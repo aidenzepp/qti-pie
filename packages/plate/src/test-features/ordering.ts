@@ -18,6 +18,7 @@
  */
 import { Option, Result } from "effect";
 import { qtiNamespace } from "#plate/document/source.ts";
+import { TestFeatureNotImplemented } from "#plate/test-features/contract.ts";
 import type { TestFeatureModule } from "#plate/test-features/contract.ts";
 
 /**
@@ -38,7 +39,8 @@ export interface OrderingNode {
  * The Ordering module (S-4, issue m3f-02): it reads each `qti-ordering` into an
  * {@link OrderingNode}, whose `shuffle` the Selection module's `sequence` applies right after its
  * section's selection. Its own `sequence`, `gate` and `deliver` have no effect, and its `enter`
- * lets every place be entered.
+ * lets every place be entered. It presents nothing at any place, so its `render` is never reached
+ * and throws.
  */
 export const orderingModule: TestFeatureModule<"qti-ordering", OrderingNode> = {
   deliver: (context) => context.test,
@@ -54,5 +56,9 @@ export const orderingModule: TestFeatureModule<"qti-ordering", OrderingNode> = {
     Result.map(context.readers.xsBoolean(element, "shuffle", false), (shuffle) =>
       Option.some({ path: context.path, shuffle }),
     ),
+  present: () => [],
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: "qti-ordering", issue: "m3f-02" });
+  },
   sequence: (context) => context.places,
 };

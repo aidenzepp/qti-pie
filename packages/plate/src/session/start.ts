@@ -40,8 +40,8 @@ import {
 } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import type { TimedScope } from "#plate/test-features/contract.ts";
-import { enteredBy, sequencedBy } from "#plate/test-features/dispatch.ts";
+import type { TestContent, TimedScope } from "#plate/test-features/contract.ts";
+import { enteredBy, presentedBy, sequencedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -176,6 +176,14 @@ export interface ItemView {
    */
   readonly configuration: Configuration;
   /**
+   * The content the test-feature modules present with the item, each module's nodes in table order
+   * ({@link TestContent}): a rubric block, a test feedback. The host renders it beside the item
+   * through `renderTestContent` (`#plate/session/content.ts`). Empty while every module is a stub,
+   * and for an item no module presents anything at. It is server data like the rest of the view,
+   * and holds nothing of the session a module did not choose to show.
+   */
+  readonly content: readonly TestContent[];
+  /**
    * Whether the item is closed: its part has ended, the test has closed, or its attempt limit is
    * above 0 and reached. Its controls render disabled, and `advance` ignores the responses a step
    * carries for it, so its `values` stay the ones it closed with whatever a host posts.
@@ -235,9 +243,11 @@ export interface SummaryItem {
 }
 
 /**
- * What a closed test shows instead of an item: each of its items, in sequence.
+ * What a closed test shows instead of an item: each of its items, in sequence, and the content the
+ * test-feature modules present with the summary, as {@link ItemView.content} holds an item's.
  */
 export interface TestSummary {
+  readonly content: readonly TestContent[];
   readonly items: readonly SummaryItem[];
   readonly kind: "summary";
 }
@@ -359,14 +369,45 @@ interface Index {
    */
   readonly ended: ReadonlySet<string>;
   /**
+   * The test, which a test-feature module's `present` is handed.
+   */
+  readonly model: Test;
+  /**
    * Each item ref's place, by identifier.
    */
   readonly places: ReadonlyMap<string, Place>;
+  /**
+   * The sections that enclose each item ref, outermost first, by identifier.
+   */
+  readonly sections: ReadonlyMap<string, readonly Section[]>;
   /**
    * The test's identifier, which an {@link UnknownItemRef} names.
    */
   readonly test: string;
 }
+
+/**
+ * List the sections that enclose each item ref of some section children, outermost first, by the
+ * item ref's identifier, in one walk. An identifier keeps its first item ref in document order, as
+ * {@link placesOf} does.
+ *
+ * @param children The children, whose item refs the sections enclose.
+ * @param enclosing The sections that already enclose the children, outermost first.
+ * @param held The map to write into, one entry per identifier.
+ */
+const collectSections = (
+  children: readonly SectionChild[],
+  enclosing: readonly Section[],
+  held: Map<string, readonly Section[]>,
+): void => {
+  for (const child of children) {
+    if (child.kind === "section") {
+      collectSections(child.children, [...enclosing, child], held);
+    } else if (!held.has(child.identifier)) {
+      held.set(child.identifier, enclosing);
+    }
+  }
+};
 
 /**
  * Derive what a read of a session looks its items up in, in one walk of the test each.
@@ -385,12 +426,19 @@ const indexOf = (test: Test, session: TestSession): Index => {
     }
   }
 
+  const sections = new Map<string, readonly Section[]>();
+  for (const part of test.parts) {
+    collectSections(part.children, [], sections);
+  }
+
   return {
     controls: sessionControls(test),
     ended: new Set(
       session.parts.filter((part) => part.status === "ended").map((part) => part.identifier),
     ),
+    model: test,
     places,
+    sections,
     test: test.identifier,
   };
 };
@@ -1446,6 +1494,7 @@ export const valuesOf = (item: SessionItem): Responses => {
  * @param session The session.
  * @param configuration The host's configuration.
  * @param item The session item.
+ * @param features The table whose modules present the view's content.
  * @returns The view, or {@link UnknownItemRef}.
  */
 const viewOf = (
@@ -1453,9 +1502,21 @@ const viewOf = (
   session: TestSession,
   configuration: Configuration,
   item: SessionItem,
+  features: TestFeatureTable,
 ): Result.Result<ItemView, UnknownItemRef> =>
   Result.map(inspect(index, session, configuration, item), (inspected) => ({
     configuration: inspected.configuration,
+    content: presentedBy(features, {
+      place: {
+        kind: "item",
+        part: inspected.place.part,
+        ref: item.ref,
+        sections: index.sections.get(item.ref) ?? [],
+        sequenceIndex: item.sequenceIndex,
+      },
+      session,
+      test: index.model,
+    }),
     count: session.items.length,
     disabled: inspected.closed,
     instance: `${session.instance}.${item.sequenceIndex}`,
@@ -1477,6 +1538,8 @@ const viewOf = (
  * @param session The session.
  * @param configuration The host's configuration.
  * @param sequenceIndex The item's sequence index, counted from 1.
+ * @param features The table whose modules present the view's content, the package's
+ *   `testFeatures` by default; a test passes one holding a module that has landed.
  * @returns The item's view; {@link ItemNotInSession} for a sequence index the session lacks;
  *   {@link UnknownItemRef} when the test holds no item ref the item names, as when the session
  *   belongs to another test.
@@ -1486,9 +1549,10 @@ export const itemView = (
   session: TestSession,
   configuration: Configuration,
   sequenceIndex: number,
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<ItemView, ItemNotInSession | UnknownItemRef> =>
   Result.flatMap(itemAt(session, sequenceIndex), ([, item]) =>
-    viewOf(indexOf(test.test, session), session, configuration, item),
+    viewOf(indexOf(test.test, session), session, configuration, item, features),
   );
 
 /**
@@ -1506,6 +1570,8 @@ export const itemView = (
  * @param session The session.
  * @param configuration The host's configuration.
  * @param sequenceIndices The items' sequence indices, each counted from 1.
+ * @param features The table whose modules present the views' content, the package's
+ *   `testFeatures` by default.
  * @returns Each item's view, in the order of `sequenceIndices`; {@link ItemNotInSession} for the
  *   first sequence index the session lacks; {@link UnknownItemRef} when the test holds no item ref
  *   an item names, as when the session belongs to another test.
@@ -1515,6 +1581,7 @@ export const itemViews = (
   session: TestSession,
   configuration: Configuration,
   sequenceIndices: readonly number[],
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<readonly ItemView[], ItemNotInSession | UnknownItemRef> => {
   const index = indexOf(test.test, session);
   const bySequence = new Map<number, SessionItem>();
@@ -1531,7 +1598,7 @@ export const itemViews = (
           Option.fromUndefinedOr(bySequence.get(sequenceIndex)),
           () => new ItemNotInSession({ count: session.items.length, sequenceIndex }),
         ),
-        (item) => viewOf(index, session, configuration, item),
+        (item) => viewOf(index, session, configuration, item, features),
       ),
     ),
   );
@@ -1608,6 +1675,8 @@ export const permits = (
  * @param test The test the session was started from.
  * @param session The session.
  * @param configuration The host's configuration.
+ * @param features The table whose modules present the content the view or the summary carries, the
+ *   package's `testFeatures` by default.
  * @returns The view or the summary; {@link ItemNotInSession} for an open session whose position is
  *   past its items; {@link UnknownItemRef} when the test holds no item ref an item names.
  */
@@ -1615,11 +1684,12 @@ export const current = (
   test: AcceptedTest,
   session: TestSession,
   configuration: Configuration,
+  features: TestFeatureTable = testFeatures,
 ): Result.Result<Current, ItemNotInSession | UnknownItemRef> => {
   const index = indexOf(test.test, session);
   if (session.status === "interacting") {
     return Result.flatMap(itemAtPosition(session), ([, item]) =>
-      viewOf(index, session, configuration, item),
+      viewOf(index, session, configuration, item, features),
     );
   }
 
@@ -1635,6 +1705,10 @@ export const current = (
         })),
       ),
     ),
-    (items): TestSummary => ({ items, kind: "summary" }),
+    (items): TestSummary => ({
+      content: presentedBy(features, { place: { kind: "summary" }, session, test: index.model }),
+      items,
+      kind: "summary",
+    }),
   );
 };

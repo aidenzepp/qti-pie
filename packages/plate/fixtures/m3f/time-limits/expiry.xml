@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  identifier="expiry" title="A test whose limits run out">
+  <qti-time-limits max-time="900"/>
+  <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="S1" title="A timed section" visible="true">
+      <qti-time-limits max-time="120"/>
+      <qti-assessment-item-ref identifier="s1a" href="choice.xml"/>
+      <qti-assessment-item-ref identifier="s1b" href="choice.xml"/>
+    </qti-assessment-section>
+    <qti-assessment-section identifier="S2" title="A timed item" visible="true">
+      <qti-assessment-item-ref identifier="i1" href="choice.xml">
+        <qti-time-limits max-time="60"/>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="s2a" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="P2" navigation-mode="nonlinear" submission-mode="individual">
+    <qti-time-limits max-time="300"/>
+    <qti-assessment-section identifier="S3" title="A timed part" visible="true">
+      <qti-assessment-item-ref identifier="p2a" href="choice.xml">
+        <qti-time-limits max-time="60"/>
+      </qti-assessment-item-ref>
+      <qti-assessment-item-ref identifier="p2b" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+  <qti-test-part identifier="P3" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="S4" title="An untimed part" visible="true">
+      <qti-assessment-item-ref identifier="p3a" href="choice.xml"/>
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>

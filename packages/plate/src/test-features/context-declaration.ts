@@ -19,6 +19,7 @@
 import { Option, Result } from "effect";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { ContextDeclaration } from "#plate/model/item.ts";
+import { TestFeatureNotImplemented } from "#plate/test-features/contract.ts";
 import type { TestFeatureModule } from "#plate/test-features/contract.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 
@@ -34,7 +35,8 @@ export type ContextDeclarationNode = ContextDeclaration;
  * The Context Declarations module (I-15, issue m3f-08): it reads each test-level
  * `qti-context-declaration` of a modelled type into a {@link ContextDeclarationNode}, and marks one
  * of base type `file` or cardinality `record`. Its `sequence` keeps the places, its `gate` and
- * `enter` let everything through, and its `deliver` returns the test unchanged.
+ * `enter` let everything through, and its `deliver` returns the test unchanged. It presents nothing
+ * at any place, so its `render` is never reached and throws.
  */
 export const contextDeclarationModule: TestFeatureModule<
   "qti-context-declaration",
@@ -55,5 +57,9 @@ export const contextDeclarationModule: TestFeatureModule<
       (read): Result.Result<Option.Option<ContextDeclarationNode>, Refusal> =>
         Option.isSome(read) ? Result.succeed(read) : context.mark("qti-context-declaration"),
     ),
+  present: () => [],
+  render: () => {
+    throw new TestFeatureNotImplemented({ feature: "qti-context-declaration", issue: "m3f-08" });
+  },
   sequence: (context) => context.places,
 };

@@ -30,11 +30,11 @@ import { nullRecord } from "#plate/model/values.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 
 /**
- * A type a declaration may give a variable: any of QTI's base types, `file` included, and any of
- * its cardinalities, `record` included.
+ * A type a declaration may give a variable: any of QTI's base types, every one of which the value
+ * model holds, and any of its cardinalities, `record` included.
  */
 export interface DeclaredType {
-  readonly baseType: ModelledBaseType | "file";
+  readonly baseType: ModelledBaseType;
   readonly cardinality: Value["cardinality"] | "record";
 }
 

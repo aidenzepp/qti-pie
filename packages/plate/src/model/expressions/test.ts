@@ -36,7 +36,6 @@ import {
 import { acceptsAnyOperands, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
 import type { FamilyReaders, ReaderSpec, Variant } from "#plate/model/expressions/read.ts";
-import { isModelled } from "#plate/model/values.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
@@ -217,10 +216,9 @@ const boundReader = <K extends "outcome-maximum" | "outcome-minimum">(
 
 /**
  * The reader spec of `qti-test-variables`: no operand, its required `variable-identifier`, its
- * optional `base-type` and `weight-identifier`, and its filters. A `base-type` of `file`, whose
- * values the value model does not hold, is the mark `base-type="file"` at its path, and builds
- * nothing, as `qti-base-value`'s reader marks it; so is an element with an operand, as the generic
- * reader marks a kind that takes none.
+ * optional `base-type` and `weight-identifier`, and its filters. Every `base-type`, `file`
+ * included, is one the value model holds, so it builds; an element with an operand is a mark, as
+ * the generic reader marks a kind that takes none.
  *
  * Its read fails with `missing-attribute` for an absent `variable-identifier` and `attribute-type`
  * for a `base-type` outside its values, as a document the validator refuses first would.
@@ -239,9 +237,6 @@ const testVariablesReader: ReaderSpec<"test-variables"> = {
         "variable-identifier",
       );
       const baseType = yield* enumerated(context.walk, element, "base-type", baseTypes);
-      if (Option.isSome(baseType) && !isModelled(baseType.value)) {
-        return yield* context.unread(element, `base-type="${baseType.value}"`);
-      }
 
       return Option.some({
         ...filtersOf(element),
