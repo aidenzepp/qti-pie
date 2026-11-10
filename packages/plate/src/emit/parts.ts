@@ -50,6 +50,23 @@ interface ShippedPartsOf {
 }
 
 /**
+ * The part keys of the content slots, by owner, a part's name with a lower-case first letter: each
+ * slot a content module renders into (issues m5-01, m5-02, m5-04, m5-06, m5-07, m5-11 and m3e-01),
+ * and the test-level ones. Every content module is a stub, so no render emits one of these parts
+ * yet; the rows exist for the issues that fill them to key a style block and a witness on.
+ */
+interface ContentPartsOf {
+  "alt-text": "root";
+  "companion-materials": "root";
+  "feedback-block": "root";
+  "feedback-inline": "root";
+  "modal-feedback": "close" | "root";
+  rubric: "root";
+  "test-feedback": "root";
+  "test-stylesheet": "root";
+}
+
+/**
  * The stub interaction modules beside `#plate/interactions/contract.ts`, by type only, so this
  * module imports none of them at run time and no module that imports it forms a cycle.
  */
@@ -79,15 +96,15 @@ type StubModule =
 type StubPartsOf = { readonly [M in StubModule as M["owner"]]: keyof M["parts"] & string };
 
 /**
- * The part keys of each interaction, of the item chrome and of the test chrome: the shipped
- * interactions' and the chrome's ({@link ShippedPartsOf}) and each stub module's
+ * The part keys of each owner: the shipped interactions' and the chrome's
+ * ({@link ShippedPartsOf}), the content slots' ({@link ContentPartsOf}) and each stub module's
  * ({@link StubPartsOf}), so a module's parts are typed from the module itself.
  */
-type PartsOf = ShippedPartsOf & StubPartsOf;
+type PartsOf = ContentPartsOf & ShippedPartsOf & StubPartsOf;
 
 /**
- * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
- * test chrome's navigation, `test-navigation`.
+ * The owner of a group of parts: the item chrome, one of the interactions plate renders, the test
+ * chrome's navigation, `test-navigation`, or a content slot.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -352,6 +369,7 @@ const blockContainers: ReadonlySet<string> = new Set([
   "aside",
   "blockquote",
   "details",
+  "dialog",
   "div",
   "fieldset",
   "figure",
@@ -500,7 +518,15 @@ const admits = {
 
 /**
  * The rows of the part table, the item chrome's, then each interaction's, then the test chrome's
- * navigation rows, before {@link partTable} derives each marker.
+ * navigation rows, then the content slots', before {@link partTable} derives each marker.
+ *
+ * The item Root merges `data-magnification`, the marker the Root hook writes under a magnification
+ * support (issue m3e-09b), so a host's replacement cannot drop it and the stylesheet may key on it.
+ * The hook is a stub, so no render writes it yet.
+ *
+ * Each content row names the issue whose module renders its part. None defaults or merges an
+ * attribute: no content module computes one beyond the marker, so a name joins a row's `merged`
+ * with the module that computes it and the test that renders it.
  *
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
@@ -520,7 +546,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
-    merged: ["lang", "id"],
+    merged: ["lang", "id", "data-magnification"],
     part: "root",
     tagClass: "flow-container",
   },
@@ -881,6 +907,121 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     part: "time",
     tagClass: "flow-container",
   },
+  /**
+   * Modal Feedback's root (issue m5-01): a native `dialog`, shown by its `open` attribute without
+   * script. A `dialog` is flow content.
+   */
+  {
+    defaults: {},
+    element: "dialog",
+    interaction: "modal-feedback",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Modal Feedback's close (issue m5-01): the `button` that dismisses the dialog and returns focus.
+   */
+  {
+    defaults: {},
+    element: "button",
+    interaction: "modal-feedback",
+    listOwner: false,
+    merged: [],
+    part: "close",
+    tagClass: "button",
+  },
+  /**
+   * Block Feedback's root (issue m5-02): the `div` that holds the feedback's flow content.
+   */
+  {
+    defaults: {},
+    element: "div",
+    interaction: "feedback-block",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Inline Feedback's root (issue m5-02): a `div` as the Block's is, which its tag class lets
+   * become a `span` where the module places the feedback inside the author's sentence, since a
+   * `div` there would close the sentence's `p`.
+   */
+  {
+    defaults: {},
+    element: "div",
+    interaction: "feedback-inline",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Companion Materials's root (issue m5-07): the `aside` that holds the tools and materials the
+   * item names beside its body.
+   */
+  {
+    defaults: {},
+    element: "aside",
+    interaction: "companion-materials",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * Alt Text's root (issue m5-11): the `span` that holds an image's alternative text, which is
+   * phrasing content.
+   */
+  {
+    defaults: {},
+    element: "span",
+    interaction: "alt-text",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "phrasing-container",
+  },
+  /**
+   * Test Feedback's root (issue m5-04): the `section` that holds a test's feedback, shown during
+   * the test or at its end.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "test-feedback",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * The Test Stylesheet's root (issue m5-06): the `section` that holds a test's stylesheet.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "test-stylesheet",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  /**
+   * The Rubric's root (issue m3e-01): the `section` that holds a rubric block's content for the
+   * view it is shown to.
+   */
+  {
+    defaults: {},
+    element: "section",
+    interaction: "rubric",
+    listOwner: false,
+    merged: [],
+    part: "root",
+    tagClass: "flow-container",
+  },
 ];
 
 /**
@@ -911,11 +1052,11 @@ export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
  * an interaction module's `partRow` (`#plate/interactions/contract.ts`), so no code spells one by
  * hand.
  *
- * @param interaction The component: an interaction, `item` for the host chrome, or
- *   `test-navigation` for the test chrome.
+ * @param interaction The component: an interaction, `item` for the host chrome,
+ *   `test-navigation` for the test chrome, or a content slot's owner.
  * @param part The part.
  * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
- *   `test-navigation-item-button`.
+ *   `test-navigation-item-button`, `modal-feedback-close`.
  */
 export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -923,13 +1064,15 @@ export const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table, one row per part of the item chrome, each interaction plate renders here and the
- * test chrome's navigation, in {@link rows}' order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction plate renders here, the
+ * test chrome's navigation and the content slots, in {@link rows}' order, each with its derived
+ * marker.
  *
  * An interaction module's rows live in its module, not here: a module gives each part's
  * `PartSpec` in its `parts`, and its render places the part through `partRow`
  * (`#plate/interactions/contract.ts`), which derives the owner, the part and the marker as this
- * table does. This table, and {@link rowFor}, serve the four shipped kinds and the chrome only.
+ * table does. This table, and {@link rowFor}, serve the four shipped kinds, the chrome and the
+ * content slots only.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row
@@ -986,7 +1129,7 @@ export const partForSlot = (slot: string): Option.Option<PartName> =>
   Option.fromUndefinedOr(slotIndex.get(slot));
 
 /**
- * The owners of the part table's rows: the four shipped kinds and the chrome.
+ * The owners of the part table's rows: the four shipped kinds, the chrome and the content slots.
  */
 const tableOwners: ReadonlySet<string> = new Set(partTable.map((row) => row.interaction));
 
@@ -1048,8 +1191,9 @@ export const adoptModuleParts = (parts: readonly PartName[]): void => {
  * `fieldset`, owns it as its first child and names no Prompt id. Under `labelledby` the rows are
  * the table's: the Prompt keeps the `id` the Root's `aria-labelledby` names.
  *
- * It serves the four shipped kinds and the chrome only. An interaction module's parts have no row
- * in the table: the module places each through `partRow` (`#plate/interactions/contract.ts`).
+ * It serves the four shipped kinds, the chrome and the content slots only. An interaction module's
+ * parts have no row in the table: the module places each through `partRow`
+ * (`#plate/interactions/contract.ts`).
  *
  * @param interaction The interaction that owns the part.
  * @param part The part.

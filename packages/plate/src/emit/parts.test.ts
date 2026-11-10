@@ -38,12 +38,86 @@ import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
+ * The part table's content rows, which the content modules' issues key on, each as its owner, part,
+ * `data-slot` marker, default element and tag class: Modal Feedback and its close (issue m5-01),
+ * Block and Inline Feedback (issue m5-02), Test Feedback (issue m5-04), the Test Stylesheet (issue
+ * m5-06), Companion Materials (issue m5-07), the Rubric Block (issue m3e-01) and Alt Text (issue
+ * m5-11). Every content module is a stub, so no render emits one of them yet.
+ */
+const contentRows = [
+  {
+    element: "span",
+    interaction: "alt-text",
+    part: "root",
+    slot: "alt-text",
+    tagClass: "phrasing-container",
+  },
+  {
+    element: "aside",
+    interaction: "companion-materials",
+    part: "root",
+    slot: "companion-materials",
+    tagClass: "flow-container",
+  },
+  {
+    element: "div",
+    interaction: "feedback-block",
+    part: "root",
+    slot: "feedback-block",
+    tagClass: "flow-container",
+  },
+  {
+    element: "div",
+    interaction: "feedback-inline",
+    part: "root",
+    slot: "feedback-inline",
+    tagClass: "flow-container",
+  },
+  {
+    element: "button",
+    interaction: "modal-feedback",
+    part: "close",
+    slot: "modal-feedback-close",
+    tagClass: "button",
+  },
+  {
+    element: "dialog",
+    interaction: "modal-feedback",
+    part: "root",
+    slot: "modal-feedback",
+    tagClass: "flow-container",
+  },
+  {
+    element: "section",
+    interaction: "rubric",
+    part: "root",
+    slot: "rubric",
+    tagClass: "flow-container",
+  },
+  {
+    element: "section",
+    interaction: "test-feedback",
+    part: "root",
+    slot: "test-feedback",
+    tagClass: "flow-container",
+  },
+  {
+    element: "section",
+    interaction: "test-stylesheet",
+    part: "root",
+    slot: "test-stylesheet",
+    tagClass: "flow-container",
+  },
+] as const;
+
+/**
  * The markers of parts the part table carries ahead of the issue that renders them, which no
- * render emits until its issue lands.
+ * render emits until its issue lands: the Choice's mask parts and every content part.
  */
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
+  ...contentRows.map((row) => row.slot),
 ]);
 
 /**
@@ -184,8 +258,18 @@ const badge = (props: Attributes) => h("span", props, [text("new")]);
 
 describe("partTable", () => {
   it("holds every row of the spec's table once, with its slot and default element", () => {
-    assert.strictEqual(partTable.length, specRows.length);
-    for (const [interaction, part, slot, element] of specRows) {
+    const tableRows = [
+      ...specRows,
+      ...contentRows.map(({ element, interaction, part, slot }) => [
+        interaction,
+        part,
+        slot,
+        element,
+      ]),
+    ];
+
+    assert.strictEqual(partTable.length, tableRows.length);
+    for (const [interaction, part, slot, element] of tableRows) {
       const rows = partTable.filter((row) => row.interaction === interaction && row.part === part);
       assert.strictEqual(rows.length, 1, `${interaction} ${part}`);
       assert.strictEqual(rows[0]?.slot, slot, `${interaction} ${part}`);
@@ -286,6 +370,72 @@ describe("the interaction modules", () => {
         assert.isTrue(checked.has(row.interaction), row.slot);
       }
     }
+  });
+});
+
+describe("the content rows", () => {
+  it("[W0-CONTENT-PARTS] the part table holds a row per content part with the derived markers", () => {
+    assert.deepStrictEqual(contentRows.map((row) => row.slot).toSorted(), [
+      "alt-text",
+      "companion-materials",
+      "feedback-block",
+      "feedback-inline",
+      "modal-feedback",
+      "modal-feedback-close",
+      "rubric",
+      "test-feedback",
+      "test-stylesheet",
+    ]);
+
+    for (const { interaction, part, slot } of contentRows) {
+      assert.deepStrictEqual(Option.getOrUndefined(partForSlot(slot)), { interaction, part }, slot);
+      assert.strictEqual(rowFor(interaction, part).slot, slot, slot);
+    }
+
+    assert.strictEqual(rowFor("modal-feedback", "close").slot, "modal-feedback-close");
+    assert.strictEqual(rowFor("modal-feedback", "root").slot, "modal-feedback");
+  });
+
+  it("[W0-CONTENT-PARTS] the content rows render as the table pins: the merged column renders every row", () => {
+    const owners: ReadonlySet<string> = new Set(contentRows.map((row) => row.interaction));
+
+    assert.deepStrictEqual(
+      partTable
+        .filter((row) => owners.has(row.interaction))
+        .map((row) => row.slot)
+        .toSorted(),
+      contentRows.map((row) => row.slot).toSorted(),
+    );
+
+    for (const { element, interaction, part, slot, tagClass } of contentRows) {
+      const row = rowFor(interaction, part);
+
+      assert.strictEqual(row.element, element, slot);
+      assert.strictEqual(row.tagClass, tagClass, slot);
+      assert.deepStrictEqual(row.defaults, {}, slot);
+      assert.deepStrictEqual(row.merged, [], slot);
+      assert.isFalse(row.listOwner, slot);
+      assert.isFalse(row.legendOwner, slot);
+      assert.isTrue(allows(row, h(element, {})), slot);
+    }
+
+    const dialogRoot = rowFor("modal-feedback", "root");
+    assert.isTrue(allows(dialogRoot, h("div", {})));
+    assert.isFalse(allows(dialogRoot, h("ul", {})));
+    assert.isFalse(allows(dialogRoot, h("button", {})));
+
+    const closeButton = rowFor("modal-feedback", "close");
+    assert.isFalse(allows(closeButton, h("span", {})));
+    assert.isFalse(allows(closeButton, h("a", {})));
+
+    const altText = rowFor("alt-text", "root");
+    assert.isTrue(allows(altText, h("em", {})));
+    assert.isTrue(allows(altText, h("my-alt", {})));
+    assert.isFalse(allows(altText, h("div", {})));
+  });
+
+  it("[W0-CONTENT-PARTS] the item root row merges data-magnification", () => {
+    assert.deepStrictEqual(rowFor("item", "root").merged, ["lang", "id", "data-magnification"]);
   });
 });
 
@@ -644,15 +794,28 @@ describe("resolveOverrides", () => {
     assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "indicator")));
   });
 
-  it("returns a Result, failing UnknownPart with no part for an unknown interaction", () => {
-    const resolved = resolveOverrides({ "hotspot-interaction": {} });
-    assert.isTrue(Result.isResult(resolved));
-    assert.isTrue(Result.isFailure(resolved));
+  it("[W0-CONTENT-PARTS] the UnknownPart test iterates every stub owner derived from the modules", () => {
+    const stubOwners = Object.values(modules)
+      .filter((module) => !module.implemented)
+      .map((module) => module.owner);
 
-    const error = Option.getOrThrow(Result.getFailure(resolved));
-    assert.strictEqual(error._tag, "UnknownPart");
-    assert.strictEqual(error.interaction, "hotspot-interaction");
-    assert.isTrue(Option.isNone(error.part));
+    for (const owner of [...stubOwners, "an-owner-no-module-has"]) {
+      const resolved = resolveOverrides({ [owner]: {} });
+      assert.isTrue(Result.isResult(resolved), owner);
+      assert.isTrue(Result.isFailure(resolved), owner);
+
+      const error = Option.getOrThrow(Result.getFailure(resolved));
+      assert.strictEqual(error._tag, "UnknownPart", owner);
+      assert.strictEqual(error.interaction, owner);
+      assert.isTrue(Option.isNone(error.part), owner);
+    }
+
+    for (const module of Object.values(modules).filter((candidate) => candidate.implemented)) {
+      const parts = Object.fromEntries(Object.keys(module.parts).map((part) => [part, indicator]));
+
+      assert.isTrue(Result.isSuccess(resolveOverrides({ [module.owner]: {} })), module.owner);
+      assert.isTrue(Result.isSuccess(resolveOverrides({ [module.owner]: parts })), module.owner);
+    }
   });
 
   it("fails with UnknownPart naming an unknown part", () => {
@@ -679,14 +842,17 @@ const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode
 /**
  * The names a row's `merged` column holds that its connect function never computes, by marker:
  * the Inline Choice Option's and Placeholder's `disabled` and `hidden`, which plate owns by their
- * absence alone, and the item Live part's `role`, which it leaves to a host override so the live
- * region is no second Status region (D14).
+ * absence alone, the item Live part's `role`, which it leaves to a host override so the live
+ * region is no second Status region (D14), and the item Root's `data-magnification`, which the
+ * Root hook writes only under a magnification support (issue m3e-09b), a support none of these
+ * renders passes.
  */
 const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
   ...(["option", "placeholder"] as const).map(
     (part) => [rowFor("inline-choice-interaction", part).slot, ["disabled", "hidden"]] as const,
   ),
   [rowFor("item", "live").slot, ["role"]],
+  [rowFor("item", "root").slot, ["data-magnification"]],
 ]);
 
 /**
