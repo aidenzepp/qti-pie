@@ -50,6 +50,7 @@ import {
   owedRules,
   refusalOf,
 } from "#pantry/import/refusal.ts";
+import type { RefusalLaw } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
@@ -785,13 +786,14 @@ describe("the merged axes and the laws no row states", () => {
   });
 
   it(
-    "gives a check its installed name only where Qti states it, so a refusal by a CDN install's check prints with its name and rule and no installed name",
+    "gives a check the installed name of the constraint or domain that refused it, and none where a statement did, whether or not Qti states the check",
     () => {
-      // Oracle: grizzle's `constraintNamesOf(Qti)` lookup for the check Qti states, AL1's admission on
-      // Attribute, and the law table's name and rule for both. A CDN install's stored level states
-      // `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not, so a refusal read
-      // against Qti names a check it lacks: the refusal still carries its text, its name and its
-      // rule, and no installed name, where grizzle would throw for it.
+      // Oracle: the refusing object the outcome names (grizzle's `RefusedLaw.by`), and the law
+      // table's name and rule for each law. A native check names the constraint PostgreSQL holds it
+      // under: AL1's admission on Attribute by grizzle's `constraintNamesOf(Qti)`, and a CDN
+      // install's `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not state, by its
+      // install's own domain. Each prints with that name, its name and its rule; the same check
+      // refused by a write statement names no constraint, so it prints with no installed name.
       const stated = {
         kind: "check",
         name: checkNameOf("AL1 admission"),
@@ -802,24 +804,39 @@ describe("the merged axes and the laws no row states", () => {
         name: checkNameOf("CDN origin"),
         relation: "Attribute",
       } as const;
-      const refused = refusalOf(
-        { kind: "every", laws: [refusedOf(stated), refusedOf(cdn)] },
-        { kind: "unreported" },
-        grammar,
-      );
+      const installed = constraintNamesOf(Qti)(stated);
+      const cdnInstalled = "cdn_origin_domain";
+      const printed = (laws: Arr.NonEmptyReadonlyArray<RefusalLaw>) => {
+        const refused = refusalOf({ kind: "every", laws }, { kind: "unreported" }, grammar);
 
-      assert.strictEqual(refused.origin._tag, "Database");
-      assert.deepStrictEqual(refused.origin._tag === "Database" ? refused.origin.laws : [], [
+        return refused.origin._tag === "Database" ? refused.origin.laws : [];
+      };
+
+      assert.deepStrictEqual(
+        printed([
+          { ...refusedOf(stated), by: { kind: "constraint", name: installed } },
+          { ...refusedOf(cdn), by: { kind: "domain", name: cdnInstalled } },
+        ]),
+        [
+          {
+            installed,
+            name: "AL1 admission",
+            rule: lawTable["AL1 admission"].rule,
+            text: Formatter.format(stated),
+          },
+          {
+            installed: cdnInstalled,
+            name: "CDN origin",
+            rule: lawTable["CDN origin"].rule,
+            text: Formatter.format(cdn),
+          },
+        ],
+      );
+      assert.deepStrictEqual(printed([refusedOf(stated)]), [
         {
-          installed: constraintNamesOf(Qti)(stated),
           name: "AL1 admission",
           rule: lawTable["AL1 admission"].rule,
           text: Formatter.format(stated),
-        },
-        {
-          name: "CDN origin",
-          rule: lawTable["CDN origin"].rule,
-          text: Formatter.format(cdn),
         },
       ]);
     },

@@ -1,8 +1,10 @@
 /**
  * The census of the committed migration (plan-qti-pie Q6.02): the one `_init` folder the Qti
- * schema's migrations hold, taken by `#pantry/test/census.ts`, meets fin.md §13's zero targets and
- * holds the measured counts. It lands with the migration it reads, so it is a file of its own: the
- * census's parser and its targets are `census.test.ts`'s, which need no migration.
+ * schema's migrations hold, beside the snapshot's two files and `served/`, which holds the one file
+ * `grizzle generate` writes for the author login (`#pantry/db/served.ts`), taken by
+ * `#pantry/test/census.ts`, meets fin.md §13's zero targets and holds the measured counts. It lands
+ * with the migration it reads, so it is a file of its own: the census's parser and its targets are
+ * `census.test.ts`'s, which need no migration.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -55,7 +57,7 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration", () => {
   it.effect(
-    "is one _init folder and its snapshot's two files, meets every zero target, and holds the measured counts",
+    "is one _init folder, its snapshot's two files and the author login's served file, meets every zero target, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
@@ -67,12 +69,15 @@ describe("the committed migration", () => {
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(qtiMigrations)).toSorted();
+        const served = (yield* fs.readDirectory(`${qtiMigrations}/served`)).toSorted();
         const held = yield* censusOf(qtiMigrations);
 
-        assert.lengthOf(entries, 3, entries.join(", "));
+        assert.lengthOf(entries, 4, entries.join(", "));
         assert.match(entries[0] ?? "", /^\d{14}_init$/u);
         assert.strictEqual(entries[1], "manifest.json");
-        assert.strictEqual(entries[2], "snapshot.json");
+        assert.strictEqual(entries[2], "served");
+        assert.strictEqual(entries[3], "snapshot.json");
+        assert.deepStrictEqual(served, ["author_app.json"], "the author login's one served file");
         assert.deepStrictEqual(
           {
             enums: held.enums,

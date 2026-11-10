@@ -17,7 +17,7 @@ import { lawNamesOf, lawNamesPath, refusedOf } from "#pantry/test/law-names.ts";
 
 /**
  * The timeout, in milliseconds, of the tests that compile `Qti`'s law model: a hang guard, never a
- * budget. Measured 2026-11-08: a compile of the law model took 51 s at a load average of 60 to 76
+ * budget. Measured 2026-11-08: 51 s at a load average of 60 to 76, a compile of the law model
  * (`#pantry/test/law-namer.ts`'s record of `lawsByStatement`), so this is about twice that and
  * more.
  */

@@ -472,7 +472,10 @@ const followedAfter = (
 /**
  * Read the kinds a family's model places at each position: those its admission map gives the
  * position, by kind, then those its shared model's symbol sets do, each once. The family's map's
- * children and its shared model's pairs are read once, for every position asked.
+ * children, its shared model's pairs and the positions of each of their symbol sets are read once,
+ * for every position asked, so a position costs a pass over the family's own rows and none over
+ * `SymbolMember`: a scan of `SymbolMember` per pair and position took a model of many states and
+ * positions (`m:mmultiscripts`) past the explanation test's hang limit.
  *
  * @param content - The content grammar.
  * @param family - The family's version and parent.
@@ -490,14 +493,16 @@ const kindsAt = (
   const pairs = Option.toArray(content.sharedModelOf.lookup(family)).flatMap(({ model }) =>
     content.symbolSetOf.rows.filter((pair) => pair.model === model),
   );
+  const positionsOf = new Map(pairs.map(({ set }) => [set, new Set<string>()]));
+  for (const { position, set } of content.symbolMember.rows) {
+    positionsOf.get(set)?.add(position);
+  }
 
   return (position) =>
     Arr.dedupe([
       ...children.flatMap((row) => (row.position === position ? [row.child] : [])),
       ...pairs.flatMap((pair) =>
-        content.symbolMember.rows.some((row) => row.set === pair.set && row.position === position)
-          ? [pair.kind]
-          : [],
+        positionsOf.get(pair.set)?.has(position) === true ? [pair.kind] : [],
       ),
     ]);
 };

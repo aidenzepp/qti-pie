@@ -24,14 +24,16 @@ const adHocOperations = ["apply", "compile", "execute", "explain", "get", "page"
 
 /**
  * Blank out a module's comments, keeping its strings whole, so a call a comment names counts for
- * nothing.
+ * nothing. The pattern writes its quotation marks and backtick as `\u0022`, `\u0027` and
+ * `\u0060`, so `src/test/timeouts.test.ts`, which reads a regular expression literal as code,
+ * reads this file to its end.
  *
  * @param source - The text of a TypeScript module.
  * @returns The text with every comment removed.
  */
 const withoutComments = (source: string): string =>
   source.replaceAll(
-    /(?<literal>"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu,
+    /(?<literal>\u0022(?:\\.|[^\u0022\\\n])*\u0022|\u0027(?:\\.|[^\u0027\\\n])*\u0027|\u0060(?:\\.|[^\u0060\\])*\u0060)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu,
     (_text, literal: string | undefined) => literal ?? "",
   );
 

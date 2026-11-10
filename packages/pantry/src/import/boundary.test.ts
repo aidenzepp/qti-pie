@@ -154,29 +154,30 @@ const crossings: ByStep = [
   // read of `grammar/domains.ts`.
   ["S8", ["import/overlays/html.ts: #pantry/grammar/domains.ts"]],
   // S10 takes out of each module the code of the other side, which no export can carry across:
-  // `ingest` with its login, retries and refusal report out of `import/package.ts`; `changeSetOf`
-  // with the author role out of `import/write.ts`, and the row type with its relations into the
-  // schema, where the author login's workload reads them; the reader's refusal out of
-  // `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`, and the database's
-  // refusal an error of its own, so `import/refusal.ts` reads no `ImportRefused` and the command
-  // line gets the database's refusal from `ingest` (§2.4); the export's reads out of `export/package.ts`, behind
-  // the scan; and crust's reader types out of `vocab/open.ts`, with shred's reader. The plan places
-  // neither `export/pages.ts`'s assembly nor `qti/attributes.ts`'s `handlePrefixes`: S10 owes each
-  // a side.
+  // `ingest` with its login (the served `AuthorLogin` of `db/served.ts`, which `db/layer.ts`
+  // provides, and the author role's type of `qti/roles.ts`), retries and refusal report out of
+  // `import/package.ts`; `changeSetOf` with the author role out of `import/write.ts`, and the row
+  // type with its relations into the schema, where the author login's workload reads them; the
+  // reader's refusal out of `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`,
+  // and the database's refusal an error of its own, so `import/refusal.ts` reads no
+  // `ImportRefused` and the command line gets the database's refusal from `ingest` (§2.4); the
+  // export's reads, with the same login and role, out of `export/package.ts`, behind the scan; and
+  // crust's reader types out of `vocab/open.ts`, with shred's reader. The plan places neither
+  // `export/pages.ts`'s assembly nor `qti/attributes.ts`'s `handlePrefixes`: S10 owes each a side.
   [
     "S10",
     [
       "cli/output.ts: #pantry/package/refusal-origin.ts",
       "cli/refused.ts: #pantry/package/refusal-origin.ts",
+      "export/package.ts: #pantry/db/served.ts",
       "export/package.ts: #pantry/export/pages.ts",
-      "export/package.ts: #pantry/qti/own-login.ts",
-      "export/package.ts: #pantry/qti/package.ts",
+      "export/package.ts: #pantry/qti/roles.ts",
       "export/pages.ts: #pantry/model/assemble.ts",
       "export/pages.ts: #pantry/model/xdm.ts",
       "export/render.ts: #pantry/export/pages.ts",
+      "import/package.ts: #pantry/db/served.ts",
       "import/package.ts: #pantry/import/refusal.ts",
-      "import/package.ts: #pantry/qti/own-login.ts",
-      "import/package.ts: #pantry/qti/package.ts",
+      "import/package.ts: #pantry/qti/roles.ts",
       "import/refusal.ts: #pantry/import/rules.ts",
       "import/rules.ts: #pantry/package/refusal-origin.ts",
       "import/write.ts: #pantry/qti/roles.ts",
