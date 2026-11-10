@@ -23,12 +23,12 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 /**
  * The open attribute classes the rule refuses: every class but `data-*`.
  */
-const uninterpretedClasses = openClasses.filter((name) => name !== "data-*");
+export const uninterpretedClasses = openClasses.filter((name) => name !== "data-*");
 
 /**
  * The element kinds the rule refuses: a foreign element of each namespace class.
  */
-const foreignElementKinds = Object.values(foreignKinds);
+export const foreignElementKinds = Object.values(foreignKinds);
 
 /**
  * Select, over a base level, the attributes of an uninterpreted open class: each `(node, id)` with

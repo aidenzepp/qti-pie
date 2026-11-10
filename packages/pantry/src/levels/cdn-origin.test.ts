@@ -14,8 +14,11 @@
  *   resolve it on the origin.
  * - **Its two bypasses** (decision 488): an entity reference crust keeps unexpanded, which a player
  *   reading the external subset expands, is refused in a fetched attribute however the rest of its
- *   value reads; and every governing type the base model admits on a fetched kind is one the rule
- *   selects, so no `xsi:type` takes a fetched value out of it.
+ *   value reads; and every governor an element of a fetched kind may hold is one the rule selects,
+ *   so no `xsi:type` takes a fetched value out of it.
+ * - **What it selects**, #55's cases (`src/qti/cdn.test.ts` at `b340be09`): every fetched attribute
+ *   under every governor of its kind and every fetched text, and none of the links, identifiers and
+ *   texts the player never fetches; and the fetched rows themselves against the grammar.
  */
 import { lawsOf } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -26,18 +29,20 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
-import { GoverningOf, XsiType } from "#pantry/grammar/install.ts";
+import { GoverningOf, grammar, KindGovernor } from "#pantry/grammar/install.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
 import {
   addressPattern,
   candidatesPattern,
   cdnOriginRule,
+  fetchedNames,
   governorsOf,
+  textGovernors,
 } from "#pantry/levels/cdn-origin.ts";
 import { qti } from "#pantry/qti/schema.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
-import { fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
+import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
 
 /**
  * The origins every case is judged under: one plain, and one with a port and a hyphen, so a
@@ -401,33 +406,137 @@ describe("levels/cdn-origin.ts, the bypasses", () => {
     }
   });
 
-  it("selects each fetched value under every governing type the base model admits on its kind, so no xsi:type takes one out of the rule", () => {
-    // Oracle: Qti's "XsiType derived" containment holds every element that is not foreign to an
-    // `XsiType` row of its kind, and `GoverningOf` gives each row its governor; an xsi:type naming
-    // any other type is refused before the rule judges anything. Decision 488, claim 2.
-    const admitted = fetchedUnderGovernors.flatMap(({ governors, kind, what }) =>
-      XsiType.rows
-        .filter((row) => row.kind === kind)
-        .map(({ type, version }) => ({
-          selected: GoverningOf.rows.some(
-            (row) =>
-              row.version === version &&
-              row.kind === kind &&
-              row.governs === type &&
-              governors.includes(row.governor),
-          ),
-          shown: `${what} under ${type} in ${version}`,
-        })),
+  it("selects each fetched value under every governor an element of its kind may hold, so no xsi:type takes one out of the rule", () => {
+    // Oracle: Qti's model of an element's governor (`Node.governor`, which `Attribute` copies): its
+    // kind's own (`KindGovernor`) where no named type governs it, or `GoverningOf`'s governor at
+    // each (version, kind, type) a law admits the type at; an xsi:type naming any other type is
+    // refused before the rule judges anything. The rule selects by that governor, so every
+    // governor of either source must be one it reads. Decision 488, claim 2.
+    const unselected = fetchedUnderGovernors.flatMap(({ governors, kind, what }) =>
+      [
+        ...KindGovernor.rows
+          .filter((row) => row.kind === kind)
+          .map(({ governor }) => ({ governor, shown: `${what} under its kind's own governor` })),
+        ...GoverningOf.rows
+          .filter((row) => row.kind === kind)
+          .map(({ governor, governs, version }) => ({
+            governor,
+            shown: `${what} under ${governs} in ${version}`,
+          })),
+      ].flatMap(({ governor, shown }) => (governors.includes(governor) ? [] : [shown])),
     );
 
     assert.deepStrictEqual(
-      fetchedUnderGovernors.filter(({ kind }) => !XsiType.rows.some((row) => row.kind === kind)),
+      fetchedUnderGovernors.filter(
+        ({ kind }) => !KindGovernor.rows.some((row) => row.kind === kind),
+      ),
       [],
-      "a fetched kind no governing type admits",
+      "a fetched kind with no governor of its own",
+    );
+    assert.deepStrictEqual(unselected, []);
+  });
+});
+
+/**
+ * Attributes the player never fetches, which #55's CDN origin left free: a link, identifiers
+ * written as URIs, an image's text, response processing's template, and a MathML element's link.
+ */
+const freeFields = [
+  { governor: "a", name: "href" },
+  { governor: "img", name: "longdesc" },
+  { governor: "img", name: "alt" },
+  { governor: "qti-portable-custom-interaction", name: "custom-interaction-type-identifier" },
+  { governor: "qti-response-processing", name: "template" },
+  { governor: "m:mglyph", name: "href" },
+] as const;
+
+/**
+ * Decide whether the origin rule selects an attribute under a governor, in any address form.
+ *
+ * @param governor - The element's governor.
+ * @param name - The attribute's name.
+ * @returns Whether a relation of the rule selects it.
+ */
+const selected = (governor: string, name: string): boolean =>
+  fetchedNames.some((fetched) => fetched.name === name && fetched.governors.includes(governor));
+
+describe("levels/cdn-origin.ts, what it selects", () => {
+  it("selects every fetched attribute under every governor of its kind, in its form, and every fetched text's governor, and none of #55's free fields or a value's text", () => {
+    // Oracle: #55's CDN origin case (`src/qti/cdn.test.ts` at `b340be09`): its fetched fields,
+    // each fetched attribute under each governor `governorsOf([kind])` gives, judged in its form;
+    // its fetched texts under `governorsOf(fetchedTexts)`; and its free fields and `qti-value`'s
+    // text, always admitted. Here against the selection the rule's relations read.
+    const fetchedFields = fetchedAttributes.flatMap(({ form, kind, name }) =>
+      governorsOf([kind]).map((governor) => ({ form, governor, name })),
+    );
+
+    assert.deepStrictEqual(
+      fetchedFields
+        .filter(
+          ({ form, governor, name }) =>
+            !fetchedNames.some(
+              (fetched) =>
+                fetched.form === form &&
+                fetched.name === name &&
+                fetched.governors.includes(governor),
+            ),
+        )
+        .map(({ governor, name }) => `${governor}'s ${name}`),
+      [],
+      "a fetched field the rule does not select in its form",
     );
     assert.deepStrictEqual(
-      admitted.filter(({ selected }) => !selected).map(({ shown }) => shown),
+      governorsOf(fetchedTexts).filter((governor) => !textGovernors.includes(governor)),
       [],
+      "a fetched text the rule does not select",
     );
+    assert.deepStrictEqual(
+      freeFields
+        .filter(({ governor, name }) => selected(governor, name))
+        .map(({ governor, name }) => `${governor}'s ${name}`),
+      [],
+      "a free field the rule selects",
+    );
+    assert.notInclude(textGovernors, "qti-value", "the rule selects a value's text");
+  });
+
+  it("declares fetched attributes the grammar admits, fetched texts and address lists of the domains it names, and every media URL the grammar types URLDType as a fetched attribute", () => {
+    // Oracle: #55's vocab/fetched.ts case (`src/qti/cdn.test.ts` at `b340be09`): the grammar's
+    // admission rows and value domains, against the rows the origin and data rules read.
+    const admitted = new Set(
+      grammar.attributes.admission.rows.map(({ kind, name }) => `${kind} ${name}`),
+    );
+    const domains = new Map(
+      grammar.attributes.valueDomain.rows.map(({ domain, primitive }) => [domain, primitive]),
+    );
+    const fetched = new Set(fetchedAttributes.map(({ kind, name }) => `${kind} ${name}`));
+
+    for (const { kind, name } of fetchedAttributes) {
+      assert.isTrue(admitted.has(`${kind} ${name}`), `${kind} admits no ${name}`);
+    }
+
+    for (const kind of fetchedTexts) {
+      const texts = grammar.attributes.text.rows.filter((row) => row.kind === kind);
+
+      assert.isNotEmpty(texts, `${kind} has no text`);
+      for (const { domain } of texts) {
+        assert.strictEqual(domains.get(domain), "anyURI", `${kind}'s text`);
+      }
+    }
+
+    for (const name of addressLists) {
+      const lists = grammar.attributes.admission.rows.filter((row) => row.name === name);
+
+      assert.isNotEmpty(lists, name);
+      for (const { domain } of lists) {
+        assert.strictEqual(domains.get(domain), "list", name);
+      }
+    }
+
+    for (const { domain, kind, name } of grammar.attributes.admission.rows) {
+      if (domain.startsWith("URLDType")) {
+        assert.isTrue(fetched.has(`${kind} ${name}`), `${kind}'s ${name}, a media URL, is fetched`);
+      }
+    }
   });
 });

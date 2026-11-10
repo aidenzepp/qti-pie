@@ -475,7 +475,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "attribute-admission",
   ],
   ["ancestry-ban", "owner-copy", "ordering", "child-set", "union-count", "admission"],
-  ["cdn-data", "cdn-origin", "cdn-style", "cdn-foreign"],
   [
     "key-text-bound",
     "href-form",
@@ -795,44 +794,28 @@ describe("the merged axes and the laws no row states", () => {
   });
 
   it(
-    "gives a check the installed name of the constraint or domain that refused it, and none where a statement did, whether or not Qti states the check",
+    "gives a check the installed name of the constraint that refused it, and none where a statement did",
     () => {
       // Oracle: the refusing object the outcome names (grizzle's `RefusedLaw.by`), and the law
       // table's name and rule for each law. A native check names the constraint PostgreSQL holds it
-      // under: AL1's admission on Attribute by grizzle's `constraintNamesOf(Qti)`, and a CDN
-      // install's `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not state, by its
-      // install's own domain. Each prints with that name, its name and its rule; the same check
-      // refused by a write statement names no constraint, so it prints with no installed name.
+      // under: AL1's admission on Attribute by grizzle's `constraintNamesOf(Qti)`. It prints with
+      // that name, its name and its rule; the same check refused by a write statement names no
+      // constraint, so it prints with no installed name.
       const stated = {
         kind: "check",
         name: checkNameOf("AL1 admission"),
         relation: "Attribute",
       } as const;
-      const cdn = {
-        kind: "check",
-        name: checkNameOf("CDN origin"),
-        relation: "Attribute",
-      } as const;
       const installed = constraintNamesOf(Qti)(stated);
-      const cdnInstalled = "cdn_origin_domain";
 
       assert.deepStrictEqual(
-        printed([
-          { ...refusedOf(stated), by: { kind: "constraint", name: installed } },
-          { ...refusedOf(cdn), by: { kind: "domain", name: cdnInstalled } },
-        ]),
+        printed([{ ...refusedOf(stated), by: { kind: "constraint", name: installed } }]),
         [
           {
             installed,
             name: "AL1 admission",
             rule: lawTable["AL1 admission"].rule,
             text: Formatter.format(stated),
-          },
-          {
-            installed: cdnInstalled,
-            name: "CDN origin",
-            rule: lawTable["CDN origin"].rule,
-            text: Formatter.format(cdn),
           },
         ],
       );
@@ -1201,31 +1184,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
     "admission",
     "the content model: the family's end before admission, the most general (N5 admitted)",
   ],
-  [
-    "admission",
-    "cdn-data",
-    "the tiers: the content model before a single-CDN install's policy, so content that is not valid QTI is named by the rule that says so",
-  ],
-  [
-    "cdn-data",
-    "cdn-origin",
-    "the install's policy: a data: address is the cause its address off the origin follows from (cdn.ts)",
-  ],
-  [
-    "cdn-origin",
-    "cdn-style",
-    "the install's policy: an address the player fetches before a style that fetches, which no fetched field is (cdn.ts)",
-  ],
-  [
-    "cdn-style",
-    "cdn-foreign",
-    "the install's policy: markup it reads before markup pantry cannot read (cdn.ts)",
-  ],
-  [
-    "cdn-foreign",
-    "key-text-bound",
-    "the tiers: a single-CDN install's policy before the document layer",
-  ],
+  ["admission", "key-text-bound", "the tiers: the content model before the document layer"],
   [
     "key-text-bound",
     "regex-text-bound",

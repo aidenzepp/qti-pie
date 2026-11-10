@@ -33,8 +33,6 @@ import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
 import {
   AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
-  GoverningOf,
   TextDomain,
   ValueDomainOf,
 } from "#pantry/grammar/install.ts";
@@ -90,7 +88,7 @@ const dataTokenMatch = Compute.pattern(dataToken);
 /**
  * The value domains that are an `xs:anyURI`'s: every domain whose primitive is `anyURI`.
  */
-const uriDomains = ValueDomainOf.rows.flatMap(({ domain, primitive }) =>
+export const uriDomains = ValueDomainOf.rows.flatMap(({ domain, primitive }) =>
   primitive === "anyURI" ? [domain] : [],
 );
 
@@ -103,21 +101,12 @@ const uriDomains = ValueDomainOf.rows.flatMap(({ domain, primitive }) =>
  */
 const uriAttributesOf = (base: QtiSchema) =>
   query(base).rule((r) => {
-    const { entities, governs, id, kind, lexical, name, node, version } = v(Attribute, "attribute");
-    const model = AttributeModelOf.at(
-      "model",
-      version,
-      GoverningOf.at("governor", version, kind, governs),
-    );
+    const { entities, governor, id, lexical, name, node, version } = v(Attribute, "attribute");
+    const model = AttributeModelOf.at("model", version, governor);
 
     return r
-      .match(Attribute, { entities, governs, id, kind, lexical, name, node, version })
-      .where(
-        r.inSet(
-          AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, name)),
-          uriDomains,
-        ),
-      )
+      .match(Attribute, { entities, governor, id, lexical, name, node, version })
+      .where(r.inSet(AttributeGrammar.at("domain", model, name), uriDomains))
       .find({ entities, id, lexical, node });
   });
 
@@ -154,11 +143,10 @@ export const cdnDataRule = (base: QtiSchema, _origin: string) => {
   const CdnDataUriText = derived(
     "CdnDataUriText",
     query(base).rule((r) => {
-      const { governs, id, kind, stringValue, version } = v(Node, "node");
-      const governor = GoverningOf.at("governor", version, kind, governs);
+      const { governor, id, stringValue, version } = v(Node, "node");
 
       return r
-        .match(Node, { governs, id, kind, stringValue, version })
+        .match(Node, { governor, id, stringValue, version })
         .where(r.inSet(TextDomain.at("domain", version, governor), uriDomains))
         .find({ id, stringValue });
     }),
@@ -167,15 +155,14 @@ export const cdnDataRule = (base: QtiSchema, _origin: string) => {
   const CdnDataUriTextEntity = derived(
     "CdnDataUriTextEntity",
     query(base).rule((r) => {
-      const { id, kind, parentGoverns, parentKind, version } = v(Node, "node");
-      const governor = GoverningOf.at("governor", version, parentKind, parentGoverns);
+      const { id, kind, parentGovernor, version } = v(Node, "node");
 
       return r
-        .match(Node, { id, kind, parentGoverns, parentKind, version })
+        .match(Node, { id, kind, parentGovernor, version })
         .where(
           r.and(
             r.eq(kind, "entityRef"),
-            r.inSet(TextDomain.at("domain", version, governor), uriDomains),
+            r.inSet(TextDomain.at("domain", version, parentGovernor), uriDomains),
           ),
         )
         .find({ id, kind });
