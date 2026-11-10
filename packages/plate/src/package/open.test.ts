@@ -22,6 +22,7 @@ import {
   growthRatio,
   growthRuns,
 } from "#plate/test/growth.ts";
+import { scaledMs } from "#plate/test/timing.ts";
 import { open as openDocument } from "#plate/validate/open.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
@@ -3241,13 +3242,13 @@ const layeredRefusals = (
  * take: the walk stops at the placement that passes the bound and no test is judged, so refusing
  * costs what reading the package and reaching the bound do.
  */
-const pastLimitMs = 100;
+const pastLimitMs = scaledMs(100);
 
 /**
  * The most thread CPU, in milliseconds, opening a package at the largest size plate's assembly
  * limit admits may take: within the limit, judging the assembled tests costs seconds at most.
  */
-const withinLimitMs = 2000;
+const withinLimitMs = scaledMs(2000);
 
 /**
  * The most the heap may grow by while a package at the largest size the assembly limit admits

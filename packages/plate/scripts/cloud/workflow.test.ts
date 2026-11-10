@@ -154,4 +154,15 @@ describe(".github/workflows/plate.yml", () => {
       assert.isBelow(check, test);
     }),
   );
+
+  it.effect("sets PLATE_TIMING_SCALE to 3 on the test step, the slower runner's allowance", () =>
+    Effect.gen(function* scale() {
+      const { steps } = yield* readSteps();
+      const test = indexOf(steps, "test", (step) =>
+        step.startsWith("run: pnpm --filter @qti-pie/plate test"),
+      );
+
+      assert.match(steps[test] ?? "", /\n {8}env:\n(?: {10}#.*\n)* {10}PLATE_TIMING_SCALE: "3"\n/u);
+    }),
+  );
 });
