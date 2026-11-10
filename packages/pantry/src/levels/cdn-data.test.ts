@@ -14,16 +14,15 @@
  *   and a URI text that keep an entity reference the document never declares, which a player that
  *   reads the external DTD expands, so the level refuses every judged value that keeps one.
  */
-import { spawn } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { lawsOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Formatter } from "effect";
 import { ValueDomainOf } from "#pantry/grammar/install.ts";
 import { cdnDataRule, dataScheme, dataToken } from "#pantry/levels/cdn-data.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
+import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
+import { addedLaws } from "#pantry/test/level-laws.ts";
 import { asi, breachesOf, judged, shown, withItem } from "#pantry/test/probe.ts";
 import { Qti } from "#pantry/test/qti.ts";
 import { xsiNamespace as xsi } from "#pantry/vocab/namespaces.ts";
@@ -105,26 +104,6 @@ const dataRelations = [
 ] as const;
 
 /**
- * The package directory, where grizzle is run from and where the committed migrations live.
- */
-const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
-
-/**
- * The folder the installation's configuration is written to, made and removed by its test.
- */
-const configDirectory = path.join(packageDirectory, "work", "cdn-data-compile");
-
-/**
- * The laws a level states that a lower level does not.
- *
- * @param laws - The level's laws.
- * @param lower - The lower level's laws.
- * @returns The laws only the level states, in its order.
- */
-const addedLaws = (laws: readonly Law[], lower: readonly Law[]): readonly Law[] =>
-  laws.filter((law) => !lower.some((held) => sameLaw(held, law)));
-
-/**
  * The relations a schema's `CdnData` checks read.
  *
  * @param laws - The schema's laws.
@@ -134,78 +113,6 @@ const cdnDataRelations = (laws: readonly Law[]): readonly string[] =>
   laws
     .flatMap((law) => (law.kind === "check" && law.name === "CdnData" ? [law.relation] : []))
     .toSorted();
-
-/**
- * The configuration of an installation whose top level is the `Cdn` level over `Qti`, with the
- * author's login and the committed migrations, as `grizzle.config.ts` configures `Qti`.
- */
-const configText = `import { defineConfig } from "@bjornpagen/grizzle";
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { Effect } from "effect";
-import { migrationConnection } from "#pantry/db/connection.ts";
-import { singleCdn } from "#pantry/levels/cdn.ts";
-import { authorLogin } from "#pantry/qti/logins.ts";
-import { qti } from "#pantry/qti/schema.ts";
-
-export default defineConfig({
-  connection: await Effect.runPromise(
-    migrationConnection.pipe(Effect.provide(NodeFileSystem.layer)),
-  ),
-  logins: [authorLogin(qti())],
-  migrations: ${JSON.stringify(path.join(packageDirectory, "migrations"))},
-  schemas: [singleCdn(qti(), { origin: ${JSON.stringify(origin)} })],
-});
-`;
-
-/**
- * Write the installation's configuration into its own folder, removing the folder when the scope
- * closes.
- *
- * @returns The configuration file's path.
- */
-const writtenConfig = Effect.acquireRelease(
-  Effect.tryPromise(async () => {
-    await mkdir(configDirectory, { recursive: true });
-    const file = path.join(configDirectory, "grizzle.config.ts");
-    await writeFile(file, configText);
-
-    return file;
-  }),
-  () => Effect.promise(() => rm(configDirectory, { force: true, recursive: true })),
-);
-
-/**
- * Run `pnpm exec grizzle check <config>` in the package directory and collect how it ended.
- * grizzle prints its findings on standard error, so both streams are read together.
- *
- * @param config - The configuration file's path.
- * @returns The exit code, and everything the process wrote.
- */
-const grizzleCheck = (config: string) =>
-  Effect.callback<{ readonly code: number | null; readonly output: string }, Error>((resume) => {
-    const child = spawn("pnpm", ["exec", "grizzle", "check", config], {
-      cwd: packageDirectory,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const chunks: Buffer[] = [];
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    child.on("error", (error) => {
-      resume(Effect.fail(error));
-    });
-    child.on("close", (code) => {
-      resume(Effect.succeed({ code, output: Buffer.concat(chunks).toString("utf-8") }));
-    });
-
-    return Effect.sync(() => {
-      child.kill();
-    });
-  });
 
 describe("cdnDataRule", () => {
   it(
@@ -243,7 +150,7 @@ describe("cdnDataRule", () => {
     () =>
       Effect.scoped(
         Effect.gen(function* compiles() {
-          const config = yield* writtenConfig;
+          const config = yield* writtenCdnConfig("cdn-data-compile", origin);
           const { code, output } = yield* grizzleCheck(config);
           const lines = output.split("\n");
 

@@ -3,9 +3,10 @@
  * and released at once over the committed snapshot. Building a `DbLayer` compiles every program of
  * the login's workloads for every role it runs on, the compilation `grizzle generate` runs
  * (grizzle's README, "Deploying"), and its pool opens no session until a `Db` asks for one. The
- * import's write program is one of those programs (`importWork`), and its compilation runs
- * grizzle's write filler over every family of the schema, so a value the filler cannot fill
- * anywhere in `Qti` fails here, in the free suite, before any database or corpus run (R87).
+ * import's write program is one of those programs (`#pantry/test/author.ts` `importWork`), and its
+ * compilation runs grizzle's write filler over every family of the schema, so a value the filler
+ * cannot fill anywhere in `Qti` fails here, in the free suite, before any database or corpus run
+ * (R87).
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

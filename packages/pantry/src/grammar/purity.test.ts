@@ -12,7 +12,7 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
  * The pure layers, relative to `src`: vocabulary data, the generators and the XDM model. Each is a
  * function of its inputs, so none reaches grizzle or the modules that talk to the database. The one
  * exception is a stage-wide shared file: `install.ts` reads the committed snapshot's codes through
- * `db/codes.ts` and `db/snapshot.ts`, so its rosters are declared in the order grizzle accepts.
+ * `db/codes.ts`, so its rosters are declared in the order grizzle accepts.
  */
 const pureLayers = "{vocab,grammar,model}/**/*.ts";
 
@@ -24,10 +24,9 @@ const install = "grammar/install.ts";
 
 /**
  * The modules under `db/` that `install.ts` alone may import: the reader of the committed
- * snapshot's roster codes and the snapshot's path and error it names. Neither reaches the login or
- * the connection.
+ * snapshot's roster codes, which reaches neither the login nor the connection.
  */
-const committedCodes: readonly string[] = ["#pantry/db/codes.ts", "#pantry/db/snapshot.ts"];
+const committedCodes: readonly string[] = ["#pantry/db/codes.ts"];
 
 /**
  * The modules outside `src/test/` that import its helpers today: none since the processing

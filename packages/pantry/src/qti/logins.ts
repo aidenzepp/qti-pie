@@ -16,7 +16,7 @@ import { login, workload } from "@bjornpagen/grizzle";
 import { Function as Fn, Result } from "effect";
 import { authorReadsOf } from "#pantry/export/scan.ts";
 import { unionsOf } from "#pantry/import/overlays/index.ts";
-import { writtenNamesOf } from "#pantry/import/roster.ts";
+import { writtenNamesIn } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { authorRole } from "#pantry/qti/roles.ts";
@@ -27,9 +27,9 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
  * installed, over its author role (`#pantry/qti/roles.ts` `authorRole`), with two workloads:
  *
  * - **the export's reads**: one document's ordered scan, which the export pages, the documents of a
- *   package and a package's record (`#pantry/export/scan.ts` `authorReadsOf`), each compiled once
- *   when the login's `DbLayer` is built, its access paths earning their indexes (the W5 amendment's
- *   C20);
+ *   package, a package's record, and the listing queries an app pages, `packages` and `documents`
+ *   (`#pantry/export/scan.ts` `authorReadsOf`), each compiled once when the login's `DbLayer` is
+ *   built, its access paths earning their indexes (the W5 amendment's C20);
  * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, a package's inputs with
  *   no row being each written relation's empty keyed set, the union of no part, which has no two
  *   rows to conflict. grizzle compiles a ChangeSet from its Description, which names each insert
@@ -49,7 +49,7 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 export const authorLogin = Fn.memoize((qti: QtiSchema) => {
   const author = authorRole(qti);
   const noInputs = Result.getOrThrowWith(
-    unionsOf<PackageInputs>(writtenNamesOf(), []),
+    unionsOf<PackageInputs>(writtenNamesIn(qti), []),
     (conflict) => conflict,
   );
 

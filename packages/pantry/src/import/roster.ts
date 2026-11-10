@@ -83,14 +83,6 @@ const nestedMembersIn = Fn.memoize(
 );
 
 /**
- * Read every ordered family's member relation of `Qti` (`qti()`), on the first call rather than
- * when this module loads, and return that one set on every call.
- *
- * @returns The member relations' names.
- */
-const nestedMembers = (): ReadonlySet<string> => nestedMembersIn(qti());
-
-/**
  * Order relation names by their code points, the order the merge reports its first conflict in.
  *
  * @param names - The names.
@@ -106,14 +98,14 @@ const sorted = <N extends string>(names: readonly N[]): readonly N[] =>
  * @param schema - The schema, `Qti`.
  * @returns The written relations' names.
  */
-const writtenNamesIn = Fn.memoize(
+export const writtenNamesIn = Fn.memoize(
   (schema: QtiSchema): readonly (keyof PackageInputs)[] =>
     // SAFETY: the stored relations of `Qti` less the ordered families' members are the keys of
     // `PackageInputs`, which the builders' row types state by hand; `roster.test.ts` holds the two
     // to one set over a real import.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
     sorted(
-      writableNamesOf(schema).filter((name) => !nestedMembers().has(name)),
+      writableNamesOf(schema).filter((name) => !nestedMembersIn(schema).has(name)),
     ) as readonly (keyof PackageInputs)[],
 );
 

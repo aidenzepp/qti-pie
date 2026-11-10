@@ -10,9 +10,9 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { staticImports } from "#pantry/cli/startup.test.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
+import { staticImports } from "#pantry/test/static-imports.ts";
 
 /**
  * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
