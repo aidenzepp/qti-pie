@@ -312,6 +312,7 @@ describe("buildTest", () => {
           ],
         );
         assert.deepStrictEqual(built.unsupported, []);
+        assert.notProperty(built, "features");
       }),
   );
 

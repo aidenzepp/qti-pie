@@ -37,6 +37,9 @@ import { ItemNotInSession, current, valuesOf } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
 import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
+import type { FeatureRefusal } from "#plate/test-features/contract.ts";
+import { gatedBy } from "#plate/test-features/dispatch.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -66,6 +69,7 @@ import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 export type IntentRule =
   | "attempts-exhausted"
   | "end-of-part"
+  | "feature"
   | "item-closed"
   | "linear-back"
   | "linear-jump"
@@ -88,10 +92,13 @@ export type IntentRule =
  * `refusal` is the move's or the submission's own refusal, with what it knows of the place, such as
  * the part's first and last items; it is none for the three refusals `advance` makes itself:
  * `test-closed`, `end-part` in a linear, individual part, and `next` in a linear, simultaneous part
- * whose item's responses `score` would refuse (`responses-invalid`). A refused intent changes
+ * whose item's responses `score` would refuse (`responses-invalid`). Under the rule `feature`,
+ * `feature` names the test-feature module that refused the intent, its own rule and the reason,
+ * before the part's modes ruled on it; it is none under every other rule. A refused intent changes
  * nothing, the responses the request carried included.
  */
 export class IntentRefused extends Data.TaggedError("IntentRefused")<{
+  readonly feature: Option.Option<FeatureRefusal>;
   readonly intent: Intent;
   readonly messages: readonly ValidationMessage[];
   readonly refusal: Option.Option<MoveRefused | SubmissionRefused>;
@@ -110,6 +117,12 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
 
     return Option.match(this.refusal, {
       onNone: () => {
+        if (Option.isSome(this.feature)) {
+          const { detail, feature, rule } = this.feature.value;
+
+          return `The ${request} from ${item} is refused by ${feature} (${rule}): ${detail}`;
+        }
+
         if (this.rule === "test-closed") {
           return `The test session has closed, so it takes no ${request}. Show the summary current gives instead.`;
         }
@@ -228,6 +241,7 @@ const refusedMove = (
   rule: Exclude<MoveRule, "unsubmitted">,
 ): IntentRefused =>
   new IntentRefused({
+    feature: refusal.feature,
     intent,
     messages: [],
     refusal: Option.some(refusal),
@@ -243,6 +257,7 @@ const refusedMove = (
  */
 const closedRefusal = (intent: Intent): IntentRefused =>
   new IntentRefused({
+    feature: Option.none(),
     intent,
     messages: [],
     refusal: Option.none(),
@@ -265,6 +280,7 @@ const asIntent = (
   Result.mapError(result, (failure) =>
     failure._tag === "SubmissionRefused"
       ? new IntentRefused({
+          feature: Option.none(),
           intent,
           messages: failure.messages,
           refusal: Option.some(failure),
@@ -329,6 +345,7 @@ const leftScoreable = (
     if (Result.isFailure(attempt) && attempt.failure._tag === "ResponsesRefused") {
       return yield* Result.fail(
         new IntentRefused({
+          feature: Option.none(),
           intent,
           messages: attempt.failure.messages,
           refusal: Option.none(),
@@ -484,6 +501,50 @@ const fittingStep = (
   });
 
 /**
+ * Ask the test-feature modules what they do with a submission or an end of part, before the
+ * transition that owns it runs: a module's refusal is the rule `feature`. A move is not asked
+ * here, since `moveTargets` asks for it; every stub lets every intent through.
+ *
+ * @param advancing What the call works with.
+ * @param session The session.
+ * @param intent The intent.
+ * @param sequenceIndex The current item's sequence index, which the refusal names.
+ * @returns The refusal, none when no module refuses the intent.
+ */
+const gatedIntent = (
+  advancing: Advancing,
+  session: TestSession,
+  intent: Intent,
+  sequenceIndex: number,
+): Option.Option<IntentRefused> => {
+  if (intent.kind === "go" || intent.kind === "next" || intent.kind === "previous") {
+    return Option.none();
+  }
+
+  return Option.flatMap(
+    gatedBy(testFeatures, {
+      intent,
+      now: Option.some(advancing.now),
+      session,
+      test: advancing.test.test,
+    }),
+    (gated) =>
+      gated.kind === "refused"
+        ? Option.some(
+            new IntentRefused({
+              feature: Option.some(gated.refusal),
+              intent,
+              messages: [],
+              refusal: Option.none(),
+              rule: "feature",
+              sequenceIndex: Option.some(sequenceIndex),
+            }),
+          )
+        : Option.none(),
+  );
+};
+
+/**
  * Carry out a step's intent through the transition that owns it, which saves the step first.
  *
  * @param advancing What the call works with.
@@ -516,6 +577,7 @@ const carriedOut = (
       return advancing.linearIndividual
         ? Result.fail(
             new IntentRefused({
+              feature: Option.none(),
               intent,
               messages: [],
               refusal: Option.none(),
@@ -602,7 +664,10 @@ export const advance = (
       };
 
       return Result.flatMap(fittingStep(items, session, carried), (checked) =>
-        carriedOut(advancing, session, checked, shown.sequenceIndex),
+        Option.match(gatedIntent(advancing, session, checked.intent, shown.sequenceIndex), {
+          onNone: () => carriedOut(advancing, session, checked, shown.sequenceIndex),
+          onSome: (refused) => Result.fail(refused),
+        }),
       );
     },
   );

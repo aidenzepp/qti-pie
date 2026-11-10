@@ -174,7 +174,7 @@ import type {
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
 import { withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
-import type { LtiLink, UnheldRead } from "#plate/model/test.ts";
+import type { LtiLink, Test, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
@@ -190,6 +190,10 @@ import {
 import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { judgedInSpan } from "#plate/validate/open.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { deliveredBy } from "#plate/test-features/dispatch.ts";
+import { resourceMetadataOf } from "#plate/test-features/metadata.ts";
+import type { ResourceMetadata } from "#plate/test-features/metadata.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
 import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
 import { ltiLinkTypes, resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
@@ -309,6 +313,12 @@ const acceptPackage = Brand.nominal<AcceptedPackage>();
  */
 export interface PackageResource {
   readonly identifier: string;
+  /**
+   * The metadata its manifest entry writes, as the metadata module reads it
+   * (`#plate/test-features/metadata.ts`): empty until issue m3f-04 reads the entry's LOM and QTI
+   * metadata.
+   */
+  readonly metadata: ResourceMetadata;
   /**
    * The path of the file its `href` names, none for a resource with no `href` or one whose `href`
    * leads outside the package: an external link of a resource that is no document's, and refused
@@ -6212,6 +6222,29 @@ const byDocument = <A>(
 };
 
 /**
+ * Give the test a package delivers, through the test-feature modules: `deliveredBy` over the test
+ * as the package marked it, its document and the package's documents, so a module that places a
+ * section document or an included fragment reads them from here. The test is re-accepted only when
+ * a module or the marks changed it.
+ *
+ * @param test The test, as its document's own verdict accepted it.
+ * @param marked The test as the package marked it: the same test when it marked nothing.
+ * @param source The test's document.
+ * @param documents The package's documents the reader read, by path.
+ * @returns The test to deliver.
+ */
+const deliveredTest = (
+  test: AcceptedTest,
+  marked: Test,
+  source: SourceDocument,
+  documents: ReadonlyMap<string, SourceDocument>,
+): AcceptedTest => {
+  const delivered = deliveredBy(testFeatures, { documents, source, test: marked });
+
+  return delivered === test.test ? test : acceptMarkedTest(test, delivered);
+};
+
+/**
  * Build the contents of an accepted package from its judged documents.
  *
  * Each test is delivered as its document's own verdict accepted it, unless one of its item refs
@@ -6220,7 +6253,8 @@ const byDocument = <A>(
  * outcome processing that counts over the test's items marked and that processing `marked`
  * (`withLtiLinks` in `#plate/model/test.ts`, read from the test's document, which every judged
  * document holds), and each such processing marked (`withUnheldReads`), the outcome processing
- * `marked` and each template default that reads one left out.
+ * `marked` and each template default that reads one left out. The test-feature modules then give
+ * the test delivered ({@link deliveredTest}): every stub gives it unchanged.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
@@ -6248,6 +6282,11 @@ const contentsOf = (
   const withheld = new Set(
     manifest.resources.flatMap((resource) =>
       qtiTypes.has(resource.type) ? withheldFiles(resource) : [],
+    ),
+  );
+  const sources = new Map(
+    [...documents].flatMap(([path, document]) =>
+      Result.isSuccess(document.source) ? [[path, document.source.success] as const] : [],
     ),
   );
 
@@ -6282,6 +6321,10 @@ const contentsOf = (
           Option.map(([test, source]): PackageTest => {
             const links = tests.get(path)?.links ?? [];
             const reads = tests.get(path)?.reads ?? [];
+            const marked =
+              links.length === 0 && reads.length === 0
+                ? test.test
+                : withUnheldReads(withLtiLinks(test.test, links, source), reads);
 
             return {
               items: new Map(
@@ -6292,13 +6335,7 @@ const contentsOf = (
                     ),
                 ),
               ),
-              test:
-                links.length === 0 && reads.length === 0
-                  ? test
-                  : acceptMarkedTest(
-                      test,
-                      withUnheldReads(withLtiLinks(test.test, links, source), reads),
-                    ),
+              test: deliveredTest(test, marked, source, sources),
             };
           }),
         ),
@@ -6389,6 +6426,7 @@ const assembleTests = (
  * beside every other rule's.
  *
  * @param manifest The manifest.
+ * @param manifestSource The manifest's document, which each resource's metadata is read from.
  * @param lom Each resource's LOM generals, keyed by its location.
  * @param files The package's files, as the host gave them.
  * @param held The package's files, keyed by normal form.
@@ -6397,6 +6435,7 @@ const assembleTests = (
  */
 const judgeContents = Effect.fnUntraced(function* judgeContents(
   manifest: Manifest,
+  manifestSource: SourceDocument,
   lom: ReadonlyMap<string, readonly LomGeneral[]>,
   files: ReadonlyMap<string, Uint8Array>,
   held: ReadonlyMap<string, Uint8Array>,
@@ -6460,6 +6499,11 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
 
     return {
       identifier: resource.identifier,
+      metadata: resourceMetadataOf({
+        lom: lom.get(resource.location) ?? [],
+        manifest: manifestSource,
+        resource,
+      }),
       path,
       type: resource.type,
       verdict: path.pipe(
@@ -6549,6 +6593,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
 
   return yield* judgeContents(
     manifest.success,
+    source.success,
     resourceLom(source.success),
     files,
     held.success,

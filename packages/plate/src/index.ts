@@ -16,6 +16,13 @@
  * from a Personal Needs and Preferences document: a `Supports` widened with the preferences no
  * renderer reads yet, which `noPnpSupports` gives with none set and `PnpSupportsSchema` checks.
  *
+ * Test features: a test feature plate accepts and does not yet deliver is a mark on the verdict,
+ * and the session delivers the test without it. The types that land with them are exported now:
+ * `TimeState`, the time in force a navigation carries as `time` and a host's timer reads;
+ * `QtiContext`, the values a host supplies for the built-in `QTI_CONTEXT`; `ResourceMetadata`,
+ * a package resource's `metadata`; and `FeatureRefusal`, what an `IntentRefused` or a
+ * `MoveRefused` carries under the rule `feature`.
+ *
  * `open`, `openPackage`, `configure` and `readPnp` return Effects. Every other function is plain,
  * callable with no Effect runtime: it returns its value, or a `Result` when a caller can make it
  * fail.
@@ -239,6 +246,14 @@ export type {
 } from "#plate/supports.ts";
 
 export { catalogSupports, noPnpSupports, noSupports, toolPreferences } from "#plate/supports.ts";
+
+export type { QtiContext } from "#plate/test-features/context-declaration.ts";
+
+export type { FeatureRefusal, TestFeatureKey } from "#plate/test-features/contract.ts";
+
+export type { ResourceMetadata } from "#plate/test-features/metadata.ts";
+
+export type { TimeState } from "#plate/test-features/time-limits.ts";
 
 export { open } from "#plate/validate/open.ts";
 

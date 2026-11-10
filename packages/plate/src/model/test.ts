@@ -8,7 +8,10 @@
  * reader, and its outcome processing into the item model's rules through the registry's expression
  * reader, with the item model's element and attribute readers. The features `testMarks` lists are
  * marks on the verdict, never notices, and the tree leaves them out or holds them inert, so a
- * sequence walked from it ignores them.
+ * sequence walked from it ignores them. Each element feature has a module in the test-feature table
+ * (`#plate/test-features/table.ts`), which the walk dispatches its element to: a stub records the
+ * mark, and a module that has landed reads the element into a node the test holds in
+ * `Test.features` under the module's key.
  *
  * @module
  */
@@ -44,9 +47,18 @@ import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { outcomeDeclaration, pathsOf } from "#plate/model/item.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
 import { occurrenceOf } from "#plate/model/item-refs.ts";
+import { readersOf } from "#plate/model/reader.ts";
 import { integerLexical, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
+import type {
+  TestFeatureKey,
+  TestFeatureModule,
+  TestFeatureNodes,
+} from "#plate/test-features/contract.ts";
+import { featureAt } from "#plate/test-features/dispatch.ts";
+import { testFeatures } from "#plate/test-features/table.ts";
+import type { AnyTestFeature, TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
-import { navigationModes, renders, submissionModes, testMarks } from "#plate/vocabulary.ts";
+import { navigationModes, renders, submissionModes } from "#plate/vocabulary.ts";
 import type {
   Condition,
   FeatureRule,
@@ -172,6 +184,13 @@ export type OutcomeProcessing =
   | { readonly kind: "runs"; readonly rules: readonly Rule[] };
 
 /**
+ * The nodes the test-feature modules read from a test, by the module's key
+ * (`TestFeatureNodes`): derived from the table, so a module that lands a node lands it here with no
+ * change to this file. Every module is a stub today, so no key has a node.
+ */
+export type TestFeatures = TestFeatureNodes<AnyTestFeature>;
+
+/**
  * A valid `qti-assessment-test` as M2 models it.
  *
  * `outcomes` holds the test's outcome declarations of modelled base types and cardinalities, as the
@@ -194,6 +213,12 @@ export interface Test {
    * The document's location as the host named it.
    */
   readonly document: string;
+  /**
+   * The nodes the test-feature modules read, by key ({@link TestFeatures}). Absent when they read
+   * none, as every module that is still a stub reads none, so a test built by hand may leave it
+   * out.
+   */
+  readonly features?: TestFeatures;
   readonly identifier: string;
   readonly outcomeProcessing: OutcomeProcessing;
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
@@ -224,13 +249,6 @@ export const absentControl: ControlAttributes = {
   showSolution: Option.none(),
   validateResponses: Option.none(),
 };
-
-/**
- * The `testMarks` keys that name an element: the element is the feature wherever it sits.
- */
-const elementMarks: ReadonlySet<string> = new Set(
-  testMarks.filter((mark) => mark.startsWith("qti-")),
-);
 
 /**
  * The mark of a `qti-item-session-control` whose `allow-comment` is true.
@@ -645,15 +663,6 @@ const holdsOn = (condition: Condition, declaration: SourceElement): boolean => {
 };
 
 /**
- * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names.
- *
- * @param element The element.
- * @returns The feature's key, or none when the element is not one.
- */
-const elementMark = (element: SourceElement): Option.Option<string> =>
-  isQti(element) && elementMarks.has(element.local) ? Option.some(element.local) : Option.none();
-
-/**
  * Give the marks a `qti-item-session-control` carries, in the order its attributes are written:
  * `allow-comment` true at the element, and a negative `max-attempts` at the attribute.
  *
@@ -681,74 +690,152 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
   });
 
 /**
- * Give every feature a test holds and M2 does not deliver, in document order.
+ * What the walk over a test's features collects: the marks, in document order, and the nodes the
+ * test-feature modules read, by key, each key's in document order.
+ */
+interface FeatureWalk {
+  readonly marks: MarkedFeature[];
+  readonly nodes: Map<TestFeatureKey, unknown[]>;
+}
+
+/**
+ * Read an element a test-feature module names by the module's `parse`, which the way to record
+ * the element's mark, its path and the readers are handed to: a stub records the mark and reads no
+ * node; a module that has landed reads its node, which is collected under the module's key.
  *
- * An element `testMarks` names is marked at its path, and its own subtree is not searched, so a
- * rubric block's stylesheet is not marked apart from the block. A `qti-item-session-control` gives
- * its own marks. A test-level outcome declaration is marked as the
- * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
- * element below it that the model does not read, keyed by its name, its subtree not searched. An
- * element a reader has marked already, the outcome processing and each template default, gives its
- * own mark when it is an element feature, then the reader's marks, where it stands, its subtree not
- * searched, so an element the reader marked in it is not marked again.
+ * @param build The build.
+ * @param into Where the marks and the nodes are collected.
+ * @param module The element's module.
+ * @param element The element.
+ * @param path Its path.
+ * @returns Nothing, or the refusal the module's `parse` gives.
+ */
+const readFeature = (
+  build: ModelWalk,
+  into: FeatureWalk,
+  module: TestFeatureModule<TestFeatureKey, unknown>,
+  element: SourceElement,
+  path: string,
+): Result.Result<void, Refusal> =>
+  Result.map(
+    module.parse(element, {
+      mark: (feature) => {
+        into.marks.push({ feature, path, shown: "mark" });
+
+        return Result.succeed(Option.none());
+      },
+      path,
+      readers: readersOf(build),
+    }),
+    (node) => {
+      if (Option.isSome(node)) {
+        const nodes = into.nodes.get(module.key) ?? [];
+        nodes.push(node.value);
+        into.nodes.set(module.key, nodes);
+      }
+    },
+  );
+
+/**
+ * Give every feature a test holds and M2 does not deliver, in document order, and the nodes the
+ * test-feature modules read.
  *
- * @param source The test.
+ * An element a module names is handed to the module's `parse` ({@link readFeature}): a stub marks
+ * it at its path, and either way its own subtree is not searched, so a rubric block's stylesheet
+ * is not marked apart from the block. A `qti-item-session-control` gives its own marks. A
+ * test-level outcome declaration is marked as the item model marks an item's: the `renders` marks
+ * that sit on it, at its path, and each `qti-*` element below it that the model does not read,
+ * keyed by its name, its subtree not searched. An element a reader has marked already, the outcome
+ * processing and each template default, gives its own mark when it is an element feature, then the
+ * reader's marks, where it stands, its subtree not searched, so an element the reader marked in it
+ * is not marked again.
+ *
+ * @param build The build.
  * @param placed The marks a reader gave, keyed by the element they stand at.
- * @returns The marks, each once per feature and path.
+ * @param features The test-feature modules.
+ * @returns The marks, each once per feature and path, and the nodes; or a module's refusal.
  */
 const marksOf = (
-  source: SourceDocument,
+  build: ModelWalk,
   placed: ReadonlyMap<SourceElement, readonly MarkedFeature[]>,
-): readonly MarkedFeature[] => {
-  const marks: MarkedFeature[] = [];
-  const quiet = new Set<SourceElement>();
-  const declared = new Set<SourceElement>();
-  for (const visit of walk(source)) {
-    const { element, path } = visit;
-    const parent = Option.getOrUndefined(visit.parent);
-    const feature = Option.getOrUndefined(elementMark(element));
-    const read = placed.get(element);
-    if (parent !== undefined && quiet.has(parent)) {
-      quiet.add(element);
-    } else if (read !== undefined) {
-      const repeated = read.some((each) => each.feature === feature && each.path === path);
-      if (feature !== undefined && !repeated) {
-        marks.push({ feature, path, shown: "mark" });
-      }
-
-      marks.push(...read);
-      quiet.add(element);
-    } else if (parent !== undefined && declared.has(parent)) {
-      if (
-        isQti(element) &&
-        element.local.startsWith("qti-") &&
-        !declarationContent.has(element.local)
-      ) {
-        marks.push({ feature: element.local, path, shown: "mark" });
+  features: TestFeatureTable,
+): Result.Result<FeatureWalk, Refusal> =>
+  Result.gen(function* walkFeatures() {
+    const source = build.document;
+    const into: FeatureWalk = { marks: [], nodes: new Map() };
+    const { marks } = into;
+    const quiet = new Set<SourceElement>();
+    const declared = new Set<SourceElement>();
+    for (const visit of walk(source)) {
+      const { element, path } = visit;
+      const parent = Option.getOrUndefined(visit.parent);
+      const module = Option.getOrUndefined(featureAt(features, element));
+      const read = placed.get(element);
+      if (parent !== undefined && quiet.has(parent)) {
         quiet.add(element);
-      } else {
+      } else if (read !== undefined) {
+        const repeated = read.some((each) => each.feature === module?.key && each.path === path);
+        if (module !== undefined && !repeated) {
+          marks.push({ feature: module.key, path, shown: "mark" });
+        }
+
+        marks.push(...read);
+        quiet.add(element);
+      } else if (parent !== undefined && declared.has(parent)) {
+        if (
+          isQti(element) &&
+          element.local.startsWith("qti-") &&
+          !declarationContent.has(element.local)
+        ) {
+          marks.push({ feature: element.local, path, shown: "mark" });
+          quiet.add(element);
+        } else {
+          declared.add(element);
+        }
+      } else if (module !== undefined) {
+        yield* readFeature(build, into, module, element, path);
+        quiet.add(element);
+      } else if (isQti(element) && element.local === "qti-item-session-control") {
+        marks.push(...controlMarks(element, path));
+      } else if (
+        isQti(element) &&
+        element.local === "qti-outcome-declaration" &&
+        parent === source.root
+      ) {
+        for (const mark of declarationMarks) {
+          if (holdsOn(mark.when, element)) {
+            marks.push({ feature: mark.feature, path, shown: "mark" });
+          }
+        }
         declared.add(element);
       }
-    } else if (feature !== undefined) {
-      marks.push({ feature, path, shown: "mark" });
-      quiet.add(element);
-    } else if (isQti(element) && element.local === "qti-item-session-control") {
-      marks.push(...controlMarks(element, path));
-    } else if (
-      isQti(element) &&
-      element.local === "qti-outcome-declaration" &&
-      parent === source.root
-    ) {
-      for (const mark of declarationMarks) {
-        if (holdsOn(mark.when, element)) {
-          marks.push({ feature: mark.feature, path, shown: "mark" });
-        }
-      }
-      declared.add(element);
     }
+
+    return into;
+  });
+
+/**
+ * Give the features a walk collected as the test holds them: the table types each key's nodes from
+ * its module, and the walk reads the modules with their node types erased, so this is the one place
+ * the two meet.
+ *
+ * @param nodes The nodes the walk collected, by key.
+ * @returns The features, none when no module read a node.
+ */
+const featuresOf = (
+  nodes: ReadonlyMap<TestFeatureKey, readonly unknown[]>,
+): Option.Option<TestFeatures> => {
+  if (nodes.size === 0) {
+    return Option.none();
   }
 
-  return marks;
+  const collected: Readonly<Record<string, readonly unknown[]>> = Object.fromEntries(nodes);
+
+  // SAFETY: each key's nodes came from the module the table holds under that key, whose `parse`
+  // types them, so the record is a `TestFeatures` by construction; the walk reads the modules with
+  // their node types erased, and this is the one place the erased walk meets the typed table.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion -- see SAFETY.
+  return Option.some(collected as TestFeatures);
 };
 
 /**
@@ -1607,12 +1694,20 @@ const templateDefaultOf = (
  * A test holding an XInclude `include` is never built: `check` leaves it unchecked (E23) before it
  * reaches here, so no include is read or marked.
  *
+ * Each element feature is read by its module in the test-feature table, which a test may replace
+ * with one holding a module that has landed; the nodes the modules read are `features`, absent
+ * while every module is a stub.
+ *
  * @param source A document the structural validator and the prose rules accepted.
+ * @param features The test-feature modules, the table by default.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
  *   space. A document the validator would refuse can also fail with `missing-attribute` or
  *   `attribute-type`.
  */
-export const buildTest = (source: SourceDocument): Result.Result<Test, Refusal> =>
+export const buildTest = (
+  source: SourceDocument,
+  features: TestFeatureTable = testFeatures,
+): Result.Result<Test, Refusal> =>
   Result.gen(function* readTest() {
     const build: ModelWalk = { builder: "buildTest", document: source, paths: pathsOf(source) };
     const { root } = source;
@@ -1650,7 +1745,9 @@ export const buildTest = (source: SourceDocument): Result.Result<Test, Refusal> 
       placed.set(processing.value, read.marks);
     }
 
-    return {
+    const walked = yield* marksOf(build, placed, features);
+    const held = featuresOf(walked.nodes);
+    const test: Test = {
       declared: names.declared,
       document: source.location,
       identifier,
@@ -1659,8 +1756,10 @@ export const buildTest = (source: SourceDocument): Result.Result<Test, Refusal> 
       parts,
       repeatable: names.repeatable,
       title,
-      unsupported: marksOf(source, placed),
+      unsupported: walked.marks,
     };
+
+    return Option.isSome(held) ? { ...test, features: held.value } : test;
   });
 
 /**

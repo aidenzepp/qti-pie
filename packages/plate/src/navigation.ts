@@ -28,6 +28,8 @@ import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
 import { current, itemViews, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession } from "#plate/session/start.ts";
+import { timeStateOf } from "#plate/test-features/time-limits.ts";
+import type { TimeState } from "#plate/test-features/time-limits.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
 import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
 
@@ -63,6 +65,10 @@ export interface NavigationItem {
  * are those of the part it closed in: the last part that holds an item, since a part with no item
  * ends as the candidate reaches it. A test with no item has no such part, so its `items` are empty,
  * its `position` is 0 and its modes are its last part's.
+ *
+ * `time` is the time in force, which the `time` part and a host's timer read; absent while none
+ * is, which is always until issue m3f-01 reads the test's time limits, so a state built by hand
+ * may leave it out.
  */
 export interface NavigationState {
   /**
@@ -74,6 +80,11 @@ export interface NavigationState {
   readonly navigation: NavigationMode;
   readonly position: number;
   readonly submission: SubmissionMode;
+  /**
+   * The time in force on the session, as the time-limits module reads it (`timeStateOf`); absent
+   * while none is.
+   */
+  readonly time?: TimeState;
 }
 
 /**
@@ -240,7 +251,8 @@ export const navigationState = (
       state: stateOf(item, view.disabled),
     }));
 
-    return {
+    const time = timeStateOf(test.test, session);
+    const state: NavigationState = {
       allowed,
       count: shown.count,
       items,
@@ -248,6 +260,8 @@ export const navigationState = (
       position: shown.position,
       submission: shown.submission,
     };
+
+    return Option.isSome(time) ? { ...state, time: time.value } : state;
   });
 
 export type { NavigationPart } from "#plate/emit/navigation.ts";
