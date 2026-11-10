@@ -333,9 +333,10 @@ describe("the supports option", () => {
           render(plain, configuration, { instance: "q1", supports: noSupports }),
         );
 
+        // The three data attributes are the Root hook's (issue m3e-09b); nothing else differs.
         assert.strictEqual(
-          withSupports.html.replace(
-            ' style="font-size: 200%; color: #ffffff; background-color: #000000"',
+          withSupports.html.replaceAll(
+            / data-(?:magnification|font-color|background-color)="[^"]*"/gu,
             "",
           ),
           without.html,

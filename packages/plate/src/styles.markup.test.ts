@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { contentModules } from "#plate/content/modules.ts";
 import type { AnyContentModule } from "#plate/content/modules.ts";
-import { rootHook } from "#plate/content/root.ts";
+import { magnificationSteps, rootHook } from "#plate/content/root.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { partForSlot, rowFor } from "#plate/emit/parts.ts";
@@ -1104,10 +1104,9 @@ const magnifying: Supports = {
 /**
  * Render {@link choiceItem} in every state with a magnification on, as a host does for a candidate
  * who has one: the support-driven witness of the magnification the Root hook writes under
- * `supports.display.magnification`. The hook issue m3e-09 landed writes it as the Root's inline
- * `style` (`font-size`); issue m3e-09b (ruling D25) moves it to the `data-magnification` marker the
- * part table merges and the sheet keys on, and moves the row's read with it. The redaction takes
- * the same supports as the render, as the render contract asks.
+ * `supports.display.magnification`, as the `data-magnification` marker the part table merges and
+ * the sheet keys on (issue m3e-09b, ruling D25). The redaction takes the same supports as the
+ * render, as the render contract asks.
  *
  * @param configuration The configuration.
  * @returns The renders' trees.
@@ -1119,6 +1118,38 @@ const magnifiedTrees = Effect.fnUntraced(function* magnifiedTrees(configuration:
 });
 
 /**
+ * Open and render {@link choiceItem} once for each step of {@link magnificationSteps}, with the
+ * supports of a candidate whose magnification factor is that step as a factor (A-30a): the
+ * support-driven witness of the supports block's step rules (issue m3e-09b), each of which keys on
+ * a Root that carries its step. The redaction takes the same supports as the render, as the render
+ * contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The trees of the eight renders.
+ */
+const magnificationStepTrees = Effect.fnUntraced(function* magnificationStepTrees(
+  configuration: Configuration,
+) {
+  const accepted = yield* acceptedOf(choiceItem);
+  const trees = yield* Effect.all(
+    magnificationSteps.map((step) => {
+      const supports: Supports = {
+        ...noSupports,
+        display: { ...noSupports.display, magnification: Option.some(step / 100) },
+      };
+      const redacted = redact(accepted, undefined, configuration, { supports });
+
+      return Effect.map(
+        Effect.fromResult(render(redacted, configuration, { instance, supports })),
+        (rendered) => parseHtml(rendered.html),
+      );
+    }),
+  );
+
+  return trees.flat();
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -1127,8 +1158,8 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * the navigation, the navigation of a timed test, a Choice with answer masking on and a Choice
- * with a magnification on.
+ * the navigation, the navigation of a timed test, a Choice with answer masking on, a Choice with a
+ * magnification on and a Choice at each magnification step.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -1152,6 +1183,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...(yield* timedNavigationTrees(configuration)),
       ...(yield* maskedTrees(configuration)),
       ...(yield* magnifiedTrees(configuration)),
+      ...(yield* magnificationStepTrees(configuration)),
     ],
   };
 });
@@ -1410,9 +1442,9 @@ describe("styles.css over emitted markup", () => {
       assert.isNotEmpty(roots);
       for (const root of roots) {
         assert.strictEqual(
-          Option.exists(attribute(root, "style"), (style) => style.includes("font-size: 150%")),
+          Option.contains(attribute(root, "data-magnification"), "150"),
           rootHook.implemented,
-          "the Root carries the magnification as font-size in its style as the Root hook is implemented",
+          "the Root carries the magnification as its data-magnification step as the Root hook is implemented",
         );
       }
     }),
