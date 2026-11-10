@@ -10,7 +10,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import {
   enumerated,
   identifierAttribute,
@@ -205,7 +205,7 @@ const variableReader: ReaderSpec<"variable"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "identifier"),
       (identifier) => (operands) => ({
         identifier,
@@ -223,7 +223,7 @@ const correctReader: ReaderSpec<"correct"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "identifier"),
       (identifier) => (operands) => ({ identifier, kind: "correct", operands }),
     ),
@@ -236,7 +236,7 @@ const mapResponseReader: ReaderSpec<"map-response"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "identifier"),
       (identifier) => (operands) => ({ identifier, kind: "map-response", operands }),
     ),
@@ -249,7 +249,7 @@ const mapResponsePointReader: ReaderSpec<"map-response-point"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "identifier"),
       (identifier) => (operands) => ({ identifier, kind: "map-response-point", operands }),
     ),
@@ -262,7 +262,7 @@ const defaultReader: ReaderSpec<"default"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(
+    Result.map(
       identifierAttribute(context.walk, element, "identifier"),
       (identifier) => (operands) => ({ identifier, kind: "default", operands }),
     ),
@@ -274,7 +274,7 @@ const defaultReader: ReaderSpec<"default"> = {
 const nullReader: ReaderSpec<"null"> = {
   _tag: "generic",
   arity: "none",
-  attributes: () => Effect.succeed((operands) => ({ kind: "null", operands })),
+  attributes: () => Result.succeed((operands) => ({ kind: "null", operands })),
 };
 
 /**
@@ -289,10 +289,10 @@ const nullReader: ReaderSpec<"null"> = {
 const baseValueReader: ReaderSpec<"base-value"> = {
   _tag: "custom",
   read: (context, element) =>
-    Effect.gen(function* readBaseValue() {
+    Result.gen(function* readBaseValue() {
       const baseType = yield* enumerated(context.walk, element, "base-type", baseTypes);
       if (Option.isNone(baseType)) {
-        return yield* Effect.fail(
+        return yield* Result.fail(
           refusal(context.walk, "missing-attribute", pathOf(context.walk, element), {
             attribute: "base-type",
             element: element.local,
@@ -350,7 +350,7 @@ const randomIntegerReader: ReaderSpec<"random-integer"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(requiredValue(context.walk, element, "max"), (written) => {
+    Result.map(requiredValue(context.walk, element, "max"), (written) => {
       const max = integerOrRefOf(written);
       const min = Option.match(valueOf(element, "min"), {
         onNone: () => integerZero,
@@ -378,7 +378,7 @@ const randomFloatReader: ReaderSpec<"random-float"> = {
   _tag: "generic",
   arity: "none",
   attributes: (context, element) =>
-    Effect.map(requiredValue(context.walk, element, "max"), (written) => {
+    Result.map(requiredValue(context.walk, element, "max"), (written) => {
       const max = floatOrRefOf(written);
       const min = Option.match(valueOf(element, "min"), {
         onNone: () => floatZero,

@@ -1,15 +1,21 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option } from "effect";
+import { ConfigProvider, Effect, Layer, Option, Result } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
-import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
-import { testField } from "#plate/dev/packages.ts";
-import { createHandler } from "#plate/dev/page.ts";
+import {
+  groupVerdicts,
+  openMember,
+  verdictCache,
+  Verdicts,
+  verdictOrder,
+} from "#plate/dev/listing.ts";
+import { Packages, testField } from "#plate/dev/packages.ts";
+import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
 import { postOf, valuesOf } from "#plate/dev/post.ts";
 import { sessionStore } from "#plate/dev/store.ts";
-import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
+import type { Handler, PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -64,6 +70,25 @@ const corpusTimeoutMs = 60_000;
 const verdicts = Effect.runSync(verdictCache());
 
 /**
+ * The Layer of a handler over the corpus that shares {@link verdicts}, with a package cache of its
+ * own.
+ */
+const sharedVerdicts: PlaygroundLayer = Layer.merge(
+  Layer.succeed(Verdicts, verdicts),
+  Packages.layer,
+);
+
+/**
+ * The Layer of a handler with caches of its own that reads its configuration from the given
+ * variables alone, in place of the process environment.
+ *
+ * @param variables The variables, such as `PLATE_CORPUS_DIR`, by name.
+ * @returns The Layer.
+ */
+const variablesLayer = (variables: Readonly<Record<string, string>>): PlaygroundLayer =>
+  Layer.merge(playgroundCaches, ConfigProvider.layer(ConfigProvider.fromUnknown(variables)));
+
+/**
  * Construct a handler over the corpus that shares {@link verdicts}, with its own sessions and
  * theme.
  *
@@ -71,7 +96,7 @@ const verdicts = Effect.runSync(verdictCache());
  * @returns The handler.
  */
 const playground = (settings: Pick<PlaygroundSettings, "configuration"> = {}): Handler =>
-  createHandler({ ...settings, verdicts });
+  createHandler(settings, sharedVerdicts);
 
 /**
  * The headers every page carries, exactly (rule `723e580c`); `pageHeaders` in
@@ -130,9 +155,7 @@ const scriptItem = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/ims
  * A handler over the scratch corpus root, which holds only {@link hostile} and {@link scriptPath},
  * with its own verdict cache.
  */
-const scratchHandler = createHandler({
-  provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: scratch }),
-});
+const scratchHandler = createHandler({}, variablesLayer({ PLATE_CORPUS_DIR: scratch }));
 
 /**
  * A test title holding a script element, which the ledger page shows as text.
@@ -231,7 +254,7 @@ const malformedFolder = path.join(scratch, "malformed-ledger");
  * @returns The handler.
  */
 const ledgerHandler = (folder: string): Handler =>
-  createHandler({ provider: ConfigProvider.fromUnknown({ PLATE_LEDGER_DIR: folder }) });
+  createHandler({}, variablesLayer({ PLATE_LEDGER_DIR: folder }));
 
 beforeAll(async () => {
   rmSync(scratch, { force: true, recursive: true });
@@ -848,7 +871,10 @@ describe("dev/page.ts", { tags: ["corpus"] }, () => {
             return openMember(member);
           }),
         );
-        const handle = createHandler({ verdicts: counting });
+        const handle = createHandler(
+          {},
+          Layer.merge(Layer.succeed(Verdicts, counting), Packages.layer),
+        );
         const members = yield* corpusDocuments;
         const first = yield* get(handle, "/");
         const afterFirst = [...opened];
@@ -859,6 +885,36 @@ describe("dev/page.ts", { tags: ["corpus"] }, () => {
         assert.deepStrictEqual(afterFirst, members);
         assert.strictEqual(second.html.length, first.html.length);
         assert.strictEqual(item.response.status, 200);
+        assert.deepStrictEqual(opened, members);
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "two handlers over one playground test Layer share its verdict cache: a counting opener sees one open per member, whichever handler asks",
+    () =>
+      Effect.gen(function* sharedLayer() {
+        const opened: string[] = [];
+        const counting = yield* verdictCache((member) =>
+          Effect.suspend(() => {
+            opened.push(member);
+
+            return openMember(member);
+          }),
+        );
+        const layer = Layer.merge(Layer.succeed(Verdicts, counting), Packages.layer);
+        const first = createHandler({}, layer);
+        const second = createHandler({}, layer);
+        const members = yield* corpusDocuments;
+        const listed = yield* get(first, "/");
+        const afterFirst = [...opened];
+        const relisted = yield* get(second, "/");
+        const item = yield* get(second, itemTarget(paths.bg007));
+
+        assert.strictEqual(listed.response.status, 200);
+        assert.strictEqual(relisted.response.status, 200);
+        assert.strictEqual(item.response.status, 200);
+        assert.deepStrictEqual(afterFirst, members);
         assert.deepStrictEqual(opened, members);
       }),
     corpusTimeoutMs,
@@ -1711,7 +1767,7 @@ describe("dev/page.ts: the verdicts page and the ledger page", { tags: ["corpus"
         const tables = elementChildren(article).filter((child) => child.tag === "table");
 
         assert.strictEqual(response.status, 200);
-        assert.include(html, toHtml(ledgerHtml(fixtureLedger)));
+        assert.include(html, Result.getOrThrow(toHtml(ledgerHtml(fixtureLedger))));
         assert.deepStrictEqual(order[0], ["h1", "Feature ledger"]);
         assert.deepStrictEqual(
           order.slice(
@@ -1890,7 +1946,7 @@ const guideTest = {
  * @returns The handler.
  */
 const fixturePlayground = (): Handler =>
-  createHandler({ provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot }) });
+  createHandler({}, variablesLayer({ PLATE_CORPUS_DIR: fixturesRoot }));
 
 /**
  * Start the fixture's test as its Start button's post does.
@@ -2043,12 +2099,12 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
     "starts a test session through the playground's Start route under the playground's fixed seed as its processing seed, kept apart from the configuration's shuffle seed, and draws one with no fixed seed",
     () =>
       Effect.gen(function* processingSeedRoute() {
-        const provider = ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot });
+        const layer = variablesLayer({ PLATE_CORPUS_DIR: fixturesRoot });
         const storedUnder = Effect.fnUntraced(function* storedUnder(seed?: string) {
           const tests = sessionStore();
-          const settings: PlaygroundSettings = { configuration: { seed: "7" }, provider, tests };
+          const settings: PlaygroundSettings = { configuration: { seed: "7" }, tests };
           const location = yield* startFixture(
-            createHandler(seed === undefined ? settings : { ...settings, seed }),
+            createHandler(seed === undefined ? settings : { ...settings, seed }, layer),
           );
 
           return Option.getOrElse(tests.get(location.slice("/sessions/".length)), () =>
@@ -2161,7 +2217,7 @@ const seeds = { first: "sitting-seed-a", second: "sitting-seed-d" } as const;
  * @returns The handler.
  */
 const seeded = (seed: string): Handler =>
-  createHandler({ newInstance: () => sittingInstance, seed, verdicts });
+  createHandler({ newInstance: () => sittingInstance, seed }, sharedVerdicts);
 
 /**
  * The accepted document of {@link templateDigging}.

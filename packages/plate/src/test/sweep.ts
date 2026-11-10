@@ -18,8 +18,11 @@ import type {
   Accepted,
   Configuration,
   EngineFailure,
+  InvalidHeadingLevel,
   InvalidInstance,
   InvalidRecord,
+  MarkupRefused,
+  NotRedacted,
   Options,
   OutputTooLarge,
   PartSwapRefused,
@@ -165,7 +168,13 @@ export const threeStates = (
   record?: RedactRecord,
 ): Result.Result<
   readonly RenderState[],
-  InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
+  | InvalidHeadingLevel
+  | InvalidInstance
+  | MarkupRefused
+  | NotRedacted
+  | OutputTooLarge
+  | PartSwapRefused
+  | UnknownPart
 > => {
   const redacted = redact(accepted, record);
   const responses = redacted.responses.map((response) => response.identifier);

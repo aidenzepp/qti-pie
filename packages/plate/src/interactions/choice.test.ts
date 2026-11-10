@@ -671,7 +671,7 @@ describe("renderChoice", () => {
           assert.strictEqual(root.tag, "fieldset");
           assert.deepStrictEqual(partsIn(root, "root"), [root]);
           assert.isUndefined(root.attrs["role"]);
-          assert.notInclude(toHtml(page(root, built)), "radiogroup");
+          assert.notInclude(Result.getOrThrow(toHtml(page(root, built))), "radiogroup");
           assert.deepStrictEqual(
             partsIn(root, "control").map((control) => control.attrs["type"]),
             [type, type, type],

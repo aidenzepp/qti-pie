@@ -7,6 +7,7 @@ import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { MarkupRefused } from "#plate/emit/serialise.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -662,6 +663,34 @@ describe("renderNavigation", { tags: ["corpus"] }, () => {
           assert.strictEqual(unknown.interaction, "test-navigation");
           assert.deepStrictEqual(unknown.part, Option.some("pager"));
         }
+      }),
+  );
+});
+
+describe("renderNavigation, host markup", { tags: ["corpus"] }, () => {
+  it.effect(
+    "[T-4] [markup refused] fails MarkupRefused for a replacement with an onclick on its root",
+    () =>
+      Effect.gen(function* handlerRefused() {
+        const given = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
+        const configuration = yield* configure({});
+        const state = stateOf(given.test, sessionAfter(given, configuration, []));
+        const refusal = Result.match(
+          renderNavigation(state, configuration, {
+            parts: {
+              "test-navigation": {
+                submit: (props, children) => h("button", { ...props, onclick: "x" }, children),
+              },
+            },
+          }),
+          {
+            onFailure: (error) =>
+              error instanceof MarkupRefused ? `MarkupRefused: ${error.reason._tag}` : error._tag,
+            onSuccess: () => assert.fail("renderNavigation wrote an event-handler attribute"),
+          },
+        );
+
+        assert.strictEqual(refusal, "MarkupRefused: EventHandlerAttribute");
       }),
   );
 });

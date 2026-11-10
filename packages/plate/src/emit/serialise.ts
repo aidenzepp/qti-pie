@@ -1,4 +1,4 @@
-import { Data, Option } from "effect";
+import { Data, Option, Result } from "effect";
 import type { Element, Node } from "#plate/emit/node.ts";
 
 /**
@@ -17,11 +17,11 @@ export interface Sink {
 }
 
 /**
- * The defect of a void element built with children, which HTML cannot write because a void element
+ * The refusal of a void element built with children, which HTML cannot write because a void element
  * has no end tag to close them.
  *
- * The tree is built by code, never by content, so this is a defect in the code that built it and no
- * caller recovers: it is thrown, not returned. It cannot occur on a checked item: the XSD's HTML
+ * It is a {@link MarkupRefused}'s reason, returned, never thrown, so a host whose replacement part
+ * reaches it recovers. It cannot occur on a checked item: the XSD's HTML
  * subset gives a void element no content, so check refuses one with children, and the content
  * emitter's second line (`htmlSubset` in `#plate/emit/body.ts`) drops what that subset does not
  * hold before the serialiser sees it. A host's replacement part is host code, not a checked item,
@@ -36,7 +36,7 @@ export class VoidElementChildren extends Data.TaggedError("VoidElementChildren")
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `<${this.tag}> is a void element and cannot hold children: build it with no children, or put them in a non-void element.`;
@@ -44,11 +44,11 @@ export class VoidElementChildren extends Data.TaggedError("VoidElementChildren")
 }
 
 /**
- * The defect of an element whose tag is not a lower-case name, which the serialiser cannot write
+ * The refusal of an element whose tag is not a lower-case name, which the serialiser cannot write
  * without the tag ending early or reading as another element.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
- * not returned. It cannot occur on a checked item, because the second line emits only the XSD's
+ * Like {@link VoidElementChildren}, it is a {@link MarkupRefused}'s reason, returned, never thrown.
+ * It cannot occur on a checked item, because the second line emits only the XSD's
  * lower-case element names. A host's replacement part, which is host code and no checked item, can
  * still reach it with an element I1 to I4 do not check, below its root.
  */
@@ -59,7 +59,7 @@ export class MalformedTagName extends Data.TaggedError("MalformedTagName")<{
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `Tag ${JSON.stringify(this.tag)} is not an element name the serialiser writes: give the element a lower-case name that starts with a letter and holds only a to z, 0 to 9 and "-".`;
@@ -67,11 +67,11 @@ export class MalformedTagName extends Data.TaggedError("MalformedTagName")<{
 }
 
 /**
- * The defect of an attribute whose name is empty or holds a character that would end the name or
+ * The refusal of an attribute whose name is empty or holds a character that would end the name or
  * the tag early, so the written attribute would read back as other attributes or other markup.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
- * not returned. It cannot occur on a checked item, because the second line emits only the
+ * Like {@link VoidElementChildren}, it is a {@link MarkupRefused}'s reason, returned, never thrown.
+ * It cannot occur on a checked item, because the second line emits only the
  * attributes the XSD declares by name. A host's replacement part, which is host code and no checked
  * item, can still reach it on its root's own attributes or below its root, which I1 to I4 do not
  * check.
@@ -88,7 +88,7 @@ export class MalformedAttributeName extends Data.TaggedError("MalformedAttribute
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `Attribute name ${JSON.stringify(this.attribute)} on <${this.tag}> cannot be written as HTML: give the attribute a non-empty name with no whitespace, quote, apostrophe, ">", "/", "=" or control character.`;
@@ -96,11 +96,11 @@ export class MalformedAttributeName extends Data.TaggedError("MalformedAttribute
 }
 
 /**
- * The defect of a raw-text element built with children, whose content HTML reads with no character
+ * The refusal of a raw-text element built with children, whose content HTML reads with no character
  * reference decoded, so no escaping writes a child that reads back as itself.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
- * not returned. It cannot occur on a checked item, because the XSD's HTML subset holds no raw-text
+ * Like {@link VoidElementChildren}, it is a {@link MarkupRefused}'s reason, returned, never thrown.
+ * It cannot occur on a checked item, because the XSD's HTML subset holds no raw-text
  * element, so the second line drops them all. A host's replacement part, which is host code and no
  * checked item, can still reach it: one that adds a `script` child holding text below its root,
  * which I1 to I4 do not check, reaches it.
@@ -112,7 +112,7 @@ export class RawTextChildren extends Data.TaggedError("RawTextChildren")<{
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `<${this.tag}> is a raw-text element, whose content HTML reads without decoding character references, so the serialiser cannot escape it: build it with no children.`;
@@ -120,15 +120,15 @@ export class RawTextChildren extends Data.TaggedError("RawTextChildren")<{
 }
 
 /**
- * The defect of an escapable raw-text element (`textarea`, `title`) built with an element child,
+ * The refusal of an escapable raw-text element (`textarea`, `title`) built with an element child,
  * which HTML would read back as text rather than as an element.
  *
  * Its text children are written escaped, as anywhere else. Like {@link VoidElementChildren}, it is
- * a defect in the code that built the tree and is thrown, not returned. It cannot occur on a
- * checked item, because the XSD's HTML subset holds neither element, so the second line drops them,
- * and the parts that build a `textarea` give it text only. A host's replacement part, which is host
- * code and no checked item, can still reach it: one that adds `<textarea><b/></textarea>` below its
- * root, which I1 to I4 do not check, reaches it.
+ * a {@link MarkupRefused}'s reason, returned, never thrown. It cannot occur on a checked item,
+ * because the XSD's HTML subset holds neither element, so the second line drops them, and the parts
+ * that build a `textarea` give it text only. A host's replacement part, which is host code and no
+ * checked item, can still reach it: one that adds `<textarea><b/></textarea>` below its root, which
+ * I1 to I4 do not check, reaches it.
  */
 export class EscapableRawTextElementChild extends Data.TaggedError("EscapableRawTextElementChild")<{
   /**
@@ -142,7 +142,7 @@ export class EscapableRawTextElementChild extends Data.TaggedError("EscapableRaw
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `<${this.tag}> holds only text, and HTML would read its child <${this.child}> as text: build <${this.tag}> with text children only.`;
@@ -150,19 +150,19 @@ export class EscapableRawTextElementChild extends Data.TaggedError("EscapableRaw
 }
 
 /**
- * The defect of a `plaintext` element, whose start tag makes HTML read the whole rest of the
+ * The refusal of a `plaintext` element, whose start tag makes HTML read the whole rest of the
  * document as its text, so nothing written after it reads back as written.
  *
  * It is refused with or without children, because what follows it is out of the serialiser's sight.
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
- * not returned. It cannot occur on a checked item, because the XSD's HTML subset holds no
+ * Like {@link VoidElementChildren}, it is a {@link MarkupRefused}'s reason, returned, never thrown.
+ * It cannot occur on a checked item, because the XSD's HTML subset holds no
  * `plaintext` element, so the second line drops it. A host's replacement part, which is host code
  * and no checked item, can still reach it with a `plaintext` element below its root, which I1 to I4
  * do not check.
  */
 export class PlaintextElement extends Data.TaggedError("PlaintextElement") {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   // oxlint-disable-next-line eslint/class-methods-use-this -- A field would be an own property of the error; the other refusals' messages read their fields, and this one has none.
   override get message(): string {
@@ -171,15 +171,15 @@ export class PlaintextElement extends Data.TaggedError("PlaintextElement") {
 }
 
 /**
- * The defect of an attribute whose name starts with `on` in any case, which HTML reads as an
+ * The refusal of an attribute whose name starts with `on` in any case, which HTML reads as an
  * event-handler attribute and runs as script.
  *
- * No part, emitter or runtime writes one, so like {@link VoidElementChildren} it is a defect in the
- * code that built the tree and is thrown, not returned. It cannot occur on a checked item, because
+ * No part, emitter or runtime writes one. Like {@link VoidElementChildren}, it is a
+ * {@link MarkupRefused}'s reason, returned, never thrown. It cannot occur on a checked item, because
  * the second line emits only the attributes the XSD declares by name, and it declares no event
  * handler. A host's replacement part, which is host code and no checked item, can still reach it:
- * I1 to I4 do not check the root's own attributes, so a replacement that returns
- * `h("div", { onclick: "x" }, children)` reaches it.
+ * I1 to I4 do not check the root's own attributes, so a replacement that returns `h("div", {
+ * onclick: "x" }, children)` reaches it.
  */
 export class EventHandlerAttribute extends Data.TaggedError("EventHandlerAttribute")<{
   /**
@@ -193,10 +193,45 @@ export class EventHandlerAttribute extends Data.TaggedError("EventHandlerAttribu
   readonly tag: string;
 }> {
   /**
-   * The defect and what to change in the code that built the tree, in one line.
+   * The refusal and what to change in the code that built the tree, in one line.
    */
   override get message(): string {
     return `Attribute ${JSON.stringify(this.attribute)} on <${this.tag}> names an event handler, which the serialiser never writes: remove it, and attach behaviour with addEventListener instead.`;
+  }
+}
+
+/**
+ * Why the serialiser refused an element: one of the seven rules an element must keep for HTML to
+ * write it so that it reads back as the same tree.
+ */
+export type MarkupRefusal =
+  | EscapableRawTextElementChild
+  | EventHandlerAttribute
+  | MalformedAttributeName
+  | MalformedTagName
+  | PlaintextElement
+  | RawTextChildren
+  | VoidElementChildren;
+
+/**
+ * The failure of a tree that holds an element HTML cannot write so that it reads back as the same
+ * tree, which {@link serialise}, {@link toHtml} and {@link toHtmlWithin} return in place of HTML.
+ *
+ * No checked item reaches it, as each reason's class says. A host's replacement part in the `parts`
+ * option of `render`, `renderStatus` or `renderNavigation` is host code and can, so it is returned,
+ * never thrown. It names the first refused element in document order.
+ */
+export class MarkupRefused extends Data.TaggedError("MarkupRefused")<{
+  /**
+   * The rule the refused element broke, with its tag and the name at fault.
+   */
+  readonly reason: MarkupRefusal;
+}> {
+  /**
+   * The failure, naming the `parts` option, then the reason's message, which says what to change.
+   */
+  override get message(): string {
+    return `A replacement in the parts option holds markup the serialiser cannot write. ${this.reason.message}`;
   }
 }
 
@@ -306,20 +341,21 @@ const escapeAttribute = (value: string): string =>
  * Refuse an element that HTML cannot write so that it reads back as the same tree, before any of
  * its bytes are written.
  *
+ * The rules are tried in this order, and the first one broken is the refusal: {@link
+ * MalformedTagName} when the tag is not a lower-case letter followed by lower-case letters, digits
+ * and hyphens; {@link MalformedAttributeName} when an attribute name is empty or holds whitespace,
+ * a quote, an apostrophe, `>`, `/`, `=` or a control; {@link EventHandlerAttribute} when an
+ * attribute name starts with `on`, in any case; {@link VoidElementChildren} when a void element has
+ * children; {@link RawTextChildren} when a raw-text element has children; {@link PlaintextElement}
+ * when the element is a `plaintext` element with no children; {@link EscapableRawTextElementChild}
+ * when `textarea` or `title` has an element child.
+ *
  * @param element The element about to be written; each descendant is checked when it is written.
- * @throws {MalformedTagName} When the tag is not a lower-case letter followed by lower-case
- *   letters, digits and hyphens.
- * @throws {MalformedAttributeName} When an attribute name is empty or holds whitespace, a quote, an
- *   apostrophe, `>`, `/`, `=` or a control.
- * @throws {EventHandlerAttribute} When an attribute name starts with `on`, in any case.
- * @throws {VoidElementChildren} When a void element has children.
- * @throws {RawTextChildren} When a raw-text element has children.
- * @throws {PlaintextElement} When the element is a `plaintext` element with no children.
- * @throws {EscapableRawTextElementChild} When `textarea` or `title` has an element child.
+ * @returns The first rule `element` breaks, or none when HTML can write it.
  */
-const refuseUnwritable = (element: Element): void => {
+const refuseUnwritable = (element: Element): Option.Option<MarkupRefusal> => {
   if (!writableTag.test(element.tag)) {
-    throw new MalformedTagName({ tag: element.tag });
+    return Option.some(new MalformedTagName({ tag: element.tag }));
   }
 
   const malformed = Object.keys(element.attrs).find(
@@ -327,34 +363,34 @@ const refuseUnwritable = (element: Element): void => {
   );
 
   if (malformed !== undefined) {
-    throw new MalformedAttributeName({ attribute: malformed, tag: element.tag });
+    return Option.some(new MalformedAttributeName({ attribute: malformed, tag: element.tag }));
   }
 
   const eventHandler = Object.keys(element.attrs).find((name) => eventHandlerName.test(name));
 
   if (eventHandler !== undefined) {
-    throw new EventHandlerAttribute({ attribute: eventHandler, tag: element.tag });
+    return Option.some(new EventHandlerAttribute({ attribute: eventHandler, tag: element.tag }));
   }
 
   if (element.children.length > 0 && voidElements.has(element.tag)) {
-    throw new VoidElementChildren({ tag: element.tag });
+    return Option.some(new VoidElementChildren({ tag: element.tag }));
   }
 
   if (element.children.length > 0 && rawText.has(element.tag)) {
-    throw new RawTextChildren({ tag: element.tag });
+    return Option.some(new RawTextChildren({ tag: element.tag }));
   }
 
   if (element.tag === "plaintext") {
-    throw new PlaintextElement();
+    return Option.some(new PlaintextElement());
   }
 
   const elementChild = escapableRawText.has(element.tag)
     ? element.children.find((child) => child.kind === "element")
     : undefined;
 
-  if (elementChild !== undefined) {
-    throw new EscapableRawTextElementChild({ child: elementChild.tag, tag: element.tag });
-  }
+  return elementChild === undefined
+    ? Option.none()
+    : Option.some(new EscapableRawTextElementChild({ child: elementChild.tag, tag: element.tag }));
 };
 
 /**
@@ -388,53 +424,63 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
 
 /**
  * Hand a node of the output tree to `take` as HTML, chunk by chunk, in document order, until
- * `take` refuses a chunk.
+ * `take` refuses a chunk or an element is refused.
  *
- * It is the one walk {@link serialise} and {@link toHtmlWithin} share: each element is refused, as
- * {@link serialise} says, before any of its chunks is handed on, and once `take` refuses a chunk
- * no further chunk is made and no further node is visited.
+ * It is the one walk {@link serialise} and {@link toHtmlWithin} share: each element is checked, as
+ * {@link refuseUnwritable} says, before any of its chunks is handed on. Once `take` refuses a
+ * chunk, or an element breaks a rule, no further chunk is made and no further node is visited, so
+ * a refused element has no byte written and a refusal past the point `take` stopped is never
+ * reached.
  *
  * @param node The node to write, with its descendants.
  * @param take Takes the next chunk and says whether the walk goes on.
- * @returns Whether `take` took every chunk of `node`.
- * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
- * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
- *   write.
- * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
- *   with `on`, in any case.
- * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
- * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
- * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
- * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
- *   with an element child.
+ * @returns Whether `take` took every chunk of `node`, or the rule the first refused element in
+ *   document order broke.
  */
-const walk = (node: Node, take: (chunk: string) => boolean): boolean => {
+const walk = (
+  node: Node,
+  take: (chunk: string) => boolean,
+): Result.Result<boolean, MarkupRefusal> => {
   if (node.kind === "text") {
-    return take(escapeText(node.text));
+    return Result.succeed(take(escapeText(node.text)));
   }
 
-  refuseUnwritable(node);
+  const refusal = refuseUnwritable(node);
+
+  if (Option.isSome(refusal)) {
+    return Result.fail(refusal.value);
+  }
 
   if (!take(startTag(node))) {
-    return false;
+    return Result.succeed(false);
   }
 
   if (voidElements.has(node.tag)) {
-    return true;
+    return Result.succeed(true);
   }
 
   if (lineFeedDropping.has(node.tag) && startsWithLineFeed(node.children) && !take("\n")) {
-    return false;
+    return Result.succeed(false);
   }
 
   for (const child of node.children) {
-    if (!walk(child, take)) {
-      return false;
+    const walked = walk(child, take);
+
+    if (Result.isFailure(walked) || !walked.success) {
+      return walked;
     }
   }
 
-  return take(`</${node.tag}>`);
+  return Result.succeed(take(`</${node.tag}>`));
 };
+
+/**
+ * Wrap the rule a refused element broke as the failure the serialiser returns.
+ *
+ * @param reason The rule the first refused element broke.
+ * @returns The {@link MarkupRefused} that carries it.
+ */
+const refused = (reason: MarkupRefusal): MarkupRefused => new MarkupRefused({ reason });
 
 /**
  * Write a node of the output tree to `sink` as HTML, chunk by chunk, in document order.
@@ -451,51 +497,43 @@ const walk = (node: Node, take: (chunk: string) => boolean): boolean => {
  *
  * @param node The node to write, with its descendants.
  * @param sink The destination of the chunks.
- * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
- * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
- *   write.
- * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
- *   with `on`, in any case.
- * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
- * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
- * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
- * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
- *   with an element child.
+ * @returns Success once every chunk is written, or {@link MarkupRefused} for the first element, in
+ *   document order, that breaks one of {@link MarkupRefusal}'s rules: a tag that is not a
+ *   lower-case name ({@link MalformedTagName}), an attribute name HTML cannot write
+ *   ({@link MalformedAttributeName}) or one that starts with `on` in any case
+ *   ({@link EventHandlerAttribute}), a void or raw-text element with children
+ *   ({@link VoidElementChildren}, {@link RawTextChildren}), a `plaintext` element
+ *   ({@link PlaintextElement}), or a `textarea` or `title` with an element child
+ *   ({@link EscapableRawTextElementChild}).
  */
-export const serialise = (node: Node, sink: Sink): void => {
-  walk(node, (chunk) => {
+export const serialise = (node: Node, sink: Sink): Result.Result<void, MarkupRefused> => {
+  const walked = walk(node, (chunk) => {
     sink.write(chunk);
 
     return true;
   });
+
+  return Result.isFailure(walked) ? Result.fail(refused(walked.failure)) : Result.void;
 };
 
 /**
  * Write a node of the output tree as one HTML string.
  *
  * @param node The node to write, with its descendants.
- * @returns The bytes {@link serialise} writes for `node`, joined.
- * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
- * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
- *   write.
- * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
- *   with `on`, in any case.
- * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
- * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
- * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
- * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
- *   with an element child.
+ * @returns The bytes {@link serialise} writes for `node`, joined, or the {@link MarkupRefused}
+ *   {@link serialise} returns for it, with none of the HTML.
  */
-export const toHtml = (node: Node): string => {
+export const toHtml = (node: Node): Result.Result<string, MarkupRefused> => {
   const chunks: string[] = [];
 
-  serialise(node, {
-    write: (chunk) => {
-      chunks.push(chunk);
-    },
-  });
-
-  return chunks.join("");
+  return Result.map(
+    serialise(node, {
+      write: (chunk) => {
+        chunks.push(chunk);
+      },
+    }),
+    () => chunks.join(""),
+  );
 };
 
 /**
@@ -507,29 +545,26 @@ export const toHtml = (node: Node): string => {
  * large to hold as one string costs no more than the budget. HTML of exactly `budget` characters is
  * written.
  *
+ * An element is checked only when the walk reaches it, so a refusal past the budget is never
+ * reached and the HTML too large to hold is none, as for any other tree.
+ *
  * @example
- *   toHtmlWithin(h("p", {}, [text("a & b")]), 16); // Option.some("<p>a &amp; b</p>")
- *   toHtmlWithin(h("p", {}, [text("a & b")]), 15); // Option.none()
+ *   toHtmlWithin(h("p", {}, [text("a & b")]), 16); // Result.succeed(Option.some("<p>a &amp; b</p>"))
+ *   toHtmlWithin(h("p", {}, [text("a & b")]), 15); // Result.succeed(Option.none())
  *
  * @param node The node to write, with its descendants.
  * @param budget The most characters the HTML may hold.
  * @returns The string {@link toHtml} gives for `node` when it holds at most `budget` characters,
- *   otherwise none.
- * @throws {MalformedTagName} When `node` or a descendant written before the budget runs out has a
- *   tag that is not a lower-case name.
- * @throws {MalformedAttributeName} When such a node has an attribute name HTML cannot write.
- * @throws {EventHandlerAttribute} When such a node has an attribute name that starts with `on`, in
- *   any case.
- * @throws {VoidElementChildren} When such a node is a void element with children.
- * @throws {RawTextChildren} When such a node is a raw-text element with children.
- * @throws {PlaintextElement} When such a node is a `plaintext` element with no children.
- * @throws {EscapableRawTextElementChild} When such a node is a `textarea` or `title` with an
- *   element child.
+ *   otherwise none, or {@link MarkupRefused} for the first element written before the budget runs
+ *   out that breaks one of {@link MarkupRefusal}'s rules, as {@link serialise} lists them.
  */
-export const toHtmlWithin = (node: Node, budget: number): Option.Option<string> => {
+export const toHtmlWithin = (
+  node: Node,
+  budget: number,
+): Result.Result<Option.Option<string>, MarkupRefused> => {
   const chunks: string[] = [];
   let written = 0;
-  const within = walk(node, (chunk) => {
+  const walked = walk(node, (chunk) => {
     written += chunk.length;
 
     if (written > budget) {
@@ -541,5 +576,8 @@ export const toHtmlWithin = (node: Node, budget: number): Option.Option<string> 
     return true;
   });
 
-  return within ? Option.some(chunks.join("")) : Option.none();
+  return Result.mapBoth(walked, {
+    onFailure: refused,
+    onSuccess: (within) => (within ? Option.some(chunks.join("")) : Option.none()),
+  });
 };

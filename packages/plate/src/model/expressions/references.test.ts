@@ -52,7 +52,7 @@ const outItem = (expression: SourceElement) =>
  * @returns The expression the rule tree holds, none when the processing is none.
  */
 const readOut = (expression: SourceElement) =>
-  buildItem(outItem(expression)).pipe(
+  Effect.fromResult(buildItem(outItem(expression))).pipe(
     Effect.map((built) =>
       built.processing.pipe(
         Option.flatMap((tree) => Option.fromUndefinedOr(tree[0])),
@@ -143,7 +143,7 @@ describe("the references family's reader specs", () => {
       Effect.gen(function* readsDuration() {
         const read = yield* readOut(baseValueElement("duration", " 90.5 "));
         const refusal = yield* Effect.flip(
-          buildItem(outItem(baseValueElement("duration", "PT1M30.5S"))),
+          Effect.fromResult(buildItem(outItem(baseValueElement("duration", "PT1M30.5S")))),
         );
 
         assert.deepStrictEqual(
@@ -168,7 +168,9 @@ describe("the references family's reader specs", () => {
 
   it.effect('mark a qti-base-value of base-type="file" at its path', () =>
     Effect.gen(function* marksFile() {
-      const built = yield* buildItem(outItem(baseValueElement("file", "upload.txt")));
+      const built = yield* Effect.fromResult(
+        buildItem(outItem(baseValueElement("file", "upload.txt"))),
+      );
 
       assert.deepStrictEqual(built.processing, Option.none());
       assert.deepStrictEqual(built.unsupported, [
@@ -179,7 +181,9 @@ describe("the references family's reader specs", () => {
 
   it.effect("refuse a qti-base-value outside its lexical space as value-type at its path", () =>
     Effect.gen(function* refusesBaseValue() {
-      const refusal = yield* Effect.flip(buildItem(outItem(baseValueElement("integer", "abc"))));
+      const refusal = yield* Effect.flip(
+        Effect.fromResult(buildItem(outItem(baseValueElement("integer", "abc")))),
+      );
 
       assert.strictEqual(refusal.rule, "value-type");
       assert.deepStrictEqual(refusal.location, {
@@ -191,12 +195,14 @@ describe("the references family's reader specs", () => {
 
   it.effect("mark a qti-variable that holds an operand at its path, as no operand fits it", () =>
     Effect.gen(function* marksVariableWithOperand() {
-      const built = yield* buildItem(
-        outItem(
-          expressionElement(
-            "variable",
-            [attr("identifier", "RESPONSE")],
-            [baseValueElement("integer", "1")],
+      const built = yield* Effect.fromResult(
+        buildItem(
+          outItem(
+            expressionElement(
+              "variable",
+              [attr("identifier", "RESPONSE")],
+              [baseValueElement("integer", "1")],
+            ),
           ),
         ),
       );
@@ -286,7 +292,7 @@ describe("the references family's qti-default and qti-null", () => {
             el("qti-default-value", [], [el("qti-value", [], [text("2.5")])]),
           ]),
         ]);
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
         const after = yield* processed(document, {});
 
         assert.deepStrictEqual(refusalsOf(document), []);
@@ -341,7 +347,7 @@ describe("the references family's qti-default and qti-null", () => {
           cardinality: "unknown",
         });
         for (const document of documents) {
-          const built = yield* buildItem(document);
+          const built = yield* Effect.fromResult(buildItem(document));
 
           assert.deepStrictEqual(refusalsOf(document), []);
           assert.isTrue(Option.isSome(built.processing), "the processing runs");
@@ -373,7 +379,9 @@ const randomDeclarations: readonly SourceElement[] = [
  * @returns The expression the rule tree holds, none when the processing is none, and the item.
  */
 const readRandom = (expression: SourceElement) =>
-  buildItem(processingItem(randomDeclarations, [setOutcomeElement("OUT", expression)])).pipe(
+  Effect.fromResult(
+    buildItem(processingItem(randomDeclarations, [setOutcomeElement("OUT", expression)])),
+  ).pipe(
     Effect.map((built) => ({
       built,
       read: built.processing.pipe(

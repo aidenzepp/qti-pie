@@ -211,7 +211,7 @@ describe("the comparison family's reader specs and kind rules", () => {
           ],
         ),
       );
-      const built = yield* buildItem(document);
+      const built = yield* Effect.fromResult(buildItem(document));
 
       assert.deepStrictEqual(refusalsOf(document), []);
       assert.deepStrictEqual(
@@ -237,8 +237,8 @@ describe("the comparison family's reader specs and kind rules", () => {
 
   it.effect("mark a qti-match with one operand at its path, and read nothing in it", () =>
     Effect.gen(function* marksShortMatch() {
-      const built = yield* buildItem(
-        sameItem(expressionElement("match", [], [expressionElement("sum")])),
+      const built = yield* Effect.fromResult(
+        buildItem(sameItem(expressionElement("match", [], [expressionElement("sum")]))),
       );
 
       assert.deepStrictEqual(built.processing, Option.none());
@@ -320,7 +320,7 @@ describe("the comparison family's reader specs and kind rules", () => {
 
   it.effect("read a qti-equal's four tolerance fields at their defaults when none is written", () =>
     Effect.gen(function* readsEqualDefaults() {
-      const built = yield* buildItem(sameItem(equalOfOnes([])));
+      const built = yield* Effect.fromResult(buildItem(sameItem(equalOfOnes([]))));
 
       assert.deepStrictEqual(
         built.processing,
@@ -341,14 +341,16 @@ describe("the comparison family's reader specs and kind rules", () => {
 
   it.effect("read a qti-equal's four tolerance fields as written", () =>
     Effect.gen(function* readsEqualFields() {
-      const built = yield* buildItem(
-        sameItem(
-          equalOfOnes([
-            attr("include-lower-bound", "false"),
-            attr("include-upper-bound", " 0 "),
-            attr("tolerance", "\t0.5  INF "),
-            attr("tolerance-mode", "exact"),
-          ]),
+      const built = yield* Effect.fromResult(
+        buildItem(
+          sameItem(
+            equalOfOnes([
+              attr("include-lower-bound", "false"),
+              attr("include-upper-bound", " 0 "),
+              attr("tolerance", "\t0.5  INF "),
+              attr("tolerance-mode", "exact"),
+            ]),
+          ),
         ),
       );
 
@@ -376,7 +378,9 @@ describe("the comparison family's reader specs and kind rules", () => {
     "build an exact qti-equal whose tolerance token names nothing, with no mark (G-CQ F5)",
     () =>
       Effect.gen(function* buildsUnnamedTolerance() {
-        const built = yield* buildItem(sameItem(equalOfOnes([attr("tolerance", "NOTHING")])));
+        const built = yield* Effect.fromResult(
+          buildItem(sameItem(equalOfOnes([attr("tolerance", "NOTHING")]))),
+        );
 
         assert.deepStrictEqual(
           built.processing,
@@ -400,8 +404,10 @@ describe("the comparison family's reader specs and kind rules", () => {
     () =>
       Effect.gen(function* buildsToleranceModes() {
         for (const mode of ["relative", "absolute"] as const) {
-          const built = yield* buildItem(
-            sameItem(equalOfOnes([attr("tolerance-mode", mode), attr("tolerance", "0.1")])),
+          const built = yield* Effect.fromResult(
+            buildItem(
+              sameItem(equalOfOnes([attr("tolerance-mode", mode), attr("tolerance", "0.1")])),
+            ),
           );
 
           assert.deepStrictEqual(
@@ -427,26 +433,28 @@ describe("the comparison family's reader specs and kind rules", () => {
     "[I-9a] keep an absolute qti-equal over the floatValue of a record response, marking no tolerance mode",
     () =>
       Effect.gen(function* keepsFieldOperand() {
-        const built = yield* buildItem(
-          sameItem(
-            expressionElement(
-              "equal",
-              [attr("tolerance-mode", "absolute"), attr("tolerance", "0.1")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            sameItem(
+              expressionElement(
+                "equal",
+                [attr("tolerance-mode", "absolute"), attr("tolerance", "0.1")],
+                [
+                  expressionElement(
+                    "field-value",
+                    [attr("field-identifier", "floatValue")],
+                    [variableElement("ANSWER")],
+                  ),
+                  baseValueElement("float", "1.0"),
+                ],
+              ),
               [
-                expressionElement(
-                  "field-value",
-                  [attr("field-identifier", "floatValue")],
-                  [variableElement("ANSWER")],
-                ),
-                baseValueElement("float", "1.0"),
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "ANSWER"),
+                ]),
               ],
             ),
-            [
-              el("qti-response-declaration", [
-                attr("cardinality", "record"),
-                attr("identifier", "ANSWER"),
-              ]),
-            ],
           ),
         );
 
@@ -524,7 +532,7 @@ describe("the comparison family's reader specs and kind rules", () => {
             ]),
           ],
         );
-        const built = yield* buildItem(document);
+        const built = yield* Effect.fromResult(buildItem(document));
         const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
         const sameAt = (tolerance: number) =>
           Effect.fromResult(
@@ -545,12 +553,14 @@ describe("the comparison family's reader specs and kind rules", () => {
   it.effect("[I-9a] read qti-gt, qti-gte, qti-lt and qti-lte into their two operands", () =>
     Effect.gen(function* readsOrders() {
       for (const kind of ["gt", "gte", "lt", "lte"] as const) {
-        const built = yield* buildItem(
-          sameItem(
-            expressionElement(
-              kind,
-              [],
-              [baseValueElement("integer", "2"), baseValueElement("float", "1.5")],
+        const built = yield* Effect.fromResult(
+          buildItem(
+            sameItem(
+              expressionElement(
+                kind,
+                [],
+                [baseValueElement("integer", "2"), baseValueElement("float", "1.5")],
+              ),
             ),
           ),
         );
@@ -643,7 +653,7 @@ describe("the comparison family's reader specs and kind rules", () => {
               [baseValueElement("duration", "89.9"), baseValueElement("duration", "90")],
             ),
           );
-          const built = yield* buildItem(document);
+          const built = yield* Effect.fromResult(buildItem(document));
 
           assert.deepStrictEqual(refusalsOf(document), [], kind);
           assert.deepStrictEqual(

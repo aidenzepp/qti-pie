@@ -16,13 +16,14 @@
  */
 import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitBody } from "#plate/emit/body.ts";
+import { emitBody, writesMalformedHeading } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
+import type { MarkupRefused } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
@@ -32,7 +33,7 @@ import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
-import { payload, redactItem } from "#plate/payload.ts";
+import { isRedacted, payload, redactItem } from "#plate/payload.ts";
 import type {
   EmitState,
   Payload,
@@ -130,6 +131,50 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
    */
   override get message(): string {
     return `The instance token ${JSON.stringify(this.token)} in ${this.source} ${breaches[this.requirement](this.token)}. ${instanceRemedies[this.source]}.`;
+  }
+}
+
+/**
+ * A configured heading level at which plate cannot write a heading: a developer error, returned
+ * through a `Result`, never thrown.
+ *
+ * `configure` gives only an integer from 2 to 6, so only a `Configuration` built by hand, which
+ * skips `configure`, reaches it. {@link renderStatus} writes its heading at the level itself, so it
+ * refuses a level that is not an integer from 1 to 6. {@link render} shifts the item's headings to
+ * the level, capped at `h6` (`writesMalformedHeading` in `#plate/emit/body.ts`), so it refuses a
+ * level only for an item that writes a heading, and only where the capped level is not an integer:
+ * `NaN`, `-Infinity` or a fraction below 6. Every other level renders, capped at `h6`. `level` is
+ * the configuration's `headingLevel`.
+ */
+export class InvalidHeadingLevel extends Data.TaggedError("InvalidHeadingLevel")<{
+  readonly level: number;
+}> {
+  /**
+   * The level, and how to build a configuration that holds a valid one.
+   */
+  override get message(): string {
+    return `The configuration's headingLevel ${String(this.level)} is not a level a heading can be written at. Build the configuration with configure, which takes an integer from 2 to 6.`;
+  }
+}
+
+/**
+ * An item `render` was given that neither `redact` nor the codec's `decodeRedacted` made: a
+ * developer error, returned through a `Result`, never thrown.
+ *
+ * The `Redacted` brand is checked in the type and, since the brand alone cannot hold at run time,
+ * by a mark only those two producers set (`isRedacted` in `#plate/payload.ts`). A copy of a
+ * redacted item (a spread, a JSON round trip, a `structuredClone`) or an object built by hand and
+ * cast carries no mark, so {@link render} refuses it before it reads anything else. It has no
+ * field: the value it refuses is the caller's own, and naming none of it keeps the item's content
+ * out of the error.
+ */
+export class NotRedacted extends Data.TaggedError("NotRedacted") {
+  /**
+   * What render was given, and the two ways to a value it takes.
+   */
+  // oxlint-disable-next-line eslint/class-methods-use-this -- A field would be an own property of the error, and this one has none: its message names no part of the caller's value.
+  override get message(): string {
+    return "The item passed to render was not made by redact or decodeRedacted, so it carries no redaction mark: a copy of a redacted item, or an object built by hand, is refused. Pass the value redact returns, or decode the stored JSON with decodeRedacted and pass its value.";
   }
 }
 
@@ -350,6 +395,13 @@ const interactionRenderer =
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.
  *
+ * It takes only the very object `redact`, or the codec's `decodeRedacted`, returned (rule
+ * `723e580c`). Before anything else, before the instance, the heading level or the budget, it asks
+ * whether `item` carries the mark those two set (`isRedacted` in `#plate/payload.ts`), and fails
+ * {@link NotRedacted} when it does not: a copy of a redacted item (a spread, a JSON round trip) or
+ * an object built by hand and cast type-checks, but was never the allowlist's. {@link renderStatus}
+ * and `renderNavigation` take no item, so they read no mark.
+ *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
  * parameter whose text passed its bound, 1,000,000 or the budget `redact` ran under, fails
  * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
@@ -358,19 +410,28 @@ const interactionRenderer =
  * exactly `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with
  * none of the page built or returned.
  *
+ * An item that writes a heading at a level that, capped at 6, is not an integer (only a
+ * `Configuration` built by hand, with a `headingLevel` of `NaN`, `-Infinity` or a fraction below
+ * 6, gives one) fails {@link InvalidHeadingLevel} once the Root is built and before any HTML is
+ * written: after an unknown part, an instance token or a part swap would fail, and before refused
+ * markup or the output budget would.
+ *
  * @example
  *   const rendered = render(redact(accepted, undefined, configuration), configuration, {
  *     instance: "q1",
  *   });
  *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>', instance: "q1" })
  *
- * @param item The item `redact` gave.
+ * @param item The item `redact` gave, or `decodeRedacted`: that object itself, never a copy.
  * @param configuration The configuration, which gives the locale, the heading level, the asset
  *   base, the seed and the output budget.
  * @param options The author's inputs, none by default.
- * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
- *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
- *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ * @returns The Root's HTML and the instance token it used, or {@link NotRedacted} for an item
+ *   neither `redact` nor `decodeRedacted` returned, {@link UnknownPart} for an override the part
+ *   table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant,
+ *   {@link InvalidHeadingLevel} for a heading level no heading of the item can be written at,
+ *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write, or
  *   {@link OutputTooLarge} for an item with a text past its bound, or HTML that would pass the
  *   configuration's `outputBudget`.
  */
@@ -378,8 +439,21 @@ export const render = (
   item: Redacted,
   configuration: Configuration,
   options: Options = {},
-): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Rendered,
+  | InvalidHeadingLevel
+  | InvalidInstance
+  | MarkupRefused
+  | NotRedacted
+  | OutputTooLarge
+  | PartSwapRefused
+  | UnknownPart
+> =>
   Result.gen(function* renderItem() {
+    if (!isRedacted(item)) {
+      return yield* Result.fail(new NotRedacted());
+    }
+
     if (Option.isSome(item.unprinted)) {
       const { bound, identifier, limit } = item.unprinted.value;
 
@@ -400,8 +474,13 @@ export const render = (
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const root = yield* emitItem(built, state, body);
+
+    if (writesMalformedHeading(built.body, configuration.headingLevel)) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
+    }
+
     const html = yield* Result.fromOption(
-      toHtmlWithin(root, configuration.outputBudget),
+      yield* toHtmlWithin(root, configuration.outputBudget),
       () =>
         new OutputTooLarge({
           budget: configuration.outputBudget,
@@ -416,9 +495,11 @@ export const render = (
 /**
  * Render the Status part: the status region, its heading and what it shows, as HTML.
  *
- * It checks `input.instance`, which must be the token the item was rendered with, then emits the
- * region through the same part overrides `render` takes. It places the region nowhere and moves
- * no focus.
+ * It checks `input.instance`, which must be the token the item was rendered with, then the part
+ * overrides, then the configuration's heading level, at which it writes the region's heading: an
+ * integer from 1 to 6, or {@link InvalidHeadingLevel}, which only a `Configuration` built by hand
+ * gives. It then emits the region through the same part overrides `render` takes. It places the
+ * region nowhere and moves no focus.
  *
  * @example
  *   renderStatus({ heading: "scored", instance: "q1", score: "1" }, configuration);
@@ -429,18 +510,32 @@ export const render = (
  * @param options The part overrides, none by default.
  * @returns The region's HTML and `input.instance`, or {@link InvalidInstance} for an
  *   `input.instance` that breaks a requirement, {@link UnknownPart} for an override the part table
- *   lacks, or {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ *   lacks, {@link InvalidHeadingLevel} for a heading level that is not an integer from 1 to 6,
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   {@link MarkupRefused} for a replacement holding markup the serialiser cannot write.
  */
 export const renderStatus = (
   input: StatusInput,
   configuration: Configuration,
   options: Pick<Options, "parts"> = {},
-): Result.Result<Rendered, InvalidInstance | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Rendered,
+  InvalidHeadingLevel | InvalidInstance | MarkupRefused | PartSwapRefused | UnknownPart
+> =>
   Result.gen(function* renderStatusRegion() {
     yield* checkedInstance(input.instance, "input.instance");
 
     const parts = yield* resolveOverrides(options.parts);
+    // Plain JavaScript can hand over a configuration with no headingLevel, which the Status
+    // heading reads as 1, as rowFor does.
+    const configured: number | undefined = configuration.headingLevel;
+    const headingLevel = configured ?? 1;
+
+    if (!Number.isInteger(headingLevel) || headingLevel < 1 || headingLevel > 6) {
+      return yield* Result.fail(new InvalidHeadingLevel({ level: headingLevel }));
+    }
+
     const region = yield* emitStatus(input, stateOf(configuration, parts));
 
-    return { html: toHtml(region), instance: input.instance };
+    return { html: yield* toHtml(region), instance: input.instance };
   });

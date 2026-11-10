@@ -713,10 +713,12 @@ const templateDefaultsOf = (
  *   in sequence order: a default reads a value the session's records lack (an
  *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
  *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A
- *   package that holds the test and its items refuses each of these at `openPackage` but one: a
- *   default whose type a `qti-field-value` decides at run time, such as a field of an item's
- *   declared `record` read through `qti-default`, whose `OutcomeMismatchError` reaches the session
- *   with no answer given, since a `record` declaration types none of its fields.
+ *   package that holds the test and its items keeps all but one of these from the session:
+ *   `openPackage` refuses each, but a default that reads an item's context variable through its
+ *   item ref, which it marks and leaves out. The one that reaches the session is a default whose
+ *   type a `qti-field-value` decides at run time, such as a field of an item's declared `record`
+ *   read through `qti-default`, whose `OutcomeMismatchError` reaches the session with no answer
+ *   given, since a `record` declaration types none of its fields.
  */
 export const partStarted = (
   test: Test,

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option } from "effect";
+import { ConfigProvider, Effect, Fiber, Latch, Option } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
@@ -304,6 +304,24 @@ const craftedRoot = path.join(scratch, "corpus");
 const outsideRoot = path.join(scratch, "outside");
 
 /**
+ * A third folder in the scratch folder, a corpus root of empty packages for the bounded reads: it
+ * holds more packages than the bound, so the bound, not the package count, limits how many opens
+ * run at once.
+ */
+const boundedRoot = path.join(scratch, "bounded");
+
+/**
+ * The ids of the packages in {@link boundedRoot}, in the order of their locations: eleven, numbered
+ * so the sorted order is their numbering. The fixture package follows them in the cache.
+ */
+const boundedIds = Array.from({ length: 11 }, (_, index) => `p${String(index).padStart(2, "0")}`);
+
+/**
+ * The most package opens the package cache runs at once.
+ */
+const openBound = 8;
+
+/**
  * The bytes of `secret.png` in {@link outsideRoot}, which no package route may answer with.
  */
 const outsideBytes = "OUTSIDE-SECRET-BYTES";
@@ -351,6 +369,19 @@ const inCrafted = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   );
 
 /**
+ * Run an effect with {@link boundedRoot} as `PLATE_CORPUS_DIR`.
+ *
+ * @param effect The effect.
+ * @returns The effect under that setting.
+ */
+const inBounded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  effect.pipe(
+    Effect.provide(
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: boundedRoot })),
+    ),
+  );
+
+/**
  * Send a GET for a target to the route over the crafted packages.
  *
  * @param target The path.
@@ -380,6 +411,9 @@ beforeAll(() => {
   symlinkSync(path.join("..", "outside"), path.join(craftedRoot, "linked"));
   writeFileSync(path.join(htmlItem, "imsmanifest.xml"), craftedManifest("items/q.html"));
   writeFileSync(path.join(htmlItem, "items", "q.html"), craftedItem);
+  for (const id of boundedIds) {
+    mkdirSync(path.join(boundedRoot, `${id}.zip.d`), { recursive: true });
+  }
 });
 
 afterAll(() => {
@@ -410,6 +444,45 @@ describe("dev/packages.ts", () => {
         [ids.begGuide, ...itemsPackages, ids.fixture],
       );
     });
+  });
+
+  describe("packageCache", () => {
+    it.effect(
+      "bounded corpus reads: the packages open more than one package at once and at most 8, in their order",
+      () =>
+        Effect.gen(function* boundedReads() {
+          const latch = yield* Latch.make();
+          let inFlight = 0;
+          let most = 0;
+          const held = yield* packageCache((source) =>
+            Effect.gen(function* heldOpen() {
+              inFlight += 1;
+              most = Math.max(most, inFlight);
+              yield* latch.await;
+              inFlight -= 1;
+
+              return uncheckedOf(source);
+            }),
+          );
+
+          // Find the packages first, opening none, so every open below starts in the forked
+          // fiber's first run and holds on the latch until it opens.
+          yield* inBounded(held.packageOf("absent"));
+
+          const reading = yield* Effect.forkChild(inBounded(held.packages), {
+            startImmediately: true,
+          });
+          yield* latch.open;
+          const listed = yield* Fiber.join(reading);
+
+          assert.isAbove(most, 1);
+          assert.isAtMost(most, openBound);
+          assert.deepStrictEqual(
+            listed.map((entry) => entry.id),
+            [...boundedIds, ids.fixture],
+          );
+        }),
+    );
   });
 
   describe("routePackages", () => {

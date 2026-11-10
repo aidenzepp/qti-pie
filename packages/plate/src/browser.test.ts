@@ -105,6 +105,8 @@ const notRoots = {
   "src/control-cap.ts": "reached from the roots, so the scan checks it",
   "src/count-range.ts":
     "the count range the model builder, the structural walk and decodeRedacted read, kept apart from vocabulary.ts so decodeRedacted loads none of its tables",
+  "src/effect.ts":
+    "the opt-in ./effect entry for servers, which re-exports the Effect versions under src/effect/ beside the public entry; no browser module may reach it",
   "src/index.ts": "the public entry, which re-exports the Schema side beside the browser modules",
   "src/messages.ts": "reached from the roots, so the scan checks it",
   "src/output-budget.ts": "reached from the roots, so the scan checks it",
@@ -216,6 +218,15 @@ describe("the browser modules", () => {
     assert.deepStrictEqual(unclassified([...paths, "src/unlisted.ts"]), ["src/unlisted.ts"]);
     assert.include(selectRoots([...paths, "src/x.dom.ts"]), "src/x.dom.ts");
     assert.notInclude(selectRoots([...paths, "src/x.dom.test.ts"]), "src/x.dom.test.ts");
+  });
+
+  it("[effect entry boundary] reach neither src/effect.ts nor any module under src/effect/", () => {
+    assert.include(nonTest, "src/effect.ts");
+    assert.isNotEmpty(nonTest.filter((path) => path.startsWith("src/effect/")));
+    assert.deepStrictEqual(
+      closure.filter((path) => path === "src/effect.ts" || path.startsWith("src/effect/")),
+      [],
+    );
   });
 
   it("throw no bare Error, and the browser closure calls no getOrThrow (rule d772ad5c point 2)", () => {

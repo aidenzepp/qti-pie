@@ -10,8 +10,7 @@
  *
  * @module
  */
-import { Array as Arr, Data, Effect, Option } from "effect";
-import type { Result } from "effect";
+import { Array as Arr, Data, Option, Result } from "effect";
 import { greatestCount, leastCount } from "#plate/count-range.ts";
 import { attributePath, qtiNamespace, xmlNamespace } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -216,8 +215,8 @@ export const typed = <A>(
   build: ModelWalk,
   path: string,
   parsed: Result.Result<A, InvalidValue>,
-): Effect.Effect<A, Refusal> =>
-  Effect.mapError(Effect.fromResult(parsed), (invalid) =>
+): Result.Result<A, Refusal> =>
+  Result.mapError(parsed, (invalid) =>
     refusal(build, "value-type", path, { baseType: invalid.baseType, lexical: invalid.lexical }),
   );
 
@@ -273,16 +272,16 @@ export const requiredAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<SourceAttribute, Refusal> =>
+): Result.Result<SourceAttribute, Refusal> =>
   Option.match(attributeOf(element, name), {
     onNone: () =>
-      Effect.fail(
+      Result.fail(
         refusal(build, "missing-attribute", pathOf(build, element), {
           attribute: name,
           element: nameOf(element),
         }),
       ),
-    onSome: (attribute) => Effect.succeed(attribute),
+    onSome: (attribute) => Result.succeed(attribute),
   });
 
 /**
@@ -297,8 +296,8 @@ export const requiredValue = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<string, Refusal> =>
-  Effect.map(requiredAttribute(build, element, name), (attribute) => attribute.value);
+): Result.Result<string, Refusal> =>
+  Result.map(requiredAttribute(build, element, name), (attribute) => attribute.value);
 
 /**
  * Read an identifier as its XSD type reads it.
@@ -324,6 +323,17 @@ export const identifierOf = (written: string): string => trimXmlSpace(written);
 export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
+ * Collapse a value's XML whitespace, as XSD's `whiteSpace="collapse"` facet reads it: the XML
+ * whitespace at either end removed and each inner run of it one space. An `xs:anyURI`, an `xs:ID`,
+ * an `xs:IDREF` and an `xs:token` are read this way.
+ *
+ * @param value The value as written.
+ * @returns The value, collapsed.
+ */
+export const collapseXmlSpace = (value: string): string =>
+  trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
+
+/**
  * Read an identifier attribute the element must carry, as `identifierOf` reads it.
  *
  * @param build The build.
@@ -335,8 +345,8 @@ export const identifierAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<string, Refusal> =>
-  Effect.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
+): Result.Result<string, Refusal> =>
+  Result.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
 
 /**
  * Read an attribute the element carries whose value is one of a closed list.
@@ -354,18 +364,18 @@ export const listed = <const T extends string>(
   name: string,
   attribute: SourceAttribute,
   allowed: readonly T[],
-): Effect.Effect<T, Refusal> =>
+): Result.Result<T, Refusal> =>
   Option.match(
     Arr.findFirst(allowed, (value) => value === attribute.value),
     {
       onNone: () =>
-        Effect.fail(
+        Result.fail(
           refusal(build, "attribute-type", attributePath(pathOf(build, element), attribute), {
             attribute: name,
             value: attribute.value,
           }),
         ),
-      onSome: (value) => Effect.succeed(value),
+      onSome: (value) => Result.succeed(value),
     },
   );
 
@@ -384,8 +394,8 @@ export const enumerated = <const T extends string>(
   element: SourceElement,
   name: string,
   allowed: readonly T[],
-): Effect.Effect<Option.Option<T>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<T>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) =>
       listed(build, element, name, attribute, allowed),
     ),
@@ -420,18 +430,18 @@ const xsIntegerOf = (
   element: SourceElement,
   name: string,
   refuse: IntegerCheck,
-): Effect.Effect<Option.Option<bigint>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<bigint>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) => {
       const path = attributePath(pathOf(build, element), attribute);
       const lexical = trimXmlSpace(attribute.value);
 
       return typed(build, path, parseLexical("integer", lexical)).pipe(
-        Effect.map((single) => integerOf(build, single)),
-        Effect.flatMap((value) =>
+        Result.map((single) => integerOf(build, single)),
+        Result.flatMap((value) =>
           Option.match(refuse(value, lexical), {
-            onNone: () => Effect.succeed(value),
-            onSome: ([rule, detail]) => Effect.fail(refusal(build, rule, path, detail)),
+            onNone: () => Result.succeed(value),
+            onSome: ([rule, detail]) => Result.fail(refusal(build, rule, path, detail)),
           }),
         ),
       );
@@ -467,8 +477,8 @@ export const xsInt = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.map(
+): Result.Result<Option.Option<number>, Refusal> =>
+  Result.map(
     xsIntegerOf(build, element, name, (value, lexical) =>
       value >= leastInt && value <= greatestInt
         ? Option.none()
@@ -493,7 +503,7 @@ export const countAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<bigint>, Refusal> =>
+): Result.Result<Option.Option<bigint>, Refusal> =>
   xsIntegerOf(build, element, name, (value, lexical) => {
     if (value < 0n) {
       return Option.some(["value-type", { baseType: "xs:nonNegativeInteger", lexical }]);
@@ -545,19 +555,19 @@ export const xsBoolean = (
   element: SourceElement,
   name: string,
   absent: boolean,
-): Effect.Effect<boolean, Refusal> =>
+): Result.Result<boolean, Refusal> =>
   Option.match(attributeOf(element, name), {
-    onNone: () => Effect.succeed(absent),
+    onNone: () => Result.succeed(absent),
     onSome: (attribute) =>
       Option.match(xsBooleanOf(attribute.value), {
         onNone: () =>
-          Effect.fail(
+          Result.fail(
             refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
               baseType: "boolean",
               lexical: attribute.value,
             }),
           ),
-        onSome: (value) => Effect.succeed(value),
+        onSome: (value) => Result.succeed(value),
       }),
   });
 
@@ -574,14 +584,14 @@ export const floatAttribute = (
   build: ModelWalk,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<number>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) =>
       typed(
         build,
         attributePath(pathOf(build, element), attribute),
         parseLexical("float", attribute.value),
-      ).pipe(Effect.map((single) => floatOf(build, single))),
+      ).pipe(Result.map((single) => floatOf(build, single))),
     ),
   );
 
@@ -604,22 +614,25 @@ const coordinate = /^(?<digits>[0-9]+)%?$/u;
 export const coordsOf = (
   build: ModelWalk,
   element: SourceElement,
-): Effect.Effect<readonly (readonly [number, boolean])[], Refusal> =>
-  Effect.flatMap(requiredAttribute(build, element, "coords"), (attribute) => {
+): Result.Result<readonly (readonly [number, boolean])[], Refusal> =>
+  Result.gen(function* readCoords() {
+    const attribute = yield* requiredAttribute(build, element, "coords");
     const path = attributePath(pathOf(build, element), attribute);
+    const coords: (readonly [number, boolean])[] = [];
 
-    return Effect.forEach(attribute.value.split(","), (written) => {
+    for (const written of attribute.value.split(",")) {
       const digits = coordinate.exec(written)?.groups?.["digits"];
+      if (digits === undefined) {
+        return yield* Result.fail(
+          refusal(build, "attribute-type", path, { attribute: "coords", value: attribute.value }),
+        );
+      }
 
-      return digits === undefined
-        ? Effect.fail(
-            refusal(build, "attribute-type", path, { attribute: "coords", value: attribute.value }),
-          )
-        : Effect.map(
-            typed(build, path, parseLexical("float", digits)),
-            (single) => [floatOf(build, single), written.endsWith("%")] as const,
-          );
-    });
+      const single = yield* typed(build, path, parseLexical("float", digits));
+      coords.push([floatOf(build, single), written.endsWith("%")]);
+    }
+
+    return coords;
   });
 
 /**
@@ -640,14 +653,14 @@ export const doubleAttribute = (
   element: SourceElement,
   name: string,
   refuse: AttributeRefusal,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
+): Result.Result<Option.Option<number>, Refusal> =>
+  Result.transposeOption(
     Option.map(attributeOf(element, name), (attribute) => {
       const lexical = trimXmlSpace(attribute.value);
 
-      return Effect.fromResult(parseLexical("float", lexical)).pipe(
-        Effect.mapError(() => refuse(attribute, "value-type", { baseType: "xs:double", lexical })),
-        Effect.map((single) => floatOf(build, single)),
+      return parseLexical("float", lexical).pipe(
+        Result.mapError(() => refuse(attribute, "value-type", { baseType: "xs:double", lexical })),
+        Result.map((single) => floatOf(build, single)),
       );
     }),
   );
