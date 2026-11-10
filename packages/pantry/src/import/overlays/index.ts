@@ -15,10 +15,11 @@
  * (`#pantry/qti/schema.ts`): a ChangeSet over the author role writes only the relations the schema
  * holds.
  */
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
-import { Equal, Formatter, Result, Schema } from "effect";
+import { Equal, Formatter, Option, Result, Schema, Struct } from "effect";
 import { placedCatalogRowsOf, rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
 import type { CatalogRows, PlacedCatalogRows } from "#pantry/import/overlays/catalog.ts";
+import { rowsOf as dataSsmlRowsOf } from "#pantry/import/overlays/data-ssml.ts";
+import type { DataSsmlRows } from "#pantry/import/overlays/data-ssml.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -34,14 +35,12 @@ import type {
 import { rowsOf as htmlRowsOf } from "#pantry/import/overlays/html.ts";
 import type { HtmlRows } from "#pantry/import/overlays/html.ts";
 import {
-  languageRowsOf,
   placedIdRowsOf,
   placedLanguageRowsOf,
   rowsOf as identityRowsOf,
 } from "#pantry/import/overlays/identity.ts";
 import type {
   IdentityRows,
-  LanguageRows,
   PlacedIdRows,
   PlacedLanguageRows,
 } from "#pantry/import/overlays/identity.ts";
@@ -59,12 +58,8 @@ import type {
 } from "#pantry/import/overlays/interactions.ts";
 import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
-import {
-  rowsOf as metadataRowsOf,
-  namedDocumentOf,
-  objectRowsOfPackage,
-} from "#pantry/import/overlays/metadata.ts";
-import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
+import { rowsOf as metadataRowsOf } from "#pantry/import/overlays/metadata.ts";
+import type { MetadataRows } from "#pantry/import/overlays/metadata.ts";
 import { mathmlRowsOf } from "#pantry/import/overlays/mathml.ts";
 import type { MathmlRows } from "#pantry/import/overlays/mathml.ts";
 import { placedShareRowsOf } from "#pantry/import/overlays/mathml-share.ts";
@@ -76,6 +71,8 @@ import {
   rowsOf as packageRowsOf,
   referenceCensus,
   referenceRowsOf,
+  typedHrefsOf,
+  unreadTypePathsOf,
 } from "#pantry/import/overlays/package.ts";
 import type { PackageRows, ReferenceRows } from "#pantry/import/overlays/package.ts";
 import { rowsOf as quotationRowsOf } from "#pantry/import/overlays/quotation.ts";
@@ -85,8 +82,8 @@ import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { overlayNames } from "#pantry/import/roster.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
+import { overlayRelations } from "#pantry/import/roster.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * Every overlay's rows of a package, one keyed set per relation: each document builder's, and the
@@ -95,16 +92,15 @@ import { manifestPath } from "#pantry/qti/package.ts";
 export type OverlayRows = AssembledExpressionRows &
   AssembledRows &
   CatalogRows &
+  DataSsmlRows &
   DeclarationRows &
   ExpressionRows &
   HtmlRows &
   IdentityRows &
   InteractionRows &
-  LanguageRows &
   MappingRows &
   MathmlRows &
   MetadataRows &
-  ObjectRows &
   OperatorRows &
   PackageRows &
   PlacedBindingRows &
@@ -123,6 +119,7 @@ export type OverlayRows = AssembledExpressionRows &
  */
 interface DocumentRows {
   readonly catalog: CatalogRows;
+  readonly dataSsml: DataSsmlRows;
   readonly declarations: DeclarationRows;
   readonly expressions: ExpressionRows;
   readonly html: HtmlRows;
@@ -153,6 +150,7 @@ interface DocumentRows {
  */
 const documentRowsOf = ({ ids, listed: { path, tree } }: PlacedDocument): DocumentRows => ({
   catalog: catalogRowsOf(tree, ids),
+  dataSsml: dataSsmlRowsOf(tree, ids),
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
   html: htmlRowsOf(tree, ids),
@@ -222,45 +220,47 @@ export const unionOf = <Row>(
 };
 
 /**
- * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation `names`
- * lists, in their order, over the parts that hold it, so a relation no part holds is its empty
- * set. The relations are a set of
- * keys of one record type, `OverlayRows` or the document layer's, each of which
- * `#pantry/import/roster.ts` reads from the schema, so a relation the schema gains is unioned with
- * no edit here.
- *
- * @param names - The record's relation names, each once.
- * @param parts - The builders' rows, each holding some of the relations.
- * @returns Every relation's union; or the {@link OverlayConflict} of the first relation, in
- *   `names`' order, met with two different rows at one key.
+ * The union of one relation's keyed sets over every part ({@link unionOf}), as a type-level
+ * function of the relation, so `Struct.map` gives each relation of `Rows` its own row type. The
+ * relation's name, its key in the record mapped over, picks its keyed set out of each part.
  */
-export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string, unknown> }>(
-  names: readonly (keyof R & string)[],
-  parts: readonly Partial<R>[],
-): Result.Result<R, OverlayConflict> =>
-  Result.map(
-    Result.all(
-      Object.fromEntries(
-        names.map(
-          (name) =>
-            [
-              name,
-              unionOf(
-                name,
-                parts.flatMap((part) => {
-                  const set = part[name];
+interface UnionAt<Rows> extends Struct.Lambda {
+  <Name extends keyof Rows & string>(relation: {
+    readonly name: Name;
+  }): Result.Result<ReadonlyMap<string, Rows[Name]>, OverlayConflict>;
+  readonly "~lambda.out": this["~lambda.in"] extends {
+    readonly name: infer Name extends keyof Rows;
+  }
+    ? Result.Result<ReadonlyMap<string, Rows[Name]>, OverlayConflict>
+    : never;
+}
 
-                  return set === undefined ? [] : [set];
-                }),
-              ),
-            ] as const,
+/**
+ * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation of
+ * `relations` over the parts that hold it, so a relation no part holds is its empty set.
+ * `relations` is a record of the relations themselves, each under its own name, the overlays' or
+ * the document layer's, which `#pantry/import/roster.ts` reads from the schema, so a relation the
+ * schema gains is unioned with no edit here. `Rows`, each relation's row type, is read from the
+ * parts alone, and `Struct.map` over `relations` ({@link UnionAt}) gives each union those rows.
+ *
+ * @param relations - The relations, each under its own name: at least every relation of `Rows`.
+ * @param parts - The builders' rows, each holding some of the relations' keyed sets.
+ * @returns Every relation's union; or the {@link OverlayConflict} of the first relation, in
+ *   `relations`' order, met with two different rows at one key.
+ */
+export const unionsOf = <Rows>(
+  relations: NoInfer<{ readonly [Name in keyof Rows]: { readonly name: Name } }>,
+  parts: readonly { readonly [Name in keyof Rows]?: ReadonlyMap<string, Rows[Name]> }[],
+) =>
+  Result.all(
+    Struct.map(
+      Struct.lambda<UnionAt<Rows>>(({ name }) =>
+        unionOf(
+          name,
+          parts.flatMap((part) => Option.toArray(Option.fromUndefinedOr(part[name]))),
         ),
       ),
-    ),
-    // SAFETY: the record holds one union at each of `names`, the keys of `R`, each a keyed set of
-    // the rows the parts give that relation, which are `R`'s rows there.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    (unions) => unions as R,
+    )(relations),
   );
 
 /**
@@ -269,10 +269,9 @@ export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string
  * relation its builder writes.
  *
  * @param documents - The package's documents, each listed and under its ids, the manifest among
- *   them, the one of resource type `none`.
+ *   them, the one of type `manifest`.
  * @param mint - Draws a fresh uuid for each assembled instance but a root.
  * @returns The parts, in the order {@link overlayRowsOf} merges them.
- * @throws {Error} When no document is the manifest: every package lists its own (`readProgram`).
  */
 export const overlayPartsOf = (
   documents: readonly PlacedDocument[],
@@ -291,32 +290,22 @@ export const overlayPartsOf = (
   const referenced = assembledExpressionRowsOf(
     built.map(({ document, rows }) => ({
       cardinalities: rows.declarations.DeclarationCardinality,
+      declarations: rows.declarations.DeclarationIdentifier,
       expressions: rows.expressions,
       ids: document.ids,
       tests: rows.tests,
       tree: document.listed.tree,
     })),
     assembled,
-    built.flatMap(({ rows }) => [...rows.package.TypedHref.values()]),
+    built.flatMap(({ rows }) => typedHrefsOf(rows.package)),
     new Set(
-      built.flatMap(({ rows }) =>
-        [...rows.package.UnreadTypePath.values()].map(({ path }) => path),
+      built.flatMap(({ document, rows }) =>
+        document.listed.path === manifestPath
+          ? [...unreadTypePathsOf(document.listed.tree, document.ids.idOf, rows.package)]
+          : [],
       ),
     ),
   );
-  const named = new Map<string, NamedDocument>();
-  for (const { document, rows } of built) {
-    if (document.listed.resourceType !== "none" && !named.has(document.listed.path)) {
-      named.set(document.listed.path, namedDocumentOf(document.ids.idOf(0), rows.metadata));
-    }
-  }
-
-  const manifest = built.find(({ document }) => document.listed.resourceType === "none");
-  if (manifest === undefined) {
-    throw new Error(
-      "overlayPartsOf was given no manifest, the one document of resource type none. Pass every document of the package, as readProgram lists them, its manifest first.",
-    );
-  }
 
   const placedIds = placedIdRowsOf({
     ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
@@ -342,6 +331,7 @@ export const overlayPartsOf = (
   return [
     ...built.flatMap(({ rows }) => [
       rows.catalog,
+      rows.dataSsml,
       rows.declarations,
       rows.expressions,
       rows.html,
@@ -358,27 +348,17 @@ export const overlayPartsOf = (
     ]),
     assembled,
     referenced,
-    languageRowsOf(built.map(({ rows }) => rows.identity)),
     placedLanguageRowsOf(
       built.map(({ rows }) => rows.identity),
       assembled.Instance.values(),
     ),
     placedVariableRowsOf({
-      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
-      cardinalities: built.flatMap(({ rows }) => [
-        ...rows.declarations.DeclarationCardinality.values(),
-      ]),
       declarations: built.flatMap(({ rows }) => [
         ...rows.declarations.DeclarationIdentifier.values(),
-      ]),
-      elements: built.flatMap(({ rows }) => [
-        ...rows.expressions.Expression.values(),
-        ...rows.expressions.Processing.values(),
       ]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
     }),
-    objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named),
     placedBindingRowsOf({
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
@@ -421,17 +401,15 @@ export const overlayPartsOf = (
 
 /**
  * Build every overlay's rows of one package: each document builder over each document, under its
- * ids, then the four that read the whole package: the assemblies from every document's test rows
+ * ids, then those that read the whole package: the assemblies from every document's test rows
  * (`assembledRowsOf`), the sections' placements under each test from the declarations, the
- * assemblies and the sections' and fragments' references (`sectionRowsOf`), the LOM records'
- * objects from the manifest and each document's assessment object (`objectRowsOfPackage`), and the
- * LOM languages' witnesses from every document's identity rows (`languageRowsOf`), and in place
- * under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed set
- * per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from
- * the schema.
+ * assemblies and the sections' and fragments' references (`sectionRowsOf`), and the languages in
+ * place under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed
+ * set per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads
+ * from the schema (`overlayRelations`).
  *
  * @param documents - The package's documents, each listed and under its ids; the manifest is the
- *   one no resource names (resource type `none`).
+ *   one no resource names (type `manifest`).
  * @param mint - Draws a fresh uuid for each assembled instance but a root, whose id is its
  *   document's node.
  * @returns The rows, every relation of {@link OverlayRows} present; or the {@link OverlayConflict}
@@ -441,4 +419,4 @@ export const overlayRowsOf = (
   documents: readonly PlacedDocument[],
   mint: () => NodeId,
 ): Result.Result<OverlayRows, OverlayConflict> =>
-  unionsOf<OverlayRows>(overlayNames, overlayPartsOf(documents, mint));
+  unionsOf(overlayRelations, overlayPartsOf(documents, mint));

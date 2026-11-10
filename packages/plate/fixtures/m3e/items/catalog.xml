@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3e-catalog" title="Catalog resources" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p data-catalog-idref="c1">A tide pool keeps sea water in a hollow of the rock after the tide goes out.</p>
+    <p data-catalog-idref="c2">The chart compares the depth of three pools at low tide.</p>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt><span data-catalog-idref="c1">Which pool is deepest at low tide?</span></qti-prompt>
+      <qti-simple-choice identifier="A">The north pool</qti-simple-choice>
+      <qti-simple-choice identifier="B">The middle pool</qti-simple-choice>
+      <qti-simple-choice identifier="C">The south pool</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+  <qti-catalog-info>
+    <qti-catalog id="c1">
+      <qti-card support="additional-directions">
+        <qti-html-content>
+          <p>Read the passage twice before you choose a pool.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="ext:pacing">
+        <qti-html-content>
+          <p>Take a short pause after the passage before the question.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="keyword-translation">
+        <qti-card-entry xml:lang="es">
+          <qti-html-content>
+            <p>poza de marea</p>
+          </qti-html-content>
+        </qti-card-entry>
+        <qti-card-entry xml:lang="de" default="true">
+          <qti-html-content>
+            <p>Gezeitentümpel</p>
+          </qti-html-content>
+        </qti-card-entry>
+      </qti-card>
+      <qti-card support="spoken">
+        <qti-card-entry data-reading-type="screen-reader">
+          <qti-html-content>
+            <p>Tide pool: a rock hollow that keeps sea water, read by the screen reader.</p>
+          </qti-html-content>
+        </qti-card-entry>
+        <qti-card-entry data-reading-type="computer-read-aloud">
+          <qti-html-content>
+            <p>Tide pool: a rock hollow that keeps sea water, read aloud by the delivery system.</p>
+          </qti-html-content>
+        </qti-card-entry>
+      </qti-card>
+      <qti-card support="transcript"/>
+    </qti-catalog>
+    <qti-catalog id="c2">
+      <qti-card support="long-description">
+        <qti-file-href mime-type="text/html">descriptions/chart.html</qti-file-href>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>

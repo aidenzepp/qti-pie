@@ -17,15 +17,8 @@
  * texts and nothing else: its alternatives are literals, anchored at both ends.
  */
 import { Array as Arr, Option, Order } from "effect";
-import type { Result } from "effect";
 import { closed, idField, valueField } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
@@ -129,46 +122,53 @@ export type NamesUnder = Closed<
  * the pattern of the expanded names of the element kinds it admits there.
  *
  * Only a parent that admits a foreign kind may hold a foreign element (N5), so the relation is
- * total over the parents a foreign element's row may name and holds no other.
+ * total over the parents a foreign element's row may name and holds no other. A family's names are
+ * its admission map's, so each map's pattern is spelled once, however many families hold it.
  *
- * @param input - The admitted triples and the kinds' names.
- * @param input.admitted - Each (version, parent, child) the content grammar admits.
+ * @param input - The admission maps and the kinds' names.
+ * @param input.admissionIn - `AdmissionIn`: each admission map's children.
+ * @param input.families - `ContentModelOf`: each (version, parent) family's admission map, in
+ *   (version, parent) code order, the rows' order.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.nameOf - A kind's expanded name, none for a kind that is no element of a
  *   vocabulary.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const namesUnder = (input: {
-  readonly admitted: readonly {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }[];
+  readonly admissionIn: {
+    readonly rows: readonly { readonly child: string; readonly map: string }[];
+  };
+  readonly families: {
+    readonly rows: readonly {
+      readonly admission: string;
+      readonly parent: string;
+      readonly version: SchemaVersion;
+    }[];
+  };
   readonly kinds: Roster<string>;
   readonly nameOf: (
     kind: string,
   ) => Option.Option<{ readonly local: string; readonly namespace: string }>;
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<NamesUnder, ClosedRelationError> => {
-  const families = Object.values(
-    Arr.groupBy(input.admitted, ({ parent, version }) => `${version} ${parent}`),
-  );
-  const rows = families.flatMap(([first, ...rest]) => {
-    const admitted = [first, ...rest];
+}): NamesUnder => {
+  const patterns = new Map<string, string>();
+  for (const [map, held] of Map.groupBy(input.admissionIn.rows, ({ map: of }) => of)) {
+    if (held.some(({ child }) => isForeignKind(child))) {
+      patterns.set(
+        map,
+        expandedNamesPattern(held.flatMap(({ child }) => Option.toArray(input.nameOf(child)))),
+      );
+    }
+  }
 
-    return admitted.some(({ child }) => isForeignKind(child))
-      ? [
-          {
-            names: expandedNamesPattern(
-              admitted.flatMap(({ child }) => Option.toArray(input.nameOf(child))),
-            ),
-            parent: first.parent,
-            version: first.version,
-          },
-        ]
-      : [];
-  });
+  const rows = input.families.rows.flatMap(({ admission, parent, version }) =>
+    Option.toArray(Option.fromUndefinedOr(patterns.get(admission))).map((names) => ({
+      names,
+      parent,
+      version,
+    })),
+  );
 
   return closed({
     key: [idField("version", input.versions), idField("parent", input.kinds)],
@@ -193,9 +193,8 @@ export type TypesAvailable = Closed<
 
 /**
  * Generate `TypeAvailable`, total over the `TypeName` roster: for each type, the pattern of the
- * vocabulary namespaces under whose elements an `xsi:type` may name it; {@link everyText} for the
- * null type, which names no namespace, and for a type of XML Schema's own namespace, which every
- * schema set holds.
+ * vocabulary namespaces under whose elements an `xsi:type` may name it; {@link everyText} for a
+ * type of XML Schema's own namespace, which every schema set holds.
  *
  * An element of a namespace no vocabulary has stands in documents of every set, so it may name a
  * type of every vocabulary: a law reads that half through {@link vocabularyNamespacesPattern},
@@ -206,40 +205,39 @@ export type TypesAvailable = Closed<
  *   second (`open.ts`, `typeAvailable`).
  * @param input.everywhere - Whether a type of a namespace is available under every namespace: a
  *   type of XML Schema's namespace.
- * @param input.namespaceOf - A type's namespace, or none for the null type.
+ * @param input.namespaceOf - A type's namespace.
  * @param input.types - The `TypeName` roster.
  * @param input.vocabularies - The vocabularies' namespaces, as crust's tree spells them, the texts
  *   a pattern holds.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const typesAvailable = (input: {
   readonly available: (parent: NamespaceOfKind, type: NamespaceName) => boolean;
   readonly everywhere: (namespace: NamespaceName) => boolean;
-  readonly namespaceOf: (type: string) => Option.Option<NamespaceName>;
+  readonly namespaceOf: (type: string) => NamespaceName;
   readonly types: Roster<string>;
   readonly vocabularies: readonly string[];
-}): Result.Result<TypesAvailable, ClosedRelationError> => {
+}): TypesAvailable => {
   const patternOf = (namespace: NamespaceName): string =>
     textsPattern(
       input.vocabularies.filter((parent) => input.available(namespaceNameOf(parent), namespace)),
     );
   // A type's pattern is its namespace's, so each named namespace's is spelled once.
   const byNamespace = new Map<string, string>();
-  const rows = input.types.handles.map((type) => ({
-    namespaces: Option.match(input.namespaceOf(type), {
-      onNone: () => everyText,
-      onSome: (namespace) => {
-        if (input.everywhere(namespace)) {
-          return everyText;
-        }
+  const rows = input.types.handles.map((type) => {
+    const namespace = input.namespaceOf(type);
+    if (input.everywhere(namespace)) {
+      return { namespaces: everyText, type };
+    }
 
-        return namespace._tag === "in"
+    return {
+      namespaces:
+        namespace._tag === "in"
           ? byNamespace.getOrInsertComputed(namespace.uri, () => patternOf(namespace))
-          : patternOf(namespace);
-      },
-    }),
-    type,
-  }));
+          : patternOf(namespace),
+      type,
+    };
+  });
 
   return closed({
     key: [idField("type", input.types)],
@@ -288,7 +286,7 @@ export type HeldRootsUnder = NamesUnder;
  * @param input.roots - Each root, its name as crust's tree spells it, and the versions it is
  *   declared globally in.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const heldRootsUnder = (input: {
   readonly classOf: (namespace: NamespaceName, parent: NamespaceOfKind) => string;
@@ -307,7 +305,7 @@ export const heldRootsUnder = (input: {
     readonly versions: readonly SchemaVersion[];
   }[];
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<HeldRootsUnder, ClosedRelationError> => {
+}): HeldRootsUnder => {
   const families = Object.values(
     Arr.groupBy(input.held, ({ parent, version }) => `${version} ${parent}`),
   );

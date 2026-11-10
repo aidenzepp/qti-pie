@@ -10,7 +10,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
-import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import {
   alignLaws,
@@ -21,7 +21,8 @@ import {
   leafStartFold,
 } from "#pantry/qti/mathml-align.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
@@ -78,7 +79,7 @@ describe("qti/mathml-align.ts, declared", { timeout: buildTimeout }, () => {
     assert.isAbove(alignLaws.length, 0);
     assert.strictEqual(new Set(alignLaws).size, alignLaws.length);
 
-    const built = schema("AlignLayer", { ...Qti.relations }, [...nodeLaws, ...alignLaws]);
+    const built = schema("AlignLayer", { ...QtiBase.relations }, [...nodeLaws, ...alignLaws]);
 
     assert.strictEqual(built.statements.length, nodeLaws.length + alignLaws.length);
     for (const statement of alignLaws) {
@@ -146,7 +147,7 @@ describe("qti/mathml-align.ts, declared", { timeout: buildTimeout }, () => {
   });
 
   it("reads every containment, key and family of the module as 'E1 derived'", () => {
-    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds.
+    // Oracle: the statements are named by `schemaLawNameOf`'s own table, as `refusal.test.ts` holds.
     const own = ownLaws();
     assert.isAbove(own.length, 0);
     assert.deepStrictEqual([...new Set(own.map(([, name]) => name))], ["E1 derived"]);
@@ -154,7 +155,7 @@ describe("qti/mathml-align.ts, declared", { timeout: buildTimeout }, () => {
     assert.isTrue(own.some(([law]) => law.kind === "family" && law.order === "counted"));
 
     for (const [law, name] of own) {
-      assert.deepStrictEqual(lawNameOf(law), Option.some(name));
+      assert.deepStrictEqual(schemaLawNameOf(law), Option.some(name));
     }
   });
 });
@@ -166,10 +167,10 @@ describe("qti/mathml-align.ts, spellings", () => {
       ["ltr", "rtl"],
     );
     for (const [direction, spelling] of directionSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*${direction}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*${direction}[ \\t\\n\\r]*$`);
     }
 
-    const pattern = new RegExp(directionSpellings[0][1], "u");
+    const pattern = new RegExp(directionSpellings[0][1].source, "u");
 
     assert.isTrue(pattern.test(" ltr\n"));
     assert.isFalse(pattern.test("ltrx"));

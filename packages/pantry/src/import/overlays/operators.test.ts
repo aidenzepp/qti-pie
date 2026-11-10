@@ -30,12 +30,8 @@ import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operato
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import {
-  doublePattern,
-  equalRoundedMode,
-  integerForm,
-  positivePattern,
-} from "#pantry/qti/operators.ts";
+import { integerForm } from "#pantry/qti/limits.ts";
+import { doublePattern, positivePattern } from "#pantry/qti/operators.ts";
 import {
   collapsedText,
   figuresIntegerOf,
@@ -45,6 +41,7 @@ import {
 } from "#pantry/test/operator-spec.ts";
 import type { RoundingKind } from "#pantry/test/operator-spec.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { equalRoundedMode } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -163,9 +160,9 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
  * classes, groups and alternation alone, which ECMAScript's `u` mode reads the same.
  */
 const database = {
-  integer: new RegExp(integerForm, "u"),
-  numeric: new RegExp(doublePattern, "u"),
-  positive: new RegExp(positivePattern, "u"),
+  integer: new RegExp(integerForm.source, "u"),
+  numeric: new RegExp(doublePattern.source, "u"),
+  positive: new RegExp(positivePattern.source, "u"),
 };
 
 /**

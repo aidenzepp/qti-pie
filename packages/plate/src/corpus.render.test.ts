@@ -272,6 +272,9 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
         case "extended-text": {
           return walk(Option.getOrElse(node.prompt, () => []));
         }
+        case "container": {
+          return walk(node.children);
+        }
         case "content":
         case "text":
         case "text-entry":
@@ -516,6 +519,7 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
     }
 
     switch (node.kind) {
+      case "container":
       case "element": {
         return inlineChoicesOf(node.children);
       }
