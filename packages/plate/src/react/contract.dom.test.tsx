@@ -1,9 +1,10 @@
 /**
  * The React layer's contract in each engine's page, under React 19: `useParts` projects the tree
  * plate's part functions build for the M2 Choice fixture to the same `data-slot` markers, ids and
- * entry names as `render`'s HTML (OD-8: one emitter, a React projection); every stub component (the
- * 21 interactions', `Item`, `Status` and `Navigation`) renders the item's notice; and
- * `TestProvider` fails at mount naming the issue that fills it.
+ * entry names as `render`'s HTML (OD-8: one emitter, a React projection); every export the stub
+ * marker (`isStub`) marks renders the item's notice, its roster read from the marker so a filled
+ * component leaves it with no edit here; and `TestProvider` fails at mount naming the issue that
+ * fills it while it is still marked.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
@@ -39,7 +40,6 @@ import {
   Hotspot,
   Hottext,
   InlineChoice,
-  Item,
   Match,
   Media,
   Navigation,
@@ -55,7 +55,9 @@ import {
   Upload,
   useParts,
 } from "#plate/react/index.tsx";
+import * as react from "#plate/react/index.tsx";
 import type { InteractionComponent } from "#plate/react/index.tsx";
+import { isStub } from "#plate/react/parts.tsx";
 import { redact, render } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
@@ -178,31 +180,37 @@ const valuesOf = (node: ParentNode, name: string): readonly string[] =>
   [...node.querySelectorAll(`[${name}]`)].map((element) => element.getAttribute(name) ?? "");
 
 /**
- * Every interaction's component, by the QTI element its notice names.
+ * Every interaction's component, by its export name, with the QTI element its notice names.
  */
-const interactionStubs: readonly (readonly [string, InteractionComponent<never>])[] = [
-  ["qti-associate-interaction", Associate],
-  ["qti-choice-interaction", Choice],
-  ["qti-drawing-interaction", Drawing],
-  ["qti-end-attempt-interaction", EndAttempt],
-  ["qti-extended-text-interaction", ExtendedText],
-  ["qti-gap-match-interaction", GapMatch],
-  ["qti-graphic-associate-interaction", GraphicAssociate],
-  ["qti-graphic-gap-match-interaction", GraphicGapMatch],
-  ["qti-graphic-order-interaction", GraphicOrder],
-  ["qti-hotspot-interaction", Hotspot],
-  ["qti-hottext-interaction", Hottext],
-  ["qti-inline-choice-interaction", InlineChoice],
-  ["qti-match-interaction", Match],
-  ["qti-media-interaction", Media],
-  ["qti-order-interaction", Order],
-  ["qti-portable-custom-interaction", PortableCustom],
-  ["qti-position-object-interaction", PositionObject],
-  ["qti-select-point-interaction", SelectPoint],
-  ["qti-slider-interaction", Slider],
-  ["qti-text-entry-interaction", TextEntry],
-  ["qti-upload-interaction", Upload],
+const interactionStubs: readonly (readonly [string, string, InteractionComponent<never>])[] = [
+  ["Associate", "qti-associate-interaction", Associate],
+  ["Choice", "qti-choice-interaction", Choice],
+  ["Drawing", "qti-drawing-interaction", Drawing],
+  ["EndAttempt", "qti-end-attempt-interaction", EndAttempt],
+  ["ExtendedText", "qti-extended-text-interaction", ExtendedText],
+  ["GapMatch", "qti-gap-match-interaction", GapMatch],
+  ["GraphicAssociate", "qti-graphic-associate-interaction", GraphicAssociate],
+  ["GraphicGapMatch", "qti-graphic-gap-match-interaction", GraphicGapMatch],
+  ["GraphicOrder", "qti-graphic-order-interaction", GraphicOrder],
+  ["Hotspot", "qti-hotspot-interaction", Hotspot],
+  ["Hottext", "qti-hottext-interaction", Hottext],
+  ["InlineChoice", "qti-inline-choice-interaction", InlineChoice],
+  ["Match", "qti-match-interaction", Match],
+  ["Media", "qti-media-interaction", Media],
+  ["Order", "qti-order-interaction", Order],
+  ["PortableCustom", "qti-portable-custom-interaction", PortableCustom],
+  ["PositionObject", "qti-position-object-interaction", PositionObject],
+  ["SelectPoint", "qti-select-point-interaction", SelectPoint],
+  ["Slider", "qti-slider-interaction", Slider],
+  ["TextEntry", "qti-text-entry-interaction", TextEntry],
+  ["Upload", "qti-upload-interaction", Upload],
 ];
+
+/**
+ * The exports `TestProvider`'s own case checks while it is a stub, which fail at mount rather than
+ * render a notice.
+ */
+const failingStubs: ReadonlySet<string> = new Set(["TestProvider"]);
 
 /**
  * A component that projects a tree through `useParts`.
@@ -241,52 +249,61 @@ describe(server.browser, () => {
   });
 
   describe("the stubs", () => {
-    it.effect("render the item's notice naming their feature", () =>
+    it.effect("[m3g-01] the gate's stub case derives its roster from the marker", () =>
       Effect.gen(function* stubsGiveNotice() {
         const configuration = yield* configure({});
-        const { redacted } = yield* redactedChoice;
-        const stubs: readonly (readonly [string, ReactNode])[] = [
+        const rows: ReadonlyMap<string, readonly [string, ReactNode]> = new Map([
           ...interactionStubs.map(
-            ([feature, Stub]) =>
-              [feature, <Stub key={feature} responseIdentifier="RESPONSE" />] as const,
+            ([name, feature, Stub]) =>
+              [name, [feature, <Stub key={name} responseIdentifier="RESPONSE" />]] as const,
           ),
           [
-            "qti-assessment-item",
-            <Item configuration={configuration} key="item" redacted={redacted} />,
+            "Status",
+            [
+              "status",
+              <Status
+                configuration={configuration}
+                input={{ heading: "scored", instance }}
+                key="status"
+              />,
+            ],
           ],
           [
-            "status",
-            <Status
-              configuration={configuration}
-              input={{ heading: "scored", instance }}
-              key="status"
-            />,
+            "Navigation",
+            [
+              "test-navigation",
+              <Navigation
+                configuration={configuration}
+                key="navigation"
+                state={{
+                  allowed: [],
+                  count: 0,
+                  items: [],
+                  navigation: "linear",
+                  position: 0,
+                  submission: "individual",
+                }}
+              />,
+            ],
           ],
-          [
-            "test-navigation",
-            <Navigation
-              configuration={configuration}
-              key="navigation"
-              state={{
-                allowed: [],
-                count: 0,
-                items: [],
-                navigation: "linear",
-                position: 0,
-                submission: "individual",
-              }}
-            />,
-          ],
-        ];
+        ]);
+        const roster = Object.entries(react)
+          .filter(([name, value]) => isStub(value) && !failingStubs.has(name))
+          .map(([name]) => name);
 
-        assert.strictEqual(interactionStubs.length, 21);
+        assert.isFalse(isStub(react.Item));
 
-        for (const [feature, node] of stubs) {
+        for (const name of roster) {
+          const row = rows.get(name);
+
+          assert.isDefined(row, `${name} is marked a stub, and the stub case has no props for it`);
+
+          const [feature, node] = row;
           const { container, unmount } = mount(node);
           const notice = container.querySelector('[data-slot="item-notice"]');
 
-          assert.strictEqual(notice?.getAttribute("role"), "note", feature);
-          assert.strictEqual(notice?.textContent, `Not supported here: ${feature}`);
+          assert.strictEqual(notice?.getAttribute("role"), "note", name);
+          assert.strictEqual(notice?.textContent, `Not supported here: ${feature}`, name);
           unmount();
         }
       }),
@@ -294,7 +311,11 @@ describe(server.browser, () => {
   });
 
   describe("TestProvider", () => {
-    it("fails at mount with NotImplemented naming m3g-06", () => {
+    it("fails at mount with NotImplemented naming m3g-06 while it is a stub", () => {
+      if (!isStub(TestProvider)) {
+        return;
+      }
+
       const errors: unknown[] = [];
       const transport = {
         post: () => Promise.reject(new NotImplemented({ issue: "test", piece: "post" })),

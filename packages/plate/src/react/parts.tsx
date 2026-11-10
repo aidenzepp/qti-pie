@@ -1,12 +1,9 @@
 /**
  * The React layer's core pieces: {@link useParts}, the projection of the neutral tree to React;
- * {@link useUpgrade}, the runtime's mount; {@link Notice}, the item's notice every stub renders; and
- * {@link Item}, a stub until issue m3g-01 fills it.
- *
- * `Item` stays a stub because the tree `render` builds is not reachable from its public result,
- * which is the HTML alone: a real `Item` needs a seam in `#plate/render.ts` that gives the tree,
- * which issue m3g-01 adds, so the projection calls the same part functions `render` calls and no
- * second copy of its steps exists here.
+ * {@link useUpgrade}, the runtime's mount; {@link Notice}, the item's notice every stub renders;
+ * and the stub marker, {@link markStub} and {@link isStub}, which names the pieces still stubs.
+ * `Item` lives in `#plate/react/item.tsx`, and the projection that applies part replacements in
+ * `#plate/react/interaction.tsx` (issue m3g-01).
  *
  * @module
  */
@@ -18,13 +15,46 @@ import { rowFor } from "#plate/emit/parts.ts";
 import type { InteractionKey } from "#plate/emit/parts.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
-import type {
-  InteractionComponent,
-  ItemProps,
-  UseParts,
-  UseUpgrade,
-} from "#plate/react/contract.tsx";
+import type { InteractionComponent, UseParts, UseUpgrade } from "#plate/react/contract.tsx";
 import { upgrade } from "#plate/runtime.dom.ts";
+
+/**
+ * The pieces of the React layer that are still stubs, as {@link markStub} marked them. A weak set,
+ * so a mark keeps no component alive.
+ */
+const stubs = new WeakSet<object>();
+
+/**
+ * Mark a piece of the React layer as a stub: one that renders the item's notice, or fails at mount,
+ * until its issue fills it. The issue that fills it drops the mark by replacing the stub, so
+ * {@link isStub} names exactly the pieces still to fill, and the gate's stub case reads its roster
+ * from the mark (issue m3g-01).
+ *
+ * @example
+ *   export const Status = markStub(({ configuration }: StatusProps) => <Notice … />);
+ *
+ * @param component The stub.
+ * @returns The same component, marked.
+ */
+export const markStub = <C extends object>(component: C): C => {
+  stubs.add(component);
+
+  return component;
+};
+
+/**
+ * Tell whether a value is a piece of the React layer that {@link markStub} marked: `Item` passes
+ * an interaction whose component is a stub to the projection, so every kind the core renders shows
+ * in `Item` before its component is filled.
+ *
+ * @param component Any value, such as an export of `#plate/react/index.tsx`.
+ * @returns Whether it is a marked stub.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The marker is asked of every export of the React surface, components and functions and values alike, as the gate's stub case asks it.
+export const isStub = (component: unknown): boolean =>
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Only an object or a function can be in the weak set; any other export is no stub.
+  (typeof component === "function" || (typeof component === "object" && component !== null)) &&
+  stubs.has(component);
 
 /**
  * The HTML attribute names whose React prop is spelt otherwise, by HTML name. A name not listed is
@@ -54,6 +84,27 @@ const reactNames: ReadonlyMap<string, string> = new Map([
   ["xlink:href", "xlinkHref"],
   ["xml:lang", "xmlLang"],
 ]);
+
+/**
+ * The HTML attribute name of each React prop {@link propName} spells otherwise, by React name: the
+ * inverse of {@link reactNames}, with an uncontrolled default read back as the state attribute
+ * it mounts (`defaultChecked` as `checked`, `defaultValue` as `value`).
+ */
+const htmlNames: ReadonlyMap<string, string> = new Map([
+  ...[...reactNames].map(([html, react]) => [react, html] as const),
+  ["defaultChecked", "checked"],
+  ["defaultValue", "value"],
+]);
+
+/**
+ * Name a React prop as the HTML attribute it writes: the inverse of the projection's spelling, so
+ * a replacement's props are read as the attributes the swap invariant compares.
+ *
+ * @param prop The React prop's name, such as `className` or `defaultChecked`.
+ * @returns The attribute's HTML name, such as `class` or `checked`; a name React spells as HTML
+ *   does, as `id` and every `aria-*` and `data-*` name, as it is.
+ */
+export const attributeName = (prop: string): string => htmlNames.get(prop) ?? prop;
 
 /**
  * The React props that take a boolean, by React name: a boolean attribute present (`true` in the
@@ -109,15 +160,17 @@ const textOf = (children: readonly Node[]): string =>
   children.map((child) => (child.kind === "text" ? child.text : textOf(child.children))).join("");
 
 /**
- * Give an element's attributes as React props.
+ * Give an element's attributes as React props, as {@link useParts} and the projection that applies
+ * part replacements (`#plate/react/interaction.tsx`) both write them.
  *
  * A `textarea`'s text becomes its `defaultValue`, since React takes a text area's content as a prop
- * and refuses it as children.
+ * and refuses it as children. A boolean attribute is `true` for a prop React takes as a boolean
+ * and the empty string otherwise, so no value is `false`.
  *
  * @param element The element.
  * @returns Its props in React's spelling.
  */
-const propsOf = (element: Element): Readonly<Record<string, string | boolean>> => {
+export const propsOf = (element: Element): Readonly<Record<string, string | boolean>> => {
   const entries = Object.entries(element.attrs).map(
     ([name, value]: [string, Attributes[string]]) => {
       const prop = propName(element, name);
@@ -155,8 +208,8 @@ const project = (node: Node): ReactNode => {
 /**
  * Project a node of the neutral tree to React (OD-8): every element to the element of its tag,
  * with the same attributes in React's spelling, so the markers, ids and names a React page holds
- * are the ones `render`'s HTML holds. Part replacements are not applied here; issue m3g-01 applies
- * them through the swap invariant.
+ * are the ones `render`'s HTML holds. Part replacements are not applied here: `Item` and
+ * `useInteraction` (`#plate/react/interaction.tsx`) apply them through the swap invariant.
  *
  * @example
  *   const Prompt = () => useParts(h("p", { "data-slot": "item-notice" }, [text("Hello")]));
@@ -220,23 +273,12 @@ export const Notice = ({ feature, locale = "en" }: NoticeProps): ReactNode =>
 
 /**
  * Make an interaction's stub component, which renders the item's notice naming the interaction's
- * QTI element, `qti-<key>`, until its issue fills it.
+ * QTI element, `qti-<key>`, until its issue fills it. The component is marked
+ * ({@link markStub}), so `Item` projects that interaction's root as the core rendered it instead
+ * of mounting the stub.
  *
  * @param key The interaction's key, such as `hotspot-interaction`.
- * @returns The stub component.
+ * @returns The stub component, marked.
  */
 export const stubInteraction = <I extends InteractionKey>(key: I): InteractionComponent<I> =>
-  function InteractionStub() {
-    return <Notice feature={`qti-${key}`} />;
-  };
-
-/**
- * An item, rendered as React: a stub that renders the item's notice in the configuration's locale.
- * Issue m3g-01 fills it, projecting the tree `render` builds through {@link useParts}.
- *
- * @param props The item, the configuration and the options `render` takes.
- * @returns The item's notice.
- */
-export const Item = ({ configuration }: ItemProps): ReactNode => (
-  <Notice feature="qti-assessment-item" locale={configuration.locale} />
-);
+  markStub((): ReactNode => <Notice feature={`qti-${key}`} />);
