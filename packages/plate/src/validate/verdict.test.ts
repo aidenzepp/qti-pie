@@ -21,13 +21,14 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { isStubbed } from "#plate/model/interactions.ts";
+import { isStubbed, modules as interactionModules } from "#plate/model/interactions.ts";
 import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
 import { InvalidValue } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
 import { allowedEffectNames, readImports, sourceModules, valueNames } from "#plate/test/imports.ts";
+import { stubBaseType, stubCardinality, stubElement } from "#plate/test/stub-kind.ts";
 import { open } from "#plate/validate/open.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
@@ -536,7 +537,11 @@ describe("check", () => {
     }
   });
 
-  it("[Q-31] accepts a qti-hotspot-interaction with unsupported features, naming it", () => {
+  it("[Q-31] accepts a qti-hotspot-interaction: naming it as unsupported while the Hotspot module is a stub, and as its node once the module lands", () => {
+    // Derived from the module's `implemented` flag, as vertical.test.ts [I-0] derives a verdict:
+    // this case's point is the Hotspot's own verdict, so the fixture stays a complete hotspot and
+    // reads from the flag whether `check` gives the stub's notice or the module's node.
+    const landed = interactionModules.hotspot.implemented;
     const hotspot = el(
       "qti-hotspot-interaction",
       [attr("response-identifier", "RESPONSE")],
@@ -551,18 +556,16 @@ describe("check", () => {
     );
     const accepted = acceptedOf(
       verdictOf(item([response("identifier", "single"), body([hotspot])])),
-      "accepted-with-unsupported",
+      landed ? "accepted" : "accepted-with-unsupported",
     );
+    const at = `${bodyPath}/qti-hotspot-interaction`;
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      {
-        feature: "qti-hotspot-interaction",
-        path: `${bodyPath}/qti-hotspot-interaction`,
-        shown: "notice",
-      },
-    ]);
+    assert.deepStrictEqual(
+      accepted.unsupported,
+      landed ? [] : [{ feature: "qti-hotspot-interaction", path: at, shown: "notice" }],
+    );
     assert.deepStrictEqual(outline(accepted.item.body), [
-      `notice:qti-hotspot-interaction@${bodyPath}/qti-hotspot-interaction`,
+      landed ? "hotspot" : `notice:qti-hotspot-interaction@${at}`,
     ]);
   });
 
@@ -911,29 +914,25 @@ describe("check, the URL pass", () => {
   });
 
   it("marks a URL dropped inside a part the body already shows as a notice", () => {
-    const hotspot = el(
-      "qti-hotspot-interaction",
+    // The stub kind's element, not a hotspot: the point is the URL pass's mark beside the notice
+    // of the part that holds it, so the fixture names the kind the table of modules holds as a stub
+    // the longest, and no module that lands meets it.
+    const stub = el(
+      stubElement,
       [attr("response-identifier", "RESPONSE")],
-      [
-        el("img", [attr("alt", "A map"), attr("src", scriptUrl)]),
-        el("qti-hotspot-choice", [
-          attr("coords", "10,10,5"),
-          attr("identifier", "A"),
-          attr("shape", "circle"),
-        ]),
-      ],
+      [el("img", [attr("alt", "A map"), attr("src", scriptUrl)])],
     );
     const accepted = acceptedOf(
-      verdictOf(item([response("identifier", "single"), body([hotspot])])),
+      verdictOf(item([response(stubBaseType, stubCardinality), body([stub])])),
       "accepted-with-unsupported",
     );
-    const at = `${bodyPath}/qti-hotspot-interaction`;
+    const at = `${bodyPath}/${stubElement}`;
 
     assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "qti-hotspot-interaction", path: at, shown: "notice" },
+      { feature: stubElement, path: at, shown: "notice" },
       { feature: "url-scheme:javascript", path: `${at}/img`, shown: "mark" },
     ]);
-    assert.deepStrictEqual(outline(accepted.item.body), [`notice:qti-hotspot-interaction@${at}`]);
+    assert.deepStrictEqual(outline(accepted.item.body), [`notice:${stubElement}@${at}`]);
   });
 
   it("writes a kept URL in its parsed form, and an item whose URLs are all kept is accepted", () => {

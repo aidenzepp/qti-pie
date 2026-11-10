@@ -124,7 +124,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
       "[Q-2] [I-9b] [keyboard] BG007 by keyboard: true scores 1, false 0, none 0",
       "[Q-20] [I-9b] [keyboard] BG010 by keyboard: YORK and york give 0.5, Paris and none 0",
       "[Q-5] [keyboard] BG011 by keyboard, past the video: the response is recorded, not scored",
-      "[I-9b] [keyboard] the hotspot item shows one notice, posts its other entries, and scores 0",
+      "[I-9b] [keyboard] the stub-kind item shows one notice, posts its other entries, and scores 0",
     ],
   ],
   [
