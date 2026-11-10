@@ -6,6 +6,7 @@ import { Effect, FileSystem, Option } from "effect";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { declared } from "#crust/test/bytes.ts";
+import { assertRefusal } from "#crust/test/refusal.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
@@ -246,13 +247,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* placeTooDeep() {
       const error = yield* Effect.flip(readText(`${"<a>".repeat(256)}\n<a>${"</a>".repeat(257)}`));
 
-      assert.strictEqual(error._tag, "ReaderRefusal");
-      assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
       // The line and column the detail states: where saxes stands after the 257th start tag.
-      assert.deepStrictEqual(
-        error._tag === "ReaderRefusal" ? error.position : undefined,
-        Option.some({ column: 3, line: 2 }),
-      );
+      assertRefusal(error, "element-depth", Option.some({ column: 3, line: 2 }));
     }),
   );
 
@@ -260,15 +256,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* placeUndeclared() {
       const error = yield* Effect.flip(readText("<a>\n  &nbsp;</a>"));
 
-      assert.strictEqual(error._tag, "ReaderRefusal");
-      assert.strictEqual(
-        error._tag === "ReaderRefusal" ? error.rule : undefined,
-        "undeclared-entity",
-      );
-      assert.deepStrictEqual(
-        error._tag === "ReaderRefusal" ? error.position : undefined,
-        Option.some({ column: 3, line: 2 }),
-      );
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 3, line: 2 }));
     }),
   );
 
@@ -283,15 +271,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
         readText(`<!DOCTYPE a SYSTEM "a.dtd"><a>${everySentinel}\n\n  &u;</a>`),
       );
 
-      assert.strictEqual(error._tag, "ReaderRefusal");
-      assert.strictEqual(
-        error._tag === "ReaderRefusal" ? error.rule : undefined,
-        "undeclared-entity",
-      );
-      assert.deepStrictEqual(
-        error._tag === "ReaderRefusal" ? error.position : undefined,
-        Option.some({ column: 3, line: 3 }),
-      );
+      assertRefusal(error, "undeclared-entity", Option.some({ column: 3, line: 3 }));
     }),
   );
 
