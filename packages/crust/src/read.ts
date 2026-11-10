@@ -144,7 +144,7 @@ const assignSentinels = (
       }
 
       if (prolog.undeclared._tag === "refused") {
-        return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
+        return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why, Option.none()));
       }
 
       const sentinels = new Map<string, string>();
@@ -159,6 +159,7 @@ const assignSentinels = (
             undeclaredEntity(
               name,
               "the document leaves no private use character free to stand for it",
+              Option.none(),
             ),
           );
         }
@@ -273,6 +274,7 @@ const parse = (
         if (open.length >= elementDepth) {
           throw new ReaderRefusal({
             detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
+            position: Option.none(),
             rule: "element-depth",
           });
         }

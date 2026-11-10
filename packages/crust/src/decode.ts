@@ -178,9 +178,17 @@ const declaredEncoding = (units: Units): Option.Option<string> => {
 
 /**
  * Builds the refusal for bytes the label's decoder could not accept.
+ *
+ * @param rule - The rule the bytes break.
+ * @param detail - What in the input broke it.
+ * @param position - Where in the decoded text it broke, or none for the document as a whole.
+ * @returns The refusal.
  */
-const refuse = (rule: ReaderRefusal["rule"], detail: string): ReaderRefusal =>
-  new ReaderRefusal({ detail, rule });
+const refuse = (
+  rule: ReaderRefusal["rule"],
+  detail: string,
+  position: ReaderRefusal["position"],
+): ReaderRefusal => new ReaderRefusal({ detail, position, rule });
 
 /**
  * Decode `body` with the named `TextDecoder` encoding, failing on any malformed sequence.
@@ -209,6 +217,7 @@ const decodeStrictly = (
         refuse(
           "unsupported-encoding",
           `No decoder here recognizes the encoding "${label}". Re-save the document as UTF-8, or declare an encoding this reader can decode.`,
+          Option.none(),
         ),
       try: () => new TextDecoder(name, { fatal: true, ignoreBOM: true }),
     });
@@ -217,6 +226,7 @@ const decodeStrictly = (
       return yield* refuse(
         "unsupported-encoding",
         `The encoding "${label}" is decoded as "${decoder.encoding}" by the decoder that serves that label, so some bytes would read as characters the author did not write. Re-save the document as UTF-8.`,
+        Option.none(),
       );
     }
 
@@ -225,6 +235,7 @@ const decodeStrictly = (
         refuse(
           "decode",
           `The document is read as ${label}, but its bytes are not valid in that encoding. Fix the bytes that are not valid ${label}, or re-save the document as UTF-8.`,
+          Option.none(),
         ),
       try: () => decoder.decode(body),
     });
@@ -250,6 +261,7 @@ const asciiDecoders: Readonly<Record<"ascii" | "decode-only" | "latin1" | "utf8"
           refuse(
             "decode",
             `The document is read as ${label}, which holds only bytes below 0x80, but the byte at offset ${body.indexOf(byte)} is 0x${byte.toString(16).toUpperCase()}. Re-save the document as UTF-8, or declare the encoding it was written in.`,
+            Option.none(),
           ),
         );
   },
@@ -395,6 +407,7 @@ const mismatch = (row: Decodable, label: string, declared: boolean): ReaderRefus
   refuse(
     "encoding-mismatch",
     `The document begins with ${row.opening}, which only ${row.named} begins with (XML 1.0 Appendix F), but ${declared ? `its declaration names ${label}` : `it declares no encoding, which makes it ${label} (XML 1.0 section 4.3.3)`}. Declare the encoding the bytes are in, or re-save the document in ${label}.`,
+    Option.none(),
   );
 
 /**
@@ -444,6 +457,7 @@ const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRe
         refuse(
           "nul",
           `The decoded text holds U+0000 at offset ${offset}, a character XML 1.0 forbids anywhere in a document. Remove it from the source.`,
+          Option.none(),
         ),
       );
 };
@@ -465,6 +479,7 @@ export const decodeBy = (table: readonly Row[]) =>
       return yield* refuse(
         "unsupported-encoding",
         `The document begins with the bytes of ${row.family} (XML 1.0 Appendix F), an encoding this reader cannot decode. Re-save the document as UTF-8.`,
+        Option.none(),
       );
     }
 
