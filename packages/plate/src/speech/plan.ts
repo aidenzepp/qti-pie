@@ -84,9 +84,13 @@ export interface LexiconEntry {
 
 /**
  * A PLS 1.0 pronunciation lexicon as plain data, the value `readLexicon` returns: its `alphabet`
- * and `xml:lang` as written, and its alias entries in document order. A lexeme with only
- * `phoneme` children has no entry, since the plan substitutes text and an engine that takes
- * phonemes takes them through {@link SpeechSegment.phoneme}.
+ * and `xml:lang` as written, and its alias entries in document order. A lexeme whose preferred
+ * pronunciation is a `phoneme` has no entry, since the plan substitutes text and an engine that
+ * takes phonemes takes them through {@link SpeechSegment.phoneme}. Where two entries write one
+ * grapheme, the first in document order is the one the plan applies.
+ *
+ * `lang` is carried as data: the plan holds one lexicon and applies it to every segment whatever
+ * the segment's `lang`, so filtering by language is a limit.
  */
 export interface Lexicon {
   readonly alphabet: Option.Option<string>;
@@ -95,8 +99,8 @@ export interface Lexicon {
 }
 
 /**
- * The speech functions a carrier gives one element, as the walk composes them: each one is the
- * value of the carrier nearest the text, or none.
+ * The speech functions a carrier gives one element: each one is a value, or none where the
+ * carrier gives none.
  */
 interface Functions {
   readonly alias: Option.Option<string>;
@@ -225,6 +229,15 @@ const isElement = (child: SourceChild): child is SourceElement => child.kind ===
 const isSsml = (element: SourceElement): boolean => element.namespace === ssmlNamespace;
 
 /**
+ * Report whether an element is one whose content no engine speaks.
+ *
+ * @param element The element.
+ * @returns Whether it is an {@link unspoken} SSML element.
+ */
+const isUnspoken = (element: SourceElement): boolean =>
+  isSsml(element) && unspoken.has(element.local);
+
+/**
  * Read an attribute of an element: in no namespace, or in the namespace given.
  *
  * @param element The element.
@@ -265,9 +278,7 @@ const textOf = (element: SourceElement): string =>
         return child.text;
       }
 
-      return child.kind === "element" && !(isSsml(child) && unspoken.has(child.local))
-        ? textOf(child)
-        : "";
+      return child.kind === "element" && !isUnspoken(child) ? textOf(child) : "";
     })
     .join("");
 
@@ -482,27 +493,50 @@ const inlineFunctions = (element: SourceElement): Functions => {
 };
 
 /**
- * Compose the functions of an element's two carriers: the inline element's own function wins over
- * the `data-ssml` one for the same function, since it is the carrier nearer the text.
+ * Read the functions one element carries: an element in the SSML namespace carries its own inline
+ * function, and any other element carries its `data-ssml` value.
+ *
+ * An element in the SSML namespace does not declare `data-ssml`, so there it is a custom `data-*`
+ * attribute and no carrier (the Data-SSML reading, R7-a); the two carriers therefore never meet
+ * on one element.
  *
  * @param element The element.
- * @returns Its functions.
+ * @returns Its functions, {@link noFunctions} for an element that carries none.
  */
-const functionsOf = (element: SourceElement): Functions => {
-  const json = Option.getOrElse(
-    Option.flatMap(attributeOf(element, "data-ssml"), decodeDataSsml),
-    () => noFunctions,
-  );
-  const inline = isSsml(element) ? inlineFunctions(element) : noFunctions;
+const functionsOf = (element: SourceElement): Functions =>
+  isSsml(element)
+    ? inlineFunctions(element)
+    : Option.getOrElse(
+        Option.flatMap(attributeOf(element, "data-ssml"), decodeDataSsml),
+        () => noFunctions,
+      );
 
-  return {
-    alias: Option.orElse(inline.alias, () => json.alias),
-    pause: Option.orElse(inline.pause, () => json.pause),
-    phoneme: Option.orElse(inline.phoneme, () => json.phoneme),
-    rate: Option.orElse(inline.rate, () => json.rate),
-    sayAs: Option.orElse(inline.sayAs, () => json.sayAs),
-  };
-};
+/**
+ * Report whether a carrier's functions replace the text under it: a `sub`'s alias, a `say-as`
+ * or a `phoneme`.
+ *
+ * @param functions The functions.
+ * @returns Whether any of the three is given.
+ */
+const replacesText = (functions: Functions): boolean =>
+  Option.isSome(functions.alias) ||
+  Option.isSome(functions.sayAs) ||
+  Option.isSome(functions.phoneme);
+
+/**
+ * Report whether an element holds, below it, a carrier whose function replaces the text of its
+ * own. An element that does not speak (an {@link unspoken} one) holds nothing.
+ *
+ * @param element The element.
+ * @returns Whether a descendant that is spoken carries a replacing function.
+ */
+const holdsReplacing = (element: SourceElement): boolean =>
+  element.children.some(
+    (child) =>
+      isElement(child) &&
+      !isUnspoken(child) &&
+      (replacesText(functionsOf(child)) || holdsReplacing(child)),
+  );
 
 /**
  * The grapheme segmenter `say-as` `characters` spells a text out with, so a character of several
@@ -537,17 +571,60 @@ const spokenOf = (written: string, functions: Functions): string =>
   );
 
 /**
- * Construct the segments of one element under its context: a pause for a `break`, one segment for
- * an element whose function replaces its text (`sub`, `say-as`, `phoneme`), else a segment per
- * text run and the segments of each child element, with a `data-ssml` pause after the element's
- * content.
+ * A segment under construction. A text run is `open` until the nearest enclosing carrier that
+ * replaces text settles it ({@link settled}); a segment that is not open is final, as is a run
+ * that no such carrier encloses.
+ */
+interface Piece {
+  readonly open: boolean;
+  readonly segment: SpeechSegment;
+}
+
+/**
+ * Settle the text runs open to a replacing carrier: the first is spoken as the carrier's alias,
+ * since an alias is spoken once, and each later one as written, and every one carries the
+ * carrier's `say-as` and `phoneme`, spelled out where the `say-as` asks.
+ *
+ * @param pieces The pieces of the carrier's content, in document order.
+ * @param functions The carrier's functions.
+ * @returns The same pieces, each open run settled and closed.
+ */
+const settled = (pieces: readonly Piece[], functions: Functions): readonly Piece[] => {
+  const first = pieces.findIndex((piece) => piece.open);
+  const later: Functions = { ...functions, alias: Option.none() };
+
+  return pieces.map((piece, index) =>
+    piece.open
+      ? {
+          open: false,
+          segment: {
+            ...piece.segment,
+            phoneme: functions.phoneme,
+            sayAs: functions.sayAs,
+            spoken: spokenOf(piece.segment.written, index === first ? functions : later),
+          },
+        }
+      : piece,
+  );
+};
+
+/**
+ * Construct the pieces of one element under its context: a pause for a `break`, and its content
+ * in one of three shapes.
+ *
+ * An element whose function replaces its text (`sub`, `say-as`, `phoneme`) and that holds no
+ * carrier of a replacing function below it is one segment of its whole text. One that does hold
+ * such a carrier keeps only the runs the nearer carrier does not take: each is a piece of its own,
+ * open, and {@link settled} gives those the element's functions. Any other element is a piece per
+ * text run and the pieces of each child element, left open to the carrier above. A `data-ssml`
+ * pause follows the element's content.
  *
  * @param element The element.
  * @param outer The context above it.
- * @returns Its segments, in document order.
+ * @returns Its pieces, in document order.
  */
-const segmentsOf = (element: SourceElement, outer: Context): readonly SpeechSegment[] => {
-  if (isSsml(element) && unspoken.has(element.local)) {
+const piecesOf = (element: SourceElement, outer: Context): readonly Piece[] => {
+  if (isUnspoken(element)) {
     return [];
   }
 
@@ -562,27 +639,27 @@ const segmentsOf = (element: SourceElement, outer: Context): readonly SpeechSegm
       () => outer.suppressed,
     ),
   };
-  const pause: readonly SpeechSegment[] = Option.match(functions.pause, {
+  const pause: readonly Piece[] = Option.match(functions.pause, {
     onNone: () => [],
     onSome: (value) => [
       {
-        lang: context.lang,
-        pause: Option.some(value),
-        phoneme: Option.none(),
-        rate: Option.none(),
-        sayAs: Option.none(),
-        spoken: "",
-        suppressed: context.suppressed,
-        written: "",
+        open: false,
+        segment: {
+          lang: context.lang,
+          pause: Option.some(value),
+          phoneme: Option.none(),
+          rate: Option.none(),
+          sayAs: Option.none(),
+          spoken: "",
+          suppressed: context.suppressed,
+          written: "",
+        },
       },
     ],
   });
-  const replaces =
-    Option.isSome(functions.alias) ||
-    Option.isSome(functions.sayAs) ||
-    Option.isSome(functions.phoneme);
+  const replaces = replacesText(functions);
 
-  if (replaces) {
+  if (replaces && !holdsReplacing(element)) {
     const written = textOf(element);
 
     return [
@@ -590,29 +667,33 @@ const segmentsOf = (element: SourceElement, outer: Context): readonly SpeechSegm
         ? []
         : [
             {
-              lang: context.lang,
-              pause: Option.none(),
-              phoneme: functions.phoneme,
-              rate: context.rate,
-              sayAs: functions.sayAs,
-              spoken: spokenOf(written, functions),
-              suppressed: context.suppressed,
-              written,
+              open: false,
+              segment: {
+                lang: context.lang,
+                pause: Option.none(),
+                phoneme: functions.phoneme,
+                rate: context.rate,
+                sayAs: functions.sayAs,
+                spoken: spokenOf(written, functions),
+                suppressed: context.suppressed,
+                written,
+              },
             },
           ]),
       ...pause,
     ];
   }
 
-  return [
-    ...element.children.flatMap((child): readonly SpeechSegment[] => {
-      if (isElement(child)) {
-        return segmentsOf(child, context);
-      }
+  const content = element.children.flatMap((child): readonly Piece[] => {
+    if (isElement(child)) {
+      return piecesOf(child, context);
+    }
 
-      return child.kind === "text" && !isBlank(child.text)
-        ? [
-            {
+    return child.kind === "text" && !isBlank(child.text)
+      ? [
+          {
+            open: true,
+            segment: {
               lang: context.lang,
               pause: Option.none(),
               phoneme: Option.none(),
@@ -622,11 +703,12 @@ const segmentsOf = (element: SourceElement, outer: Context): readonly SpeechSegm
               suppressed: context.suppressed,
               written: child.text,
             },
-          ]
-        : [];
-    }),
-    ...pause,
-  ];
+          },
+        ]
+      : [];
+  });
+
+  return [...(replaces ? settled(content, functions) : content), ...pause];
 };
 
 /**
@@ -640,19 +722,22 @@ const escaped = (grapheme: string): string => grapheme.replaceAll(/[$()*+.?[\\\]
 /**
  * Construct the substitution a lexicon makes in a spoken text: one pass that replaces each
  * whole-word, case-sensitive grapheme match with its alias, the longest graphemes matched first, so
- * no alias is itself re-matched.
+ * no alias is itself re-matched. Where entries write one grapheme, the first in document order
+ * supplies the alias (PLS 1.0 on `lexeme` order, see {@link speechPlan}).
  *
  * @param lexicon The lexicon.
  * @returns The substitution, the identity for a lexicon with no entry.
  */
 const substitutionOf = (lexicon: Lexicon): ((spoken: string) => string) => {
-  const aliases = new Map(
-    lexicon.entries.flatMap((entry) =>
-      entry.graphemes
-        .filter((grapheme) => grapheme !== "")
-        .map((grapheme): readonly [string, string] => [grapheme, entry.alias]),
-    ),
-  );
+  const aliases = new Map<string, string>();
+
+  for (const entry of lexicon.entries) {
+    for (const grapheme of entry.graphemes) {
+      if (grapheme !== "" && !aliases.has(grapheme)) {
+        aliases.set(grapheme, entry.alias);
+      }
+    }
+  }
 
   if (aliases.size === 0) {
     return (spoken) => spoken;
@@ -672,20 +757,34 @@ const substitutionOf = (lexicon: Lexicon): ((spoken: string) => string) => {
  *
  * Both carriers read into the same segments: an inline SSML 1.1 element (`sub`, `say-as`,
  * `phoneme`, `prosody`, `break`, and the elements that only hold text) and a `data-ssml` JSON
- * value on any element. Only the structural fields of {@link SourceElement} are read (namespace,
- * local name, attributes' names and values, children), so the browser runtime can hand it a tree
- * mapped from the DOM.
+ * value on any element that is not in the SSML namespace. Only the structural fields of
+ * {@link SourceElement} are read (namespace, local name, attributes' names and values, children),
+ * so the browser runtime can hand it a tree mapped from the DOM.
+ *
+ * The carrier nearest the text wins. An element whose function replaces its text (`sub`, `say-as`,
+ * `phoneme`) and that holds no carrier of a replacing function below it is one segment of its
+ * whole text. One that holds such a carrier gives, in document order, a segment per text run it
+ * keeps and the nearer carrier's own segments. An alias is spoken once, so the first run the
+ * element keeps is spoken as the alias and each later run as written; a `say-as` spelling and a
+ * `phoneme` apply to each run. A nearer carrier's replacing functions replace the outer one's
+ * whole, so none of them composes across two elements, and a run inside a plain element between
+ * the two carriers is a run of the outer one. For example:
+ *
+ * ```xml
+ * <span data-ssml='{"sub":{"alias":"World Wide Web Consortium"}}'>the <ssml:sub alias="W three C">W3C</ssml:sub> site</span>
+ * ```
+ *
+ * The plan is three segments: written `the ` spoken `World Wide Web Consortium`, written `W3C`
+ * spoken `W three C`, and written ` site` spoken ` site`.
  *
  * The defaults where the readings are silent:
  *
  * - An SSML element outside any `speak` is read into the plan as one inside is; no fragment rule
  *   applies to it (those are `checkSpeak`'s).
  * - A `data-ssml` value that does not decode as Data-SSML JSON is left out of the plan, and its
- *   element's text is spoken as written, because the validator already reports it.
- * - When an element carries both an inline SSML function and a `data-ssml` one for the same function,
- *   the inline element nearer the text wins. An element whose function replaces its text (`sub`,
- *   `say-as`, `phoneme`) is one segment of its whole text content, whatever carriers its
- *   descendants hold.
+ *   element's text is spoken as written, because the validator already reports it. On an element in
+ *   the SSML namespace `data-ssml` is a custom `data-*` attribute and is not read (the Data-SSML
+ *   reading, R7-a).
  * - A lexicon alias replaces a whole-word, case-sensitive grapheme match in `spoken` only; a match is
  *   whole where no letter or digit adjoins it, and `written` keeps the text as the candidate sees
  *   it.
@@ -697,12 +796,29 @@ const substitutionOf = (lexicon: Lexicon): ((spoken: string) => string) => {
  * - A text run that is whitespace only is no segment. The content of `meta`, `metadata`, `lexicon`
  *   and `desc` is not spoken.
  *
+ * Where a lexicon and the carriers meet (the order of precedence is a proposed reading: PLS 1.0
+ * says nothing about SSML's, and SSML 1.1 says only that a PLS lexicon's information must be used
+ * for the tokens within a `lookup` (§3.1.5.2), and, under `phoneme` (§3.1.10), that a phoneme's
+ * string is not a token for lexicon lookup while the values of `say-as` and `sub` may undergo text
+ * normalization and lookup both):
+ *
+ * - The lexicon applies to `spoken` after every carrier, since the substitution runs over the
+ *   finished spoken text. A `sub` alias is itself subject to the lexicon's whole-word substitution,
+ *   and a grapheme that matches only the written text under a `sub` is not applied.
+ * - A `say-as` `characters` text is spelled out from the written text first and then substituted, so
+ *   a grapheme that matches the spelled-out text (`Q T I`) is replaced and one that matched only
+ *   the unspelled `QTI` is not.
+ * - A `phoneme` segment keeps its `phoneme`, and its spoken text is substituted like any other.
+ * - The lexicon's `xml:lang` is carried as data and does not filter the segments it applies to: the
+ *   plan has one lexicon, and filtering by language is a limit.
+ * - Where two entries write one grapheme, the first in document order supplies the alias.
+ *
  * @param root The tree to read, an item body or any element of it.
  * @param lexicon The lexicon whose aliases the spoken text takes, none by default.
  * @returns The plan: the segments in document order.
  */
 export const speechPlan = (root: SourceElement, lexicon?: Lexicon): SpeechPlan => {
-  const segments = segmentsOf(root, rootContext);
+  const segments = piecesOf(root, rootContext).map((piece) => piece.segment);
 
   if (lexicon === undefined) {
     return { segments };
