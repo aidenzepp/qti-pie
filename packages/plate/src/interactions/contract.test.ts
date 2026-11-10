@@ -559,10 +559,24 @@ const landedGapMatch: InteractionModule<
   "gap" | "itemButton" | "root",
   unknown
 > = {
+  /**
+   * One association where NULL would stand when the form posted nothing for the response, so a
+   * test sees the postings and the decoder reach this member.
+   */
+  absentValue: () => ({
+    baseType: "directedPair",
+    cardinality: "multiple",
+    values: [{ baseType: "directedPair", value: ["W", "G1"] }],
+  }),
   bindings: (interaction) => [{ base: Option.none(), response: interaction.response }],
   connect: () => ({}),
   content: (interaction) => interaction.content,
   controls: () => 1,
+  /**
+   * The attempt counts only when the submission set the response the node binds, so a test sees
+   * the hub hand the submission's responses to this member.
+   */
+  countsAttempt: (interaction, posted) => Object.hasOwn(posted, interaction.response),
   element: `qti-${landedKind}-interaction`,
   feature: features[landedKind],
   implemented: true,
@@ -1344,6 +1358,63 @@ describe("a module that lands", () => {
         );
       }),
     ),
+  );
+
+  it.effect(
+    "says whether a submission counts an attempt and what no posted entry means, which the hubs, the engine and the postings read",
+    () =>
+      withLanded(
+        Effect.gen(function* attemptFacts() {
+          const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const records = yield* Effect.promise(() => import("#plate/model/record.ts"));
+          const engine = yield* Effect.promise(() => import("#plate/engine/attempt.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const form = yield* Effect.promise(() => import("#plate/form/encoding.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const [node] = built.body;
+
+          assert.isDefined(node);
+          if (node === undefined || !isLandedModel(node)) {
+            assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the landed Gap Match`);
+          }
+
+          const absent = pairsValue(["W", "G1"]);
+
+          // The hubs hand the node to the module's two members.
+          assert.deepStrictEqual(interactions.absentValueOf(node), absent);
+          assert.isFalse(interactions.countsAttempt(built, {}));
+          assert.isTrue(interactions.countsAttempt(built, { RESPONSE: pairsValue() }));
+
+          // The engine raises the count only when the hub says the attempt counts, and sets the
+          // responses either way.
+          const record = records.fresh(built, "q1");
+          const uncounted = yield* Effect.fromResult(engine.runAttempt(built, record, {}));
+          const counted = yield* Effect.fromResult(
+            engine.runAttempt(built, record, { RESPONSE: pairsValue(["W", "G2"]) }),
+          );
+
+          assert.deepStrictEqual(
+            [uncounted.numAttempts, uncounted.attempt, counted.numAttempts, counted.attempt],
+            [0, "submitted", 1, "submitted"],
+          );
+          assert.deepStrictEqual(counted.responses, { RESPONSE: pairsValue(["W", "G2"]) });
+
+          // The posting carries the module's value, which no entry decodes to.
+          const [posting, ...others] = payload.postings(payload.redactItem(built), "q1");
+
+          assert.lengthOf(others, 0);
+          assert.deepStrictEqual(posting?.options, { absent, base: 10 });
+          if (posting === undefined) {
+            assert.fail("RESPONSE has no posting.");
+          }
+
+          assert.deepStrictEqual(
+            Result.getSuccess(form.decode([], posting.binding, posting.options)),
+            Option.some(absent),
+          );
+        }),
+      ),
   );
 
   it.effect("counts the headings of its payload's content in the item's heading shift", () =>
