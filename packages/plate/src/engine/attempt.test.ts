@@ -3,6 +3,8 @@ import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { decodeRecord } from "#plate/codec/record.ts";
+import type * as Adaptive from "#plate/engine/adaptive.ts";
+import type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import { drawBelow, drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
@@ -674,7 +676,107 @@ const withUncounted = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =
     ),
   );
 
+/**
+ * The adaptive policy's module file, which {@link withKeptOutcomes} mocks.
+ */
+const policyFile = "#plate/engine/adaptive.ts";
+
+/**
+ * Run an effect with the adaptive policy's `startingOutcomes` answering the record's outcomes, as
+ * the adaptive items module will for an adaptive item, every module that reads the policy loaded
+ * afresh, and the stub restored after. The mock keeps the policy's every other member.
+ *
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withKeptOutcomes = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(policyFile, async (importOriginal) => {
+      const actual = await importOriginal<typeof Adaptive>();
+      const kept: AdaptivePolicy = {
+        ...actual.adaptivePolicy,
+        startingOutcomes: (_item, record) => record.outcomes,
+      };
+
+      return { ...actual, adaptivePolicy: kept };
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(policyFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * An item whose processing sets the float `SCORE`, with no default, to `SCORE` plus one, so a
+ * second attempt that starts from the first's outcomes reads 2 and one that resets reads 1.
+ */
+const accumulates = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "SCORE", "float"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "SCORE")],
+        [
+          el(
+            "qti-sum",
+            [],
+            [
+              el("qti-variable", [attr("identifier", "SCORE")]),
+              el("qti-base-value", [attr("base-type", "float")], [text("1")]),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
 describe("runAttempt", () => {
+  it.effect(
+    "[W0-BD] a policy that keeps the outcomes lets a second attempt read the first's, and the stub resets them",
+    () =>
+      Effect.gen(function* keptOutcomes() {
+        const item = yield* Effect.fromResult(buildItem(accumulates));
+        const record = fresh(item, instance);
+        const first = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("true") }),
+        );
+
+        assert.deepStrictEqual([score(first), score(second)], [floatValue(1), floatValue(1)]);
+
+        yield* withKeptOutcomes(
+          Effect.gen(function* underKeptOutcomes() {
+            const engine = yield* Effect.promise(() => import("#plate/engine/attempt.ts"));
+            const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+            const records = yield* Effect.promise(() => import("#plate/model/record.ts"));
+            const built = yield* Effect.fromResult(model.buildItem(accumulates));
+            const start = records.fresh(built, instance);
+            const once = yield* Effect.fromResult(
+              engine.runAttempt(built, start, { RESPONSE: identifierValue("true") }),
+            );
+            const twice = yield* Effect.fromResult(
+              engine.runAttempt(built, once, { RESPONSE: identifierValue("true") }),
+            );
+
+            assert.deepStrictEqual([score(once), score(twice)], [floatValue(1), floatValue(2)]);
+            assert.strictEqual(twice.numAttempts, 2);
+          }),
+        );
+      }),
+  );
+
   it.effect(
     "leaves numAttempts where it was when an interaction's module says the submission counts no attempt, and still sets the responses and runs the rules",
     () =>

@@ -91,6 +91,8 @@ export {
 
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
+export type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
+
 export type { EngineFailure } from "#plate/engine/evaluate.ts";
 
 export {

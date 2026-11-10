@@ -18,7 +18,10 @@
  * both against §2.7.1.2 and reading 151 as stated above: the two agree on every case, and each
  * raises `LomObjectTitle` exactly where the case's record has a title none of whose strings holds
  * the root's title in its language; the oracle raises the value domain exactly where the item's
- * `xml:lang` lies outside it.
+ * `xml:lang` lies outside it. `lom-title` is a rule over a query (`MatchedTitle`,
+ * `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the oracle's side
+ * alone is held to it here, and `#pantry/qti/metadata.db.test.ts` holds the database to it through
+ * the importer.
  *
  * Bound: an item whose `xml:lang` is `en`, empty, `en_GB` or unwritten, and whose record's title
  * is absent, the root's or another, its string's `language` unwritten, `en` or `fr`: 28 cases,
@@ -235,8 +238,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   assert.deepStrictEqual(judged.disagreements.map(shownDisagreement), [], said);
                   assert.match(judged.summary.import, /^built /u, said);
+                  assert.strictEqual(
+                    /\bLomObjectTitle\b/u.test(judged.summary.oracle),
+                    titleRefused(of),
+                    said,
+                  );
                   for (const side of [judged.summary.oracle, judged.summary.import]) {
-                    assert.strictEqual(/\bLomObjectTitle\b/u.test(side), titleRefused(of), said);
                     assert.notMatch(side, /\bE1 derived\b/u, said);
                   }
 
