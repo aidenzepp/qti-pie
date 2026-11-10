@@ -1191,6 +1191,103 @@
 /* end hotspot-interaction */
 
 /* begin hottext-interaction (issue m3d-09) */
+
+/* The Hot Text Root: a block holding the Prompt and the author's content. */
+:where([data-slot="hottext-interaction"]) {
+  display: block;
+}
+
+/* The Prompt: set apart above the content by weight, as the Choice Prompt is. */
+:where([data-slot="hottext-interaction-prompt"]) {
+  display: block;
+  margin-block-end: 0.75rem;
+  font-weight: 500;
+}
+
+/* The Content: the author's block markup, whose own spacing the host's styles keep. */
+:where([data-slot="hottext-interaction-content"]) {
+  display: block;
+}
+
+/*
+ * A Choice, one hottext: a label that stays in the run of the author's sentence, holding its native
+ * Control and the hottext's own words. It is inline, so the sentence reads as written; a hottext
+ * inside a sentence may be smaller than 24 by 24 CSS pixels (WCAG 2.5.8, the Inline exception).
+ */
+:where([data-slot="hottext-interaction-choice"]) {
+  display: inline;
+  border-radius: calc(var(--radius, 0.625rem) * 0.6);
+}
+
+/* The Control: the browser's own checkbox or radio, a little apart from the words it selects. */
+:where([data-slot="hottext-interaction-control"]) {
+  margin-inline-end: 0.25em;
+  vertical-align: baseline;
+}
+
+/* A Choice under the pointer, unless its Control is disabled: a Choice row's hover look. */
+:where(
+  [data-slot="hottext-interaction-choice"]:hover:not(
+      :has([data-slot="hottext-interaction-control"]:disabled)
+    )
+) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/*
+ * A selected Choice: the native Control already shows the selection, so the surface only adds to
+ * it, and nothing is told by colour alone.
+ */
+:where(
+  [data-slot="hottext-interaction-choice"]:has([data-slot="hottext-interaction-control"]:checked)
+) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/* A Choice whose Control holds a refused answer: a line under the words, in --destructive. */
+:where(
+  [data-slot="hottext-interaction-choice"]:has(
+    [data-slot="hottext-interaction-control"][aria-invalid="true"]
+  )
+) {
+  border-bottom: 2px solid var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A Choice whose Control is disabled. */
+:where(
+  [data-slot="hottext-interaction-choice"]:has([data-slot="hottext-interaction-control"]:disabled)
+) {
+  opacity: 0.5;
+}
+
+/*
+ * A Choice in review or solution: at full strength, after the rule above, since its Control is
+ * disabled there only because the answer it shows cannot change; a Root the author disabled, which
+ * carries data-disabled, stays dimmed in every mode.
+ */
+:where(
+  [data-slot="hottext-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="hottext-interaction-choice"],
+  [data-slot="hottext-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="hottext-interaction-choice"]
+) {
+  opacity: 1;
+}
+
+/* Focus on a Choice, by its Control: the same 3px ring at half strength as a Choice row's. */
+:where(
+  [data-slot="hottext-interaction-choice"]:has(
+    [data-slot="hottext-interaction-control"]:focus-visible
+  )
+) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end hottext-interaction */
 
 /* begin match-interaction (issue m3d-11) */
