@@ -47,9 +47,9 @@ import { manifestPath } from "#pantry/vocab/terms/package.ts";
  *
  * The brand is plate's `PackagePath` (`#plate/model/url.ts`), `Brand.Branded<string,
  * "PackagePath">`, stated here because pantry depends on no plate: one Effect brand of one key is
- * one type, so a path of a {@link QtiPackage} keys plate's `assets` as it is. plate's `isPackagePath`
- * holds a path to no empty first segment and no `.` or `..` segment, and every path of a package
- * the import accepted meets it: the reader refuses an absolute path and a `..` segment
+ * one type, so a path of a {@link QtiPackage} keys plate's `assets` as it is. plate's
+ * `isPackagePath` holds a path to no empty first segment and no `.` or `..` segment, and every path
+ * of a package the import accepted meets it: the reader refuses an absolute path and a `..` segment
  * (`#pantry/package/zip.ts` `unsafeEntryPath`), a resolved path holds no dot segment ("E1 derived",
  * `resolvedPathPattern` of `#pantry/qti/package.ts`), and every entry but the manifest is the
  * resolved path of a file the manifest lists ("File listed"). A zip may name an entry with a `.`
