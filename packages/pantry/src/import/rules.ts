@@ -5,7 +5,7 @@
  * import's read reaches only this half: it builds no schema and names no law, so a refusal by the
  * database, which `#pantry/import/refusal.ts` names by its laws, is never on the dry run's path.
  */
-import { Match, Order, Schema } from "effect";
+import { Match, Option, Order, Schema } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
 import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
@@ -137,6 +137,8 @@ export type ReadRefusal =
  * under no name or open class (reason `unadmitted`, AL1's rule) and `unmodeled-vocabulary` for
  * every other name it cannot represent; `PackageReadError` is `manifest-root` for a missing
  * manifest and `href-path` for an entry outside the package; a `ZipRefusal` names its own rule.
+ * A `ReaderRefusal`'s detail starts with its own rule and, when it has a position, ends with its
+ * line and column, as a `WellFormednessError`'s does.
  *
  * @param e - The error raised.
  * @returns The refusal naming its rule.
@@ -155,7 +157,11 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
         }),
       ReaderRefusal: (refused) =>
         new ImportRefused({
-          detail: `${refused.rule}: ${refused.detail}`,
+          detail: Option.match(refused.position, {
+            onNone: () => `${refused.rule}: ${refused.detail}`,
+            onSome: ({ column, line }) =>
+              `${refused.rule}: ${refused.detail} at line ${String(line)}, column ${String(column)}`,
+          }),
           origin: readerOrigin,
           rules: ["reader-refusal"],
         }),

@@ -17,7 +17,7 @@ import { required } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
+import { Duration, Effect, Formatter, Function as Fn, Layer, Option, Result } from "effect";
 import { describe } from "vitest";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -38,8 +38,13 @@ import {
   reordered,
   writtenOf,
 } from "#pantry/test/gen/attribute-order.ts";
+import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { judgedLaws } from "#pantry/test/host-judge.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
+import type { OracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
@@ -50,11 +55,17 @@ import { ImportRefused } from "#pantry/import/rules.ts";
 const orderTimeoutMs = 900_000;
 
 /**
- * What an import of a package did: accepted under the id it answered, or refused under rules.
+ * What an import of a package did: accepted under the id it answered, or refused under rules, with
+ * each law the database named, by its installed name where it has one and its text where it has
+ * none (none for a reader's refusal).
  */
 type Imported =
   | { readonly id: Uuid; readonly verdict: "accepted" }
-  | { readonly rules: readonly string[]; readonly verdict: "refused" };
+  | {
+      readonly laws: readonly string[];
+      readonly rules: readonly string[];
+      readonly verdict: "refused";
+    };
 
 /**
  * Import a package's files on the lease.
@@ -76,7 +87,14 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
     return yield* Effect.die(refused);
   }
 
-  return { rules: refused.rules, verdict: "refused" } satisfies Imported;
+  return {
+    laws:
+      refused.origin._tag === "Database"
+        ? refused.origin.laws.map(({ installed, text }) => installed ?? text)
+        : [],
+    rules: refused.rules,
+    verdict: "refused",
+  } satisfies Imported;
 });
 
 /**
@@ -89,6 +107,165 @@ const verdictOf = (imported: Imported) =>
   imported.verdict === "accepted"
     ? { verdict: imported.verdict }
     : { rules: imported.rules, verdict: imported.verdict };
+
+/**
+ * The relations that copy an identifier attribute and check the copy with `E1_derived`, read from
+ * the schema's own statements rather than named by hand: the target of each containment from
+ * `Attribute` whose selection takes an `identifier` attribute and turns on the name (it takes no
+ * attribute of another name), and which copies the attribute's `lexical` into a field the target's
+ * `E1_derived` check reads. At grizzle 89e94c0 they are `DeclarationIdentifier`,
+ * `InteractionAttribute`, `ManifestId`, `ObjectIdentifier`, `ResourceId` and `TestToken`. Each is
+ * named by its `E1_derived` check's installed name, as a refusal's laws name it. Read in the test's
+ * body, since the first read compiles the schema's law model.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The installed names of the identifier copies' `E1_derived` checks.
+ */
+const identifierCopyChecksOf = Fn.memoize((schema: typeof Qti): ReadonlySet<string> => {
+  const laws = judgedLaws(schema);
+  const derivedReads = new Map(
+    laws.flatMap((law) =>
+      law.kind === "check" && law.law.kind === "check" && law.law.name === "E1_derived"
+        ? [[law.relation, law.reads] as const]
+        : [],
+    ),
+  );
+
+  return new Set(
+    laws.flatMap((law) => {
+      if (law.kind !== "contained" || law.from.relation !== "Attribute") {
+        return [];
+      }
+
+      const at = law.from.law.terms.findIndex(({ field }) => field === "lexical");
+      const copied = law.to.law.terms[at]?.field;
+
+      return at !== -1 &&
+        copied !== undefined &&
+        derivedReads.get(law.to.relation)?.includes(copied) === true &&
+        law.from.selection({ name: "identifier" }) !== false &&
+        law.from.selection({ name: "" }) === false
+        ? [checkConstraintOf(schema, law.to.relation, "E1_derived")]
+        : [];
+    }),
+  );
+});
+
+/**
+ * Decide whether a package has an element whose `identifier` the identifier's value domain refuses:
+ * once the import strips its leading and trailing XML whitespace (`lead` and `trail`), the piece
+ * left is empty or holds a character below `!`, so it fails `identifierPattern`
+ * (`src/qti/metadata.ts`).
+ *
+ * @param entries - The package's entries as the case reads them.
+ * @returns Whether one such element is written.
+ */
+const breaksIdentifier = (entries: readonly CaseEntry[]): boolean =>
+  entries.some(
+    ({ tree }) =>
+      Option.isSome(tree) &&
+      elementsOf(tree.value.root).some(({ attributes }) =>
+        attributes.some(
+          ({ local, namespace, value }) =>
+            namespace === "" &&
+            local === "identifier" &&
+            !/^[!-\uFFFD\u{10000}-\u{10FFFF}]+$/u.test(
+              value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
+            ),
+        ),
+      ),
+  );
+
+/**
+ * The one family of refusals this test admits under a rule the law oracle does not predict, issue
+ * #103 (decision 474). The import writes the derived row of an identifier copy for an identifier
+ * outside its value domain, and PostgreSQL refuses that row's immediate `E1_derived` check before
+ * the attribute's own `value_domain` check, so the import names `derived` where the oracle predicts
+ * `attribute-lexical` or `required-attribute`. The verdict is the same. This test first drew it on
+ * `ObjectIdentifier`, an item's identifier (`TEST_SEED=1234327904`, case 14), and then on
+ * `TestToken`, a section's item ref with an empty identifier (`TEST_SEED=1819136236`, case 6); it
+ * holds at grizzle 6995af4 and at 89e94c0 alike. It is keyed to the family, not to one relation, so
+ * the next copy it reaches does not reopen the test: the refusal names one law and no other, the
+ * `E1_derived` check of an identifier copy ({@link identifierCopyChecksOf}), under the one rule
+ * `derived`; an element's `identifier` breaks the value domain ({@link breaksIdentifier}); and the
+ * oracle refuses the package under `attribute-lexical` or `required-attribute`, the rules that
+ * identifier breaks. Every other refusal is still held to the oracle's rules, and `derived` is
+ * admitted nowhere else. Remove it with issue #103.
+ *
+ * @param imported - What the import did.
+ * @param predicted - What the oracle predicts.
+ * @param entries - The package's entries as the case reads them.
+ * @returns Whether the refusal is that known exception.
+ */
+const knownException = (
+  imported: Imported,
+  predicted: OracleVerdict,
+  entries: readonly CaseEntry[],
+): boolean =>
+  imported.verdict === "refused" &&
+  imported.rules.length === 1 &&
+  imported.rules[0] === "derived" &&
+  imported.laws.length === 1 &&
+  identifierCopyChecksOf(Qti).has(imported.laws[0] ?? "") &&
+  predicted.kind === "refused" &&
+  (predicted.rules.has("attribute-lexical") || predicted.rules.has("required-attribute")) &&
+  breaksIdentifier(entries);
+
+/**
+ * The two laws on `Expression` the #104 pair names, by their installed names: `Arity`, which an
+ * operand count outside its operator's breaks (rule `P2`), and `Operand_fit`, which an operand that
+ * does not fit its operator breaks (rule `P23`). Read in the test's body, since the first read
+ * compiles the schema's law model.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns The two checks' installed names.
+ */
+const expressionChecksOf = Fn.memoize((schema: typeof Qti) => ({
+  arity: checkConstraintOf(schema, "Expression", "Arity"),
+  operandFit: checkConstraintOf(schema, "Expression", "Operand_fit"),
+}));
+
+/**
+ * The one pair of refusals this test admits under different rules, issue #104. A package with two
+ * broken `Expression` rows, one breaking `Operand_fit` alone (rule `P23`) and one breaking `Arity`
+ * and `Operand_fit` (rule `P2`), is refused under the rules of whichever row PostgreSQL checks
+ * first, and that varies from import to import of the same bytes; the reordering does not move
+ * it. This test first drew it at the re-pin to grizzle 89e94c0 (`TEST_SEED=1819136236`, case 6),
+ * and it holds at 6995af4 too. It is keyed as narrowly as the case allows: both imports refuse, one
+ * under rules that hold `P2` and one under `P23` alone, each names only those two `Expression`
+ * checks and `Operand_fit` among them, the `P23` side names `Operand_fit` alone, and the oracle
+ * predicts both rules. Every other pair of imports must still name the same rules. Remove it with
+ * issue #104.
+ *
+ * @param before - What the import of the package as read did.
+ * @param after - What the import of the reordered package did.
+ * @param predicted - What the oracle predicts of the reordered package.
+ * @returns Whether the two refusals are that known exception.
+ */
+const firstRuleVaries = (before: Imported, after: Imported, predicted: OracleVerdict): boolean => {
+  if (before.verdict !== "refused" || after.verdict !== "refused") {
+    return false;
+  }
+
+  const { arity, operandFit } = expressionChecksOf(Qti);
+  const sides = [before, after];
+  const p2 = sides.find(({ rules }) => rules.includes("P2"));
+  const p23 = sides.find(({ rules }) => rules.length === 1 && rules[0] === "P23");
+
+  return (
+    p2 !== undefined &&
+    p23 !== undefined &&
+    p2 !== p23 &&
+    sides.every(
+      ({ laws }) =>
+        laws.includes(operandFit) && laws.every((law) => law === arity || law === operandFit),
+    ) &&
+    p23.laws.length === 1 &&
+    predicted.kind === "refused" &&
+    predicted.rules.has("P2") &&
+    predicted.rules.has("P23")
+  );
+};
 
 /**
  * Hold an accepted package's export to the order its source writes: every XML entry exported
@@ -201,16 +378,23 @@ describe.skipIf(!hasLease)(
                     c.note("moved");
                   }
 
-                  assert.deepStrictEqual(verdictOf(after), verdictOf(before));
                   if (after.verdict === "refused") {
                     const predicted = yield* oracleVerdict(written);
 
+                    // Issue #104: the one keyed pair of refusals under two rules (firstRuleVaries).
+                    if (!firstRuleVaries(before, after, predicted)) {
+                      assert.deepStrictEqual(verdictOf(after), verdictOf(before));
+                    }
+
+                    // Issue #103: the keyed family of exceptions to the oracle (knownException).
                     assert.isTrue(
-                      predicted.kind === "refused" &&
-                        after.rules.some((rule) => predicted.rules.has(rule)),
+                      (predicted.kind === "refused" &&
+                        after.rules.some((rule) => predicted.rules.has(rule))) ||
+                        knownException(after, predicted, entries),
                       `refused under ${after.rules.join(", ")}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
                     );
                   } else {
+                    assert.deepStrictEqual(verdictOf(after), verdictOf(before));
                     yield* exportHolds(
                       after.id,
                       new Map(

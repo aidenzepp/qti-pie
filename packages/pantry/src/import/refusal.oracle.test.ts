@@ -1592,7 +1592,13 @@ describe("the refusals made before the database", () => {
           "entity-cycle",
           "entity-expansion",
         ] as const
-      ).map((rule) => [new ReaderRefusal({ detail: "d", rule }), "reader-refusal"] as const),
+      ).map(
+        (rule) =>
+          [
+            new ReaderRefusal({ detail: "d", position: Option.none(), rule }),
+            "reader-refusal",
+          ] as const,
+      ),
       [new WellFormednessError({ column: 1, line: 1, message: "m" }), "well-formedness"],
     ];
 
@@ -1602,6 +1608,24 @@ describe("the refusals made before the database", () => {
 
     const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rules: ["admission"] });
     assert.strictEqual(ruleOfError(refused), refused);
+  });
+
+  it("names a reader refusal's line and column when it has a position, as a well-formedness error's", () => {
+    const placed = ruleOfError(
+      new ReaderRefusal({
+        detail: "d",
+        position: Option.some({ column: 7, line: 3 }),
+        rule: "element-depth",
+      }),
+    );
+    const unplaced = ruleOfError(
+      new ReaderRefusal({ detail: "d", position: Option.none(), rule: "element-depth" }),
+    );
+
+    assert.deepStrictEqual(placed.rules, ["reader-refusal"]);
+    assert.isTrue(placed.detail.endsWith(" at line 3, column 7"), placed.detail);
+    assert.deepStrictEqual(unplaced.rules, ["reader-refusal"]);
+    assert.notInclude(unplaced.detail, " at line ");
   });
 });
 

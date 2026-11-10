@@ -663,14 +663,26 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         // a containment from the declaration's `DeclarationCardinality`, a deferred foreign key
         // set immediate: a record's into the declarations with no base type, any other's into
         // the `base-type` attributes, which no stray row writes (spec reading 158).
-        // Bound: every cardinality (4) without a base type's row and with `float`'s, 8 cases;
-        // the attribute's half is judged where it refuses, since its control writes a `Node`.
+        // The writer leaves a fixed target field it is not told unstated, so a record's
+        // `Declaration.baseTypes` is its base types' count, and the record half's foreign key
+        // refuses a record with one at commit (23503). A record whose `Declaration` states the 0
+        // the record half's target fixes is refused at once instead, by its family's CHECK:
+        // `fin(Declaration, baseTypes)` admits no member of a count of 0, which grizzle 89e94c0
+        // states as an immediate CHECK (23514), the same law (decision 471).
+        // Bound: every cardinality (4) without a base type's row and with `float`'s, 8 cases,
+        // and the record whose `Declaration` states its count, 0 or 1, 2; the attribute's half is
+        // judged where it refuses, since its control writes a `Node`.
         Effect.gen(function* baseTypeLaw() {
           const client = yield* loginSession;
           const recordHalf = yield* constraintDescribed(
             client,
             "declaration_cardinality",
             "%tag Declaration.baseTypes = 0) to Declaration(node, baseTypes)",
+          );
+          const baseTypeCount = yield* constraintDescribed(
+            client,
+            "declaration_base_type",
+            "%law counted DeclarationBaseType(node) in fin(Declaration, baseTypes)",
           );
           const otherHalf = yield* constraintDescribed(
             client,
@@ -697,6 +709,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               }
             }
           }
+          const counted = declarationRow({ cardinality: "record" });
+          const stating = (baseTypes: bigint) =>
+            judgedCase(client, {
+              immediate: [recordHalf],
+              inserts: declared({ ...counted, row: { ...counted.row, baseTypes } }),
+            });
+          const fixed = yield* stating(0n);
+          assertVerdict(fixed.refused, baseTypeCount, true, "record float, its fixed count 0");
+
+          const stated = yield* stating(1n);
+          assertVerdict(stated.refused, recordHalf, true, "record float, counted", "23503");
         }).pipe(Effect.scoped),
       { timeout: leaseTestTimeoutMs },
     );
