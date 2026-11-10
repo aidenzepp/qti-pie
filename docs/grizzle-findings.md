@@ -1463,8 +1463,11 @@ verdicts at `73360ca` and `234e398`.
   a text, `Lexical`, and the target is `Contract<"KeyText", …>`. The same containments type-check while keyText is a
   pattern, since a pattern is no part of a text's type (`src/qti/limits.ts`).
 - **Why no workaround.** A containment's side is a list of fields, so no `Compute.base` can read through it. The
-  source can't be keyText either, since `Attribute.lexical` is unbounded by design. Branding at the host (`keyText(v)`)
-  fixes only the 460 host-side type errors, not these.
+  source can't be keyText either, since `Attribute.lexical` is unbounded by design. (Bounded since decision 484,
+  2026-11-10, at PostgreSQL's regex limit, 268,435,454 UTF-8 bytes: that keeps this intent, any value PostgreSQL can
+  check, and states only the ceiling the domain's `~` already enforced; see "A rule over a query matches only a bounded
+  text" under "pantry-api phase 1" below.) Branding at the host (`keyText(v)`) fixes only the 460 host-side type
+  errors, not these.
 - **Standalone reproduction:** `~/.cache/gr8des/integration/grizzle-repros/contract-containment/` (`repro.ts` and its
   `tsc.out`): a containment from a plain text field into a field of a text contract is refused, and the control into a
   pattern-bounded field (`^.{0,100}$`) passes. At run time `own(schemaDescOf(S))` succeeds (`run.out`), so the refusal
@@ -2408,3 +2411,118 @@ inside a wider key over the same field, so each is one key stated twice:
 - **Guard:** `src/grammar/attributes.work.test.ts`, with planted bugs shown failing.
 - **LP's last commit,** `d13a8389`, finds the sentinel-range characters a document writes with one regex in crust, not
   a walk over every code point.
+
+## pantry-api phase 1 (grizzle `89e94c0`, trunk checked at `fa6c5e27`)
+
+### A rule over a query matches only a bounded text (a documented limit, at `89e94c0` and trunk `fa6c5e27`)
+
+- **Seen.** pa1-16 (CdnData) and pa1-15 (CdnOrigin): a check at level `Cdn` whose side is a derived relation over
+  `Attribute`, `Compute.matches(a.lexical, pattern)`, is refused: `UnsupportedOperation … Compute.matches in a query
+  over a text whose pattern bounds it within 268435454 bytes … the subject's pattern bounds no length, so bound it, or
+  read it in a contract predicate, row check or generated field`. `Attribute.lexical` was `str.regex(charsPattern)`,
+  with no byte bound. The same check over `Node.stringValue` (`keyText`, 2,587 bytes) compiles. Every in-query
+  workaround research 009144af probed (guards, casts, case folding, collapsing, a match in the derived relation's
+  `where`) is refused too, or over-refuses.
+- **Cause.** `regexReadable` (`packages/engine/src/scalar/compute/lower.ts:2466-2476`) refuses a regex read in mode
+  `query` over a text whose type has no byte bound within `regexTextMaxBytes`, 268,435,454
+  (`packages/engine/src/core/limits.ts:668-680`, `floor(MaxAllocSize / sizeof(pg_wchar)) - 1`, not exported). A rule
+  over a query's violation query is checked by the query checker, whose mode is `"query"`
+  (`packages/engine/src/check/checker.ts:1908`). `translate` (`lower.ts:2588-2596`), `collapse`, and the remedies the
+  message names (`octetLength` and `charLength`, `lower.ts:3737-3746`; a cast into `str.bytes`, `lower.ts:1221-1246`)
+  are all refused in a query as well.
+- **Reproduction.** Standalone, against `@bjornpagen/grizzle` at `89e94c0`, with no database (`node repro.ts`): a root
+  relation with one `str.regex` text field, and a `schema.extend` level whose check reads a derived relation over it
+  with `Compute.matches`. The two bounded fields are the control.
+
+  ```ts
+  import {
+    check,
+    Compute,
+    derived,
+    lawsOf,
+    query,
+    relation,
+    schema,
+    str,
+    uuid,
+    v,
+  } from "@bjornpagen/grizzle";
+  import type { FieldBase } from "@bjornpagen/grizzle";
+
+  // XML's Char production, as a pattern with no length bound.
+  const chars = "^[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*$";
+
+  const level = (lexical: FieldBase) => {
+    const Attr = relation("Attr", { id: uuid, lexical }, ["id"]);
+    const Root = schema("Root", { Attr }, []);
+    const Read = derived(
+      "Read",
+      query(Root).rule((r) => {
+        const { id, lexical } = v(Attr, "a");
+        return r.match(Attr, { id, lexical }).find({ id, lexical });
+      }),
+    );
+    return schema.extend(Root, "Level", { Read }, [
+      check("NoData", Read, (a) => a.not(Compute.matches(a.lexical, Compute.pattern("^data:")))),
+    ]);
+  };
+
+  for (const [label, lexical] of [
+    ["str.regex(chars)", str.regex(chars)],
+    ["str.bytes(268435454, str.regex(chars))", str.bytes(268435454, str.regex(chars))],
+    ["str.bytes(268435455, str.regex(chars))", str.bytes(268435455, str.regex(chars))],
+  ] as const) {
+    try {
+      lawsOf(level(lexical));
+      console.log(`${label}: compiles`);
+    } catch (e) {
+      const err = e as { _tag?: string; reason?: { _tag?: string }; message?: string };
+      console.log(`${label}: ${err._tag} ${err.reason?._tag}: ${err.message?.split("\n")[0]}`);
+    }
+  }
+  ```
+
+  Output (the file URL shortened to `repro.ts`):
+
+  ```text
+  str.regex(chars): CompileError UnsupportedOperation: UnsupportedOperation at check NoData at Read.check.NoData.where[0].not.not.matches (repro.ts): Compute.matches in a query over a text whose pattern bounds it within 268435454 bytes: PostgreSQL's regex engine widens its subject to four bytes for every byte and refuses past 1 GB, and a read never fails on a value; the subject's pattern bounds no length, so bound it, or read it in a contract predicate, row check or generated field
+  str.bytes(268435454, str.regex(chars)): compiles
+  str.bytes(268435455, str.regex(chars)): CompileError UnsupportedOperation: UnsupportedOperation at check NoData at Read.check.NoData.where[0].not.not.matches (repro.ts): Compute.matches in a query over a text whose pattern bounds it within 268435454 bytes: PostgreSQL's regex engine widens its subject to four bytes for every byte and refuses past 1 GB, and a read never fails on a value; the subject's pattern bounds it at 268435455 bytes, so bound it, or read it in a contract predicate, row check or generated field
+  ```
+
+- **Pull first.** Research 009144af re-ran the same shape on trunk `fa6c5e27`: the same refusals and the same
+  control. Since `b9f100ac`, though, the refusal is raised at the installation's compile, where the snapshot's
+  violation queries are written (`compileInstallation` and the snapshot's `lawChecks`, `deploy/snapshot/violation.ts`
+  at `fa6c5e27`), and no longer by `lawsOf`. So qti-pie's level build tests also compile the installation (decisions
+  484 and 485), and `limits.test.ts`'s one-byte-past case will fail, loudly, at a re-pin past `b9f100ac` until it is
+  re-pointed at that compile.
+- **Classification.** A documented limit. README "Text" (`README.md:2271`: "A query matches, translates or collapses
+  only a bounded text"), "Limits" (`:3191`), and "Rules over queries" (`:1946`: the rule's violation query is "compiled
+  by grizzle's own query compiler"). grizzle behaves as its source and README state, so it is no defect. Its reason, "a
+  read never fails on a value", fits a rule's violation query less well, since that runs only inside a writing
+  transaction or a migration, but keeping the limit is defensible: a trigger fired by a write to one table can meet an
+  over-long value another table stored, and the migration that adds the rule scans every stored row, either way with a
+  raw error rather than one that names the rule.
+- **Doc gap.** README:2271's "A check, a law's selection or a generated field reads any text" does not exclude a check
+  over a derived relation, which is a query and reads only a bounded text.
+- **What qti-pie does.** Decision 484: `Attribute.lexical` is `str.bytes(regexTextBytes, str.regex(charsPattern))`,
+  with `regexTextBytes` 268,435,454 (`packages/pantry/src/qti/limits.ts`; `Lexical` in
+  `packages/pantry/src/qti/attributes.ts`). It changes no verdict: the field's domain CHECK already runs `~` on every
+  write, and `~` reads no longer subject (PostgreSQL 19rc1 `regexp.c:332`, `palloc_array(pg_wchar, dat_len + 1)` against
+  `MaxAllocSize`), so a longer value already failed to store, with a raw "invalid memory alloc request size", and now
+  fails by name under the stated limit "Regex text bound" (rule `regex-text-bound`, reading 178 of
+  `docs/spec-readings.md`). The constant is re-spelled because grizzle exports none, and `limits.test.ts` pins it to
+  grizzle's refusal: a check over a derived relation matching a field of that type compiles, and one byte more is
+  refused (probes B1 and B6, the control above). The CDN rules then compile at the `Cdn` level with #55's patterns
+  unchanged. #55's root-level CHECK option was not taken: it breaks Goal 3 and L3 and needs a schema per origin. An
+  element's text, `Node.chars`, has the same ceiling, not yet stated (issue #111).
+- **Ask (not filed).** Nothing is filed without the operator's yes (decision 484).
+  - FR-1 (small and additive; drafted): export `regexTextMaxBytes` and `translateMaxBytes` from `public/text.ts`
+    beside `decimalTextMaxBytes` (`public/text.ts:10-17`), so `str.bytes(regexTextMaxBytes, pattern)` states "any text
+    a query may match" and no schema re-spells 268,435,454. Both are already `Limit` values with derivations, and the
+    README states the number. Acceptance: `str.bytes(regexTextMaxBytes, str.regex("^.*$", "su"))` matched in a query
+    compiles, and one byte more is refused. Once it lands, `regexTextBytes` gives way to the import.
+  - FR-2 (larger, likely declined; outlined only): let a rule over a query match, translate or collapse any text, as a
+    row check does; or, narrower, only where the subject is a field of the relation the trigger fires on and carries a
+    `str.regex` domain, so the value already passed the same `~` at its own write. It states the two counter-points
+    above up front, and is shaped only after FR-1's answer.

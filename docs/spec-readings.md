@@ -3637,6 +3637,6 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      "`Attribute.lexical` is unbounded by design" (`docs/grizzle-findings.md`) and keeps its intent: the field holds
      any value PostgreSQL can check. The bound also lets a rule over a query read the field with `Compute.matches`,
      which grizzle refuses over a text its type does not bound within this limit. An element's text (`Node.chars`)
-     has the same ceiling, not yet stated, which the issue the Mind files tracks. What would lift it (reading 91):
+     has the same ceiling, not yet stated, which issue #111 tracks. What would lift it (reading 91):
      PostgreSQL's regular expressions reading a longer subject. This binds pantry alone. (Proposed in pantry-api phase
      1, 2026-11-10, for the operator; decision 484.)
