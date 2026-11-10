@@ -3600,28 +3600,6 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="bogus" href="item.xml"/><resource type="webcontent" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "decision 454: where a resource of an unread type names an item ref's path and none of the item type or an LTI type does, the importer writes no ItemRefTarget of the other read type beside it, as the law oracle names none (main's m0 class)",
-    owner: "genetic-repair gr-5b",
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "Item_ref_target", relation: "ItemRefTarget" },
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourceextmetadata/xml " href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
@@ -3631,11 +3609,12 @@ export const fixed: readonly Known[] = [
 <qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
-    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref with no ItemRefTarget, contained in UnreadTypeHref, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
+    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref and no target (the query UntargetedItemRef), contained in UnreadTypeHref, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
     owner: "genetic-repair gr-5b",
     // His key, "contained Attribute(node) in ItemRefTarget(node)", is the law this fix split: an
-    // item ref's href is held to its ItemRefHref, and its ItemRefHref, counted, to its targets. Its
-    // class, an item ref href the rows leave unheld, is the href's containment in ItemRefHref.
+    // item ref's href is held to its ItemRefHref, and its ItemRefHref to its targets, which the
+    // database now derives (the query ItemRefTarget). Its class, an item ref href the rows leave
+    // unheld, is the href's containment in ItemRefHref.
     signature: {
       kind: "import-only-law",
       law: {

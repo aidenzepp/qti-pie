@@ -1,7 +1,7 @@
 /**
  * An item ref's href, written or not, under a path whose identifiers are written or not (spec
  * readings 147 and 155): an item ref that writes no href names nothing, so AL3 alone refuses it,
- * with no `ItemRefTarget` or `ReferencePath` row demanded of it; and an item ref's laws over its
+ * with no target or `ReferencePath` row demanded of it; and an item ref's laws over its
  * href and its mappings judge it whether or not it, its sections or its test part write an
  * identifier. The schema once demanded a target and a resolved
  * href of every item ref, so one with no href broke "Item ref target" and "Test overlay" beside

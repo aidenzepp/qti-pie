@@ -1250,7 +1250,7 @@ const packageRowsOf = (
   return {
     assembled,
     documents: inputs,
-    together: assembledExpressionRowsOf(inputs, assembled, resources, new Set()),
+    together: assembledExpressionRowsOf(inputs, assembled, resources),
   };
 };
 
@@ -2557,11 +2557,12 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
   it("names no item under an item ref that names an LTI link, so its mapping and its template default have no declaration row", () => {
     // Oracle: spec reading 110 (§7.48 and §5.152 name variables declared in the corresponding
     // item; an LTI link, the implementation guide's §6.2.9, declares none) and the UP audit's B3:
-    // the item ref's target is the link's resource type, it has no item document, and a mapping's
-    // source and a template default's template have no declaration, so neither has the row of its
-    // own that `Variable mapping source` and `Template default target` require (the ruling of
-    // 2026-11-06: a missing value is a row of its own relation, never a sentinel). Bound: the item
-    // ref case's first package, its item replaced by an LTI link.
+    // the item ref's target is the link's resource type, which its mapping's type row copies (the
+    // database derives the target itself, the query `ItemRefTarget`), it has no item document, and
+    // a mapping's source and a template default's template have no declaration, so neither has the
+    // row of its own that `Variable mapping source` and `Template default target` require (the
+    // ruling of 2026-11-06: a missing value is a row of its own relation, never a sentinel). Bound:
+    // the item ref case's first package, its item replaced by an LTI link.
     const [test] = itemRefCaseOf({
       heldBase: "integer",
       source: "SCORE",
@@ -2572,10 +2573,6 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
       { path: "a.xml", type: "imslti_xmlv1p1" },
     ]);
 
-    assert.deepStrictEqual(
-      [...rows.together.ItemRefTarget.values()].map(({ type }) => type),
-      ["imslti_xmlv1p1"],
-    );
     assert.strictEqual(rows.together.ItemRefDocument.size, 0);
     assert.strictEqual(rows.together.MappingSourceDeclaration.size, 0);
     assert.strictEqual(rows.together.TemplateDefaultTarget.size, 0);

@@ -964,7 +964,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     155,
     {
       owner:
-        "the schema's \"Item ref target\" over the item refs that write an href (`attributesOf(\"href\", [itemRefKind])` into `ItemRefHref`, and its `ItemRefTarget` unless only a resource of an unread type names its path, `src/qti/tests.ts`) and its copy of a target's type into the assembly's lookup where it names a resource (`targetedItemRefs`, `src/qti/expressions.ts`); the oracle's item ref laws over every item ref, named or not (`itemRefsOf`, read by `itemRefLawsOf` and `documentLawsOf`, `src/test/oracle-laws/tests.ts`); held by `src/qti/item-ref-href.oracle.test.ts`",
+        "the schema's \"Item ref target\" over the item refs that write an href (`attributesOf(\"href\", [itemRefKind])` into `ItemRefHref`, `src/qti/tests.ts`, and its target, the query `ItemRefTarget`, unless only a resource of an unread type names its path, `src/qti/queries.ts`) and its copy of a target's type into the assembly's lookup where it names a resource (`targetedItemRefs`, `src/qti/expressions.ts`); the oracle's item ref laws over every item ref, named or not (`itemRefsOf`, read by `itemRefLawsOf` and `documentLawsOf`, `src/test/oracle-laws/tests.ts`); held by `src/qti/item-ref-href.oracle.test.ts`",
       status: "G",
     },
   ],

@@ -263,8 +263,8 @@ const asCardinality = handleLookup("Cardinality", Cardinality.handles);
  * The `ResourceType` roster: the 21 types a `cp:resource` may name, each spelled as its lexical
  * form (`package.ts`). A lexical form no handle spells is outside the attribute's value domain, so
  * a resource that carries it is refused. No handle stands for no type: a resource whose `type`
- * spells none has no `ResourceTyped` row, and an item ref whose href names no resource has no
- * `ItemRefTarget` (a missing value is a row of its own relation, or no row).
+ * spells none has no `ResourceTyped` row, and an item ref whose href names no resource has no row
+ * of the query `ItemRefTarget` (a missing value is a row of its own relation, or no row).
  */
 export const ResourceType = closed(
   "ResourceType",

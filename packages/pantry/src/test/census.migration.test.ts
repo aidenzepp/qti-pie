@@ -18,9 +18,11 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * package read, which move none of them, and after the merge of upstream's genetic repair round 4,
  * whose placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads
  * four tables, so four constraint triggers more, and its placed map responses' two containments
- * move no count; measured again after `Entry`'s generated `digest`, whose column and text domain
- * move none), as a ratchet: a change that moves one fails here until the count is measured
- * again. A regeneration updates them here, and only here.
+ * move no count; after `Entry`'s generated `digest`, whose column and text domain move none; and
+ * after the legacy sweep's derived item ref target, `ItemRefTarget` a query where it was a table,
+ * so one table fewer, and its rules and the untargeted item refs' thirteen constraint triggers
+ * more), as a ratchet: a change that moves one fails here until the count is measured again. A
+ * regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -38,12 +40,12 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  */
 const measured = {
   constants: 119,
-  constraintTriggers: 96,
+  constraintTriggers: 109,
   live: 7,
   names: 48,
   nodeAxes: 5,
   nodeKeys: 48,
-  tables: 251,
+  tables: 250,
   validateFiles: 1,
 } as const;
 

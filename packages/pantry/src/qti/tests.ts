@@ -37,8 +37,8 @@
  *
  * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
  * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
- * item ref names ({@link ItemRefHref}, {@link ItemRefTarget} and {@link ItemRefDocument}, B2 and
- * B3).
+ * item ref names ({@link ItemRefHref} and {@link ItemRefDocument}, with the query `ItemRefTarget`
+ * of `#pantry/qti/queries.ts`, B2 and B3).
  *
  * Every attribute value a law compares is copied from `Attribute` (C18) beside the key over its
  * selection that keeps its lexical form out of every index (the addendum's "Text in keys"), and
@@ -88,7 +88,6 @@ import {
   includeParentKinds,
   IncludeSetOf,
   NodeKind,
-  ResourceType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
@@ -115,8 +114,6 @@ import {
   sectionParts,
   exits,
   flagCarriers,
-  itemResourceType,
-  linkResourceTypes,
 } from "#pantry/vocab/terms/tests.ts";
 import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
@@ -831,52 +828,26 @@ export const StimulusRef = relation(
 );
 
 /**
- * What an item ref names, keyed by the item ref's node (the UP audit's B2 and B3): its href's
- * `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`), and `type`, the
- * type of the resource of the package whose href's path that is (`TypedHref`, a rule over that
- * query in `#pantry/qti/queries.ts`), which "Item ref target" judges: the URI an item ref holds is
- * "the URI used to refer to the item's file (e.g., elsewhere in the same content package)"
- * (information model §5.6.5, `href`), so it names an item of the package, or an LTI link (R36). It
- * is a row only where a resource of the package names the path with a type the importer reads, a
- * counted member of its item ref's {@link ItemRefHref}, so an item ref whose href names none has no
- * target, which "Item ref target" refuses unless a resource of an unread type names the path
- * (`UnreadTypeHref`, a query in `#pantry/qti/queries.ts`), and one that writes no href has none,
- * which AL3 alone refuses (spec reading 155). Where a resource of an unread type names the path
- * and none of the item type or an LTI type does, the item ref names nothing a law could judge, and
- * it has no target either. An item it names is an {@link ItemRefDocument} row of its own.
- *
- * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
- * its package, which "Item ref target" refuses (`item-ref-target`, the verdict file's rule for it),
- * and testWithLti's two item refs name LTI links, a package refused under another rule.
- */
-export const ItemRefTarget = relation(
-  "ItemRefTarget",
-  { node: uuid, package: uuid, path: keyText, type: closedId(ResourceType) },
-  ["node"],
-);
-
-/**
  * The href of an item ref that writes one, keyed by the item ref's node: its href's `package` and
- * `path`, as {@link ItemRefTarget}'s, and `targets`, drawn, its count of {@link ItemRefTarget}
- * rows: 1 where a resource of the package names the path with a type the importer reads, and 0
- * where none does. An item ref with no target is judged by no other statement of "Item ref
- * target", so its path must be one a resource of an unread type names (`UnreadTypeHref`, a rule
- * over that query in `#pantry/qti/queries.ts`, spec reading 67): the type of what it names is
- * unread, so the law oracle names it no target to judge (its `itemRefTargetOf`). An unread type is
- * itself a refusal, AL1's value domain, so this narrows the law set, never a verdict. An item ref
- * that writes no href has none, which AL3 alone refuses (spec reading 155).
+ * `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`). What it names is the query
+ * `ItemRefTarget` (`#pantry/qti/queries.ts`): the type of a resource of the package whose href's
+ * path that is, of the item type or else an LTI type, which "Item ref target" judges. An item ref
+ * with no target (`UntargetedItemRef` there) must name a path a resource of an unread type names
+ * (`UnreadTypeHref`, spec reading 67): the type of what it names is unread, so the law oracle names
+ * it no target to judge (its `itemRefTargetOf`). An unread type is itself a refusal, AL1's value
+ * domain, so this narrows the law set, never a verdict. An item ref that writes no href has none,
+ * which AL3 alone refuses (spec reading 155).
  */
-export const ItemRefHref = relation(
-  "ItemRefHref",
-  { node: uuid, package: uuid, path: keyText, targets: drawn(natural) },
-  ["node"],
-);
+export const ItemRefHref = relation("ItemRefHref", { node: uuid, package: uuid, path: keyText }, [
+  "node",
+]);
 
 /**
  * The item document an item ref names, keyed by the item ref's node: a row only where the package
- * holds a document at the path of an {@link ItemRefTarget} of the item type, and none for an LTI
- * link's, so an item resource whose file the package lacks has none, which "Item ref target"
- * refuses. Every law that reads what an item ref's item declares reads it here.
+ * holds a document at the path of an item ref's target of the item type (`ItemRefTarget`,
+ * `#pantry/qti/queries.ts`), and none for an LTI link's, so an item resource whose file the package
+ * lacks has none, which "Item ref target" refuses. Every law that reads what an item ref's item
+ * declares reads it here.
  */
 export const ItemRefDocument = relation(
   "ItemRefDocument",
@@ -898,7 +869,6 @@ export const testRelations = {
   InstanceName,
   ItemRefDocument,
   ItemRefHref,
-  ItemRefTarget,
   Named,
   Section,
   SectionMember,
@@ -1476,26 +1446,11 @@ const shuffled = (b: ShuffleRow) =>
   );
 
 /**
- * The documents whose root is an item, the targets an item ref may name: the documents whose
+ * The documents whose root is an item, the documents an item ref's item may be: the documents whose
  * `rootKind`, a field beyond the target's terms, is fixed to an item, so `Document`'s key holds it
  * (grizzle's fixed target, at `3cc8fbd`) and it needs no key of its own.
  */
 const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
-
-/**
- * The item refs that name an item.
- */
-const itemTargets = select(ItemRefTarget, (t) => t.eq(t.type, itemResourceType));
-
-/**
- * Each item ref's target, counted by `ItemRefHref.targets`: one row or none.
- */
-export const itemRefTargetFamily = counted(on(ItemRefTarget, "node"), fin(ItemRefHref, "targets"));
-
-/**
- * The item refs whose href names no resource of a type the importer reads.
- */
-export const untargetedItemRefs = select(ItemRefHref, (h) => h.eq(h.targets, 0n));
 
 /**
  * The token attributes {@link TestToken} copies, each attribute's key and its two copies.
@@ -1549,9 +1504,10 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   element once per test, and the key `(assembly, identifier)` (reading 86);
  * - **the jumps** ({@link BranchResolution}, {@link BranchTarget}, {@link BranchShuffle}): each
  *   resolution's target, `Branch_target` and `Branch_forward` (reading 87);
- * - **the items** ({@link ItemRefHref}, {@link ItemRefTarget}, {@link ItemRefDocument}): each item
- *   ref's href names an item document of the package or an LTI link, unless only a resource of an
- *   unread type names it (B2, B3, "Item ref target").
+ * - **the items** ({@link ItemRefHref}, {@link ItemRefDocument}): each item ref's href resolved, and
+ *   the item document it names (B2, B3, "Item ref target"); what it names, an item document of the
+ *   package or an LTI link unless only a resource of an unread type names it, is a rule over the
+ *   query `ItemRefTarget`, stated under the same name in `#pantry/qti/queries.ts`.
  *
  * The statements by the laws they state:
  *
@@ -1598,12 +1554,13 @@ const flagCopies = flagCarriers.map(flagCopy);
  * and the two elements it reads, its own `Branch_forward` that it orders the two.
  *
  * The statements of B2's and B3's law, "Item ref target": each item ref that writes an href has
- * one {@link ItemRefHref}, its href's path, and no other element has one; each has one
- * {@link ItemRefTarget}, named by a resource of the package of the item type or an LTI type,
- * unless a resource of an unread type names its path, where it may have none; and each that names
- * an item has its {@link ItemRefDocument}, the document there, whose root is an item. An item ref
- * that writes no href names nothing, and AL3 alone refuses it (spec reading 155), named or not
- * (reading 147).
+ * one {@link ItemRefHref}, its href's path, and no other element has one; and each
+ * {@link ItemRefDocument} is the document at its path, whose root is an item. Its target, named by
+ * a resource of the package of the item type or an LTI type, is the query `ItemRefTarget`, whose
+ * rules (`#pantry/qti/queries.ts`) hold an item ref with none to a path a resource of an unread
+ * type names, and an item ref names an item exactly where it has its {@link ItemRefDocument}. An
+ * item ref that writes no href names nothing, and AL3 alone refuses it (spec reading 155), named
+ * or not (reading 147).
  */
 export const testLawsByName = {
   "Branch forward": [
@@ -2001,10 +1958,6 @@ export const testLawsByName = {
         ),
       ),
     ),
-    contained(
-      on(ItemRefTarget, "node", "package", "path"),
-      on(hrefPaths, "node", "package", "path"),
-    ),
   ],
   "File exists": [
     check("File_exists", SitePath, (s) => s.eq(s.entry, true)),
@@ -2074,22 +2027,9 @@ export const testLawsByName = {
     check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
   ],
   "Item ref target": [
-    contained(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
     contained(on(ItemRefHref, "node"), on(nodesOf(itemRefKind), "id")),
     contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefHref, "node")),
     contained(on(ItemRefHref, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-    itemRefTargetFamily,
-    check("Item_ref_target", ItemRefTarget, (t) =>
-      t.in(t.type, [itemResourceType, ...linkResourceTypes]),
-    ),
-    contained(
-      on(itemTargets, "node", "package", "path"),
-      on(ItemRefDocument, "node", "package", "path"),
-    ),
-    contained(
-      on(ItemRefDocument, "node", "package", "path"),
-      on(itemTargets, "node", "package", "path"),
-    ),
     contained(
       on(ItemRefDocument, "document", "package", "path"),
       on(Document, "node", "package", "path"),

@@ -152,7 +152,7 @@ import {
 import { keyText } from "#pantry/qti/limits.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, ItemRefDocument, ItemRefTarget, VariableMapping } from "#pantry/qti/tests.ts";
+import { Instance, ItemRefDocument, VariableMapping } from "#pantry/qti/tests.ts";
 import { optionallyTypedKinds, attributeTypedKinds } from "#pantry/vocab/terms/expressions.ts";
 import {
   expressionKinds,
@@ -685,7 +685,7 @@ export const MappingSourceDeclaration = relation(
  * A variable mapping's item ref, keyed by the mapping's node (spec reading 110): `itemRef`,
  * `VariableMapping`'s `parent`, and `types`, drawn: its count of {@link MappingItemRefType} rows, 1
  * where the item ref has a target and 0 where it has none: it writes no href, which AL3 alone
- * refuses (spec reading 155), or its href names no resource of a type the importer reads, which
+ * refuses (spec reading 155), or its href names no resource of the item type or an LTI type, which
  * "Item ref target" refuses over the item ref unless a resource of an unread type names its path,
  * itself AL1's refusal (`#pantry/qti/tests.ts` `ItemRefHref`). Every mapping has one. A mapping
  * whose item ref names an LTI link has no item, so no source declaration, and is accepted
@@ -701,9 +701,9 @@ export const MappingItemRef = relation(
 /**
  * What a variable mapping's item ref names, keyed by the mapping's node, where the item ref has a
  * target, a counted member of its {@link MappingItemRef}: its item ref (`itemRef`) and `type`, its
- * `ItemRefTarget`'s, copied from it. A mapping under an item ref with no target has no row, so no
- * type stands for it (decision 428, as `DeclarationBaseType` holds a declaration's base type only
- * where it has one).
+ * target's (the query `ItemRefTarget`, `#pantry/qti/queries.ts`), copied from it. A mapping under
+ * an item ref with no target has no row, so no type stands for it (decision 428, as
+ * `DeclarationBaseType` holds a declaration's base type only where it has one).
  */
 export const MappingItemRefType = relation(
   "MappingItemRefType",
@@ -1569,8 +1569,8 @@ const untargetedMappings = select(MappingItemRef, (m) => m.eq(m.types, 0n));
  * The variable mappings whose item ref names a resource of the package other than an LTI link: a
  * mapping under an LTI item ref has no item, so no source declaration, and is accepted unchecked
  * (spec reading 110). A mapping under an item ref that names an item or a missing document must
- * have its source's declaration. Only an LTI type is exempt, and it is copied from
- * `ItemRefTarget`, so it spares only a mapping whose item ref names a link.
+ * have its source's declaration. Only an LTI type is exempt, and it is copied from the item ref's
+ * target (the query `ItemRefTarget`), so it spares only a mapping whose item ref names a link.
  */
 const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkResourceTypes)));
 
@@ -2231,15 +2231,15 @@ export const referenceLawsByName = {
   ],
   "Item ref target": [
     // MappingItemRef: each mapping's item ref (reading 110), and MappingItemRefType what that names,
-    // a row only where the item ref has a target, its type copied from it. One whose item ref has
-    // no target has no type row (decision 428): AL3 refuses an unwritten href and "Item ref target"
-    // one that names nothing, over the item ref alone, and "Variable mapping source" judges the
-    // mapping, as it judges every mapping but an LTI one.
+    // a row only where the item ref has a target, its type copied from it, which the rule over the
+    // query `ItemRefTarget` proves (`#pantry/qti/queries.ts`). One whose item ref has no target has
+    // no type row (decision 428): AL3 refuses an unwritten href and "Item ref target" one that
+    // names nothing, over the item ref alone, and "Variable mapping source" judges the mapping, as
+    // it judges every mapping but an LTI one.
     contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
     contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
     mappingItemRefTypeFamily,
     contained(on(MappingItemRefType, "node", "itemRef"), on(MappingItemRef, "node", "itemRef")),
-    contained(on(MappingItemRefType, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
   ],
   "Prefixed reference": [
     key(on(resolvingReadings, "assembly", "node", "attribute")),

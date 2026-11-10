@@ -219,7 +219,6 @@ const testKeyNames = {
   InstanceName: "Test name key",
   ItemRefDocument: "Test overlay",
   ItemRefHref: "Item ref target",
-  ItemRefTarget: "Item ref target",
   Named: "Test overlay",
   Section: "Test overlay",
   SectionMember: "Test overlay",

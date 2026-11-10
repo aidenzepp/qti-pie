@@ -747,7 +747,7 @@ const dependencyTargetsOf = (
  * restricts `xs:NCName`, so it names no resource, and its value domain refuses it alone (spec
  * reading 152, decision 457 (2)). A resource whose `type` is written and spells no handle has no
  * code, and its href is a row of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`), which no
- * table stores ({@link unreadTypePathsOf} reads its paths on the host).
+ * table stores.
  *
  * Each identifier and `identifierref` row holds its written form (`lexical`) and that form
  * collapsed, its value (an `xs:ID` and an `xs:IDREF` are whiteSpace `collapse` types, decision 457
@@ -926,40 +926,6 @@ export const typedHrefsOf = (
       type,
     })),
   );
-
-/**
- * Read the paths a manifest's resources of an unread type name: each resource whose `type` is
- * written, nonempty, and spells no handle (so it has no `ResourceTyped`), by its href's compared
- * path, the rows of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`), which no table stores.
- * The importer reads them on the host to name no target for an item ref whose path only such a
- * resource names besides types no law reads (`#pantry/import/overlays/expressions.ts`
- * `itemRefTargetsOf`); the database reads the same join where "Item ref target" judges it.
- *
- * @param doc - The manifest's tree.
- * @param idOf - The ids its rows are written under.
- * @param rows - The manifest's overlay rows.
- * @returns The paths.
- */
-export const unreadTypePathsOf = (
-  doc: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
-  rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
-): ReadonlySet<string> => {
-  const flat = flatten(doc, idOf);
-  const resources = new Set(
-    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
-  );
-
-  return new Set(
-    flat.attributes.flatMap(({ lexical, name, node }) =>
-      name === "type" && resources.has(node) && lexical !== "" && !rows.ResourceTyped.has(node)
-        ? Option.toArray(Option.fromUndefinedOr(rows.ResourceHref.get(node))).map(
-            ({ path }) => path,
-          )
-        : [],
-    ),
-  );
-};
 
 /**
  * Name the documents a manifest's resources name (reading 93): each pair of the entry path an href

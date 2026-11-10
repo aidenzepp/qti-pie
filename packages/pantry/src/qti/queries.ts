@@ -51,6 +51,7 @@ import {
 } from "#pantry/qti/expression-types.ts";
 import {
   Expression,
+  MappingItemRefType,
   MappingSourceDeclaration,
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
@@ -87,12 +88,11 @@ import {
   AssembledName,
   InstanceName,
   ItemRefDocument,
-  ItemRefTarget,
-  untargetedItemRefs,
+  ItemRefHref,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
-import { itemRefKind, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
+import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * Build every query `Qti` names over a stored level, and every rule over one: each query under its
@@ -111,20 +111,24 @@ export const queriesOf = (base: QtiBase) => {
    *
    * Its rows are a join no table stores and no write keeps, which the importer reads on the host
    * before it writes a row, to name the documents it reads (`#pantry/import/overlays/package.ts`
-   * `typedHrefsOf`).
+   * `typedHrefsOf`). It is a query of its own, which {@link TypedHref} names, so the queries over an
+   * item ref's target ({@link itemRefTargets}, {@link targetHrefs}) match and negate it.
    */
-  const TypedHref = derived(
-    "TypedHref",
-    query(base).rule((r) => {
-      const { node, package: pkg, path, scope } = v(ResourceHref, "href");
-      const { type } = v(ResourceTyped, "typed");
+  const typedHrefs = query(base).rule((r) => {
+    const { node, package: pkg, path, scope } = v(ResourceHref, "href");
+    const { type } = v(ResourceTyped, "typed");
 
-      return r
-        .match(ResourceHref, { node, package: pkg, path, scope })
-        .match(ResourceTyped, { node, type })
-        .find({ node, package: pkg, path, scope, type });
-    }),
-  );
+    return r
+      .match(ResourceHref, { node, package: pkg, path, scope })
+      .match(ResourceTyped, { node, type })
+      .find({ node, package: pkg, path, scope, type });
+  });
+
+  /**
+   * {@link typedHrefs} as a relation of the schema, which the rules of "Document entry",
+   * "RootOfType" and the importer read.
+   */
+  const TypedHref = derived("TypedHref", typedHrefs);
 
   /**
    * The href of a resource whose `type` is written and spells no `ResourceType` handle, by the
@@ -135,9 +139,9 @@ export const queriesOf = (base: QtiBase) => {
    * negation stands alone as a filter, never inside a conjunction, and reads no pattern over the
    * attribute's unbounded lexical form in a query. A resource that writes no `type` has none (AL3
    * refuses it alone), and neither has one that writes no `href`, which names no path. Its rows are
-   * a join no table stores, which "Item ref target" reads: an item ref whose href names nothing the
-   * importer reads names a path one of these names, or is refused (the oracle's `itemRefTargetOf`
-   * names no target there).
+   * a join no table stores, which "Item ref target" reads: an item ref with no target
+   * ({@link UntargetedItemRef}) names a path one of these names, or is refused (the oracle's
+   * `itemRefTargetOf` names no target there).
    */
   const UnreadTypeHref = derived(
     "UnreadTypeHref",
@@ -161,6 +165,92 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
+   * The paths a resource of the item type or an LTI type names, by package: the paths an item ref's
+   * target is named at (the UP audit's B2 and B3, R36). An item ref whose path none of them names
+   * has no target ({@link UntargetedItemRef}).
+   */
+  const targetHrefs = query(base).rule((r) => {
+    const { package: pkg, path, type } = v(typedHrefs, "typed");
+
+    return r
+      .match(typedHrefs, { package: pkg, path, type })
+      .where(r.inSet(type, [itemResourceType, ...linkResourceTypes]))
+      .find({ package: pkg, path });
+  });
+
+  /**
+   * What an item ref names, by the item ref's node (the UP audit's B2 and B3): its
+   * {@link ItemRefHref}'s `package` and `path`, and `type`, the type of a resource of the package
+   * whose href's path that is, of the item type where one is, and else of an LTI type: the URI an
+   * item ref holds is "the URI used to refer to the item's file (e.g., elsewhere in the same
+   * content package)" (information model §5.6.5, `href`), so it names an item of the package, or an
+   * LTI link (R36). Two rules state it, one per kind of target, and the link's negates the item's,
+   * so an href that a resource of each type names is an item's alone. A path that several LTI types
+   * name is a row per type, each a link.
+   *
+   * An item ref whose path no resource of either kind names has no target, and "Item ref target"
+   * holds its path to one a resource of an unread type names ({@link UntargetedItemRef}): a path
+   * only a resource of another type the importer reads names, a test's or a stimulus's, is refused
+   * there. One that writes no href has no {@link ItemRefHref} and names nothing, which AL3 alone
+   * refuses (spec reading 155).
+   *
+   * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
+   * its package, which "Item ref target" refuses (`item-ref-target`, the verdict file's rule for
+   * it), and testWithLti's two item refs name LTI links, a package refused under another rule.
+   */
+  const itemRefTargets = query(base)
+    .rule((r) => {
+      const { node, package: pkg, path } = v(ItemRefHref, "href");
+      const { type } = v(typedHrefs, "item");
+
+      return r
+        .match(ItemRefHref, { node, package: pkg, path })
+        .match(typedHrefs, { package: pkg, path, type })
+        .where(r.eq(type, itemResourceType))
+        .find({ node, package: pkg, path, type });
+    })
+    .rule((r) => {
+      const { node, package: pkg, path } = v(ItemRefHref, "href");
+      const { type } = v(typedHrefs, "link");
+
+      return r
+        .match(ItemRefHref, { node, package: pkg, path })
+        .match(typedHrefs, { package: pkg, path, type })
+        .where(r.inSet(type, linkResourceTypes))
+        .where(r.not(typedHrefs, { package: pkg, path, type: itemResourceType }))
+        .find({ node, package: pkg, path, type });
+    });
+
+  /**
+   * {@link itemRefTargets} as a relation of the schema, which "Item ref target" reads: the item an
+   * item ref names has its `ItemRefDocument`, and a mapping's copy of its item ref's type is one of
+   * these.
+   */
+  const ItemRefTarget = derived("ItemRefTarget", itemRefTargets);
+
+  /**
+   * The item refs that have no target, by the item ref's node: each {@link ItemRefHref} whose path
+   * no resource of the item type or an LTI type names ({@link targetHrefs}). Its negation reads
+   * those hrefs alone, never {@link itemRefTargets}, whose link rule negates in turn.
+   */
+  const UntargetedItemRef = derived(
+    "UntargetedItemRef",
+    query(base).rule((r) => {
+      const { node, package: pkg, path } = v(ItemRefHref, "href");
+
+      return r
+        .match(ItemRefHref, { node, package: pkg, path })
+        .where(r.not(targetHrefs, { package: pkg, path }))
+        .find({ node, package: pkg, path });
+    }),
+  );
+
+  /**
+   * The item refs that name an item.
+   */
+  const itemTargets = select(ItemRefTarget, (t) => t.eq(t.type, itemResourceType));
+
+  /**
    * The typed hrefs whose type `RootOfType` maps: each names a document of that type.
    */
   const documentHrefs = select(TypedHref, (h) => h.in(h.type, documentTypes));
@@ -175,9 +265,10 @@ export const queriesOf = (base: QtiBase) => {
    *   `Entry`, so no rule here restates it.
    * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the path of a
    *   typed href of its type (spec reading 176).
-   * - **B2 and B3 ("Item ref target"):** an item ref's target is a (path, type) pair a typed href of
-   *   its package names, and an item ref with no target names a path an unread-type resource names
-   *   ({@link UnreadTypeHref}).
+   * - **B2 and B3 ("Item ref target"):** an item ref with no target names a path an unread-type
+   *   resource names ({@link UntargetedItemRef}, {@link UnreadTypeHref}); an item ref names an item
+   *   exactly where it has its `ItemRefDocument`, the document at its path; and a mapping's copy of
+   *   its item ref's type is that item ref's target's.
    */
   const packageQueryLawsByName = {
     "Document entry": [
@@ -190,14 +281,19 @@ export const queriesOf = (base: QtiBase) => {
       ),
     ],
     "Item ref target": [
-      contained(
-        on(ItemRefTarget, "package", "path", "type"),
-        on(TypedHref, "package", "path", "type"),
-      ),
-      // An item ref whose href names no resource of a type the importer reads names a path a
+      // An item ref whose href names no resource of the item type or an LTI type names a path a
       // resource of an unread type names, so the type of what it names is unread, and nothing
       // judges it (spec reading 67).
-      contained(on(untargetedItemRefs, "package", "path"), on(UnreadTypeHref, "package", "path")),
+      contained(on(UntargetedItemRef, "package", "path"), on(UnreadTypeHref, "package", "path")),
+      contained(
+        on(itemTargets, "node", "package", "path"),
+        on(ItemRefDocument, "node", "package", "path"),
+      ),
+      contained(
+        on(ItemRefDocument, "node", "package", "path"),
+        on(itemTargets, "node", "package", "path"),
+      ),
+      contained(on(MappingItemRefType, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
     ],
     RootOfType: [
       contained(
@@ -751,7 +847,8 @@ export const queriesOf = (base: QtiBase) => {
 
   /**
    * A reading through a found item ref that names an LTI link (spec reading 110): a split or
-   * numbered reading joined with its item ref's `ItemRefTarget`, of an LTI link's type. A link has
+   * numbered reading joined with its item ref's target ({@link itemRefTargets}), of an LTI link's
+   * type. A link has
    * no declarations, no template variables and no item to map from, so a name read through it is
    * accepted unchecked: its source is `link`, or `builtIn` for an item's built-in, never `none`,
    * `declared` or `mapped` (`E1_derived`), and a `link` reading is one of these.
@@ -760,7 +857,7 @@ export const queriesOf = (base: QtiBase) => {
     "LinkReading",
     query(base).rule((r) => {
       const { assembly, attribute, form, named, node, source, split } = v(Reading, "reading");
-      const { type } = v(ItemRefTarget, "target");
+      const { type } = v(itemRefTargets, "target");
 
       return r
         .match(Reading, {
@@ -774,7 +871,7 @@ export const queriesOf = (base: QtiBase) => {
           source,
           split,
         })
-        .match(ItemRefTarget, { node: named, type })
+        .match(itemRefTargets, { node: named, type })
         .where(r.and(r.inSet(form, ["split", "numbered"]), r.inSet(type, linkResourceTypes)))
         .find({ assembly, attribute, form, node, source, split });
     }),
@@ -1183,6 +1280,7 @@ export const queriesOf = (base: QtiBase) => {
     FoundName,
     HeldScope,
     HeldType,
+    ItemRefTarget,
     LinkReading,
     ListedIdentifier,
     ListedTitle,
@@ -1198,6 +1296,7 @@ export const queriesOf = (base: QtiBase) => {
     RequiredSsmlProperty,
     TypedHref,
     UnreadTypeHref,
+    UntargetedItemRef,
   };
 
   /**

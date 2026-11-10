@@ -111,7 +111,6 @@ export const writtenRelations = {
   ItemMode: { name: "ItemMode" },
   ItemRefDocument: { name: "ItemRefDocument" },
   ItemRefHref: { name: "ItemRefHref" },
-  ItemRefTarget: { name: "ItemRefTarget" },
   LabelUse: { name: "LabelUse" },
   LeastCount: { name: "LeastCount" },
   Literal: { name: "Literal" },

@@ -14,9 +14,10 @@
  *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `VariableMapping`'s key and session check, and what each item ref names:
- *   its `ItemRefHref`, and its `ItemRefTarget` and `ItemRefDocument`, each a row only where the
- *   package holds it. Each law carries the name `src/import/refusal.ts` gives the schema's
- *   statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
+ *   its `ItemRefHref` and `ItemRefDocument`, each a row only where the package holds it, and its
+ *   target as the query `ItemRefTarget` derives it from the resources' rows. Each law carries the
+ *   name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
+ *   `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -237,14 +238,13 @@ const restates = (law: Law, restated: Restated): boolean => {
  * The schema's statements this file restates, each with the law name the host gives its breaches.
  */
 const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
-  [{ kind: "check", name: "Item_ref_target" }, "Item ref target"],
   [
     { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefHref", "node"] },
     "Item ref target",
   ],
   [
     {
-      from: ["ItemRefHref", "package", "path"],
+      from: ["UntargetedItemRef", "package", "path"],
       kind: "contained",
       to: ["UnreadTypeHref", "package", "path"],
     },
@@ -777,25 +777,15 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
- * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item ref
- * that writes an href has its href's row, and its target, of the item type or an LTI type, named by
- * a resource of the package, unless a resource of an unread type names its path, where it may have
- * none (decision 454); and each of the item type has its document, whose root is an item, and no
- * other has one. Each is named by the empty name, as the oracle keys the law by its path alone.
+ * Each item ref's targets, by the item ref's node, as the query `ItemRefTarget`
+ * (`#pantry/qti/queries.ts`) derives them from the import's rows: the item type where a resource of
+ * the package of that type names its href's path, and else each LTI type one names; none where
+ * neither does.
  *
  * @param inputs - The import's rows.
- * @returns The breaches.
+ * @returns The targets' types, by the item ref's node.
  */
-const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
-  const law = "Item ref target";
-  const targets = [...inputs.ItemRefTarget.values()];
-  const documents = [...inputs.ItemRefDocument.values()];
-  const itemTypes: ReadonlySet<string> = new Set([itemResourceType, ...linkResourceTypes]);
-  // The item refs that write an href, each read through its href's `Reference`, the attribute's
-  // copy both ways.
-  const hrefs = [...inputs.Reference.values()].filter(
-    ({ kind, name }) => kind === "qti-assessment-item-ref" && name === "href",
-  );
+const itemRefTargetsOf = (inputs: PackageInputs): ReadonlyMap<string, readonly string[]> => {
   // The (path, type) pairs the package's resources name: each resource's href beside its type's
   // code, where it has both.
   const named = [...inputs.ResourceHref.values()].flatMap(({ node, package: held, path }) =>
@@ -804,6 +794,43 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       path,
       type,
     })),
+  );
+
+  return new Map(
+    [...inputs.ItemRefHref.values()].map((href) => {
+      const types = named
+        .filter(({ package: held, path }) => held === href.package && path === href.path)
+        .map(({ type }): string => type);
+
+      return [
+        href.node,
+        types.includes(itemResourceType)
+          ? [itemResourceType]
+          : types.filter((type) => linkTypes.has(type)),
+      ] as const;
+    }),
+  );
+};
+
+/**
+ * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item ref
+ * that writes an href has its href's row; one with no target ({@link itemRefTargetsOf}) names a
+ * path a resource of an unread type names (decision 454); and an item ref whose target is of the
+ * item type has its document, whose root is an item, and no other has one. Each is named by the
+ * empty name, as the oracle keys the law by its path alone.
+ *
+ * @param inputs - The import's rows.
+ * @returns The breaches.
+ */
+const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
+  const law = "Item ref target";
+  const targets = itemRefTargetsOf(inputs);
+  const documents = [...inputs.ItemRefDocument.values()];
+  const namesItem = (node: string): boolean => (targets.get(node) ?? []).includes(itemResourceType);
+  // The item refs that write an href, each read through its href's `Reference`, the attribute's
+  // copy both ways.
+  const hrefs = [...inputs.Reference.values()].filter(
+    ({ kind, name }) => kind === "qti-assessment-item-ref" && name === "href",
   );
 
   // The hrefs of the package's resources of an unread type (decision 454), as the query
@@ -830,38 +857,33 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
 
   return [
     ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefHref.has(node), law, "")),
-    ...[...inputs.ItemRefHref.values()].flatMap((href) =>
-      unless(
-        inputs.ItemRefTarget.has(href.node) ||
+    ...[...inputs.ItemRefHref.values()].flatMap((href) => [
+      ...unless(
+        (targets.get(href.node) ?? []).length > 0 ||
           unreadPaths.some(
             ({ package: held, path }) => held === href.package && path === href.path,
           ),
         law,
         "",
       ),
-    ),
-    ...targets.flatMap((target) => [
-      ...unless(itemTypes.has(target.type), law, ""),
       ...unless(
-        named.some(
-          ({ package: held, path, type }) =>
-            held === target.package && path === target.path && type === target.type,
-        ),
-        law,
-        "",
-      ),
-      ...unless(
-        target.type !== itemResourceType ||
+        !namesItem(href.node) ||
           documents.some(
             ({ node, package: held, path }) =>
-              node === target.node && held === target.package && path === target.path,
+              node === href.node && held === href.package && path === href.path,
           ),
         law,
         "",
       ),
     ]),
     ...documents.flatMap((document) => [
-      ...unless(inputs.ItemRefTarget.get(document.node)?.type === itemResourceType, law, ""),
+      ...unless(
+        namesItem(document.node) &&
+          inputs.ItemRefHref.get(document.node)?.package === document.package &&
+          inputs.ItemRefHref.get(document.node)?.path === document.path,
+        law,
+        "",
+      ),
       ...unless(
         [...inputs.Document.values()].some(
           ({ node, package: held, path, rootKind }) =>
@@ -899,6 +921,7 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     mappings: [...inputs.VariableMapping.values()],
     sources: [...inputs.MappingSourceDeclaration.values()],
   };
+  const targets = itemRefTargetsOf(inputs);
 
   return [
     ...[...inputs.TemplateDefault.values()].flatMap((templateDefault) =>
@@ -915,12 +938,12 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...rows.mappings.flatMap((mapping) => {
       const itemRef = inputs.MappingItemRef.get(mapping.node);
       const typed = inputs.MappingItemRefType.get(mapping.node);
-      const target = inputs.ItemRefTarget.get(mapping.parent);
 
       return unless(
         itemRef?.itemRef === mapping.parent &&
           (typed === undefined ||
-            (typed.itemRef === mapping.parent && typed.type === target?.type)),
+            (typed.itemRef === mapping.parent &&
+              (targets.get(mapping.parent) ?? []).includes(typed.type))),
         "Item ref target",
         "",
       );

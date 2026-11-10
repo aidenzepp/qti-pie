@@ -857,8 +857,8 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
 };
 
 /**
- * Resolve the hrefs of a test's or a section's item refs, which `ItemRefHref` and `ItemRefTarget`
- * copy: each item ref's path, as its `ReferencePath` resolves it; none for any other document.
+ * Resolve the hrefs of a test's or a section's item refs, which `ItemRefHref` copies: each item
+ * ref's path, as its `ReferencePath` resolves it; none for any other document.
  *
  * @param doc - The document's tree.
  * @param ids - The ids its rows are written under.
