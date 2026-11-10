@@ -20,13 +20,14 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { notesOnly } from "@grizzle/testing/sense";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Formatter, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Duration, Effect, FileSystem, Formatter } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -34,16 +35,6 @@ import { scratchDirectory } from "#pantry/test/scratch.ts";
  * its slowest test.
  */
 const testTimeoutMs = 480_000;
-
-/**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The QTI 3 ASI namespace, of every item element.

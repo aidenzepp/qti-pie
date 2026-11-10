@@ -17,7 +17,7 @@
  * entries back ({@link filesOf}); crust's writer writes an element's attributes, its namespace
  * declarations among them, in the order its tree holds them.
  */
-import { Effect, Option } from "effect";
+import { Effect, Option, Order } from "effect";
 import type { Array as Arr } from "effect";
 import type { Gen } from "@grizzle/testing/gen";
 import { int, shuffled } from "@grizzle/testing/gen";
@@ -450,22 +450,6 @@ const editedEntries = (
 };
 
 /**
- * Compare two paths by their UTF-16 code units, the order a case's entries are listed in.
- *
- * @param left - One path.
- * @param right - The other.
- * @returns A negative number, zero or a positive number as `left` sorts before, with or after
- *   `right`.
- */
-const byCodeUnit = (left: string, right: string): number => {
-  if (left === right) {
-    return 0;
-  }
-
-  return left < right ? -1 : 1;
-};
-
-/**
  * Build a case's package: its base's entries in path order, each XML entry read by crust, with the
  * case's edits made.
  *
@@ -480,7 +464,7 @@ export const readCase = Effect.fn("test.attributeOrder.read")(function* readCase
 ): Effect.fn.Return<readonly CaseEntry[]> {
   const entries = yield* Effect.orDie(baseEntries(orderedCase.base, names));
   const read = yield* Effect.forEach(
-    [...entries].toSorted(([left], [right]) => byCodeUnit(left, right)),
+    [...entries].toSorted(([left], [right]) => Order.String(left, right)),
     ([path, bytes]) =>
       path.endsWith(".xml")
         ? Effect.map(Effect.orDie(readXml(bytes)), (tree): CaseEntry => ({

@@ -74,8 +74,9 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, LawName } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -83,11 +84,6 @@ import type { Breach, LawName } from "#pantry/test/oracle.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The oracle's tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The every-relation package the cases edit.

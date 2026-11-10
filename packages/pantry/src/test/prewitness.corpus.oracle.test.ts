@@ -2,15 +2,16 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
-import { Console, Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Console, Effect, Order } from "effect";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
-import { explain, judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
+import { explain, judge, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
 import type { Breach, CodecRule, Judgment, OracleRule } from "#pantry/test/oracle.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { parseVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, for judging one corpus package: one read of its entries, then a
@@ -40,16 +41,6 @@ const corpus = settings.corpusRequested
   : [];
 
 /**
- * The composed grammar every case judges by, and the oracle's tables of it, built once.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
-
-/**
  * One corpus zip's predicted verdict, with the judgment it follows from.
  */
 interface Predicted {
@@ -66,21 +57,6 @@ interface Predicted {
 const predictions: Predicted[] = [];
 
 /**
- * Order two strings by UTF-16 code unit, the order the verdict file is sorted in.
- *
- * @param a - One string.
- * @param b - The other.
- * @returns Negative, zero or positive as `a` sorts before, with or after `b`.
- */
-const byCodeUnit = (a: string, b: string): number => {
-  if (a === b) {
-    return 0;
-  }
-
-  return a < b ? -1 : 1;
-};
-
-/**
  * Render predictions in the verdict file's layout: the header, then one line per zip sorted by
  * `file`, every line ended by a line feed.
  *
@@ -95,7 +71,7 @@ const renderPredicted = (rows: readonly Predicted[]): string =>
   [
     "file\tverdict\trule",
     ...rows
-      .toSorted((left, right) => byCodeUnit(left.file, right.file))
+      .toSorted((left, right) => Order.String(left.file, right.file))
       .map(({ file, rule, verdict }) => `${file}\t${verdict}\t${rule}`),
   ]
     .map((line) => `${line}\n`)
@@ -230,7 +206,7 @@ describe.skipIf(!settings.corpusRequested)("prewitness.corpus.oracle.test.ts, th
             [
               "file\tlaw\trule\tdocument\tnode\tdetail",
               ...predictions
-                .toSorted((left, right) => byCodeUnit(left.file, right.file))
+                .toSorted((left, right) => Order.String(left.file, right.file))
                 .flatMap(({ file, judgment }) =>
                   judgment._tag === "Judged"
                     ? judgment.breaches.map((breach) => breachLine(file, breach))
@@ -257,8 +233,8 @@ describe.skipIf(!settings.corpusRequested)("prewitness.corpus.oracle.test.ts, th
           );
 
           assert.deepStrictEqual(
-            predictions.map(({ file }) => file).toSorted(byCodeUnit),
-            committed.map(({ file }) => file).toSorted(byCodeUnit),
+            predictions.map(({ file }) => file).toSorted(Order.String),
+            committed.map(({ file }) => file).toSorted(Order.String),
             "one prediction per corpus zip, the committed file's zips",
           );
         }),

@@ -33,13 +33,8 @@ import { grammar } from "#pantry/grammar/install.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-
-/**
- * The oracle's law tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * One choice class: its element, written with its identifier attribute or none, its own

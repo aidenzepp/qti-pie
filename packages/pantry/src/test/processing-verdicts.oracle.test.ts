@@ -8,14 +8,15 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, verdictOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -23,16 +24,6 @@ import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
  * under V8 coverage, its slowest test.
  */
 const testTimeoutMs = 240_000;
-
-/**
- * The composed grammar every package is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The laws a guard's package is refused under, as `import/program.oracle.db.test.ts` picks them

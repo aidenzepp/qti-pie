@@ -36,7 +36,8 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { cases, holdsTwice, packageOf, shown } from "#pantry/test/placed-id-copy-cases.ts";
 import type { CopyCase } from "#pantry/test/placed-id-copy-cases.ts";
-import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -44,11 +45,6 @@ import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
  * 108, its slowest test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The oracle's tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Hold one case.

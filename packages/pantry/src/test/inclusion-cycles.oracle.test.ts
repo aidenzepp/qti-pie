@@ -20,8 +20,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Formatter, Option, Predicate, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Duration, Effect, FileSystem, Formatter, Option, Predicate } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -32,9 +31,11 @@ import { materialize } from "#pantry/test/fixtures.ts";
 import { datumText } from "#pantry/test/predicates.ts";
 import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
 import { keyBreachesOf } from "#pantry/test/key-breaches.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -42,16 +43,6 @@ import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
  * its slowest test.
  */
 const testTimeoutMs = 240_000;
-
-/**
- * The composed grammar every case is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Every law the host judges, read once.

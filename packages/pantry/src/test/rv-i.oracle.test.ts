@@ -25,34 +25,18 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Result } from "effect";
+import { Duration, Effect, Formatter } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
-import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import {
-  documentBreaches,
-  judge,
-  lawsOf,
-  ruleOf,
-  shownBreach,
-  verdictOf,
-} from "#pantry/test/oracle.ts";
+import { documentBreaches, judge, ruleOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName, OracleRule } from "#pantry/test/oracle.ts";
-
-/**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The QTI 3 ASI namespace, of every item element.

@@ -11,12 +11,13 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Formatter, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Effect, Formatter } from "effect";
 import { readEntries } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -24,16 +25,6 @@ import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
  * 108, its slowest test.
  */
 const testTimeoutMs = 60_000;
-
-/**
- * The composed grammar every seed is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * `simple`'s item declarations, interaction and response processing as its `choice.xml` writes

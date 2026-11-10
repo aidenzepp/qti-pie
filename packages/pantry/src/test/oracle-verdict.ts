@@ -12,13 +12,9 @@ import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-
-/**
- * The oracle's tables over the installed grammar, built once.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * What the law oracle predicts of a package: accepted, or refused under the rules its breaches

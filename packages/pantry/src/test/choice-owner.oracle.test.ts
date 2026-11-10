@@ -49,7 +49,8 @@ import type { ChoiceOwnerCase } from "#pantry/test/choice-owner-cases.ts";
 import { orphansOf } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -57,11 +58,6 @@ import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
  * its slowest test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The oracle's tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Hold one case to the oracle and its rows to the laws.

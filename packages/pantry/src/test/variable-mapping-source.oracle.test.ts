@@ -29,19 +29,14 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
 import { fixed, knownEntries } from "#pantry/test/gen/genetic/known.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
  * Measured 2026-11-09: 2.0 s at a load average of 68 to 160, its one test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The oracle's law tables over the composed grammar.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The text every XML file of O3's package opens with.

@@ -36,13 +36,9 @@ import {
 } from "#pantry/test/gen/lom-resource-type.ts";
 import type { LomFeature, PackageSketch } from "#pantry/test/gen/lom-resource-type.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
-import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach } from "#pantry/test/oracle.ts";
-
-/**
- * The tables the laws read, derived from the grammar once.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The law this slice states, as the oracle names it.

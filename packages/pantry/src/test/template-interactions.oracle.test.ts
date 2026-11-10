@@ -19,21 +19,12 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Duration, Effect } from "effect";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
 import type { Judgment } from "#pantry/test/oracle.ts";
-
-/**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The QTI 3 ASI namespace, of every item element.

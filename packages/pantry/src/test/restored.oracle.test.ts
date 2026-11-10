@@ -15,12 +15,12 @@ import {
   item,
   itemResource,
   judged,
-  grammar,
-  laws,
   manifestOf,
   shown,
   withItem,
 } from "#pantry/test/probe.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * Whether the examples tarball, which every fixture is cut from, is on this machine.

@@ -5,25 +5,16 @@
  * `last` is not its own characters' end breaks "E1 derived".
  */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, explain, judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-
-/**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
+import { documentBreaches, explain, judge, verdictOf } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The QTI 3 ASI namespace, of every item element.

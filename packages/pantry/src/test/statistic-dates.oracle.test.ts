@@ -17,14 +17,15 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { lexical, date } from "@bjornpagen/grizzle";
-import { Array as Arr, Duration, Effect, Equivalence, Option, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Array as Arr, Duration, Effect, Equivalence, Option } from "effect";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, verdictOf } from "#pantry/test/oracle.ts";
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -32,16 +33,6 @@ import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
  * under V8 coverage, its slowest test.
  */
 const testTimeoutMs = 300_000;
-
-/**
- * The composed grammar every case is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The years of the box: the year 0000 xs:date has none of, the first and the last, a common and a

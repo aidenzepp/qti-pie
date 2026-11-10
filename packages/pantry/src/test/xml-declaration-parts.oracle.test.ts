@@ -31,13 +31,9 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, shownBreach } from "#pantry/test/oracle.ts";
 import type { Judgment } from "#pantry/test/oracle.ts";
-
-/**
- * The oracle's tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * Every law the host judges, read once.

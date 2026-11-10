@@ -1,19 +1,10 @@
 import { assert } from "@effect/vitest";
-import { Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Effect } from "effect";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
-
-/**
- * The composed grammar every case judges by.
- */
-export const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-export const laws = lawsOf(grammar);
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The QTI 3 ASI namespace, of every item and test element.

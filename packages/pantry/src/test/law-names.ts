@@ -16,7 +16,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
-import { Array as Arr, Function as Fn, Option } from "effect";
+import { Array as Arr, Function as Fn, Option, Order } from "effect";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { bucketOf, schemaLawIdsOf, schemaLawNameOf } from "#pantry/test/law-namer.ts";
@@ -72,7 +72,7 @@ export const lawNamesPath: string = fileURLToPath(
  * @returns The same entries, keys in code point order.
  */
 const sortedRecord = <A>(record: Readonly<Record<string, A>>): Readonly<Record<string, A>> =>
-  Object.fromEntries(Object.entries(record).toSorted(([x], [y]) => (x < y ? -1 : Number(x > y))));
+  Object.fromEntries(Object.entries(record).toSorted(([x], [y]) => Order.String(x, y)));
 
 /**
  * Build the dictionary from the schema: under its id, each named law of grizzle's `lawIdsOf(Qti)`

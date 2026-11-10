@@ -22,8 +22,7 @@ import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Duration, Effect } from "effect";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -34,7 +33,9 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly } from "#pantry/test/gen/assembly.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
+import { judge, shownBreach } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -42,16 +43,6 @@ import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The composed grammar every case judges by, composed once for the file.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The branch law each fault of the model is named by.

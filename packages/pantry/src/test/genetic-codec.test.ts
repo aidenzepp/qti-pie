@@ -31,11 +31,10 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
-import { Console, Effect, Layer, Option, Result } from "effect";
+import { Console, Effect, Layer, Option } from "effect";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
-import { composed } from "#pantry/grammar/compose.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { names } from "#pantry/model/names.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
@@ -59,6 +58,7 @@ import { xdmDocument } from "#pantry/test/gen/xdm.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { OracleLayer } from "#pantry/xml/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
 
 /**
  * A document a table keeps by value: its text and the charset it is encoded in.
@@ -254,11 +254,6 @@ const fixed: readonly Fixed[] = [
     ],
   },
 ];
-
-/**
- * The composed grammar, shred's projection of it and unshred's names.
- */
-const grammar = Result.getOrThrow(composed());
 
 /**
  * The QTI seeds: the XDM generator's documents, on a stream this label fixes, so shred admits

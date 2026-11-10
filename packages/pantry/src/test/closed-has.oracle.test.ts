@@ -49,18 +49,13 @@ import { Qti } from "#pantry/qti/own.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { checkValueOf } from "#pantry/test/key-copies.ts";
 import { admittedOf, indexesOf } from "#pantry/test/indexes.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * How long one case may run before the search stops it as hung: a family's or a triple's handful
  * of reads.
  */
 const caseHang = Duration.minutes(1);
-
-/**
- * The law oracle's tables over the installed grammar.
- */
-const laws = lawsOf(grammar);
 
 /**
  * A closed relation this file judges.

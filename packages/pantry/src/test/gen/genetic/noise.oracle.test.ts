@@ -25,13 +25,8 @@ import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import type { Genome } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, movedBy, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
 import { noised } from "#pantry/test/gen/genetic/noise.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
-
-/**
- * The oracle's law tables over the composed grammar.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The salt aeced65a's classes were found under, which picks `choice.xml`, the one document.

@@ -31,11 +31,9 @@ import {
   breachesOf,
   contextPci,
   edit,
-  grammar,
   item,
   itemResource,
   judged,
-  laws,
   manifestOf,
   refusedBy,
   shown,
@@ -44,6 +42,8 @@ import {
 } from "#pantry/test/probe.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

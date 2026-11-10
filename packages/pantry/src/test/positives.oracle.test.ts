@@ -2,8 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { ConfigProvider, Effect, FileSystem, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { ConfigProvider, Effect, FileSystem } from "effect";
 import { readEntries } from "#pantry/package/read.ts";
 import {
   catalogNames,
@@ -13,7 +12,9 @@ import {
   pciNames,
 } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
@@ -32,16 +33,6 @@ const tarballPresent = existsSync(Effect.runSync(examplesTarball));
  * lease.
  */
 const positiveNames: readonly FixtureName[] = [...catalogNames, ...companionNames, ...pciNames];
-
-/**
- * The composed grammar every positive is judged by, composed once for the whole file.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the law oracle reads, derived from {@link grammar}.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Materialize a fixture in a root of its own and read its package.

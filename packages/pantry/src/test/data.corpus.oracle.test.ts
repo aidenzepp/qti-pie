@@ -1,12 +1,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
-import { Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Effect } from "effect";
 import { readEntries } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment } from "#pantry/test/oracle.ts";
 import { settings } from "#pantry/test/settings.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, for judging one corpus package: one read of its entries, then a
@@ -66,16 +67,6 @@ const everyPackage = settings.corpusRequested
  * The five packages of {@link dataPackages} among {@link everyPackage}.
  */
 const corpus = everyPackage.filter(({ name }) => carriesData(name));
-
-/**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Whether a breach concerns a `data-*` attribute.

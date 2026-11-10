@@ -3,7 +3,6 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Option, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { assemble } from "#pantry/model/assemble.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -16,10 +15,12 @@ import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { judge, lawsOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
@@ -30,17 +31,6 @@ const workDirectory = path.resolve(import.meta.dirname, "../../work");
  * Whether the examples tarball, which every SSML fixture is cut from, is on this machine.
  */
 const tarballPresent = existsSync(Effect.runSync(examplesTarball));
-
-/**
- * The composed grammar every fixture is judged by and shredded through, composed once by
- * `composed()` for the whole file.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the law oracle reads, derived from {@link grammar}.
- */
-const laws = lawsOf(grammar);
 
 /**
  * What one fixture's item must hold: the text the SSML edit leaves in it, which proves the edit was

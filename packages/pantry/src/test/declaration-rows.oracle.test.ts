@@ -45,12 +45,8 @@ import {
 import { orphansOf, rowsByRelation } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
-
-/**
- * The oracle's tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
+import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * Every (site, state) of the scope, by its number.

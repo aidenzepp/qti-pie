@@ -19,14 +19,15 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
 import { manifestRoot } from "#pantry/grammar/facets.ts";
 import { fragmentType } from "#pantry/grammar/include.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { globalKinds, vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -34,16 +35,6 @@ import { globalKinds, vocabularies } from "#pantry/vocab/inventory/vocabularies.
  * under V8 coverage, its slowest test.
  */
 const testTimeoutMs = 240_000;
-
-/**
- * The composed grammar every case is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * `RootOfType`'s rows: each resource type that lists documents, with a root kind its documents may

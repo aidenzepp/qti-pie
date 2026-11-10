@@ -18,7 +18,7 @@
  */
 import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
-import { Effect, Option } from "effect";
+import { Effect, Option, Order } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -385,21 +385,6 @@ export const isElementNode = (grammar: ComposedGrammar, node: FoldedNode<Compose
   Option.isSome(grammar.kinds.isElement.lookup({ kind: node.kind }));
 
 /**
- * Order two paths by UTF-16 code unit, the order `readEntries` lists entries in.
- *
- * @param left - One path.
- * @param right - The other.
- * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
- */
-const byCodeUnit = (left: string, right: string): number => {
-  if (left === right) {
-    return 0;
-  }
-
-  return left < right ? -1 : 1;
-};
-
-/**
  * Read a package's entries as `readEntries` returns them: each with its kind, sorted by path.
  *
  * @param entries - The package.
@@ -412,7 +397,7 @@ export const filesOf = (entries: PackageEntries): readonly PackageFile[] =>
       kind: path === "imsmanifest.xml" ? "manifest" : "file",
       path,
     }))
-    .toSorted((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => Order.String(left.path, right.path));
 
 /**
  * Read, shred and fold one entry of a package as the oracle does a listed document, its node ids

@@ -30,13 +30,9 @@ import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
+import { documentBreaches } from "#pantry/test/oracle.ts";
 import { admits, ancestryIndexesOf } from "#pantry/test/indexes.ts";
-
-/**
- * The oracle's law tables over the installed grammar.
- */
-const laws = lawsOf(grammar);
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * A lawful item whose body holds a choice interaction and a gap match, so its rows have first

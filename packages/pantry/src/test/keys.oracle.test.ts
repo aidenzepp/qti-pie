@@ -36,8 +36,9 @@ import { SideSchema } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
 import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
-import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -45,11 +46,6 @@ import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 1_800_000;
-
-/**
- * The oracle's tables over the installed grammar, built once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The document relations the oracle has rows for.

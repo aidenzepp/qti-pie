@@ -33,13 +33,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
+import { documentBreaches } from "#pantry/test/oracle.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -47,16 +48,6 @@ import { asiNamespace } from "#pantry/vocab/namespaces.ts";
  * 108, its slowest test.
  */
 const testTimeoutMs = 120_000;
-
-/**
- * The composed grammar.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The law oracle's tables.
- */
-const laws = lawsOf(grammar);
 
 /**
  * A cardinality of QTI's, but record.

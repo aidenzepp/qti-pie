@@ -29,8 +29,7 @@ import type { Case, Kept } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Duration, Effect } from "effect";
 import { lawNames as statedLawNames } from "#pantry/import/refusal.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
@@ -58,15 +57,10 @@ import { nodeEdits } from "#pantry/test/oracle-complete/row-edits-nodes.ts";
 import { packageMutations } from "#pantry/test/oracle-complete/packages.ts";
 import { testMutations } from "#pantry/test/oracle-complete/tests.ts";
 import { hostlessLaws, policyLaws, statedInParts } from "#pantry/test/oracle-laws.ts";
-import {
-  documentBreaches,
-  judge,
-  lawNames,
-  lawsOf,
-  ruleOf,
-  shownBreach,
-} from "#pantry/test/oracle.ts";
+import { documentBreaches, judge, lawNames, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, LawName } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -74,16 +68,6 @@ import type { Breach, LawName } from "#pantry/test/oracle.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 300_000;
-
-/**
- * The composed grammar every case judges by, composed once for the file.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Every law's mutation, by law, from each group's module.

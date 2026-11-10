@@ -67,11 +67,12 @@ import {
   swarmedItemRefPackage,
 } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declarations.ts";
-import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -83,11 +84,6 @@ import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
  * swarm's, 35.9 s. The value is twice the 86.8 s, rounded up to the next minute.
  */
 const testTimeoutMs = 180_000;
-
-/**
- * The oracle's tables over the installed grammar, built once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The lexical forms of a resource's `type` that spell a `ResourceType` handle, each as written

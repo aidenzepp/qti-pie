@@ -28,7 +28,7 @@
 // GRIZZLE-PENDING: Q10. A ChangeSet's host preview would judge the selections and checks this
 // evaluates from the statements' kept predicates.
 import type { AnySchema, LawSide, Statement } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
+import { Array as Arr, Option, Order, pipe, Predicate, Schema } from "effect";
 
 /**
  * An exact numeric as PostgreSQL's `numeric` orders it: a finite decimal, its digits signed over
@@ -702,21 +702,6 @@ const numericText = (value: Numeric): string => {
 };
 
 /**
- * Order two texts by their UTF-16 code units.
- *
- * @param left - One text.
- * @param right - The other.
- * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
- */
-const byCodeUnit = (left: string, right: string): number => {
-  if (left === right) {
-    return 0;
-  }
-
-  return left < right ? -1 : 1;
-};
-
-/**
  * Write a datum as a key's text: a text as itself, a natural, a float or a boolean as it prints, an
  * exact numeric as `numeric_out` writes it, a set as its members in code-unit order, since a set
  * has none of its own and two equal sets write one text, and an absent value as nothing.
@@ -735,7 +720,7 @@ export const datumText = (datum: Datum | undefined): string => {
 
   return Predicate.isBigInt(datum) || Predicate.isNumber(datum) || Predicate.isBoolean(datum)
     ? String(datum)
-    : [...datum].toSorted(byCodeUnit).join(" ");
+    : [...datum].toSorted(Order.String).join(" ");
 };
 
 /**

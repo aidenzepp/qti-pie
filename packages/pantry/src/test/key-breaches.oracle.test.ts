@@ -11,13 +11,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { evaluatedKeys, keyBreachesOf } from "#pantry/test/key-breaches.ts";
 import { packagingFixtures } from "#pantry/test/oracle-verdict.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -25,16 +26,6 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
  * under V8 coverage, its slowest test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The composed grammar every package is judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The keys the box must read somewhere, each a key a refusal of the DB tier named: a document per

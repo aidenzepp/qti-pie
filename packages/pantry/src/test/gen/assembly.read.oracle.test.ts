@@ -30,7 +30,8 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge } from "#pantry/test/oracle.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, of the test: a hang guard, never a budget. Measured 2026-11-07:
@@ -39,11 +40,6 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
  * 57.
  */
 const testTimeoutMs = 1_200_000;
-
-/**
- * The law oracle's tables over the installed grammar, built once.
- */
-const laws = lawsOf(grammar);
 
 /**
  * Import one generated package to its rows, hold `readProgram` to the law oracle's judgment of

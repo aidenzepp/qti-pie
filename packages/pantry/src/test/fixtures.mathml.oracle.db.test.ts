@@ -18,9 +18,10 @@ import {
   mathmlPositives,
 } from "#pantry/test/fixtures.mathml.ts";
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
-import { grammar, laws } from "#pantry/test/probe.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 describe.skipIf(!hasLease)(
   "fixtures.mathml.db.test.ts, on the lease",

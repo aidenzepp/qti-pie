@@ -26,9 +26,8 @@ import { shuffled } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Effect, Formatter, Option, Result } from "effect";
+import { Effect, Formatter, Option, Order } from "effect";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
-import { composed } from "#pantry/grammar/compose.ts";
 import { names } from "#pantry/model/names.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
@@ -42,34 +41,10 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import type { CaseEntry, OrderFeature } from "#pantry/test/gen/attribute-order.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
-import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment } from "#pantry/test/oracle.ts";
-
-/**
- * The composed grammar every case is generated over and judged by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
-
-/**
- * Compare two texts by their UTF-16 code units, the order a set of breaches is listed in.
- *
- * @param left - One text.
- * @param right - The other.
- * @returns A negative number, zero or a positive number as `left` sorts before, with or after
- *   `right`.
- */
-const byCodeUnit = (left: string, right: string): number => {
-  if (left === right) {
-    return 0;
-  }
-
-  return left < right ? -1 : 1;
-};
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * Write a breach as the fact it states, without the slot of the attribute it breaks at, which is
@@ -85,7 +60,7 @@ const factOf = ({ document, keys, law }: Breach): string =>
     law,
     Object.entries(keys)
       .filter(([field]) => field !== "at")
-      .toSorted(([left], [right]) => byCodeUnit(left, right)),
+      .toSorted(([left], [right]) => Order.String(left, right)),
   ]);
 
 /**
@@ -99,7 +74,7 @@ const statementOf = (judgment: Judgment) =>
   judgment._tag === "CodecRefusal"
     ? { document: judgment.document, rule: judgment.rule }
     : {
-        breaches: [...new Set(judgment.breaches.map(factOf))].toSorted(byCodeUnit),
+        breaches: [...new Set(judgment.breaches.map(factOf))].toSorted(Order.String),
         documents: judgment.documents,
       };
 

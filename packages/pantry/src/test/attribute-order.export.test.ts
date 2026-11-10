@@ -24,12 +24,11 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Effect, Formatter, Option, Result } from "effect";
+import { Effect, Formatter, Option } from "effect";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
-import { composed } from "#pantry/grammar/compose.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
@@ -56,11 +55,7 @@ import {
 } from "#pantry/test/gen/attribute-order.ts";
 import type { OrderFeature } from "#pantry/test/gen/attribute-order.ts";
 import { caseHang, idOf, scrambledIdOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
-
-/**
- * The composed grammar every case is generated over and read through.
- */
-const grammar = Result.getOrThrow(composed());
+import { grammar } from "#pantry/grammar/install.ts";
 
 /**
  * The grammar shred reads through, projected once.

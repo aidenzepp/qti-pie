@@ -23,10 +23,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
+import { Console, Effect, FileSystem } from "effect";
 import { census, countsOf, readings, statuses } from "#pantry/test/alignment.ts";
 import type { Rule } from "#pantry/test/alignment.ts";
+import { grammar } from "#pantry/grammar/install.ts";
 
 /**
  * The folder this test writes to, `packages/pantry/work/alignment`.
@@ -54,13 +54,6 @@ const readingsFile = path.resolve(
  * readings' laws (2, 3, 9, 39, 41, 42, 43 and 47): every XSD rule and every spec reading is owned.
  */
 const unownedCeiling = 0;
-
-/**
- * The composed grammar the census reads, built once while the file is collected: building it is
- * the slow part (43.6 s measured on 2026-11-05 at a load average near 30), and the census itself
- * takes about a second.
- */
-const grammar = Result.getOrThrow(composed());
 
 /**
  * The timeout, in milliseconds, for the census test, which takes the census of the grammar built

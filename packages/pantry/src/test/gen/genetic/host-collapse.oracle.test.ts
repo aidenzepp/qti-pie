@@ -24,19 +24,14 @@ import { Duration, Effect } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
  * Measured 2026-11-09: 2.1 s at a load average of 83 to 131, its one test.
  */
 const testTimeoutMs = 600_000;
-
-/**
- * The oracle's law tables over the composed grammar.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The text every XML file of the cases opens with.

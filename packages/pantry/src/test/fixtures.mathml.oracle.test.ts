@@ -11,7 +11,9 @@ import {
 } from "#pantry/test/fixtures.mathml.ts";
 import type { MathmlFixtureName } from "#pantry/test/fixtures.mathml.ts";
 import { judge, verdictOf } from "#pantry/test/oracle.ts";
-import { grammar, laws, shown } from "#pantry/test/probe.ts";
+import { shown } from "#pantry/test/probe.ts";
+import { grammar } from "#pantry/grammar/install.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * Whether the examples tarball, which every fixture is cut from, is on this machine.

@@ -6,15 +6,9 @@
  * must be one set, so a bug in either is named here, not shared by both sides.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { Result } from "effect";
-import { composed } from "#pantry/grammar/compose.ts";
 import { splicingParentsOf } from "#pantry/test/oracle.ts";
 import { splicingParents } from "#pantry/vocab/terms/tests.ts";
-
-/**
- * The composed grammar the oracle reads its include parents from.
- */
-const grammar = Result.getOrThrow(composed());
+import { grammar } from "#pantry/grammar/install.ts";
 
 describe("the splicing parents, stated twice", () => {
   it("are one set in the schema and in the law oracle, every parent one side splices and the other does not named", () => {

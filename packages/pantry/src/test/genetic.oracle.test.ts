@@ -74,9 +74,9 @@ import {
   shownResidual,
 } from "#pantry/test/gen/genetic/search.ts";
 import type { Isolating } from "#pantry/test/gen/genetic/search.ts";
-import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
+import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -90,11 +90,6 @@ const testTimeoutMs = 600_000;
  * budget's hang guard, measured by the long run, not the free one.
  */
 const longTimeoutMs = 3_600_000;
-
-/**
- * The oracle's law tables over the installed grammar, which the importer reads.
- */
-const laws = lawsOf(grammar);
 
 /**
  * The exploration's budget, which `GR8DES_GENETIC=1` runs: `runs` is the rotating stream's runs
