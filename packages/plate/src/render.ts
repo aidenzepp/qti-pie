@@ -75,11 +75,16 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
  * six, the candidate's when absent: each content module's render decides by both what it shows of
  * what {@link redact} kept under the same two, so a render passes the supports and the view its
- * redaction took.
+ * redaction took. `files` is the host's reader of package-relative paths, none when the host holds
+ * no such file: plate reads no file itself (`openPackage` gives the host the package's paths, and
+ * the host holds the texts), so a content module's render reads one through the kit's `files`, as
+ * the two stylesheet modules of issue `m5-06` will, together with the kit's `instance` that scopes
+ * the Root's id. With no `files`, every path reads as none.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
+  readonly files?: (path: string) => Option.Option<string>;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
   readonly mode?: RenderMode;

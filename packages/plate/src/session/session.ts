@@ -162,6 +162,10 @@ export type Intent =
  * responses, so a host may post a closed item's form as rendered, or pass what it decoded from it.
  */
 export interface Step {
+  /**
+   * The comment the candidate posted with this request on the current item, when it carries one.
+   */
+  readonly comment?: string;
   readonly intent: Intent;
   readonly responses?: Responses;
 }
