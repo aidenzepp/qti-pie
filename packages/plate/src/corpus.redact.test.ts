@@ -928,6 +928,7 @@ const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean
     case "template-inline": {
       return false;
     }
+    case "content":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -1059,6 +1060,7 @@ const noticeStep = (
     case "extended-text": {
       return { ...quietStep, runs: [[Option.getOrElse(node.prompt, () => []), true]] };
     }
+    case "content":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -1213,6 +1215,7 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
       case "template-inline": {
         return { ...node, content: withoutPaths(node.content), path: "" };
       }
+      case "content":
       case "printed-variable":
       case "text-entry":
       case "unsupported": {
@@ -1344,6 +1347,7 @@ const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
       case "extended-text": {
         return Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead));
       }
+      case "content":
       case "printed-variable":
       case "text":
       case "text-entry":

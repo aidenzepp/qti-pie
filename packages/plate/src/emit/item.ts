@@ -10,6 +10,7 @@
  * @module
  */
 import { Option, Result } from "effect";
+import { rootHook } from "#plate/content/root.ts";
 import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -53,8 +54,10 @@ export const itemPart = (
  * Emit the item Root around an emitted body.
  *
  * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode` naming the
- * payload's mode, and `data-disabled` when the author disabled every control. It holds the body's
- * nodes by identity, in order, and nothing else: no form, no submit control, no attempt state.
+ * payload's mode, `data-disabled` when the author disabled every control, and whatever the Root
+ * hook adds for the supports and the view (`rootHook` in `#plate/content/root.ts`), which never
+ * replaces one of these. It holds the body's nodes by identity, in order, and nothing else: no
+ * form, no submit control, no attempt state.
  *
  * @example
  *   Result.map(emitItem(payload, state, body), toHtml);
@@ -62,7 +65,8 @@ export const itemPart = (
  *
  * @param payload The render's payload, which gives the language, the instance, the mode and
  *   `finished`.
- * @param state The emit state, which holds the part overrides.
+ * @param state The emit state, which holds the part overrides, and the supports and the view the
+ *   Root hook reads.
  * @param body The emitted body, which the Root holds.
  * @returns The item Root, or the refusal of a replacement that breaks the swap invariant.
  */
@@ -75,6 +79,7 @@ export const emitItem = (
     state.parts,
     "root",
     {
+      ...rootHook.attributes(state),
       "data-mode": payload.mode,
       id: scopedId(payload.instance, "item"),
       lang: payload.lang,

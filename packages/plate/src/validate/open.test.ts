@@ -7,6 +7,7 @@ import type { ItemRef, Section, Test } from "#plate/model/test.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { PackageVerdict } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { selectionModule } from "#plate/test-features/selection.ts";
 import { open } from "#plate/validate/open.ts";
 import type { Location, Refusal, RefusalRule } from "#plate/validate/refusal.ts";
 import { acceptedItem, unsupportedFeatures } from "#plate/validate/verdict.ts";
@@ -401,7 +402,8 @@ const fieldIs = (value: boolean): boolean => value;
 
 /**
  * The eight `xs:boolean` attributes of round 9h's H1, in each element plate reads them on, and
- * `with-replacement` in the element plate marks and does not read.
+ * `with-replacement` in the element plate marks and does not read while the Selection module is a
+ * stub.
  */
 const booleanPlacements: readonly BooleanPlacement[] = [
   {
@@ -519,14 +521,13 @@ const booleanPlacements: readonly BooleanPlacement[] = [
         `<qti-selection select="1" with-replacement="${written}"/>`,
       ),
     element: "qti-selection",
-    expected: () => ({
-      marks: ["qti-selection"],
-      refusals: [],
-      verdict: "accepted-with-unsupported",
-    }),
+    expected: () =>
+      selectionModule.implemented
+        ? { marks: [], refusals: [], verdict: "accepted" }
+        : { marks: ["qti-selection"], refusals: [], verdict: "accepted-with-unsupported" },
     read: judged,
     title:
-      "with-replacement on a qti-selection, whose value plate does not read, is accepted-with-unsupported and marked qti-selection in every form",
+      "with-replacement on a qti-selection is judged in every form as the Selection module's implemented flag says: while it is a stub, which reads no value, accepted-with-unsupported and marked qti-selection",
   },
 ];
 
