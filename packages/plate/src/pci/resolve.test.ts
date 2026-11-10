@@ -2,7 +2,60 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { resolvePciModules } from "#plate/pci/resolve.ts";
 import type { ModuleRoute, PciModules, PciNotice } from "#plate/pci/resolve.ts";
-import { readImports, sourceModules } from "#plate/test/imports.ts";
+import { readImports, sourceModules, valueClosure } from "#plate/test/imports.ts";
+
+/**
+ * The resolver's path under the package, the module the guard keeps out of the browser closure.
+ */
+const resolver = "src/pci/resolve.ts";
+
+/**
+ * The folders whose non-test modules are browser roots, as `src/browser.test.ts` lists them in
+ * `browserFolders`, and the modules under them that are not, as its `sessionExclusions` names
+ * them: the two server modules of `src/pci/` among them. The lists are restated here because that
+ * test exports nothing; a change there moves here.
+ */
+const browserFolders = [
+  "src/emit/",
+  "src/interactions/",
+  "src/engine/",
+  "src/session/",
+  "src/form/",
+  "src/pci/",
+] as const;
+
+/**
+ * The modules under the {@link browserFolders} that are not browser roots, as
+ * `src/browser.test.ts`'s `sessionExclusions` names them.
+ */
+const browserExclusions: ReadonlySet<string> = new Set([
+  resolver,
+  "src/pci/type-identifier.ts",
+  "src/session/advance.ts",
+  "src/session/submit.ts",
+]);
+
+/**
+ * Select the browser roots among some paths, as `selectRoots` in `src/browser.test.ts` does: every
+ * non-test DOM-program module (`*.dom.ts`) under `src/`, every non-test module under the
+ * {@link browserFolders} but the {@link browserExclusions}, then the top-level roots.
+ *
+ * @param paths Paths under the package.
+ * @returns The roots.
+ */
+const browserRoots = (paths: readonly string[]): readonly string[] => [
+  ...paths.filter(
+    (path) =>
+      !path.endsWith(".test.ts") &&
+      (path.endsWith(".dom.ts")
+        ? path.startsWith("src/")
+        : browserFolders.some((folder) => path.startsWith(folder)) && !browserExclusions.has(path)),
+  ),
+  "src/payload.ts",
+  "src/render.ts",
+  "src/responses.ts",
+  ...["src/navigation.ts", "src/solution.ts"].filter((path) => paths.includes(path)),
+];
 
 /**
  * The default primary configuration's path, the schema's default for `primary-configuration`.
@@ -390,17 +443,19 @@ describe("resolvePciModules", () => {
       readImports(typeIdentifier).imports.filter((declaration) => !declaration.typeOnly),
       [],
     );
-    assert.deepStrictEqual(
-      [...modules].flatMap(([path, source]) =>
-        !path.endsWith(".test.ts") &&
-        readImports(source).imports.some(
-          (declaration) =>
-            declaration.specifier === "#plate/pci/resolve.ts" && !declaration.typeOnly,
-        )
-          ? [path]
-          : [],
-      ),
-      [],
-    );
+    assert.notInclude(valueClosure(modules, browserRoots([...modules.keys()])), resolver);
+  });
+
+  it("[pci-01] the resolver guard admits a Node-side value import and refuses one from a browser root's closure", () => {
+    const modules = sourceModules();
+    const importer = `import { resolvePciModules } from "${resolver.replace("src/", "#plate/")}";\n`;
+    const withNodeSide = new Map([...modules, ["src/dev/pci-host.ts", importer]]);
+    const withBrowser = new Map([...modules, ["src/pci/frame.dom.ts", importer]]);
+    const reaches = (map: ReadonlyMap<string, string>): boolean =>
+      valueClosure(map, browserRoots([...map.keys()])).includes(resolver);
+
+    assert.isFalse(reaches(modules));
+    assert.isFalse(reaches(withNodeSide));
+    assert.isTrue(reaches(withBrowser));
   });
 });
