@@ -834,12 +834,17 @@ const landedSteps: SteppedIn<LandedTable> = landedTable;
  * element under the mock.
  *
  * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @param module The module registered, {@link landedGapMatch} by default; a test hands a copy of it
+ *   with one step recording what the hubs hand it.
  * @returns The effect, wrapped.
  */
-const withLanded = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+const withLanded = <A, E>(
+  effect: Effect.Effect<A, E>,
+  module: typeof landedGapMatch = landedGapMatch,
+): Effect.Effect<A, E> =>
   Effect.sync(() => {
     vi.resetModules();
-    vi.doMock(landedFile, () => ({ [landedExport]: landedGapMatch }));
+    vi.doMock(landedFile, () => ({ [landedExport]: module }));
   }).pipe(
     Effect.andThen(effect),
     Effect.ensuring(
@@ -925,6 +930,62 @@ const landedDocument = doc(
                   text("."),
                 ],
               ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * The author's `data-*` attributes {@link landedDataDocument} writes on its root that plate keeps:
+ * `data-note`, which plate never writes, and `data-response`, which the fake's render writes on its
+ * Root, so the Root shows the module's value over the author's.
+ */
+const landedKeptData = [
+  { name: "data-note", value: "x" },
+  { name: "data-response", value: "mine" },
+] as const;
+
+/**
+ * An item whose body holds one Gap Match the landed module reads, its root carrying four of the
+ * author's `data-*` attributes: the two plate keeps ({@link landedKeptData}), and two with reserved
+ * names, `data-slot` (plate's marker) and `data-qti-z` (the reserved prefix), which the hub drops
+ * and marks.
+ */
+const landedDataDocument = doc(
+  "items/landed-data.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "landed-data"), attr("title", "Landed data")],
+    [
+      el(
+        "qti-response-declaration",
+        [
+          attr("base-type", "directedPair"),
+          attr("cardinality", "multiple"),
+          attr("identifier", "RESPONSE"),
+        ],
+        [],
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            `qti-${landedKind}-interaction`,
+            [
+              attr("data-note", "x"),
+              attr("data-slot", "mine"),
+              attr("max-associations", "1"),
+              attr("response-identifier", "RESPONSE"),
+              attr("data-qti-z", "1"),
+              attr("data-response", "mine"),
+            ],
+            [
+              el("qti-gap-text", [attr("identifier", "W")], [text("winter")]),
+              el("p", [], [text("It was "), el("qti-gap", [attr("identifier", "G1")])]),
             ],
           ),
         ],
@@ -1326,6 +1387,108 @@ describe("a module that lands", () => {
           assert.include(html, 'class="gaps"');
         }),
       ),
+  );
+
+  it.effect(
+    "[W0-AU.2] has the author's non-reserved data-* on its root carried by the hubs alone: onto its model node, its payload node, the JSON form and its Root under its own attributes, its redact handed the node and returning none",
+    () => {
+      const handed: LandedModel[] = [];
+      const recorder: typeof landedGapMatch = {
+        ...landedGapMatch,
+        redact: (interaction, kit) => {
+          handed.push(interaction);
+
+          return landedGapMatch.redact(interaction, kit);
+        },
+      };
+
+      return withLanded(
+        Effect.gen(function* authorData() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const codec = yield* Effect.promise(() => import("#plate/codec/redacted.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({});
+          const built = yield* Effect.fromResult(model.buildItem(landedDataDocument));
+          const [node] = built.body;
+          const path = `qti-assessment-item/qti-item-body/qti-${landedKind}-interaction`;
+
+          if (node === undefined || !isLandedModel(node)) {
+            assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the landed Gap Match`);
+          }
+
+          // The hub read the root's data-* after the module's parse: the kept ones in document
+          // order on the node, the reserved ones dropped and marked as E3 marks an attribute.
+          assert.deepStrictEqual(node.data, landedKeptData);
+          assert.deepStrictEqual(built.unsupported, [
+            { feature: "attribute:data-slot", path, shown: "mark" },
+            { feature: "attribute:data-qti-z", path, shown: "mark" },
+          ]);
+
+          const redactedItem = payload.redactItem(built);
+          const view: View = {
+            finished: false,
+            instance: "q1",
+            locale: configuration.locale,
+            messages: [],
+            mode: "answering",
+            names: new Map(),
+            posted: Option.none(),
+            seed: "",
+            values: new Map(),
+          };
+          const [copied] = payload.payload(redactedItem, view).body;
+
+          // The module's redact was handed the node and returned a payload without the data; the
+          // hub spread the data onto the payload node beside it.
+          assert.lengthOf(handed, 1);
+          assert.deepStrictEqual(handed[0]?.data, landedKeptData);
+          if (copied?.kind !== landedKind) {
+            assert.fail(
+              `the payload holds a ${copied?.kind ?? "nothing"}, not the landed Gap Match`,
+            );
+          }
+
+          assert.deepStrictEqual(copied.data, landedKeptData);
+          assert.isFalse(
+            Option.exists(landedPayloadOf(copied), (landed) => Object.hasOwn(landed, "data")),
+          );
+
+          // The JSON form carries the data and gives it back.
+          const encoded = yield* Effect.fromResult(codec.encodeRedacted(redactedItem));
+          const [json] = encoded.body;
+          const jsonData: unknown = Predicate.isObject(json) ? json.data : undefined;
+
+          assert.deepStrictEqual(jsonData, landedKeptData);
+
+          const decoded = yield* Effect.fromResult(
+            // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+            codec.decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+          );
+          const [again] = decoded.body;
+
+          assert.isTrue(isLandedModel(again));
+          assert.deepStrictEqual(isLandedModel(again) ? again.data : undefined, landedKeptData);
+
+          // The Root carries the kept attribute under the module's own: the module's
+          // data-response stands, no part carries data-note, and the marker is plate's.
+          const { html } = yield* Effect.fromResult(
+            plate.render(decoded, configuration, { instance: "q1" }),
+          );
+
+          assert.match(
+            html,
+            new RegExp(`<div [^>]*data-slot="${landedOwner}"[^>]*data-note="x"[^>]*>`, "u"),
+          );
+          assert.include(html, 'data-response="RESPONSE"');
+          assert.notInclude(html, 'data-response="mine"');
+          assert.notInclude(html, 'data-slot="mine"');
+          assert.notInclude(html, "data-qti-z");
+          assert.lengthOf(html.match(/data-note=/gu) ?? [], 1);
+        }),
+        recorder,
+      );
+    },
   );
 
   it.effect(

@@ -3,13 +3,14 @@ import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
-import type { Element, Node } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
 import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions, isStubbed } from "#plate/model/interactions.ts";
 import type { ModelOf, Modules } from "#plate/model/interactions.ts";
+import { buildItem } from "#plate/model/item.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -4395,4 +4396,158 @@ describe("redactItem and payload on a module's container", () => {
       interactionsIn(payload(redacted, answering).body).map((interaction) => interaction.response),
     );
   });
+});
+
+/**
+ * An item whose body is one `qti-gap-match-interaction`, an interaction a module parses, bound to
+ * a multiple directed-pair response, with one gap text and one gap, its root carrying the author's
+ * attributes given.
+ *
+ * @param attributes The root's attributes beside `response-identifier`.
+ * @returns The document at `items/data.xml`.
+ */
+const gapMatchItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(
+    "items/data.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "data"), attr("title", "Data")],
+      [
+        el(
+          "qti-response-declaration",
+          [
+            attr("base-type", "directedPair"),
+            attr("cardinality", "multiple"),
+            attr("identifier", "RESPONSE"),
+          ],
+          [],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "qti-gap-match-interaction",
+              [attr("response-identifier", "RESPONSE"), ...attributes],
+              [
+                el("qti-gap-text", [attr("identifier", "A")], [sourceText("ant")]),
+                el("p", [], [sourceText("It was "), el("qti-gap", [attr("identifier", "G1")])]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * The author's `data-*` attribute {@link gapMatchItem}'s root carries in these tests, which plate
+ * never writes itself.
+ */
+const note: SourceAttribute = attr("data-note", "x");
+
+/**
+ * List every element of some nodes, in document order, the elements inside them included.
+ *
+ * @param nodes The nodes.
+ * @returns The elements.
+ */
+const elementsIn = (nodes: readonly Node[]): readonly Element[] =>
+  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsIn(node.children)] : []));
+
+/**
+ * Render a built item and give its Gap Match Root, the element marked `gap-match-interaction`.
+ *
+ * @param built The item.
+ * @returns The Root's attributes.
+ */
+const rootAttributesOf = (built: Item): Effect.Effect<Attributes, unknown> =>
+  Effect.gen(function* gapMatchRoot() {
+    const configuration = yield* configure({});
+    const { html } = yield* Effect.fromResult(
+      render(redactItem(built), configuration, { instance }),
+    );
+    const root = elementsIn(parseHtml(html)).find(
+      (element) => element.attrs["data-slot"] === "gap-match-interaction",
+    );
+
+    assert.isDefined(root, "the HTML holds no Gap Match Root");
+    assert.lengthOf(
+      html.match(/data-note=/gu) ?? [],
+      root?.attrs["data-note"] === undefined ? 0 : 1,
+    );
+
+    return root?.attrs ?? {};
+  });
+
+describe("an author's data-* on a module's interaction root (D24)", () => {
+  it.effect("[W0-AU.2] the payload node carries the data the module's redact never saw", () =>
+    Effect.gen(function* carriesData() {
+      const built = yield* Effect.fromResult(buildItem(gapMatchItem([note])));
+      const [node] = payload(redactItem(built), answering).body;
+
+      if (node?.kind !== "gap-match") {
+        assert.fail(`the payload holds a ${node?.kind ?? "nothing"}, not the Gap Match`);
+      }
+
+      // The data is the hub's copy of the model's, beside the payload the module's redact gave,
+      // which carries none of it.
+      assert.deepStrictEqual(node.data, [{ name: "data-note", value: "x" }]);
+      assert.isFalse(Object.hasOwn(node.payload, "data"));
+
+      const [bare] = payload(
+        redactItem(yield* Effect.fromResult(buildItem(gapMatchItem([])))),
+        answering,
+      ).body;
+
+      assert.strictEqual(bare?.kind, "gap-match");
+      assert.isFalse("data" in (bare ?? {}));
+    }),
+  );
+
+  it.effect("[W0-AU.2] the Root carries the kept attribute under the module's own attributes", () =>
+    Effect.gen(function* rootCarries() {
+      // `data-mode` is the Root state the module's connect writes: the author's value for it
+      // never stands over the module's.
+      const built = yield* Effect.fromResult(
+        buildItem(gapMatchItem([note, attr("data-mode", "mine")])),
+      );
+      const root = yield* rootAttributesOf(built);
+
+      assert.strictEqual(root["data-note"], "x");
+      assert.strictEqual(root["data-mode"], "answering");
+      assert.strictEqual(root["data-slot"], "gap-match-interaction");
+    }),
+  );
+
+  it.effect("[W0-AU.2] the Root's own guard drops a reserved name a payload carries", () =>
+    Effect.gen(function* rootGuard() {
+      const built = yield* Effect.fromResult(buildItem(gapMatchItem([])));
+      const [node] = built.body;
+
+      if (node?.kind !== "gap-match") {
+        assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the Gap Match`);
+      }
+
+      // A payload no model built, carrying reserved names the model dispatch never keeps.
+      const forged: Item = {
+        ...built,
+        body: [
+          {
+            ...node,
+            data: [
+              { name: "data-slot", value: "mine" },
+              { name: "data-qti-z", value: "1" },
+              { name: "data-note", value: "x" },
+            ],
+          },
+        ],
+      };
+      const root = yield* rootAttributesOf(forged);
+
+      assert.strictEqual(root["data-slot"], "gap-match-interaction");
+      assert.isFalse(Object.hasOwn(root, "data-qti-z"));
+      assert.strictEqual(root["data-note"], "x");
+    }),
+  );
 });

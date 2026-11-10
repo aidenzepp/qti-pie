@@ -442,12 +442,19 @@ export interface ExtendedTextPayload extends TextControlPayload {
 }
 
 /**
- * The payload node of a kind plate parses through an interaction module: the kind, and the node
- * its module's `redact` gave, which only its module's `render` reads.
+ * The payload node of a kind plate parses through an interaction module: the kind, the node its
+ * module's `redact` gave, which only its module's `render` reads, and the author's `data-*` the
+ * model node carries, which the hub copies past the module's `redact`.
  *
  * @template K The kind.
  */
 export interface ModulePayloadOf<K extends ModuleKind> {
+  /**
+   * The author's non-reserved `data-*` on the interaction's root (`ModuleInteraction.data` in
+   * `#plate/interactions/contract.ts`), copied by the hub, never by the module's `redact`; the
+   * Root write puts each onto the module's Root. Absent when the model node carries none.
+   */
+  readonly data?: readonly AttributePayload[];
   readonly kind: K;
   readonly payload: PayloadOf<K>;
 }
@@ -1324,7 +1331,13 @@ const copyKit = (build: Build): ContentCopyKit => ({ nodes: (nodes) => copyNodes
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   if (isStubbed(node)) {
-    return stubSteps(node).redact(redactKit(node, build));
+    const copied = stubSteps(node).redact(redactKit(node, build));
+
+    // The author's data-* on the root travel hub-side (decision D24): the module's redact is
+    // handed the node and gives a payload without them; the hub copies them beside it.
+    return node.data === undefined
+      ? copied
+      : { ...copied, data: node.data.map(({ name, value }) => ({ name, value })) };
   }
 
   switch (node.kind) {

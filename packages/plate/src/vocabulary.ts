@@ -420,6 +420,13 @@ export const messageAttributes = [
 ] as const;
 
 /**
+ * The `data-*` names plate reserves for itself on a part (`reservedDataNames`, `reservedDataPrefix`
+ * and `isReservedData`), re-exported from the emitter's part table, which owns them, so the model
+ * hub reads the one table the Root write consults without the emitter loading these tables.
+ */
+export { isReservedData, reservedDataNames, reservedDataPrefix } from "#plate/emit/parts.ts";
+
+/**
  * The two URI prefixes of QTI 3's response-processing templates (reading 9.23's shared part).
  *
  * A built-in template is either prefix followed by its name, with or without `.xml`.

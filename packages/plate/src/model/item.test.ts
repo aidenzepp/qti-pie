@@ -1015,6 +1015,28 @@ const extendedTextItem = (
   });
 
 /**
+ * An item whose body is one `qti-gap-match-interaction`, an interaction a module parses, bound to
+ * a multiple directed-pair response, with one gap text and one gap.
+ *
+ * @param attributes The interaction's attributes beside `response-identifier`.
+ * @returns The document at `items/test.xml`.
+ */
+const gapMatchItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
+  item({
+    body: [
+      el(
+        "qti-gap-match-interaction",
+        [attr("response-identifier", "RESPONSE"), ...attributes],
+        [
+          el("qti-gap-text", [attr("identifier", "A")], [text("ant")]),
+          el("p", [], [text("It was "), el("qti-gap", [attr("identifier", "G1")])]),
+        ],
+      ),
+    ],
+    declarations: [declaration("qti-response-declaration", "RESPONSE", "directedPair", "multiple")],
+  });
+
+/**
  * Read an item written as XML text, at `items/test.xml`.
  *
  * @param xml The document's text.
@@ -2636,6 +2658,45 @@ describe("buildItem", () => {
           landed ? [] : [{ feature: "qti-portable-custom-interaction", path, shown: "notice" }],
         );
       }),
+  );
+
+  it.effect(
+    "[W0-AU.2] the model holds an interaction root's non-reserved data-* on its node, reserved ones dropped",
+    () =>
+      Effect.gen(function* holdsRootData() {
+        const path = `${body}/qti-gap-match-interaction`;
+        const built = yield* Effect.fromResult(
+          buildItem(
+            gapMatchItem([
+              attr("data-note", "x"),
+              attr("data-slot", "mine"),
+              attr("data-qti-z", "1"),
+            ]),
+          ),
+        );
+        const [node] = built.body;
+
+        if (node?.kind !== "gap-match") {
+          assert.fail(`the body holds a ${node?.kind ?? "nothing"}, not the Gap Match`);
+        }
+
+        assert.deepStrictEqual(node.data, [{ name: "data-note", value: "x" }]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "attribute:data-slot", path, shown: "mark" },
+          { feature: "attribute:data-qti-z", path, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect("[W0-AU.2] a root with no author data-* has no data key", () =>
+    Effect.gen(function* noDataKey() {
+      const built = yield* Effect.fromResult(buildItem(gapMatchItem([])));
+      const [node] = built.body;
+
+      assert.strictEqual(node?.kind, "gap-match");
+      assert.isFalse("data" in (node ?? {}));
+      assert.deepStrictEqual(built.unsupported, []);
+    }),
   );
 
   it.effect(

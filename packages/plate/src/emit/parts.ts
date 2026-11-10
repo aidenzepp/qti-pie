@@ -19,6 +19,35 @@ import type { sliderModule } from "#plate/interactions/slider.ts";
 import type { uploadModule } from "#plate/interactions/upload.ts";
 
 /**
+ * The `data-*` names plate writes on a part for its own use: the part marker, the area and
+ * position of a placed part, and the empty state. An author's attribute of one of these names
+ * never passes through to the HTML; the hub drops it and marks `attribute:<name>`.
+ */
+export const reservedDataNames: ReadonlySet<string> = new Set([
+  "data-slot",
+  "data-area",
+  "data-position",
+  "data-empty",
+]);
+
+/**
+ * The prefix of the `data-*` names plate reserves beyond {@link reservedDataNames}: a name under it
+ * is plate's, whatever follows.
+ */
+export const reservedDataPrefix = "data-qti-";
+
+/**
+ * Whether a `data-*` name is one plate reserves: one of {@link reservedDataNames} or a name under
+ * {@link reservedDataPrefix}. The one table every hub and the Root write consult;
+ * `#plate/vocabulary.ts` re-exports it beside its other tables.
+ *
+ * @param name The attribute's name, as the author wrote it.
+ * @returns Whether plate keeps the name for itself.
+ */
+export const isReservedData = (name: string): boolean =>
+  reservedDataNames.has(name) || name.startsWith(reservedDataPrefix);
+
+/**
  * The part keys of the four interactions plate renders, of the item chrome and of the test chrome,
  * a part's name with a lower-case first letter.
  */
@@ -193,7 +222,9 @@ export interface PartRow {
    *
    * `parts.test.ts` renders every row to hold this list equal to what the connect function
    * computes, the Option's and Placeholder's `disabled` and `hidden` aside; the merge itself
-   * writes whatever the props carry.
+   * writes whatever the props carry. An author's `data-*` passed through to a module's Root
+   * (`ModuleInteraction.data` in `#plate/interactions/contract.ts`) is neither merged nor a
+   * default: the Root write adds it after the merge, under the module's own attributes.
    */
   readonly merged: readonly string[];
   readonly part: PartKey;

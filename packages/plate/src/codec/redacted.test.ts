@@ -9,7 +9,10 @@ import type {
 } from "#plate/codec/redacted.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { SourceAttribute, SourceDocument } from "#plate/document/source.ts";
 import { isStubbed, mapRegions, regionsOf } from "#plate/model/interactions.ts";
+import { buildItem } from "#plate/model/item.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -1890,5 +1893,88 @@ describe("the codec on a module's container", () => {
         assert.strictEqual(error._tag, "InvalidRedacted");
         assert.strictEqual(error.stage, "encode");
       }),
+  );
+});
+
+/**
+ * An item whose body is one `qti-gap-match-interaction`, an interaction a module parses, bound to
+ * a multiple directed-pair response, with one gap text and one gap, its root carrying the author's
+ * attributes given.
+ *
+ * @param attributes The root's attributes beside `response-identifier`.
+ * @returns The document at `items/data.xml`.
+ */
+const gapMatchItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(
+    "items/data.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "data"), attr("title", "Data")],
+      [
+        el(
+          "qti-response-declaration",
+          [
+            attr("base-type", "directedPair"),
+            attr("cardinality", "multiple"),
+            attr("identifier", "RESPONSE"),
+          ],
+          [],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "qti-gap-match-interaction",
+              [attr("response-identifier", "RESPONSE"), ...attributes],
+              [
+                el("qti-gap-text", [attr("identifier", "A")], [sourceText("ant")]),
+                el("p", [], [sourceText("It was "), el("qti-gap", [attr("identifier", "G1")])]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("an author's data-* on a module's interaction root (D24)", () => {
+  it.effect("[W0-AU.2] the redacted JSON round-trips the data field and omits it when absent", () =>
+    Effect.gen(function* roundTripsData() {
+      const kept = [{ name: "data-note", value: "x" }];
+      const noted = redact(
+        acceptForTest(yield* Effect.fromResult(buildItem(gapMatchItem([attr("data-note", "x")])))),
+      );
+      const encoded = yield* Effect.fromResult(encodeRedacted(noted));
+      const [node] = encoded.body;
+
+      if (node?.kind !== "gap-match") {
+        assert.fail(`the JSON form holds a ${node?.kind ?? "nothing"}, not the Gap Match`);
+      }
+
+      assert.deepStrictEqual(node.data, kept);
+
+      const decoded = yield* Effect.fromResult(
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- the round trip is the JSON a host sends to a page, which a structured clone does not take.
+        decodeRedacted(JSON.parse(JSON.stringify(encoded))),
+      );
+      const [again] = decoded.body;
+
+      assert.strictEqual(again?.kind, "gap-match");
+      assert.deepStrictEqual(again?.kind === "gap-match" ? again.data : undefined, kept);
+
+      const bare = redact(acceptForTest(yield* Effect.fromResult(buildItem(gapMatchItem([])))));
+      const [bareNode] = (yield* Effect.fromResult(encodeRedacted(bare))).body;
+
+      assert.strictEqual(bareNode?.kind, "gap-match");
+      assert.isFalse("data" in (bareNode ?? {}));
+
+      const lacking = yield* failureOf(
+        decodeRedacted({ ...encoded, body: [{ ...node, data: [{ name: "data-note" }] }] }),
+      );
+
+      assert.strictEqual(lacking._tag, "InvalidRedacted");
+      assert.strictEqual(lacking.stage, "decode");
+    }),
   );
 });
