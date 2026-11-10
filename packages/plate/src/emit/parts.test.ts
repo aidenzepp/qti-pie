@@ -22,23 +22,7 @@ import {
   splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
-import { associateModule } from "#plate/interactions/associate.ts";
-import { drawingModule } from "#plate/interactions/drawing.ts";
-import { endAttemptModule } from "#plate/interactions/end-attempt.ts";
-import { gapMatchModule } from "#plate/interactions/gap-match.ts";
-import { graphicAssociateModule } from "#plate/interactions/graphic-associate.ts";
-import { graphicGapMatchModule } from "#plate/interactions/graphic-gap-match.ts";
-import { graphicOrderModule } from "#plate/interactions/graphic-order.ts";
-import { hotspotModule } from "#plate/interactions/hotspot.ts";
-import { hottextModule } from "#plate/interactions/hottext.ts";
-import { matchModule } from "#plate/interactions/match.ts";
-import { mediaModule } from "#plate/interactions/media.ts";
-import { orderModule } from "#plate/interactions/order.ts";
-import { portableCustomModule } from "#plate/interactions/portable-custom.ts";
-import { positionObjectModule } from "#plate/interactions/position-object.ts";
-import { selectPointModule } from "#plate/interactions/select-point.ts";
-import { sliderModule } from "#plate/interactions/slider.ts";
-import { uploadModule } from "#plate/interactions/upload.ts";
+import { modules } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -113,31 +97,23 @@ type ShippedInteraction =
   | TextEntryInteraction;
 
 /**
- * Every interaction module by its part-table owner and whether it is implemented: the four plate
- * renders, whose rows the table holds, and each stub module beside the contract.
+ * The owners of the four interactions plate renders, whose rows the part table holds.
+ */
+const shippedOwners = [
+  "choice-interaction",
+  "extended-text-interaction",
+  "inline-choice-interaction",
+  "text-entry-interaction",
+] as const;
+
+/**
+ * Every interaction by its part-table owner and whether it is implemented: the four plate renders,
+ * and each module of the table of modules (`#plate/model/interactions.ts`) as its own `implemented`
+ * says, so a module that lands changes no line here.
  */
 const interactionModules: readonly { readonly implemented: boolean; readonly owner: string }[] = [
-  { implemented: true, owner: "choice-interaction" },
-  { implemented: true, owner: "extended-text-interaction" },
-  { implemented: true, owner: "inline-choice-interaction" },
-  { implemented: true, owner: "text-entry-interaction" },
-  associateModule,
-  drawingModule,
-  endAttemptModule,
-  gapMatchModule,
-  graphicAssociateModule,
-  graphicGapMatchModule,
-  graphicOrderModule,
-  hotspotModule,
-  hottextModule,
-  matchModule,
-  mediaModule,
-  orderModule,
-  portableCustomModule,
-  positionObjectModule,
-  selectPointModule,
-  sliderModule,
-  uploadModule,
+  ...shippedOwners.map((owner) => ({ implemented: true, owner })),
+  ...Object.values(modules),
 ];
 
 /**
@@ -274,21 +250,16 @@ describe("partTable", () => {
 });
 
 describe("the interaction modules", () => {
-  it("give the table rows for each implemented module, and none for a stub", () => {
+  it("hold the table's rows for the four shipped kinds only, and give a module's rows in the module: one for each part of an implemented module, none for a stub", () => {
     const owners: ReadonlySet<string> = new Set(partTable.map((row) => row.interaction));
-    const implemented = interactionModules.filter((module) => module.implemented);
 
-    assert.deepStrictEqual(
-      implemented.map((module) => module.owner),
-      [
-        "choice-interaction",
-        "extended-text-interaction",
-        "inline-choice-interaction",
-        "text-entry-interaction",
-      ],
-    );
-    for (const module of interactionModules) {
-      assert.strictEqual(owners.has(module.owner), module.implemented, module.owner);
+    for (const owner of shippedOwners) {
+      assert.isTrue(owners.has(owner), owner);
+    }
+
+    for (const module of Object.values(modules)) {
+      assert.isFalse(owners.has(module.owner), module.owner);
+      assert.strictEqual(Object.keys(module.parts).length > 0, module.implemented, module.owner);
     }
   });
 
