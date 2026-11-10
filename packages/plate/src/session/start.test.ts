@@ -3279,7 +3279,7 @@ describe("a package whose test reads a numbered name through an item ref", () =>
   );
 
   it.effect(
-    "align-54 r11 numbered reading counted once P1-1: a test with its own a and a section document holding a.2 marks its processing that reads a.2.SCORE by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r11 numbered reading counted once P1-1: a test with its own a and a section document holding a.2 holds its processing that reads a.2.SCORE, as the delivered test places that section document and a.2 is its own item ref, so the processing runs unmarked and end-part gives TOTAL item a.2's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* numberedThroughSection() {
         const { closed, delivery } = yield* numberedRun({
@@ -3298,13 +3298,12 @@ describe("a package whose test reads a numbered name through an item ref", () =>
           ),
         });
 
-        assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" });
-        assert.isTrue(
-          delivery.test.test.unsupported.some(
-            (feature) => feature.feature === "variable:a.2.SCORE",
-          ),
+        assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(
+          delivery.test.test.unsupported.map((feature) => feature.feature),
+          [],
         );
-        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0));
+        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7));
       }),
   );
 
@@ -3361,8 +3360,8 @@ const moreRefXml = '<qti-assessment-section-ref identifier="referred" href="sect
 /**
  * The cases N1 names: a name read in a test that holds its own item ref `a`, part `part` and
  * section `section`, and the item ref of the section document that gives the name's one resolving
- * reading, which the session does not deliver. Through the test's own prefix, each name's rest is
- * itself dotted, so it names no variable of the test's own items.
+ * reading, which the delivered test places and so holds. Through the test's own prefix, each
+ * name's rest is itself dotted, so it names no variable of the test's own items.
  */
 const ownPrefixCases: readonly (readonly [name: string, sectionRef: string])[] = [
   ["a.b.SCORE", "a.b"],
@@ -3398,7 +3397,7 @@ const markedFeatures = (delivery: Delivery): readonly string[] =>
 
 describe("a package whose test reads a dotted name through its own prefix and a section document", () => {
   it.effect(
-    "align-54 r12 own prefix through a section document N1: outcome processing that sets TOTAL from a.b.SCORE, section.x.SCORE, part.x.SCORE or a.SCORE.SCORE, whose one resolving reading is a section document's item ref, is marked by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r12 own prefix through a section document N1: outcome processing that sets TOTAL from a.b.SCORE, section.x.SCORE, part.x.SCORE or a.SCORE.SCORE, whose one resolving reading is a section document's item ref, is held, as the delivered test places that section document, so it runs unmarked and end-part gives TOTAL that item ref's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* marksOwnPrefixReads() {
         for (const [name, sectionRef] of ownPrefixCases) {
@@ -3411,17 +3410,17 @@ describe("a package whose test reads a dotted name through its own prefix and a 
             ),
           });
 
-          assert.strictEqual(verdict, "accepted-with-unsupported", name);
-          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
-          assert.include(markedFeatures(delivery), `variable:${name}`, name);
-          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(verdict, "accepted", name);
+          assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs", name);
+          assert.notInclude(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7), name);
           assert.strictEqual(closed.status, "closed", name);
         }
       }),
   );
 
   it.effect(
-    "align-54 r12 own prefix through a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    "align-54 r12 own prefix through a section document N1: item ref c's template default of T that reads such a name is held, as the delivered test places that section document, so startTest succeeds on a fresh session and c's T is that item ref's SCORE, 7, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes (issue m3f-03b)",
     () =>
       Effect.gen(function* leavesOwnPrefixDefaults() {
         const configuration = yield* configure({});
@@ -3455,11 +3454,19 @@ describe("a package whose test reads a dotted name through its own prefix and a 
                 (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
               );
             }
-            const presented = session.items.find((item) => item.ref === "c");
+            const at =
+              session.items.find((item) => item.ref === "c")?.sequenceIndex ??
+              assert.fail(`${label} delivers no item c`);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
-            assert.include(markedFeatures(delivery), `variable:${name}`, label);
-            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(verdict.verdict, "accepted", label);
+            assert.notInclude(markedFeatures(delivery), `variable:${name}`, label);
+            // The default is held, not left out: the section document's item ref is the delivered
+            // test's own, and its SCORE defaults to 7.
+            assert.deepStrictEqual(
+              templatesAt(presentedAt(delivery, session, at, after(500)), at)["T"],
+              float(7),
+              label,
+            );
             assert.strictEqual(closed.status, "closed", label);
           }
         }
@@ -3539,7 +3546,7 @@ const unscoredItemXml = [
  * One case N1's residual names: a name the test reads whose reading through the test's own item
  * ref counts in the test document alone, though that ref's item, {@link unscoredItemXml}, declares
  * no `SCORE`, so the name's one counting reading is the section document's item ref, which names
- * `i2`, which the session does not deliver.
+ * `i2`, which the delivered test places and so holds.
  */
 interface CountingCase {
   /**
@@ -3613,7 +3620,7 @@ const countingItems = (
 
 describe("a package whose test reads a name whose one counting reading is a section document's", () => {
   it.effect(
-    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is marked by name, and end-part leaves TOTAL at its default 0",
+    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is held, as the delivered test places that section document, so it runs unmarked and end-part gives TOTAL that item ref's SCORE, 7 (issue m3f-03b)",
     () =>
       Effect.gen(function* marksCountingReads() {
         for (const { declarations, name, own, placed } of countingCases) {
@@ -3626,17 +3633,17 @@ describe("a package whose test reads a name whose one counting reading is a sect
             ),
           });
 
-          assert.strictEqual(verdict, "accepted-with-unsupported", name);
-          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
-          assert.include(markedFeatures(delivery), `variable:${name}`, name);
-          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(verdict, "accepted", name);
+          assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs", name);
+          assert.notInclude(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7), name);
           assert.strictEqual(closed.status, "closed", name);
         }
       }),
   );
 
   it.effect(
-    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is held, as the delivered test places that section document, so startTest succeeds on a fresh session and c's T is that item ref's SCORE, 7, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes (issue m3f-03b)",
     () =>
       Effect.gen(function* leavesCountingDefaults() {
         const configuration = yield* configure({});
@@ -3670,11 +3677,19 @@ describe("a package whose test reads a name whose one counting reading is a sect
                 (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
               );
             }
-            const presented = session.items.find((item) => item.ref === "c");
+            const at =
+              session.items.find((item) => item.ref === "c")?.sequenceIndex ??
+              assert.fail(`${label} delivers no item c`);
 
-            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
-            assert.include(markedFeatures(delivery), `variable:${name}`, label);
-            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(verdict.verdict, "accepted", label);
+            assert.notInclude(markedFeatures(delivery), `variable:${name}`, label);
+            // The default is held, not left out: the section document's item ref is the delivered
+            // test's own, and its SCORE defaults to 7.
+            assert.deepStrictEqual(
+              templatesAt(presentedAt(delivery, session, at, after(500)), at)["T"],
+              float(7),
+              label,
+            );
             assert.strictEqual(closed.status, "closed", label);
           }
         }

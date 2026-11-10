@@ -186,6 +186,7 @@ import { buildTest, withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, Test, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { assembleTest } from "#plate/package/assemble.ts";
+import type { PassedLimit } from "#plate/package/assemble.ts";
 import { includeTargets, performIncludes } from "#plate/package/include.ts";
 import type { IncludeCount, Included, ReferenceCensus } from "#plate/package/include.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
@@ -239,8 +240,11 @@ export interface PackageTest {
    * 5.2), each path segment's percent escapes decoded, a malformed escape left as written, then its
    * dot segments removed, and its query and fragment set aside. A test `check` accepts holds no
    * `xml:base` above an item ref, as no test element declares one (reading 90), so for the test's
-   * own item refs the base is the test's location on both sides; a placed section document's item
-   * refs agree with `startTest` when its folder stands as deep in the package as the test's.
+   * own item refs the base is the test's location on both sides. A placed section document's item
+   * ref is resolved against the document that writes it, wherever that stands in the package, and
+   * the assembled test writes its `href` as the path of that item relative to the test's location
+   * (`#plate/package/assemble.ts`; issue m3f-03b), so `startTest` finds the same item for every
+   * item ref of the assembled test, placed or not.
    */
   readonly items: ReadonlyMap<string, Accepted>;
   /**
@@ -6080,17 +6084,16 @@ const judgeTest = (
    * Report whether a name the test's processing reads names, through an item ref, part or section,
    * a variable the engine holds no value of: the test does not hold it whole, and its one counting
    * reading reads a context variable, one its item declares in a `qti-context-declaration` or the
-   * built-in `QTI_CONTEXT` (reading 106), reads through an item ref that names an LTI link, whose
-   * variables no session holds, or reads through a prefix a section document writes, whose items
-   * no session delivers.
+   * built-in `QTI_CONTEXT` (reading 106), or reads through an item ref that names an LTI link,
+   * whose variables no session holds.
    *
-   * The test model reads no item, so it holds a name whose reading through the test's own part,
-   * section or item ref counts in the test document alone (`isPrefixedHeld` in
-   * `#plate/model/test.ts`): `a.2.SCORE` through an own `a` a selection with replacement can
-   * repeat, or `x.y.SCORE` through an own `x.y`. Where that ref's item declares no such variable,
-   * the package counts only the section document's `a.2` or `x`, so the engine would find no
-   * reading of it. A name the test model already marks, as it marks `I1.SCORE` through a section
-   * document's `I1`, is marked once ({@link withUnheldReads}).
+   * A read through a prefix a section document writes is held, not marked: every section document
+   * the reach holds is one the test places, and the package delivers the test assembled from them
+   * ({@link deliveryOf}), with each test it cannot assemble within the limits of the delivery
+   * refused, so an item ref a placed section document writes is the delivered test's own, its item
+   * is delivered and the engine holds its variables, as it holds the test's own item refs'
+   * (S-9; issue m3f-03b). A test opened alone places nothing and marks such a read in the test
+   * model (`referencesSection` in `#plate/model/test.ts`).
    *
    * @param name The name.
    * @returns Whether it does.
@@ -6106,9 +6109,7 @@ const judgeTest = (
       return (
         only !== undefined &&
         others.length === 0 &&
-        (only.variable.kind === "context" ||
-          itemRefs.get(only.prefix)?.link === true ||
-          (written.get(only.prefix)?.document ?? testPath) !== testPath)
+        (only.variable.kind === "context" || itemRefs.get(only.prefix)?.link === true)
       );
     }).includes(true);
   };
@@ -6434,6 +6435,31 @@ interface Delivery {
 }
 
 /**
+ * Construct the `assembly-limit` refusal of a test whose assembled document passes a limit of the
+ * delivery (`assembleTest` in `#plate/package/assemble.ts`; S-9, P-2; issue m3f-03b, GitHub issue
+ * #186): `check` names the limit, `delivery-depth`, `delivery-instances` or `delivery-size`, and
+ * its detail the limit's value and the count `reached` when the copy stopped. It sits at the test
+ * document, where the judging's own `assembly-limit` refusal sits at the package.
+ *
+ * @param document The test document's location.
+ * @param passed The limit the assembly passed.
+ * @returns The refusal.
+ */
+const deliveryLimit = (document: string, passed: PassedLimit): Refusal =>
+  new Refusal({
+    detail: {
+      check: `delivery-${passed.limit}`,
+      limit: String(passed.allowed),
+      reached: String(passed.reached),
+    },
+    document,
+    location: { kind: "document" },
+    readerRule: Option.none(),
+    rule: "assembly-limit",
+    suggestion: Option.none(),
+  });
+
+/**
  * Give what a test is delivered from, assembled from the section documents it places
  * (`assembleTest` in `#plate/package/assemble.ts`; S-9 Section References, P-2 Nested Section
  * Instances; issue m3f-03): a test whose assembly places nothing is delivered from its own
@@ -6443,78 +6469,84 @@ interface Delivery {
  * `buildTest` over it, so every path the model and the test-feature modules record is the
  * assembled document's, and `PackageTest.items` holds the item of every item ref the assembled test
  * holds, each resolved against the document that writes it, as the judging resolved it
- * ({@link structureIn}). The test's LTI links are then every item ref of the assembled document
+ * ({@link structureIn}). The assembly writes each placed item ref's `href` as the path of that item
+ * relative to the test document, so `startTest`, which resolves every item ref against the test's
+ * location, finds the item `PackageTest.items` holds for it wherever the placed section document
+ * stands (issue m3f-03b). The test's LTI links are then every item ref of the assembled document
  * that names one, at its path there, and each read the judging found in the test document is moved
  * to its path in the assembled document.
  *
  * An assembled document that nests deeper than the shared reader lets any document nest
- * (`assemblyDepthLimit`, 256 elements open at once), or that holds more placements of section
+ * (`assemblyDepthLimit`, 256 elements open at once), that holds more placements of section
  * documents, every instance counted, than the judging's assembly limit counts for a test
- * (`assemblyInstanceLimit`, 2,048), is not built: the test model and the session recurse over a
- * document's elements within the reader's depth, and a chain of documents that each place the next
- * twice multiplies its instances past any session, so the test is delivered as a test opened alone
- * is, from its own document with its section refs marked and nothing placed, a stated limit of the
- * delivery. The package's judging, which places and judges every section document within the
+ * (`assemblyInstanceLimit`, 2,048), or that holds more elements than `assemblyElementLimit`
+ * (262,144) is not built: the test model and the session recurse over a document's elements within
+ * the reader's depth, a chain of documents that each place the next twice multiplies its instances
+ * past any session, and a few large documents placed many times copy every element once for each
+ * placement. The test is then refused `assembly-limit`, with the limit passed as its `check`
+ * ({@link deliveryLimit}), and no test is ever delivered unassembled once its assembly places
+ * something. The package's judging, which places and judges every section document within the
  * assembly limit, is not affected.
  *
  * @param test The test, as its document's own verdict accepted it.
  * @param source The test's document.
+ * @param path The test document's path from the package's root.
  * @param judged What judging the test gave: its assembly, its own item refs' items, its own LTI
  *   links and its reads.
  * @param documents The package's documents the reader read, by path.
- * @returns What the test is delivered from.
+ * @returns What the test is delivered from, or the `assembly-limit` refusal at the test document
+ *   when its assembly passes a limit of the delivery.
  * @throws {AssemblyDefect} When the test model refuses the assembled document, which a checked
  *   package cannot cause.
  */
 const deliveryOf = (
   test: AcceptedTest,
   source: SourceDocument,
+  path: string,
   judged: Pick<TestJudgement, "assembly" | "links" | "reads" | "refs">,
   documents: ReadonlyMap<string, SourceDocument>,
-): Delivery => {
+): Result.Result<Delivery, Refusal> => {
   const { children, placements } = judged.assembly;
   const placed = [...children.values()].flat();
-  const own: Delivery = {
-    items: judged.refs,
-    links: judged.links,
-    reads: judged.reads,
-    source,
-    test: test.test,
-  };
   if (placed.length === 0) {
-    return own;
+    return Result.succeed({
+      items: judged.refs,
+      links: judged.links,
+      reads: judged.reads,
+      source,
+      test: test.test,
+    });
   }
 
-  const assembled = Option.getOrUndefined(
-    assembleTest({
-      documents,
-      itemRefs: placements.flatMap((placement) => placement.structure.itemRefs),
-      sectionRefs: placed.map(({ placement, site }) => ({
-        element: site.element,
-        path: placement.path,
-      })),
-      test: source,
-    }),
-  );
-  if (assembled === undefined) {
-    return own;
+  const assembled = assembleTest({
+    documents,
+    itemRefs: placements.flatMap((placement) => placement.structure.itemRefs),
+    sectionRefs: placed.map(({ placement, site }) => ({
+      element: site.element,
+      path: placement.path,
+    })),
+    test: source,
+    testPath: path,
+  });
+  if (Result.isFailure(assembled)) {
+    return Result.fail(deliveryLimit(source.location, assembled.failure));
   }
 
-  const built = buildTest(assembled.document);
+  const built = buildTest(assembled.success.document);
   if (Result.isFailure(built)) {
     throw new AssemblyDefect({ document: source.location, refusal: built.failure });
   }
 
-  return {
-    items: assembled.items,
-    links: assembled.links,
+  return Result.succeed({
+    items: assembled.success.items,
+    links: assembled.success.links,
     reads: judged.reads.map((read) => ({
       ...read,
-      path: assembled.paths.get(read.path) ?? read.path,
+      path: assembled.success.paths.get(read.path) ?? read.path,
     })),
-    source: assembled.document,
+    source: assembled.success.document,
     test: built.success,
-  };
+  });
 };
 
 /**
@@ -6529,7 +6561,9 @@ const deliveryOf = (
  * was built from), and each processing that reads a variable the engine holds no value of is marked
  * (`withUnheldReads`), the outcome processing `marked` and each template default that reads one
  * left out. The test-feature modules then give the test delivered ({@link deliveredTest}): every
- * stub gives it unchanged.
+ * stub gives it unchanged. A test whose assembly passes a limit of the delivery is not delivered:
+ * the package is refused with the test's `assembly-limit` refusal ({@link deliveryOf}), one for
+ * each such test, in the manifest's order.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
@@ -6537,14 +6571,15 @@ const deliveryOf = (
  *   its item refs that name an LTI link, and its reads of a variable the engine holds no value of,
  *   keyed by the test's path.
  * @param location The package's location.
- * @returns The contents.
+ * @returns The contents, or the refusal of each test whose assembly passes a limit of the
+ * delivery.
  */
 const contentsOf = (
   manifest: Manifest,
   documents: ReadonlyMap<string, Document>,
   tests: ReadonlyMap<string, Pick<TestJudgement, "assembly" | "links" | "reads" | "refs">>,
   location: string,
-): PackageContents => {
+): Result.Result<PackageContents, Arr.NonEmptyReadonlyArray<Refusal>> => {
   /**
    * Give the accepted item of the document at a path.
    *
@@ -6565,7 +6600,54 @@ const contentsOf = (
     ),
   );
 
-  return {
+  const delivered = byDocument(
+    pathsOfType(manifest, "imsqti_test_xmlv3p0"),
+    (path) =>
+      Option.all([
+        verdictAt(documents, path).pipe(Option.flatMap(acceptedTest)),
+        Option.fromUndefinedOr(documents.get(path)).pipe(
+          Option.flatMap((document) => Result.getSuccess(document.source)),
+        ),
+      ]).pipe(
+        Option.map(([test, source]): Result.Result<PackageTest, Refusal> => {
+          const judged = tests.get(path);
+          const given: Result.Result<Delivery, Refusal> =
+            judged === undefined
+              ? Result.succeed({ items: new Map(), links: [], reads: [], source, test: test.test })
+              : deliveryOf(test, source, path, judged, sources);
+
+          return given.pipe(
+            Result.map((delivery): PackageTest => {
+              const { links, reads } = delivery;
+              const marked =
+                links.length === 0 && reads.length === 0
+                  ? delivery.test
+                  : withUnheldReads(withLtiLinks(delivery.test, links, delivery.source), reads);
+
+              return {
+                items: new Map(
+                  [...delivery.items].flatMap(([identifier, itemPath]) =>
+                    Option.toArray(
+                      itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
+                    ),
+                  ),
+                ),
+                test: deliveredTest(test, marked, delivery.source, sources),
+              };
+            }),
+          );
+        }),
+      ),
+    (entry) => (Result.isSuccess(entry) ? entry.success.test.document : entry.failure.document),
+  );
+  const [refused, ...alsoRefused] = [...delivered.values()].flatMap((entry) =>
+    Result.isFailure(entry) ? [entry.failure] : [],
+  );
+  if (refused !== undefined) {
+    return Result.fail([refused, ...alsoRefused]);
+  }
+
+  return Result.succeed({
     files: new Set(
       manifest.resources.flatMap((resource) =>
         resource.files.flatMap((file) =>
@@ -6584,43 +6666,13 @@ const contentsOf = (
       (path) => verdictAt(documents, path).pipe(Option.flatMap(acceptedStimulus)),
       (stimulus) => stimulus.document,
     ),
-    tests: byDocument(
-      pathsOfType(manifest, "imsqti_test_xmlv3p0"),
-      (path) =>
-        Option.all([
-          verdictAt(documents, path).pipe(Option.flatMap(acceptedTest)),
-          Option.fromUndefinedOr(documents.get(path)).pipe(
-            Option.flatMap((document) => Result.getSuccess(document.source)),
-          ),
-        ]).pipe(
-          Option.map(([test, source]): PackageTest => {
-            const judged = tests.get(path);
-            const delivery: Delivery =
-              judged === undefined
-                ? { items: new Map(), links: [], reads: [], source, test: test.test }
-                : deliveryOf(test, source, judged, sources);
-            const { links, reads } = delivery;
-            const marked =
-              links.length === 0 && reads.length === 0
-                ? delivery.test
-                : withUnheldReads(withLtiLinks(delivery.test, links, delivery.source), reads);
-
-            return {
-              items: new Map(
-                [...delivery.items].flatMap(([identifier, itemPath]) =>
-                  Option.toArray(
-                    itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
-                  ),
-                ),
-              ),
-              test: deliveredTest(test, marked, delivery.source, sources),
-            };
-          }),
-        ),
-      (entry) => entry.test.document,
+    tests: new Map(
+      [...delivered].flatMap(([document, entry]) =>
+        Result.isSuccess(entry) ? [[document, entry.success] as const] : [],
+      ),
     ),
     version: manifest.version,
-  };
+  });
 };
 
 /**
@@ -6818,7 +6870,11 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   }
 
   const contents = contentsOf(manifest, documents, tests, location);
-  const delivered = [...contents.tests.values()];
+  if (Result.isFailure(contents)) {
+    return { location, refusals: contents.failure, resources, verdict: "refused" };
+  }
+
+  const delivered = [...contents.success.tests.values()];
   const deliveredAt = new Set(delivered.map((entry) => entry.test.document));
   // A delivered test's marks are the delivered test's, built from its assembled document: its
   // own verdict marks each section ref it places, which the delivery holds inline. A section
@@ -6835,7 +6891,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   );
 
   return {
-    accepted: acceptPackage(contents),
+    accepted: acceptPackage(contents.success),
     location,
     resources,
     verdict:
