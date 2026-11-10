@@ -386,6 +386,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         assert.strictEqual(error.kind, "import-refused");
         assert.strictEqual(error.command, "import");
         assert.deepStrictEqual(error.rules, ["attribute-admission"]);
+        assert.strictEqual(error.rule, "attribute-admission");
         assert.strictEqual(error.refused_kind, "some");
         assert.deepStrictEqual(error.laws, [
           {
@@ -438,6 +439,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
               kind: error.kind,
               laws: error.laws,
               refused: error.refused_kind,
+              rule: error.rule,
               rules: error.rules,
               sources: error.sources,
             },
@@ -445,6 +447,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
               kind: "import-refused",
               laws: [{ name, rule, text: Formatter.format(law) }],
               refused: "every",
+              rule,
               rules: [rule],
               sources: [source],
             },
@@ -456,9 +459,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("a refusal of a level above Qti", (it) => {
-  it.effect("under --json prints one error object with the level and its rule", () =>
-    // Oracle: the refusal's own fields, the level and the rule it was built with, and the committed
-    // schema of the error object. A level's refusal names no law of `Qti`, so no laws or sources.
+  it.effect("under --json prints one error object with the level, its rule and its rules", () =>
+    // Oracle: the refusal's own fields, the level, the rule and the rules it was built with, and
+    // the committed schema of the error object. A level's refusal names no law of `Qti`, so no
+    // laws or sources.
     Effect.gen(function* level() {
       const byLevel = ending(
         "import",
@@ -469,6 +473,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal of a level a
                 detail: "the item has no reviewer",
                 level: "Review",
                 rule: "item-reviewed",
+                rules: ["item-reviewed", "item-dated"],
               }),
           ),
         false,
@@ -483,6 +488,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal of a level a
       assert.strictEqual(error.kind, "import-refused");
       assert.strictEqual(error.level, "Review");
       assert.strictEqual(error.rule, "item-reviewed");
+      assert.deepStrictEqual(error.rules, ["item-reviewed", "item-dated"]);
       assert.notProperty(error, "laws");
       assert.notProperty(error, "sources");
     }),
@@ -595,6 +601,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           assert.isTrue(matchesCommittedError(json.stderr), `${label}: ${json.stderr}`);
           assert.strictEqual(error.kind, "import-refused", label);
           assert.deepStrictEqual(error.rules, refusal.rules, label);
+          assert.strictEqual(error.rule, refusal.rules[0], label);
           assert.deepStrictEqual(
             Object.fromEntries(
               Object.entries({ laws, refused_kind: refusedKind, sources, witness }).filter(

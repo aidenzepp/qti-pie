@@ -199,12 +199,12 @@ export const ErrorRefusedKind = RefusedKind;
  *
  * - `rules` is present only when an import was refused: the rules it was refused under, each once,
  *   most specific first, none where the database named only laws the law table does not hold.
- *   `refused_kind`, `laws`, `sources` and `witness` are present only when the database refused it:
- *   how grizzle decided the laws its refusal names, the laws, where each is stated, and whether the
- *   message names the row that broke them (`key` or `row`) or the database named none
- *   (`unreported`).
+ *   `rule` is the first of them, absent where `rules` is empty. `refused_kind`, `laws`, `sources`
+ *   and `witness` are present only when the database refused it: how grizzle decided the laws its
+ *   refusal names, the laws, where each is stated, and whether the message names the row that broke
+ *   them (`key` or `row`) or the database named none (`unreported`).
  * - `level` is present only when a level an app builds above `Qti` refused the package: that level's
- *   name, beside `rule`, the level's own rule.
+ *   name, beside `rules`, the level's own rules, and `rule`, the first of them.
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
  *   rebuild a stored package: the failure's tag.
  */
@@ -220,6 +220,7 @@ export const ErrorObject = Schema.Struct({
   message: Schema.String,
   ok: Schema.Literal(false),
   refused_kind: Schema.optionalKey(ErrorRefusedKind),
+  rule: Schema.optionalKey(Schema.String),
   rules: Schema.optionalKey(Schema.Array(Schema.String)),
   schema_version: Schema.Literal(1),
   sources: Schema.optionalKey(Schema.Array(Schema.String)),

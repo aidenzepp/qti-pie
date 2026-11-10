@@ -5,7 +5,7 @@
  */
 import { schemaNameOf } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { qti, qtiBuilt, qtiLevels } from "#pantry/qti/schema.ts";
+import { qti, qtiBuilt, qtiLevels, qtiOwnLevels } from "#pantry/qti/schema.ts";
 
 describe("qti()", () => {
   it("builds the schema on its first call and returns that value on every call", () => {
@@ -20,9 +20,18 @@ describe("qti()", () => {
     assert.isTrue(qtiBuilt());
   });
 
-  it("names the schema qti, the PostgreSQL schema its level installs into", () => {
-    // Oracle: GOAL G2, `schemaNameOf(Qti)` is `qti`.
-    assert.strictEqual(schemaNameOf(qti()), "qti");
+  it("has two own levels, Qti in the schema qti and QtiQueries over it in qti_queries", () => {
+    // Oracle: GOAL G2 and decision 499: pantry's own levels are the set {qti, qti_queries}, the
+    // stored level's PostgreSQL schema and the top level's, and `qti()` is the top level. A law
+    // either states is `Qti`'s; the level is matched by the name grizzle reports.
+    const levels = qtiOwnLevels();
+
+    assert.deepStrictEqual(levels.map(schemaNameOf), ["qti", "qti_queries"]);
+    assert.deepStrictEqual(
+      levels.map(({ name }) => name),
+      ["Qti", "QtiQueries"],
+    );
+    assert.strictEqual(levels[1], qti());
   });
 
   it("is the top level of qtiLevels(), over its stored level", () => {

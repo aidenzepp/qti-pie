@@ -12,7 +12,7 @@ import {
   TransportFailure,
 } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Option, Result } from "effect";
+import { Config, ConfigProvider, Effect, Option, Result, Runtime } from "effect";
 import {
   describeFailure,
   kindExitCode,
@@ -22,9 +22,12 @@ import {
 } from "#pantry/cli/errors.ts";
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { refusalFieldsOf } from "#pantry/cli/refused.ts";
+import { failRefused, RefusedByLevel } from "#pantry/cli/verdict.ts";
+import { refusalOf } from "#pantry/api/verdict.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
 import { ServedLoadError } from "#pantry/db/served.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
+import { aboveRefusalOf } from "#pantry/import/above.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
 import { WitnessKind } from "#pantry/package/refusal-origin.ts";
@@ -292,6 +295,73 @@ describe("describeFailure, a refused import", () => {
       assert.include(help, "Nothing was written.");
     }
   });
+
+  it.effect(
+    "a refused verdict of a level above Qti fails as RefusedByLevel, with ImportRefused's kind and exit code",
+    () =>
+      // Oracle: decision 483 and pa1-22's brief: a level's refusal reaches the command line as the
+      // `above` case of the verdict (`refusalOf`), and fails as `RefusedByLevel` with its level,
+      // rule, rules and detail, of kind `import-refused` and exit 1, never as a defect of qti
+      // (decision 496, D4: `rule` kept, `rules` added). Bound: one refusal of two checks of one
+      // level; residual: the `qti` case, which keeps `ImportRefused` and is covered by the import
+      // command's own tests.
+      Effect.gen(function* refusedByLevel() {
+        const above = Option.getOrThrow(
+          aboveRefusalOf(
+            {
+              kind: "every",
+              laws: [
+                {
+                  law: {
+                    kind: "above",
+                    law: { kind: "check", name: "CdnOrigin", relation: "CdnUrl" },
+                    level: "Cdn",
+                  },
+                },
+                {
+                  law: {
+                    kind: "above",
+                    law: { kind: "check", name: "CdnData", relation: "CdnUrl" },
+                    level: "Cdn",
+                  },
+                },
+              ],
+            },
+            { kind: "unreported" },
+          ),
+        );
+        // The importer's own refusal, before the verdict maps it, is the same kind and no named
+        // defect of qti (decision 499).
+        assert.deepStrictEqual(identity(above), { exitCode: 1, kind: "import-refused" });
+        assert.isTrue(Option.isNone(namedFailureOf(above)));
+
+        const failure = yield* Effect.flip(failRefused(refusalOf(above)));
+
+        assert.instanceOf(failure, RefusedByLevel);
+        assert.deepStrictEqual(
+          {
+            detail: failure.detail,
+            level: failure.level,
+            rule: failure.rule,
+            rules: failure.rules,
+          },
+          {
+            detail: above.detail,
+            level: "Cdn",
+            rule: "CdnOrigin",
+            rules: ["CdnOrigin", "CdnData"],
+          },
+        );
+
+        const { exitCode, help, kind } = describeFailure(failure);
+
+        assert.deepStrictEqual({ exitCode, kind }, { exitCode: 1, kind: "import-refused" });
+        assert.strictEqual(failure[Runtime.errorExitCode], kindExitCode["import-refused"]);
+        assert.strictEqual(help, failure.help);
+        assert.include(help, "Nothing was written.");
+        assert.isTrue(Option.isNone(namedFailureOf(failure)));
+      }),
+  );
 
   it("a database origin without all of its decision, laws, sources and witness is no refusal's", () => {
     // Oracle: the origin's shape, one case that carries the four facts together or the reader's

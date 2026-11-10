@@ -83,6 +83,20 @@ export const qtiLevels = (): QtiLevels => {
 };
 
 /**
+ * Pantry's own levels, the stored level `Qti` and the level `QtiQueries` over it: the two levels of
+ * {@link qtiLevels}' one build, installed in the PostgreSQL schemas `qti` and `qti_queries`. A law
+ * either one states is `Qti`'s, so a refusal by it names the level `Qti` (decision 499), never a
+ * level above; a level is matched by its `name`, as grizzle reports the level of an `above` law.
+ *
+ * @returns The stored level and the top level, in that order.
+ */
+export const qtiOwnLevels = (): readonly [QtiLevels["base"], QtiSchema] => {
+  const { base, qti: top } = qtiLevels();
+
+  return [base, top];
+};
+
+/**
  * Build the QTI 3.0 schema on the first call and return that one value on every call, so loading
  * this module composes nothing and a caller pays for the composition only when it asks. The value
  * is the top level of {@link qtiLevels}' one build.
