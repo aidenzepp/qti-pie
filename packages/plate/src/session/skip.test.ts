@@ -85,7 +85,11 @@ const declarationOf = ({
  */
 const stubChildren = {
   "graphic-associate": "",
-  "graphic-gap-match": "",
+  "graphic-gap-match": [
+    '<img src="images/map.svg" alt="A map of a farm" width="400" height="300"/>',
+    '<qti-gap-text identifier="A" match-max="1">Wheat field</qti-gap-text>',
+    '<qti-associable-hotspot identifier="H1" shape="rect" coords="40,40,180,130" match-max="1" hotspot-label="The square plot"/>',
+  ].join(""),
   "graphic-order": "",
   hotspot: [
     '<img src="images/map.svg" alt="A map of four plots" width="400" height="300"/>',
