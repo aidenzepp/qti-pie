@@ -364,7 +364,7 @@ const encoders: Record<EncoderClass, (doc: XmlDocument) => Effect.Effect<Uint8Ar
  * The recursive `encode`.
  */
 const recursiveEncode = (doc: XmlDocument, label: string): Effect.Effect<Uint8Array, EncodeError> =>
-  encoders[classify(label).class](doc);
+  encoders[classify(label)](doc);
 
 // The tests.
 

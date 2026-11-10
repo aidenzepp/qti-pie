@@ -81,7 +81,7 @@ const bytesOf: Readonly<
  *   holds a code point the label cannot carry and no reference can write.
  */
 export const encode = (doc: XmlDocument, label: string): Effect.Effect<Uint8Array, EncodeError> => {
-  const { class: encoderClass } = classify(label);
+  const encoderClass = classify(label);
   if (encoderClass === "decode-only") {
     return Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" }));
   }

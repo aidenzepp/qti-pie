@@ -430,7 +430,7 @@ const mismatch = (row: Decodable, label: string, declared: boolean): ReaderRefus
 const decodeRow = (row: Decodable, body: Uint8Array): Effect.Effect<Decoded, ReaderRefusal> => {
   const declared = declaredEncoding(row.units(body));
   const label = Option.getOrElse(declared, () => row.undeclared);
-  const decoder = row.decoders[classify(label).class];
+  const decoder = row.decoders[classify(label)];
 
   return decoder === undefined
     ? Effect.fail(mismatch(row, label, Option.isSome(declared)))

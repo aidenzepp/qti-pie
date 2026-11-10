@@ -64,7 +64,7 @@ describe("classify", () => {
   it.effect("puts every ISO-8859-1 alias in the latin1 class, however it is spelled", () =>
     Effect.sync(() => {
       for (const label of ["latin1", "ISO_8859-1", "iso-8859-1", "L1", "IBM819", "iso-ir-100"]) {
-        assert.deepStrictEqual(classify(label), { canonical: "ISO-8859-1", class: "latin1" });
+        assert.strictEqual(classify(label), "latin1");
       }
     }),
   );
@@ -72,27 +72,24 @@ describe("classify", () => {
   it.effect("puts every US-ASCII alias in the ascii class", () =>
     Effect.sync(() => {
       for (const label of ["US-ASCII", "ascii", "ANSI_X3.4-1968", "ISO646-US", "csASCII"]) {
-        assert.deepStrictEqual(classify(label), { canonical: "US-ASCII", class: "ascii" });
+        assert.strictEqual(classify(label), "ascii");
       }
     }),
   );
 
-  it.effect("gives UTF-8 and each UTF-16 label their own canonical name", () =>
+  it.effect("gives UTF-8 and each UTF-16 label its own class", () =>
     Effect.sync(() => {
-      assert.deepStrictEqual(classify("utf-8"), { canonical: "UTF-8", class: "utf8" });
-      assert.deepStrictEqual(classify("UTF-16"), { canonical: "UTF-16", class: "utf16" });
-      assert.deepStrictEqual(classify("utf-16le"), { canonical: "UTF-16LE", class: "utf16le" });
-      assert.deepStrictEqual(classify("UTF-16BE"), { canonical: "UTF-16BE", class: "utf16be" });
+      assert.strictEqual(classify("utf-8"), "utf8");
+      assert.strictEqual(classify("UTF-16"), "utf16");
+      assert.strictEqual(classify("utf-16le"), "utf16le");
+      assert.strictEqual(classify("UTF-16BE"), "utf16be");
     }),
   );
 
-  it.effect("leaves every other label decode-only and keeps its spelling", () =>
+  it.effect("leaves every other label decode-only", () =>
     Effect.sync(() => {
-      assert.deepStrictEqual(classify("windows-1252"), {
-        canonical: "windows-1252",
-        class: "decode-only",
-      });
-      assert.strictEqual(classify("ISO-8859-9").class, "decode-only");
+      assert.strictEqual(classify("windows-1252"), "decode-only");
+      assert.strictEqual(classify("ISO-8859-9"), "decode-only");
     }),
   );
 });

@@ -24,18 +24,6 @@ export type EncoderClass =
   | "decode-only";
 
 /**
- * A label's canonical name and encoder class.
- */
-export interface LabelClass {
-  /**
-   * The IANA preferred name for a label in the table, and the label itself, as spelled, for any
-   * other label.
-   */
-  readonly canonical: string;
-  readonly class: EncoderClass;
-}
-
-/**
  * The labels XML 1.0 section 4.3.3 lets a document declare that this package can both decode and
  * encode, grouped by the IANA name they share.
  *
@@ -85,12 +73,9 @@ const groups: readonly {
  * The label table keyed by lower-cased label, because XML 1.0 section 4.3.3 compares encoding names
  * case-insensitively.
  */
-const table: ReadonlyMap<string, LabelClass> = new Map(
+const table: ReadonlyMap<string, EncoderClass> = new Map(
   groups.flatMap(({ aliases, canonical, class: encoderClass }) =>
-    [canonical, ...aliases].map((label) => [
-      label.toLowerCase(),
-      { canonical, class: encoderClass },
-    ]),
+    [canonical, ...aliases].map((label) => [label.toLowerCase(), encoderClass]),
   ),
 );
 
@@ -98,11 +83,11 @@ const table: ReadonlyMap<string, LabelClass> = new Map(
  * Classify an XML encoding label by the encoder that can write it.
  *
  * @param label - The label as read from the document, in any letter case.
- * @returns The label's canonical name and encoder class; `decode-only` for a label outside the
- *   table, which `xml/decode.ts` admits only when a `TextDecoder` knows it under that exact name.
+ * @returns The label's encoder class; `decode-only` for a label outside the table, which
+ *   `decode.ts` admits only when a `TextDecoder` knows it under that exact name.
  */
-export const classify = (label: string): LabelClass =>
-  table.get(label.toLowerCase()) ?? { canonical: label, class: "decode-only" };
+export const classify = (label: string): EncoderClass =>
+  table.get(label.toLowerCase()) ?? "decode-only";
 
 /**
  * The highest code point each encoder class writes as a single byte, absent for a class with no
@@ -243,7 +228,7 @@ export const unwritableIn = (doc: XmlDocument, limit: number): Option.Option<Enc
  *   `ascii` document it finds a construct in.
  */
 export const exportCharset = (label: string, doc: XmlDocument): string => {
-  const { class: encoderClass } = classify(label);
+  const encoderClass = classify(label);
   if (encoderClass === "decode-only") {
     return "UTF-8";
   }
