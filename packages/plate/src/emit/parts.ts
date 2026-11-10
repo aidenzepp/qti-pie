@@ -1027,6 +1027,90 @@ export const partTable: readonly PartRow[] = rows.map((row) => ({
 }));
 
 /**
+ * The prefix of the `data-*` names plate reserves wholesale, matched without regard to ASCII case.
+ *
+ * Decision D24 reserves `data-qti-*` so plate's own markers may grow without a table change.
+ * `data-qti-suppress-tts` is under it and is also an attribute the XSD declares (decision D22), so
+ * it still passes: E3 securing and the emitter ask the XSD first and this prefix second.
+ */
+export const reservedDataPrefix = "data-qti-";
+
+/**
+ * The `data-*` names the Root and the runtime write that no part row lists: `data-mode` and
+ * `data-disabled` are written on every Root by the emitter's own code, and `data-runtime` is the
+ * mark a stub controller's upgrade sets, so no part row's `merged` list holds them.
+ */
+const stateDataNames = ["data-disabled", "data-mode", "data-runtime"] as const;
+
+/**
+ * The four fixed reserved names: the part and area markers, and the position and emptiness a part
+ * announces.
+ */
+const fixedDataNames = ["data-area", "data-empty", "data-position", "data-slot"] as const;
+
+/**
+ * The `data-*` names plate itself writes or reads, which an author's attribute never overrides.
+ *
+ * Decision D24 (operator ruling, 2026-11-10): "Pass valid author data-* attributes through to the
+ * rendered HTML, on HTML content elements and on interaction roots, unchanged. Plate's own markers
+ * are reserved: data-slot, data-area, data-position, data-empty, data-qti-*, and every data-* name
+ * plate emits, all derived from one table. An author attribute with a reserved name is dropped, not
+ * refused. It never overrides plate's marker, and the drop is documented, with a test. Plate
+ * attaches no behaviour to passed-through attributes. They're inert in HTML until the app's own CSS
+ * or JS reads them. PCI keeps the route it has now."
+ *
+ * The basis is QTI 3 Binding, section 6.7. This is the one table: E3 securing (`check`), the
+ * emitter's guard (`emitBody`) and every test read it, and none keeps a list of its own. It holds
+ * the four fixed names, the Root and runtime names no row lists, and every `data-*` name a part
+ * row's `merged` list holds, so a part row that gains a `data-*` name reserves it with no edit
+ * here. It is defined in this file, beside {@link partTable}, because the emitter is a browser
+ * module and imports this leaf already; `#plate/vocabulary.ts` exports it too. The `data-qti-`
+ * prefix is {@link reservedDataPrefix}, not a member, and {@link isReservedData} asks both.
+ *
+ * Scope: this unit passes the author attributes of the body's HTML content elements. Interaction
+ * roots: W0-AU.2, a unit of its own; a portable custom interaction keeps its route (`pci-03`).
+ *
+ * The names an interaction module writes on its own parts (Gap Match's `data-gap` and
+ * `data-match-group`, for one) are not derived here: they live in `interactions/*.ts`, which
+ * value-import the emitter that imports this file, so reading them from here would close an import
+ * cycle.
+ */
+export const reservedDataNames: ReadonlySet<string> = new Set([
+  ...fixedDataNames,
+  ...stateDataNames,
+  ...partTable.flatMap((row) => row.merged.filter((name) => name.startsWith("data-"))),
+]);
+
+/**
+ * Whether a `data-*` name is plate's own and an author's attribute of it is dropped.
+ *
+ * HTML matches an attribute name without regard to ASCII case, so the name is folded before it is
+ * asked: `data-SLOT` is the reserved `data-slot` to a browser.
+ *
+ * @param name The attribute's name, as authored.
+ * @returns Whether the name is in {@link reservedDataNames} or under {@link reservedDataPrefix}.
+ */
+export const isReservedData = (name: string): boolean => {
+  const folded = name.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+  return folded.startsWith(reservedDataPrefix) || reservedDataNames.has(folded);
+};
+
+/**
+ * Whether an attribute name is an author `data-*` plate passes through: the reading's form
+ * (`data-` and one or more of `a-z`, `0-9`, `_`, `.` and `-`, reading 13) and not
+ * {@link isReservedData}.
+ *
+ * The name is the attribute's local name; one in a namespace is never an author `data-*`, and the
+ * caller checks the namespace.
+ *
+ * @param name The attribute's local name, as authored.
+ * @returns Whether plate keeps the attribute.
+ */
+export const isAuthorData = (name: string): boolean =>
+  /^data-[a-z0-9_.-]+$/u.test(name) && !isReservedData(name);
+
+/**
  * Give the key of a part in the lookups: the interaction and the part, which neither key's spelling
  * can make ambiguous because neither holds a space.
  *

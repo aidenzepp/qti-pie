@@ -35,6 +35,13 @@
  * dropped. Names match exactly, so `A` or `HREF` is not `a` or `href`. Valid content loses
  * nothing, since `check` refuses or strips everything outside the subset first.
  *
+ * One attribute the XSD does not declare is emitted: an author `data-*` that plate does not
+ * reserve ({@link isAuthorData}, decision D24), written unchanged on any element of the subset.
+ * Plate reads none of them and attaches no behaviour; they are inert in the HTML until the host's
+ * own CSS or script reads them. A reserved name (`data-slot`, `data-mode`, anything under
+ * `data-qti-`, any `data-*` name plate itself writes) is dropped here as it is by `check`, so an
+ * authored attribute never overrides plate's marker.
+ *
  * @module
  * @see {@link Payload} for what the walk reads.
  */
@@ -45,6 +52,7 @@ import {
   authoredId,
   authoredIdrefs,
   headings,
+  isAuthorData,
   positionUnder,
   rowFor,
   scopedId,
@@ -630,14 +638,22 @@ export const htmlSubset: ReadonlyMap<string, ReadonlySet<string>> = new Map(
 
 /**
  * Tell whether the second line admits an attribute on an element: the XSD declares it there by
- * name, or it is ARIA's shortcuts attribute on an element that declares the misspelling.
+ * name, it is ARIA's shortcuts attribute on an element that declares the misspelling, or it is an
+ * author `data-*` plate does not reserve ({@link isAuthorData}, decision D24).
+ *
+ * The declared set is asked first, so a name the XSD declares (`data-ssml`,
+ * `data-qti-suppress-tts`, `data-catalog-idref`, decision D22) passes though plate reserves its
+ * prefix; a reserved name the XSD does not declare, and a name the reading's form refuses, is
+ * dropped, so the serialiser never meets one.
  *
  * @param declared The attributes the XSD declares on the element.
  * @param name The attribute's name as the payload holds it.
  * @returns Whether the attribute is emitted.
  */
 const admits = (declared: ReadonlySet<string>, name: string): boolean =>
-  declared.has(name) || (name === keyShortcuts && declared.has(keyShortcutsMisspelt));
+  declared.has(name) ||
+  (name === keyShortcuts && declared.has(keyShortcutsMisspelt)) ||
+  isAuthorData(name);
 
 /**
  * Text that holds whitespace only, which the HTML parser keeps in place between table rows.
@@ -795,11 +811,12 @@ const attributeFor = (
 /**
  * Give an authored element's attributes as they render.
  *
- * Only the attributes the second line admits are emitted, so an event handler, `style`, an
- * authored `data-slot` or `data-mode`, and any other undeclared name is dropped; `check` already
- * removes and marks every attribute only the XSD's wildcard admits, so this drop is the emitter's
- * own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang` wins, as it does in HTML,
- * and when they wrote both shortcut spellings, ARIA's wins.
+ * Only the attributes the second line admits are emitted, so an event handler, `style`, an authored
+ * `data-slot` or `data-mode` (any name `isReservedData` holds), and any other undeclared name is
+ * dropped, while an author `data-*` plate does not reserve is written unchanged; `check` already
+ * removes and marks every attribute only the XSD's wildcard admits and plate does not keep, so this
+ * drop is the emitter's own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang`
+ * wins, as it does in HTML, and when they wrote both shortcut spellings, ARIA's wins.
  *
  * @param element The element as the model kept it.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
