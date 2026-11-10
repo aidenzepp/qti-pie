@@ -24,14 +24,13 @@ import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
 
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Judgment } from "#pantry/test/oracle.ts";
@@ -45,11 +44,6 @@ const laws = lawsOf(grammar);
  * Every law the host judges, read once.
  */
 const hostLaws = judgedLaws(Qti);
-
-/**
- * The names the export writes under.
- */
-const names = namesOf(grammar);
 
 /**
  * The QTI 3 ASI namespace, of every item element.
@@ -445,7 +439,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a document's XML decla
                   );
                   assert.deepStrictEqual(
                     Result.isFailure(read) && read.failure._tag === "ImportRefused"
-                      ? read.failure.rule
+                      ? read.failure.rules.join("|")
                       : "read",
                     expected.rule,
                     `${label}: the import`,

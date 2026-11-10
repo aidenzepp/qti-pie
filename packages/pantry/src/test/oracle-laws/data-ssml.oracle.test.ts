@@ -1,13 +1,14 @@
 /**
  * The law oracle's own reader of `data-ssml` (`src/test/oracle-laws/data-ssml.ts`), judged against
- * Data-SSML 1.0's JSON Schema (section 3.4.5, spec reading R7-a) case by case, and against the
- * importer's checker (`#pantry/vocab/data-ssml.ts`) over a generated box. Only this test reads
- * both; the reader itself never imports the checker.
+ * Data-SSML 1.0's JSON Schema (section 3.4.5, spec reading R7-a) case by case, and against the law
+ * the database holds the importer's rows to ("Data SSML", spec reading 177, restated over
+ * `dataSsmlOf`'s rows by `#pantry/test/data-ssml-law.ts`) over a generated box. Only this test
+ * reads both; the reader itself never imports the importer's.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { dataSsmlBreachOf } from "#pantry/test/oracle-laws/data-ssml.ts";
-import { dataSsmlFaultOf } from "#pantry/vocab/data-ssml.ts";
+import { breaksDataSsml } from "#pantry/test/data-ssml-law.ts";
 
 /**
  * A specification case: the text, and the path of its breach, or none when it is admitted.
@@ -152,14 +153,14 @@ const box = (): readonly string[] => {
  */
 const boxSize = 5 * 8 * 5 * 5 + 6;
 
-describe("the law oracle's Data-SSML reader, against the importer's checker", () => {
-  it("agrees with the checker on every text of the box, and the box has both verdicts", () => {
+describe("the law oracle's Data-SSML reader, against the law over the importer's rows", () => {
+  it("agrees with the law on every text of the box, and the box has both verdicts", () => {
     const texts = box();
     assert.strictEqual(texts.length, boxSize);
     let admits = 0;
     for (const text of texts) {
       const oracle = Option.isNone(dataSsmlBreachOf(text));
-      assert.strictEqual(oracle, dataSsmlFaultOf(text) === undefined, text);
+      assert.strictEqual(oracle, !breaksDataSsml(text), text);
       admits += oracle ? 1 : 0;
     }
 
@@ -167,9 +168,9 @@ describe("the law oracle's Data-SSML reader, against the importer's checker", ()
     assert.isBelow(admits, texts.length);
   });
 
-  it("agrees with the checker on every specification case", () => {
+  it("agrees with the law on every specification case", () => {
     for (const [text, expected] of specification) {
-      assert.strictEqual(Option.isNone(expected), dataSsmlFaultOf(text) === undefined, text);
+      assert.strictEqual(Option.isNone(expected), !breaksDataSsml(text), text);
     }
   });
 });

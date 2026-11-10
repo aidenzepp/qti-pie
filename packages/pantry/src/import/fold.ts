@@ -27,7 +27,6 @@ import {
   interactionKinds,
   NodeKind,
   nonElementKinds,
-  TextDomain,
 } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
@@ -87,23 +86,25 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * Read the governor `GoverningOf` gives an element: the type whose attribute grammar and text
- * domain it is judged under.
+ * Read a node's governor, `Node.governor`: what its attributes and text are judged under, as the
+ * law states it (`typeGovernorOf` of `#pantry/qti/node.ts`, and `E1_derived` on `Node`). Under a
+ * named type it is `GoverningOf`'s of (version, kind, type); with no type, and under a type
+ * `GoverningOf` holds no row of (an `xsi:type` its kind's declared type does not derive, which
+ * `XsiType derived` refuses), its kind's own, `KindGovernor`'s, which spells the kind's handle
+ * (`#pantry/grammar/install.ts` `Governor`: each `NodeKind` handle first).
  *
- * @param version - The element's version.
+ * @param version - The node's version.
  * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns The governor, none where `GoverningOf` holds no row.
+ * @param governs - Its governing type, none where no named type governs it.
+ * @returns The governor's `Governor` handle.
  */
-export const governorOf = (version: string, kind: string, governs: string): Option.Option<string> =>
-  Option.fromNullishOr(governorAt.get(keyOf(version, kind, governs)));
-
-/**
- * The installed `TextDomain`, by `version governor`.
- */
-const textDomainAt: ReadonlyMap<string, string> = new Map(
-  TextDomain.rows.map(({ domain, governor, version }) => [keyOf(version, governor), domain]),
-);
+export const governorOf = (version: string, kind: string, governs: Option.Option<string>): string =>
+  Option.match(
+    governs.pipe(
+      Option.flatMap((type) => Option.fromNullishOr(governorAt.get(keyOf(version, kind, type)))),
+    ),
+    { onNone: () => kind, onSome: (governor) => governor },
+  );
 
 /**
  * Read the installed `Enters` as the flags each node kind enters for its descendants: every kind
@@ -163,24 +164,6 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
- * Read the domain an element reads its text in: `TextDomain` under the governor `GoverningOf`
- * gives it.
- *
- * @param version - The element's version.
- * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns The domain, none where `GoverningOf` or `TextDomain` holds no row.
- */
-export const textDomainOf = (
-  version: string,
-  kind: string,
-  governs: string,
-): Option.Option<string> =>
-  Option.flatMap(governorOf(version, kind, governs), (governor) =>
-    Option.fromNullishOr(textDomainAt.get(keyOf(version, governor))),
-  );
-
-/**
  * The state a family's automaton starts in, before its first member: position 0, the family's
  * model as a whole (`#pantry/grammar/content.ts`, `ContentGrammar`'s positions), which
  * `placedStep` steps a first member from, and the document node's own state.
@@ -188,9 +171,19 @@ export const textDomainOf = (
 const startState = 0;
 
 /**
- * The state a member claims by its placement: an `at` member's one position, a `shared` member's
- * first, a `carries` member's predecessor's. It is the state written where no position follows, so
- * that `N5_Follow` refuses the member by name; a `carries` member always steps to it.
+ * The state a member claims by its placement: an `at` member's one position, a `carries` member's
+ * predecessor's, and a `shared` member's predecessor's where that is one of its positions, else its
+ * first. It is the state written where no position follows, so that `N5_Follow` refuses the member
+ * by name; a `carries` member always steps to it.
+ *
+ * A `shared` member reaches its claim only when none of its positions follows, since no state lets
+ * two of them follow (`content.test.ts`, "decide every child's position"), so `N5_Follow` refuses
+ * it whichever it claims. Claiming its predecessor's state leaves the family's automaton where it
+ * was, as the law oracle folds the family with the member set aside (`src/test/oracle.ts`
+ * `foldedOf`), so no later sibling and no owner's `lastState` reads a state the member alone
+ * reached. Its first position does not: the third `m:mi` of an `m:mfrac` would claim the
+ * numerator's position, where the model does not end, so the owner's row would break `N7_Last`
+ * beside the member's `N5_Follow`, and the refusal would name whichever row PostgreSQL meets first.
  *
  * @param placement - The member's placement.
  * @param was - Its predecessor's state, {@link startState} for the first member.
@@ -200,7 +193,7 @@ const claimedState = (placement: Placement, was: number): number =>
   Match.valueTags(placement, {
     at: ({ position }) => position,
     carries: () => was,
-    shared: ({ positions }) => positions[0],
+    shared: ({ positions }) => (positions.includes(was) ? was : positions[0]),
   });
 
 /**

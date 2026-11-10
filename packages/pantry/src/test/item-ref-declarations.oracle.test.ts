@@ -13,11 +13,10 @@
  *   `MappingSourceDeclaration`, but a mapping's under an LTI item ref, which with a reading through
  *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
- *   mapping's source's), `MappingLookup`'s forced and justified rows, `VariableMapping`'s key and
- *   session check, and what each item ref names: its `ItemRefHref`, and its `ItemRefTarget` and
- *   `ItemRefDocument`, each a row only where the package holds it, and the assembly's names' copies
- *   of them. Each law carries the name `src/import/refusal.ts` gives the schema's statement of it
- *   ({@link hostLaws}, held to `statedLaws` by the first test).
+ *   mapping's source's), `VariableMapping`'s key and session check, and what each item ref names:
+ *   its `ItemRefHref`, and its `ItemRefTarget` and `ItemRefDocument`, each a row only where the
+ *   package holds it. Each law carries the name `src/import/refusal.ts` gives the schema's
+ *   statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -27,7 +26,7 @@
  * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
  * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
-import type { Addition, Law, LawSourceSide } from "@bjornpagen/grizzle";
+import type { Addition, Law, LawSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plainIt, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -36,13 +35,12 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option } from "effect";
-import { grammar } from "#pantry/grammar/install.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawOfCheck, ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
-import type { PackageInputs } from "#pantry/import/write.ts";
+import { lawOfCheck } from "#pantry/import/refusal.ts";
+import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
   DeclarationBaseType,
@@ -52,6 +50,8 @@ import type {
 import type {
   Expression,
   MappingSourceDeclaration,
+  Reading,
+  ReadingDeclaration,
   TemplateDefaultTarget,
 } from "#pantry/qti/expressions.ts";
 import type { VariableMapping } from "#pantry/qti/tests.ts";
@@ -64,17 +64,21 @@ import {
   smallItemRefPackage,
   sourceName,
   swarmedItemRefPackage,
-  targetName,
 } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declarations.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
+import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
+import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
  * describe: a hang guard, never a budget. Measured 2026-11-07: 35.7 s at a load average of 87 to
- * 98, its slowest test.
+ * 98, its slowest test then. The restatement test, which compiles Qti's law model to pair each
+ * statement with its laws and so ran past the free project's 60 s, states it too: it ran 86.8 s on
+ * 695e408e on 2026-11-08 beside other suites, at a load average sampled at 57 to 65 around the run
+ * but not through it. It owes a re-measure through a run at a load average of 60 or more.
  */
 const testTimeoutMs = 1_200_000;
 
@@ -84,7 +88,15 @@ const testTimeoutMs = 1_200_000;
 const laws = lawsOf(grammar);
 
 /**
- * The nil uuid, which no row of the four relations may hold.
+ * The lexical forms of a resource's `type` that spell a `ResourceType` handle, each as written
+ * (`ResourceTypeLexical`'s), which a resource of an unread type's `type` is none of.
+ */
+const spelledResourceTypes: ReadonlySet<string> = new Set(
+  ResourceTypeLexical.rows.map(({ lexical }) => lexical),
+);
+
+/**
+ * The nil uuid, which no row of the three relations may hold.
  */
 const nil = "00000000-0000-0000-0000-000000000000";
 
@@ -129,8 +141,10 @@ interface HostBreach {
 }
 
 /**
- * A side of a statement this file restates: its relation, then the fields its terms read, in the
- * order the law pairs them.
+ * A side of a statement this file restates: its relation, then the fields its terms read. A key is
+ * its fields as a set, and a containment its two sides' fields paired in order, the pairs a set:
+ * a law is the pairs it holds, whatever order its statement writes them in, so the restatement
+ * follows the schema when a statement reorders its terms.
  */
 type RestatedSide = readonly [relation: string, ...fields: string[]];
 
@@ -145,20 +159,47 @@ type Restated =
   | { readonly kind: "key"; readonly side: RestatedSide };
 
 /**
- * Whether a law side reads a restated side: the same relation, and a field term for each field, in
- * order.
+ * Read a law side's fields, where each of its terms is a field.
  *
  * @param side - A side of a law the schema states.
- * @param restated - The restated side.
- * @returns Whether it reads it.
+ * @returns Its fields in order, none where a term is a `pred` one, which no restated side holds.
  */
-const readsAs = (side: LawSourceSide, [relation, ...fields]: RestatedSide): boolean =>
-  side.relation === relation &&
-  side.terms.length === fields.length &&
-  side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
+const fieldsOf = (side: LawSide): Option.Option<readonly string[]> =>
+  Option.all(
+    side.terms.map((term) =>
+      term.kind === "field" ? Option.some(term.field) : Option.none<string>(),
+    ),
+  );
 
 /**
- * Whether a law the schema states is a restated statement's.
+ * Whether two lists hold one set of texts, each once.
+ *
+ * @param left - One list.
+ * @param right - The other.
+ * @returns Whether they are one set.
+ */
+const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
+  const held = new Set(right);
+
+  return (
+    left.length === right.length && held.size === right.length && left.every((at) => held.has(at))
+  );
+};
+
+/**
+ * Pair two sides' fields in order, each pair one text.
+ *
+ * @param from - The source's fields.
+ * @param to - The target's fields.
+ * @returns The pairs.
+ */
+const pairsOf = (from: readonly string[], to: readonly string[]): readonly string[] =>
+  Arr.zip(from, to).map(([source, target]) => `${source}\u001F${target}`);
+
+/**
+ * Whether a law the schema states is a restated statement's: a check by its name, a key by its
+ * relation and its fields as a set, a containment by its two relations and its pairs as a set
+ * ({@link RestatedSide}).
  *
  * @param law - The law, as grizzle's `lawsOf` names it.
  * @param restated - The restated statement.
@@ -170,11 +211,25 @@ const restates = (law: Law, restated: Restated): boolean => {
   }
 
   if (restated.kind === "key") {
-    return law.kind === "key" && readsAs(law.side, restated.side);
+    const [relation, ...fields] = restated.side;
+
+    return (
+      law.kind === "key" &&
+      law.side.relation === relation &&
+      Option.exists(fieldsOf(law.side), (held) => sameSet(held, fields))
+    );
   }
 
+  const [fromRelation, ...fromFields] = restated.from;
+  const [toRelation, ...toFields] = restated.to;
+
   return (
-    law.kind === "contained" && readsAs(law.from, restated.from) && readsAs(law.to, restated.to)
+    law.kind === "contained" &&
+    law.from.relation === fromRelation &&
+    law.to.relation === toRelation &&
+    Option.exists(Option.all([fieldsOf(law.from), fieldsOf(law.to)]), ([from, to]) =>
+      sameSet(pairsOf(from, to), pairsOf(fromFields, toFields)),
+    )
   );
 };
 
@@ -191,7 +246,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
     {
       from: ["ItemRefHref", "package", "path"],
       kind: "contained",
-      to: ["UnreadTypePath", "package", "path"],
+      to: ["UnreadTypeHref", "package", "path"],
     },
     "Item ref target",
   ],
@@ -208,22 +263,6 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
       from: ["ItemRefDocument", "document", "package", "path"],
       kind: "contained",
       to: ["Document", "node", "package", "path"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["NameLookup", "node", "resourceType"],
-      kind: "contained",
-      to: ["ItemRefTarget", "node", "type"],
-    },
-    "Item ref target",
-  ],
-  [
-    {
-      from: ["NameLookup", "node", "itemDocument"],
-      kind: "contained",
-      to: ["ItemRefDocument", "node", "document"],
     },
     "Item ref target",
   ],
@@ -394,8 +433,16 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [{ kind: "key", side: ["VariableMapping", "parent", "target"] }, "Variable mapping target"],
   [
     {
+      from: ["Reading", "assembly", "node", "attribute", "form", "split", "named"],
+      kind: "contained",
+      to: ["ReadingDeclaration", "assembly", "node", "attribute", "form", "split", "named"],
+    },
+    "Variable mapping source",
+  ],
+  [
+    {
       from: [
-        "Reading",
+        "ReadingDeclaration",
         "named",
         "variable",
         "declaration",
@@ -413,30 +460,6 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "declCardinalities",
         "declBaseTypes",
       ],
-    },
-    "Variable mapping source",
-  ],
-  [
-    {
-      from: ["MappingSourceDeclaration", "itemDocument", "target", "targetDeclared"],
-      kind: "contained",
-      to: ["VariableLookup", "document", "name", "declared"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["VariableMapping", "parent", "target"],
-      kind: "contained",
-      to: ["MappingLookup", "itemRef", "name"],
-    },
-    "E1 derived",
-  ],
-  [
-    {
-      from: ["MappingLookup", "itemRef", "name"],
-      kind: "contained",
-      to: ["VariableMapping", "parent", "target"],
     },
     "E1 derived",
   ],
@@ -605,7 +628,7 @@ const targetBreaches = (
 
 /**
  * The breaches of one mapping's source declaration: its copy, its item and declaration, its kind,
- * its target's lookup, and the declared half of its target's law.
+ * and the declared half of its target's law, where its item declares its target.
  *
  * @param rows - The rows.
  * @param source - The source declaration.
@@ -616,8 +639,8 @@ const sourceBreaches = (
   source: Addition<typeof MappingSourceDeclaration>,
 ): readonly HostBreach[] => {
   const mapping = rows.inputs.VariableMapping.get(source.node);
-  const lookup = [...rows.inputs.VariableLookup.values()].find(
-    ({ document, name }) => document === source.itemDocument && name === source.target,
+  const targetDeclared = rows.declarations.some(
+    ({ document, identifier }) => document === source.itemDocument && identifier === source.target,
   );
 
   return [
@@ -639,9 +662,8 @@ const sourceBreaches = (
       "Variable mapping source",
       source.source,
     ),
-    ...unless(lookup?.declared === source.targetDeclared, "E1 derived", source.target),
     ...unless(
-      !source.targetDeclared || source.target === source.source,
+      !targetDeclared || source.target === source.source,
       "Variable mapping target",
       source.target,
     ),
@@ -668,69 +690,87 @@ const keyBreaches = (rows: HostRows): readonly HostBreach[] =>
   );
 
 /**
- * The breaches of each mapped reading's declaration, its mapping's source's.
- *
- * @param rows - The rows.
- * @returns The breaches.
+ * The setters, whose prefixed readings resolve nothing (spec reading 112).
  */
-const readingBreaches = (rows: HostRows): readonly HostBreach[] =>
-  [...rows.inputs.Reading.values()]
-    .filter(
-      ({ form, found, namedKind, resourceType, source }) =>
-        source === "mapped" &&
-        !(
-          (form === "split" || form === "numbered") &&
-          found &&
-          namedKind === itemRefKind &&
-          linkTypes.has(resourceType)
-        ),
-    )
-    .flatMap((reading) => {
-      // A containment holds where any row of its target matches, so two mappings of one target,
-      // which the key over (itemRef, target) refuses on its own, leave the reading's copy to either.
-      const held = rows.sources.some(
-        (source) =>
-          source.itemRef === reading.named &&
-          source.target === reading.variable &&
-          source.declaration === reading.declaration &&
-          source.declarationKind === reading.declarationKind &&
-          source.declBaseTypes === reading.declBaseTypes &&
-          source.declCardinalities === reading.declCardinalities,
-      );
-      const mapping = rows.mappings.find(
-        ({ parent, target }) => parent === reading.named && target === reading.variable,
-      );
-
-      return unless(held, "Variable mapping source", mapping?.source ?? reading.variable);
-    });
+const setters: ReadonlySet<string> = new Set([
+  "qti-lookup-outcome-value",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+]);
 
 /**
- * The breaches of `MappingLookup`'s forced and justified rows: each mapping's target mapped, and
- * each mapped name a mapping's.
+ * Whether a reading resolves (spec readings 48 and 88): it reads a variable a source names, a
+ * setter's only unsplit, and, numbered, through an item ref a replacement can repeat, at a number
+ * of at least 1.
+ *
+ * @param reading - The reading.
+ * @returns Whether it resolves.
+ */
+const readingResolves = (reading: Addition<typeof Reading>): boolean =>
+  reading.form !== "name" &&
+  reading.source !== "none" &&
+  (reading.form === "unsplit" || !setters.has(reading.kind)) &&
+  (reading.form !== "numbered" ||
+    (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
+
+/**
+ * The key a reading's declaration row copies of its reading: the reading's key and the item ref it
+ * reads through.
+ *
+ * @param row - The reading or its declaration row.
+ * @returns The key's text.
+ */
+const readingKeyOf = (
+  row: Addition<typeof Reading> | Addition<typeof ReadingDeclaration>,
+): string =>
+  JSON.stringify([row.assembly, row.node, row.attribute, row.form, String(row.split), row.named]);
+
+/**
+ * The breaches of each resolving mapped reading's declaration, its mapping's source's, a row of its
+ * own: one through a mapping whose source its item declares nothing under has none, which
+ * "Variable mapping source" refuses, and a declaration row is its mapping's source's.
  *
  * @param rows - The rows.
  * @returns The breaches.
  */
-const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
-  const lookups = [...rows.inputs.MappingLookup.values()];
+const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
+  const declared = new Set([...rows.inputs.ReadingDeclaration.values()].map(readingKeyOf));
 
   return [
-    ...rows.mappings.flatMap((mapping) =>
-      unless(
-        lookups.some((l) => l.itemRef === mapping.parent && l.name === mapping.target && l.mapped),
-        "E1 derived",
-        mapping.target,
-      ),
-    ),
-    ...lookups
-      .filter(({ mapped }) => mapped)
-      .flatMap((lookup) =>
+    ...[...rows.inputs.Reading.values()]
+      // A reading through an LTI item ref is `link`, never `mapped` (spec reading 110), so it asks
+      // for no declaration.
+      .filter((reading) => reading.source === "mapped" && readingResolves(reading))
+      .flatMap((reading) => {
+        const mapping = rows.mappings.find(
+          ({ parent, target }) => parent === reading.named && target === reading.variable,
+        );
+
+        return unless(
+          declared.has(readingKeyOf(reading)),
+          "Variable mapping source",
+          mapping?.source ?? reading.variable,
+        );
+      }),
+    ...[...rows.inputs.ReadingDeclaration.values()]
+      .filter(({ source }) => source === "mapped")
+      .flatMap((declaration) =>
+        // A containment holds where any row of its target matches, so two mappings of one target,
+        // which the key over (itemRef, target) refuses on its own, leave the reading's copy to either.
         unless(
-          rows.mappings.some(
-            ({ parent, target }) => parent === lookup.itemRef && target === lookup.name,
+          rows.sources.some(
+            (source) =>
+              source.itemRef === declaration.named &&
+              source.target === declaration.variable &&
+              source.declaration === declaration.declaration &&
+              source.declarationKind === declaration.declarationKind &&
+              source.declBaseTypes === declaration.declBaseTypes &&
+              source.declCardinalities === declaration.declCardinalities,
           ),
           "E1 derived",
-          lookup.name,
+          declaration.variable,
         ),
       ),
   ];
@@ -740,10 +780,8 @@ const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
  * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item ref
  * that writes an href has its href's row, and its target, of the item type or an LTI type, named by
  * a resource of the package, unless a resource of an unread type names its path, where it may have
- * none (decision 454); each of the item type has its document, whose root is an item, and no other
- * has one; and each found item ref of the assembly's names that names a resource reads its type and
- * its item from them. Each is named by the empty name, as the oracle keys the law by its path
- * alone.
+ * none (decision 454); and each of the item type has its document, whose root is an item, and no
+ * other has one. Each is named by the empty name, as the oracle keys the law by its path alone.
  *
  * @param inputs - The import's rows.
  * @returns The breaches.
@@ -758,12 +796,37 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const hrefs = [...inputs.Reference.values()].filter(
     ({ kind, name }) => kind === "qti-assessment-item-ref" && name === "href",
   );
-  const found = [...inputs.NameLookup.values()].filter(
-    ({ found: held, kind, resourceType }) =>
-      held && kind === "qti-assessment-item-ref" && resourceType !== "none",
+  // The (path, type) pairs the package's resources name: each resource's href beside its type's
+  // code, where it has both.
+  const named = [...inputs.ResourceHref.values()].flatMap(({ node, package: held, path }) =>
+    Option.toArray(Option.fromUndefinedOr(inputs.ResourceTyped.get(node))).map(({ type }) => ({
+      package: held,
+      path,
+      type,
+    })),
   );
 
-  const unreadPaths = [...inputs.UnreadTypePath.values()];
+  // The hrefs of the package's resources of an unread type (decision 454), as the query
+  // `UnreadTypeHref` reads them: a resource's href beside its `type` as written, where that form is
+  // nonempty and spells no `ResourceType` handle.
+  const nodes = (node: NodeMember): readonly NodeMember[] => [
+    node,
+    ...node.children.flatMap(nodes),
+  ];
+  const unreadTypes = new Set(
+    [...inputs.Node.values()]
+      .flatMap(nodes)
+      .filter(
+        ({ attributes, kind }) =>
+          kind === "cp:resource" &&
+          attributes.some(
+            ({ lexical, name }) =>
+              name === "type" && lexical !== "" && !spelledResourceTypes.has(lexical),
+          ),
+      )
+      .map(({ id }) => id),
+  );
+  const unreadPaths = [...inputs.ResourceHref.values()].filter(({ node }) => unreadTypes.has(node));
 
   return [
     ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefHref.has(node), law, "")),
@@ -780,7 +843,7 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...targets.flatMap((target) => [
       ...unless(itemTypes.has(target.type), law, ""),
       ...unless(
-        [...inputs.NamedHref.values()].some(
+        named.some(
           ({ package: held, path, type }) =>
             held === target.package && path === target.path && type === target.type,
         ),
@@ -807,15 +870,6 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
             path === document.path &&
             rootKind === "qti-assessment-item",
         ),
-        law,
-        "",
-      ),
-    ]),
-    ...found.flatMap((name) => [
-      ...unless(inputs.ItemRefTarget.get(name.node)?.type === name.resourceType, law, ""),
-      ...unless(
-        name.resourceType !== itemResourceType ||
-          inputs.ItemRefDocument.get(name.node)?.document === name.itemDocument,
         law,
         "",
       ),
@@ -883,7 +937,6 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...rows.sources.flatMap((source) => sourceBreaches(rows, source)),
     ...keyBreaches(rows),
     ...readingBreaches(rows),
-    ...lookupBreaches(rows),
     ...itemRefBreaches(inputs),
   ];
 };
@@ -986,9 +1039,9 @@ const resolves = (input: ItemRefPackage, name: Named): boolean =>
   input.target === "item" && declaredKinds[name] !== undefined;
 
 /**
- * Hold the import's rows to the ruling: no row of the four relations holds the nil uuid or stands
- * for an unwritten attribute, each declaration row exists exactly where the item declares its
- * name, and each mapping is forced into its item ref's lookups.
+ * Hold the import's rows to the ruling: no row of the three relations holds the nil uuid or stands
+ * for an unwritten attribute, and each declaration row exists exactly where the item declares its
+ * name.
  *
  * @param input - The package.
  * @param inputs - The import's rows.
@@ -999,21 +1052,15 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((row) => Object.values(row)),
     ...[...inputs.MappingSourceDeclaration.values()].flatMap((row) => Object.values(row)),
     ...[...inputs.TemplateDefault.values()].flatMap((row) => Object.values(row)),
-    ...[...inputs.MappingLookup.values()].flatMap((row) => Object.values(row)),
   ].filter((value) => value === nil);
 
   assert.deepStrictEqual(nilFields, [], `${literal}: a row holds the nil uuid`);
   assert.deepStrictEqual(
-    [
-      ...[...inputs.ItemRefDocument.values()].flatMap((row) => Object.values(row)),
-      ...[...inputs.NameLookup.values()].flatMap((row) => Object.values(row)),
-    ].filter((value) => value === nil),
+    [...inputs.ItemRefDocument.values()]
+      .flatMap((row) => Object.values(row))
+      .filter((value) => value === nil),
     [],
-    `${literal}: an item ref's item or an assembly's name holds the nil uuid`,
-  );
-  assert.isFalse(
-    [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
-    `${literal}: an item ref's target stands for a resource the package lacks`,
+    `${literal}: an item ref's item holds the nil uuid`,
   );
   assert.isFalse(
     [...inputs.MappingItemRef.values(), ...inputs.MappingItemRefType.values()].some((row) =>
@@ -1042,14 +1089,6 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
       .toSorted(),
     `${literal}: a mapping's source row exists exactly where its item declares its source, of any kind, so its CHECK judges a wrong kind`,
   );
-  for (const spec of input.mappings) {
-    assert.isTrue(
-      [...inputs.MappingLookup.values()].some(
-        ({ mapped, name }) => mapped && name === targetName(spec),
-      ),
-      `${literal}: the mapping of ${sourceName(spec.source)} is not forced into the lookups`,
-    );
-  }
 };
 
 /**
@@ -1102,9 +1141,9 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
     assertNoSentinel(input, inputs, literal);
   }).pipe(Effect.scoped);
 
-describe("an item ref's declarations: the schema's restatement", () => {
+describe("an item ref's declarations: the schema's restatement", { timeout: testTimeoutMs }, () => {
   plainIt("names each restated law as refusal.ts names the schema's statement of it", () => {
-    // Oracle: `refusal.ts`'s naming of the laws the schema states (`ruleOfLaws`), against the rule
+    // Oracle: `refusal.ts`'s naming of the laws the schema states (`schemaRuleOfLaw`), against the rule
     // each host law's name keeps (`ruleOf`). A check is named by its name; any other restated
     // statement is each law of `statedLaws` it reads as. Bound: every law the host restates.
     for (const [restated, name] of hostLaws) {
@@ -1112,7 +1151,9 @@ describe("an item ref's declarations: the schema's restatement", () => {
       const rules =
         restated.kind === "check"
           ? [Option.map(lawOfCheck(restated.name), (law) => lawTable[law].rule)]
-          : statedLaws().flatMap(([law]) => (restates(law, restated) ? [ruleOfLaws([law])] : []));
+          : statedLaws().flatMap(([law]) =>
+              restates(law, restated) ? [schemaRuleOfLaw(law)] : [],
+            );
 
       assert.isNotEmpty(rules, `${Formatter.format(restated)}: no law the schema states`);
       for (const rule of rules) {

@@ -77,8 +77,11 @@ const toElement = (element: Element): SourceElement => ({
  * Turn the reader's failure into the refusal of the document at `location`.
  *
  * A well-formedness error is `not-well-formed` at the parser's line and column, with its message
- * under `message`. Any other reader refusal is `reader-refused` at the whole document, with the
- * reader's rule in `readerRule` and its detail under `detail`.
+ * under `message`. Any other reader refusal is `reader-refused`, with the reader's rule in
+ * `readerRule` and its detail under `detail`, at the line and column the reader places it at:
+ * `element-depth`, `nul`, `undeclared-entity`, a `decode` of an ASCII document, an `entity-cycle`
+ * through a parameter entity, and an `entity-expansion` met reading the internal subset or an
+ * attribute default. A refusal the reader does not place is at the whole document.
  *
  * @param location The document's location as the host named it.
  * @param error The reader's failure.
@@ -97,7 +100,10 @@ const refusalOf = (location: string, error: WellFormednessError | ReaderRefusal)
     : new Refusal({
         detail: { detail: error.detail },
         document: location,
-        location: { kind: "document" },
+        location: Option.match(error.position, {
+          onNone: () => ({ kind: "document" as const }),
+          onSome: ({ column, line }) => ({ column, kind: "position" as const, line }),
+        }),
         readerRule: Option.some(error.rule),
         rule: "reader-refused",
         suggestion: Option.none(),

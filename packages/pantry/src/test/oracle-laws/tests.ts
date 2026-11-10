@@ -23,22 +23,20 @@
  *   processing makes resolves, through a name the test places once (readings 48 and 88, M3), with
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
- *   (reading R15-k); `Mapped response`, a prefixed map response or map response point of a response
- *   reads a mapping or an area mapping its declaration holds (reading 166, §7.22 and §7.23);
- *   `Reference type`, a prefixed reading in place of a literal names an outcome or a template of
- *   the attribute's reference base, single, unless it reads through an LTI link (P24, readings 106
- *   and 110); and the content references, each resolving in the test's declarations or its
- *   built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`, `Printed variable
- *   reference`, `Template reference`, `Context variable reference`), with a section document's
- *   feedback naming a built-in variable judged by the type its name has (`Feedback outcome type`).
- *   Each is judged over every document the test places and every fragment those documents splice in
- *   place (spec reading 117).
+ *   (reading R15-k); `Variable kind` over each resolving reading by `identifier`; `Reference type`
+ *   over each resolving reading in place of a literal (P24); `Mapped response`, a prefixed map
+ *   response or map response point of a response reads a mapping or an area mapping its declaration
+ *   holds (reading 166, §7.22 and §7.23); and the content references, each resolving in the test's
+ *   declarations or its built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`,
+ *   `Printed variable reference`, `Template reference`, `Context variable reference`), with a
+ *   section document's feedback naming a built-in variable judged by the type its name has
+ *   (`Feedback outcome type`). Each is judged over every document the test places and every
+ *   fragment those documents splice in place (spec reading 117).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
-import { referenceBaseRows } from "#pantry/grammar/expression.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import {
   assemblyOf,
@@ -51,7 +49,8 @@ import {
   testDocumentsOf,
   testKinds,
 } from "#pantry/test/oracle-laws/assembly.ts";
-import { declarationKindsOf } from "#pantry/test/oracle-laws/expressions.ts";
+import { indexesOf } from "#pantry/test/indexes.ts";
+import { declarationKindsOf, referenceBasesOf } from "#pantry/test/oracle-laws/expressions.ts";
 import type {
   Instance,
   Name,
@@ -89,8 +88,8 @@ export const testLaws = [
   "Prefixed reference",
   "Variable declared",
   "Variable kind",
-  "Mapped response",
   "Reference type",
+  "Mapped response",
   "Context variable reference",
   "Feedback reference",
   "Feedback outcome type",
@@ -200,21 +199,44 @@ const itemRefsOf = (document: TestDocument): readonly ItemRef[] => {
 };
 
 /**
- * The declarations of a document by collapsed identifier: each declaration element's kind.
+ * A declaration as a test's laws read it: its element's kind, and its base type and its cardinality
+ * where each spells a code, none where it is unwritten or spells nothing (spec reading 158).
+ */
+interface Declared {
+  readonly baseType: Option.Option<string>;
+  readonly cardinality: Option.Option<string>;
+  readonly kind: string;
+  /**
+   * The kinds of its child elements, the tables it holds among them: a response's `qti-mapping`
+   * and `qti-area-mapping` (information model §7.22 and §7.23).
+   */
+  readonly tables: readonly string[];
+}
+
+/**
+ * The declarations of a document by collapsed identifier, each as {@link Declared} reads it.
  *
  * @param rows - The document.
  * @param grammar - The composed grammar, whose declaration kinds it reads.
- * @returns Each declared identifier's declaration kinds, in document order.
+ * @returns Each declared identifier's declarations, in document order.
  */
 const declarationsOf = (
   rows: View,
   grammar: ComposedGrammar,
-): ReadonlyMap<string, readonly string[]> => {
-  const declared = new Map<string, string[]>();
+): ReadonlyMap<string, readonly Declared[]> => {
+  const declared = new Map<string, Declared[]>();
   for (const node of rows.members) {
     if (grammar.references.declarationKind.has(node.kind)) {
       for (const identifier of Option.toArray(typedValueOf(rows, node.id, "identifier"))) {
-        declared.set(identifier, [...(declared.get(identifier) ?? []), node.kind]);
+        declared.set(identifier, [
+          ...(declared.get(identifier) ?? []),
+          {
+            baseType: typedValueOf(rows, node.id, "base-type"),
+            cardinality: typedValueOf(rows, node.id, "cardinality"),
+            kind: node.kind,
+            tables: elementsOf(rows, node.id).map(({ kind }) => kind),
+          },
+        ]);
       }
     }
   }
@@ -230,82 +252,6 @@ const readTables: ReadonlyMap<string, string> = new Map([
   ["qti-map-response", "qti-mapping"],
   ["qti-map-response-point", "qti-area-mapping"],
 ]);
-
-/**
- * Read the tables a document's declaration of a name holds, the first declaration of the name as
- * {@link declarationsOf} reads it: its child elements' kinds.
- *
- * @param rows - The document.
- * @param grammar - The composed grammar, whose declaration kinds it reads.
- * @param identifier - The name.
- * @returns The kinds of its declaration's children, none where it declares no such name.
- */
-const tablesIn = (rows: View, grammar: ComposedGrammar, identifier: string): readonly string[] =>
-  Option.match(
-    Option.fromNullishOr(
-      rows.members.find(
-        (node) =>
-          grammar.references.declarationKind.has(node.kind) &&
-          Option.contains(typedValueOf(rows, node.id, "identifier"), identifier),
-      ),
-    ),
-    {
-      onNone: () => [],
-      onSome: (declaration) => elementsOf(rows, declaration.id).map(({ kind }) => kind),
-    },
-  );
-
-/**
- * The type of a declared variable as rule P24 reads it: its base type and its cardinality, each
- * `unknown` where its declaration writes none or one outside its domain, as the per-document typing
- * reads a declaration (`expressions.ts` `typedOf`).
- */
-interface DeclaredType {
-  readonly base: string;
-  readonly cardinality: string;
-}
-
-/**
- * The type that names no declaration, or one that writes no type: both halves `unknown`, which
- * rule P24 lets pass.
- */
-const unknownType: DeclaredType = { base: "unknown", cardinality: "unknown" };
-
-/**
- * Read the type of a document's declaration of a name, the first declaration of the name as
- * {@link declarationsOf} reads it.
- *
- * @param rows - The document.
- * @param grammar - The composed grammar, whose declaration kinds it reads.
- * @param identifier - The name.
- * @returns Its declaration's type, {@link unknownType} where it declares no such name.
- */
-const typeIn = (rows: View, grammar: ComposedGrammar, identifier: string): DeclaredType =>
-  Option.match(
-    Option.fromNullishOr(
-      rows.members.find(
-        (node) =>
-          grammar.references.declarationKind.has(node.kind) &&
-          Option.contains(typedValueOf(rows, node.id, "identifier"), identifier),
-      ),
-    ),
-    {
-      onNone: () => unknownType,
-      onSome: (declaration) => ({
-        base: Option.getOrElse(typedValueOf(rows, declaration.id, "base-type"), () => "unknown"),
-        cardinality: Option.getOrElse(
-          typedValueOf(rows, declaration.id, "cardinality"),
-          () => "unknown",
-        ),
-      }),
-    },
-  );
-
-/**
- * The base types rule P24 lets any reference base pass: a variable with no base type, a record's
- * or one whose declaration writes none (`expressions.ts`, `silent`).
- */
-const silentBases: ReadonlySet<string> = new Set(["any", "unknown"]);
 
 /**
  * Judge one test or section document's own laws: its names' key, its sections' parts and
@@ -449,7 +395,10 @@ const itemRefLawsOf = (
     const linked = Option.exists(target, ({ type }) => Option.exists(type, isLinkType));
     const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));
     const kindsOf = (name: string): readonly string[] =>
-      Option.match(declared, { onNone: () => [], onSome: (held) => held.get(name) ?? [] });
+      Option.match(declared, {
+        onNone: () => [],
+        onSome: (held) => (held.get(name) ?? []).map(({ kind }) => kind),
+      });
     const children = elementsOf(rows, node.id);
     const mappings = children
       .filter(({ kind }) => kind === "qti-variable-mapping")
@@ -707,9 +656,9 @@ const branchLawsOf = (assembled: Assembled): readonly Breach[] =>
   );
 
 /**
- * What a test's assembly holds under one name (`NameLookup`): the written element with that
- * identifier, its kind, how many instances place it, whether a replacement can repeat it in one of
- * them, and, for an item ref, the type of what it names and its item.
+ * What a test's assembly holds under one name (the schema's `FoundName`): the written element with
+ * that identifier, its kind, how many instances place it, whether a replacement can repeat it in
+ * one of them, and, for an item ref, the type of what it names and its item.
  */
 interface Looked {
   readonly item: Option.Option<ListedRows>;
@@ -757,26 +706,76 @@ const lookUp = (input: PackageRows, assembled: Assembled, name: string): Option.
  */
 interface Read {
   /**
-   * The declaration kind its variable is, or stands as for a built-in or a mapped variable; `none`
-   * where it names none.
+   * The declaration kind a built-in variable stands as under its scope's root, none for a reading
+   * of anything else.
    */
-  readonly declarationKind: string;
+  readonly builtIn: Option.Option<string>;
   /**
-   * The type of its variable's declaration, the item's declaration of a declared variable or of a
-   * mapped variable's source; {@link unknownType} for every other.
+   * The declaration its declared or mapped variable reads (`ReadingDeclaration`), a mapped one's
+   * its source's (information model §7.48), with the tables it holds; none for a built-in, for
+   * nothing, for a name read through an LTI link (reading 110), and for a mapping whose source its
+   * item declares nothing under (spec reading 175).
    */
-  readonly declarationType: DeclaredType;
+  readonly declaration: Option.Option<Declared>;
   readonly form: "numbered" | "split" | "unsplit";
-  /**
-   * The kinds of its variable's declaration's children, `qti-mapping` and `qti-area-mapping` among
-   * them: only an item's declared variable has any.
-   */
-  readonly tables: readonly string[];
   readonly placements: number;
   readonly resolves: boolean;
+  /**
+   * What its variable is: a test's or an item's declared one, a mapped one, a built-in, one read
+   * through an LTI link, which has no declarations to resolve it against and so resolves unchecked
+   * (reading 110), or nothing.
+   */
   readonly source: "builtIn" | "declared" | "linked" | "mapped" | "none";
   readonly text: string;
 }
+
+/**
+ * The declaration kind a reading's variable stands as: its declaration's, or the kind a built-in
+ * stands as under its scope's root; none for nothing.
+ *
+ * @param read - The reading.
+ * @param read.builtIn - The kind its built-in stands as, if any.
+ * @param read.declaration - The declaration it reads, if any.
+ * @returns The kind, or none.
+ */
+const standsAs = ({ builtIn, declaration }: Read): Option.Option<string> =>
+  declaration.pipe(
+    Option.map(({ kind }) => kind),
+    Option.orElse(() => builtIn),
+  );
+
+/**
+ * The declaration kinds a variable named in place of a literal may be (P24): an outcome or a
+ * template.
+ */
+const standInKinds: ReadonlySet<string> = new Set([
+  "qti-outcome-declaration",
+  "qti-template-declaration",
+]);
+
+/**
+ * Whether a resolving reading in place of a literal names what no literal's stand-in may (P24, the
+ * schema's "Reference type" over `Reading`, `ReadingDeclaration` and `ReadingCardinality`): a
+ * built-in variable; or a declaration that is no outcome or template, whose base type, where it has
+ * one, is not the literal's, or whose cardinality, where it has one, is not single. A reading
+ * through a mapping whose source its item declares nothing under holds no declaration to judge
+ * (spec reading 175).
+ *
+ * @param read - The reading.
+ * @param read.declaration - The declaration it reads, if any.
+ * @param read.source - What its variable is.
+ * @param base - The literal's base type (`ReferenceBase`), none where its attribute has no row.
+ * @returns Whether it does.
+ */
+const standsAmiss = ({ declaration, source }: Read, base: Option.Option<string>): boolean =>
+  source === "builtIn" ||
+  Option.exists(
+    declaration,
+    ({ baseType, cardinality, kind }) =>
+      !standInKinds.has(kind) ||
+      Option.exists(baseType, (held) => Option.exists(base, (wanted) => held !== wanted)) ||
+      Option.exists(cardinality, (held) => held !== "single"),
+  );
 
 /**
  * Name where an unsplit reading's variable comes from: the test's declarations, else its
@@ -815,7 +814,7 @@ const readingsOf = (
     readonly builtIns: ReadonlyMap<string, ReadonlyMap<string, string>>;
     readonly grammar: ComposedGrammar;
     readonly input: PackageRows;
-    readonly testDeclared: ReadonlyMap<string, readonly string[]>;
+    readonly testDeclared: ReadonlyMap<string, readonly Declared[]>;
   },
   identifier: string,
   kind: string,
@@ -827,14 +826,16 @@ const readingsOf = (
   const itemBuiltIns = builtIns.get(testKinds.item) ?? new Map<string, string>();
   const sectionBuiltIns = builtIns.get(testKinds.section) ?? new Map<string, string>();
   const unsplitSource = sourceOf(testDeclared.has(identifier), testBuiltIns.has(identifier));
+  const testDeclaration = Option.fromNullishOr(testDeclared.get(identifier)?.[0]);
   const unsplit: Read = {
-    declarationKind: testDeclared.get(identifier)?.[0] ?? testBuiltIns.get(identifier) ?? "none",
-    declarationType: unknownType,
+    builtIn: Option.isSome(testDeclaration)
+      ? Option.none()
+      : Option.fromNullishOr(testBuiltIns.get(identifier)),
+    declaration: testDeclaration,
     form: "unsplit",
     placements: 1,
     resolves: unsplitSource !== "none",
     source: unsplitSource,
-    tables: [],
     text: identifier,
   };
   const scoped = (
@@ -844,28 +845,19 @@ const readingsOf = (
     number: string,
   ): Read => {
     const looked = lookUp(input, assembled, scope);
+    const named = { builtIn: Option.none(), declaration: Option.none(), source: "none" } as const;
     const resolved = Option.match(looked, {
-      onNone: () => ({
-        declarationKind: "none",
-        declarationType: unknownType,
-        source: "none" as const,
-        tables: [],
-      }),
-      onSome: (held): Pick<Read, "declarationKind" | "declarationType" | "source" | "tables"> => {
+      onNone: () => named,
+      onSome: (held): Pick<Read, "builtIn" | "declaration" | "source"> => {
         if (held.kind === testKinds.itemRef && Option.exists(held.type, isLinkType)) {
           // An LTI link has no declarations to resolve a name against: a name read through it is
-          // accepted unchecked, a recorded limit (reading 110).
-          return {
-            declarationKind: "none",
-            declarationType: unknownType,
-            source: "linked",
-            tables: [],
-          };
+          // accepted unchecked, a recorded limit (reading 110), and stands as no declaration.
+          return { builtIn: Option.none(), declaration: Option.none(), source: "linked" };
         }
 
         if (held.kind === testKinds.itemRef) {
           const declarations = Option.match(held.item, {
-            onNone: () => new Map<string, readonly string[]>(),
+            onNone: () => new Map<string, readonly Declared[]>(),
             onSome: (item) => declarationsOf(item.rows, grammar),
           });
           const declared = Option.contains(held.type, itemResourceType)
@@ -878,57 +870,43 @@ const readingsOf = (
           );
           if (declared !== undefined) {
             return {
-              declarationKind: declared,
-              declarationType: Option.match(held.item, {
-                onNone: () => unknownType,
-                onSome: (item) => typeIn(item.rows, grammar, variable),
-              }),
+              builtIn: Option.none(),
+              declaration: Option.some(declared),
               source: "declared",
-              tables: Option.match(held.item, {
-                onNone: () => [],
-                onSome: (item) => tablesIn(item.rows, grammar, variable),
-              }),
             };
           }
 
           if (mapping !== undefined) {
-            // A mapped name stands as its source's declaration, an outcome where it names one.
-            const source = Option.getOrElse(
-              typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
-              () => "",
-            );
-
+            // A mapped name stands as its source's declaration (information model §7.48), none
+            // where its item declares nothing under the source, which "Variable mapping source"
+            // refuses: no law over a declaration judges a name that stands as none.
             return {
-              declarationKind: declarations.get(source)?.[0] ?? "qti-outcome-declaration",
-              declarationType: Option.match(held.item, {
-                onNone: () => unknownType,
-                onSome: (item) => typeIn(item.rows, grammar, source),
-              }),
+              builtIn: Option.none(),
+              declaration: Option.flatMap(
+                typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
+                (source) => Option.fromNullishOr(declarations.get(source)?.[0]),
+              ),
               source: "mapped",
-              tables: [],
             };
           }
 
-          const builtIn = itemBuiltIns.get(variable);
-
-          return builtIn === undefined
-            ? { declarationKind: "none", declarationType: unknownType, source: "none", tables: [] }
-            : {
-                declarationKind: builtIn,
-                declarationType: unknownType,
-                source: "builtIn",
-                tables: [],
-              };
+          return Option.match(Option.fromNullishOr(itemBuiltIns.get(variable)), {
+            onNone: () => named,
+            onSome: (builtIn) => ({
+              builtIn: Option.some(builtIn),
+              declaration: Option.none(),
+              source: "builtIn",
+            }),
+          });
         }
 
         return form === "split" && durationScopes.has(held.kind) && variable === "duration"
           ? {
-              declarationKind: sectionBuiltIns.get(variable) ?? "none",
-              declarationType: unknownType,
+              builtIn: Option.fromNullishOr(sectionBuiltIns.get(variable)),
+              declaration: Option.none(),
               source: "builtIn",
-              tables: [],
             }
-          : { declarationKind: "none", declarationType: unknownType, source: "none", tables: [] };
+          : named;
       },
     });
     const { source } = resolved;
@@ -937,13 +915,12 @@ const readingsOf = (
       (Option.exists(looked, ({ replaced }) => replaced) && positiveNumber.test(number));
 
     return {
-      declarationKind: resolved.declarationKind,
-      declarationType: resolved.declarationType,
+      builtIn: resolved.builtIn,
+      declaration: resolved.declaration,
       form,
       placements: Option.match(looked, { onNone: () => 0, onSome: ({ placements }) => placements }),
       resolves: source !== "none" && !setter && numbered,
       source,
-      tables: resolved.tables,
       text: number === "" ? `${scope} . ${variable}` : `${scope} . ${number} . ${variable}`,
     };
   };
@@ -1004,9 +981,10 @@ const feedbackTypeOf = (
   // single identifier. Any other, `numAttempts` and `duration` among them, "Feedback reference"
   // alone refuses, as the import's rows do.
   const at = { root: "qti-assessment-item", variable: named.value };
-  const baseType = Option.map(grammar.references.builtInBaseType.lookup(at), (row) => row.baseType);
+  const { builtIn, builtInBaseType } = indexesOf(grammar);
+  const baseType = Option.map(builtInBaseType.lookup(at), (row) => row.baseType);
 
-  return Option.toArray(grammar.references.builtIn.lookup(at))
+  return Option.toArray(builtIn.lookup(at))
     .filter(
       ({ cardinality, declaration }) =>
         declaration === "qti-outcome-declaration" &&
@@ -1100,7 +1078,7 @@ const contentBreachesOf = (
     readonly builtIns: ReadonlyMap<string, string>;
     readonly outcomes: ReadonlyMap<string, { readonly node: Row; readonly rows: View }>;
     readonly test: string;
-    readonly testDeclared: ReadonlyMap<string, readonly string[]>;
+    readonly testDeclared: ReadonlyMap<string, readonly Declared[]>;
   },
   reference: {
     readonly attribute: string;
@@ -1111,7 +1089,9 @@ const contentBreachesOf = (
   },
 ): readonly Breach[] => {
   const { attribute, identifier, node, rows, targets } = reference;
-  const declared = (context.testDeclared.get(identifier) ?? []).some((kind) => targets.has(kind));
+  const declared = (context.testDeclared.get(identifier) ?? []).some(({ kind }) =>
+    targets.has(kind),
+  );
   const builtIn = Option.exists(Option.fromNullishOr(context.builtIns.get(identifier)), (kind) =>
     targets.has(kind),
   );
@@ -1184,11 +1164,6 @@ const referenceLawsOf = (
     builtIns.set(root, new Map([...(builtIns.get(root) ?? []), [variable, declaration]]));
   }
 
-  const referenceBases = new Map(
-    referenceBaseRows(grammar.references.variableReference.rows).map(
-      ({ attribute, base, kind }) => [`${kind} ${attribute}`, base] as const,
-    ),
-  );
   const testRows = assembled.test.listed.rows;
   const context = {
     assembled,
@@ -1198,6 +1173,7 @@ const referenceLawsOf = (
     testDeclared: declarationsOf(testRows, grammar),
   };
   const test = assembled.test.listed.path;
+  const referenceBases = referenceBasesOf(grammar);
   const contents = {
     builtIns: builtIns.get(testKinds.test) ?? new Map<string, string>(),
     outcomes: new Map(
@@ -1282,60 +1258,43 @@ const referenceLawsOf = (
               !identifier.includes(".") &&
               readings.some(({ form, source }) => form === "unsplit" && source === "none");
             // Variable kind over the readings: a setter's name resolves, and every resolving
-            // reading by `identifier` names a declaration kind its element reads or sets.
+            // reading by `identifier` names a declaration kind its element reads or sets; one that
+            // stands as no kind, through an LTI link (reading 110) or a mapping whose source its
+            // item declares nothing under, is judged by no kind.
             const allowed = declarationKindsOf(node.kind);
             const misnamed =
               attribute === "identifier" &&
               allowed.length > 0 &&
               ((setterKinds.has(node.kind) && resolving.length === 0) ||
-                resolving.some(
-                  ({ declarationKind, source }) =>
-                    source !== "linked" && !allowed.includes(declarationKind),
+                resolving.some((read) =>
+                  Option.exists(standsAs(read), (kind) => !allowed.includes(kind)),
                 ));
-
+            // Reference type over the readings: a reading in place of a literal names a single
+            // outcome or template variable of the literal's base type (P24).
+            const base = Option.fromNullishOr(referenceBases.get(`${node.kind} ${attribute}`));
+            const mistyped =
+              attribute !== "identifier" && resolving.some((read) => standsAmiss(read, base));
             // Mapped response over the prefixed readings (decisions 429 and 431, reading 166):
             // a map response's or a map response point's resolving reading of a response variable
-            // reads a mapping or an area mapping its declaration holds, which a built-in has none
-            // of; one of anything but a response is Variable kind's alone, and one through an LTI
-            // link resolves unchecked (reading 110).
+            // reads a mapping or an area mapping its declaration holds (a mapped name's, its
+            // source's), which a built-in has none of; one of anything but a response is Variable
+            // kind's alone, and one through an LTI link, which stands as no declaration kind,
+            // resolves unchecked (reading 110).
             const table = readTables.get(node.kind);
-            const unmapped = resolving.filter(
-              ({ declarationKind, form, source, tables }) =>
-                attribute === "identifier" &&
-                table !== undefined &&
-                form !== "unsplit" &&
-                source !== "linked" &&
-                declarationKind === "qti-response-declaration" &&
-                !tables.includes(table),
-            );
-
-            // Reference type over the prefixed readings (rule P24, readings 48 and 106): a variable
-            // a prefixed reading names in place of a literal is an outcome or a template, single
-            // or of unknown cardinality, of the attribute's reference base or of none, as the
-            // per-document typing holds an unprefixed one (`expressions.ts`); one through an LTI
-            // link resolves unchecked (reading 110).
-            const base = referenceBases.get(`${node.kind} ${attribute}`);
-            const mistyped = resolving.filter(
-              ({ declarationKind, declarationType, form, source }) =>
-                base !== undefined &&
-                form !== "unsplit" &&
-                source !== "linked" &&
-                !(
-                  (source === "declared" || source === "mapped") &&
-                  (declarationKind === "qti-outcome-declaration" ||
-                    declarationKind === "qti-template-declaration") &&
-                  (declarationType.base === base || silentBases.has(declarationType.base)) &&
-                  (declarationType.cardinality === "single" ||
-                    declarationType.cardinality === "unknown")
-                ),
+            const unmapped = resolving.flatMap((read) =>
+              Option.toArray(standsAs(read)).filter(
+                (declarationKind) =>
+                  attribute === "identifier" &&
+                  table !== undefined &&
+                  read.form !== "unsplit" &&
+                  declarationKind === "qti-response-declaration" &&
+                  !Option.exists(read.declaration, ({ tables }) => tables.includes(table)),
+              ),
             );
 
             return [
               ...(prefixed ? [breachAt(rows, node, "Prefixed reference", keys)] : []),
-              ...mistyped.map(({ text }) =>
-                breachAt(rows, node, "Reference type", { attribute, identifier, reading: text }),
-              ),
-              ...unmapped.map(({ declarationKind }) =>
+              ...unmapped.map((declarationKind) =>
                 breachAt(rows, node, "Mapped response", {
                   declarationKind,
                   identifier,
@@ -1348,9 +1307,22 @@ const referenceLawsOf = (
                     breachAt(rows, node, "Variable kind", {
                       allowed: allowed.join(" "),
                       declarationKind: resolving
-                        .map(({ declarationKind }) => declarationKind)
+                        .flatMap((read) => Option.toArray(standsAs(read)))
                         .join(" "),
                       identifier,
+                    }),
+                  ]
+                : []),
+              ...(mistyped
+                ? [
+                    breachAt(rows, node, "Reference type", {
+                      ...Option.match(base, {
+                        onNone: () => ({}),
+                        onSome: (held) => ({ base: held }),
+                      }),
+                      attribute,
+                      identifier,
+                      kind: node.kind,
                     }),
                   ]
                 : []),

@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Array as Arr, Effect, Option } from "effect";
 import { codePointOf } from "#crust/charset.ts";
 import { EncodeError } from "#crust/errors.ts";
 import { preorder, tour } from "#crust/tour.ts";
@@ -244,30 +244,26 @@ const renderDeclaration = (declaration: XmlDeclaration): string => {
 };
 
 /**
- * The first code point of `value` above `threshold`, or `undefined` when there is none.
+ * The first code point of `value` above `threshold`, or none when there is none.
  */
-const firstAbove = (value: string, threshold: number): number | undefined => {
-  for (const character of value) {
-    if (isAbove(character, threshold)) {
-      return codePointOf(character);
-    }
-  }
-
-  return undefined;
-};
+const firstAbove = (value: string, threshold: number): Option.Option<number> =>
+  Option.map(
+    Arr.findFirst(value, (character) => isAbove(character, threshold)),
+    codePointOf,
+  );
 
 /**
- * An `EncodeError` for the first code point of `value` above `threshold`, or `undefined`.
+ * An `EncodeError` for the first code point of `value` above `threshold`, or none.
  */
 const unwritable = (
   value: string,
   where: EncodeError["where"],
   threshold: number,
-): EncodeError | undefined => {
-  const codePoint = firstAbove(value, threshold);
-
-  return codePoint === undefined ? undefined : new EncodeError({ codePoint, threshold, where });
-};
+): Option.Option<EncodeError> =>
+  Option.map(
+    firstAbove(value, threshold),
+    (codePoint) => new EncodeError({ codePoint, threshold, where }),
+  );
 
 /**
  * The first construct of `node` itself, its children aside, that cannot carry a character
@@ -276,11 +272,11 @@ const unwritable = (
  *
  * @param node - The node to search.
  * @param threshold - The highest code point the encoder carries as itself.
- * @returns The failure for the first such construct, or `undefined` when there is none.
+ * @returns The failure for the first such construct, or none when there is none.
  */
-const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
+const findInOwn = (node: Child, threshold: number): Option.Option<EncodeError> => {
   if (node.kind === "text") {
-    return undefined;
+    return Option.none();
   }
 
   if (node.kind === "comment") {
@@ -288,32 +284,24 @@ const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
   }
 
   if (node.kind === "pi") {
-    return unwritable(node.target, "pi", threshold) ?? unwritable(node.data, "pi", threshold);
+    return Option.orElse(unwritable(node.target, "pi", threshold), () =>
+      unwritable(node.data, "pi", threshold),
+    );
   }
 
   if (node.kind === "entityRef") {
     return unwritable(node.name, "name", threshold);
   }
 
-  const own = unwritable(node.qname, "name", threshold);
-
-  if (own !== undefined) {
-    return own;
-  }
-
-  for (const attribute of node.attributes) {
-    const found =
-      unwritable(attribute.qname, "name", threshold) ??
-      attribute.references
-        .map((reference) => unwritable(reference.name, "name", threshold))
-        .find((error) => error !== undefined);
-
-    if (found !== undefined) {
-      return found;
-    }
-  }
-
-  return undefined;
+  return Option.orElse(unwritable(node.qname, "name", threshold), () =>
+    Arr.findFirst(node.attributes, (attribute) =>
+      Option.orElse(unwritable(attribute.qname, "name", threshold), () =>
+        Arr.findFirst(attribute.references, (reference) =>
+          unwritable(reference.name, "name", threshold),
+        ),
+      ),
+    ),
+  );
 };
 
 /**
@@ -325,33 +313,23 @@ const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
  *
  * @param node - The node to search.
  * @param threshold - The highest code point the encoder carries as itself.
- * @returns The failure for the first such construct, or `undefined` when there is none.
+ * @returns The failure for the first such construct, or none when there is none.
  */
-const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
-  for (const visited of preorder(node)) {
-    const found = findInOwn(visited, threshold);
-    if (found !== undefined) {
-      return found;
-    }
-  }
-
-  return undefined;
-};
+const findInNode = (node: Child, threshold: number): Option.Option<EncodeError> =>
+  Arr.findFirst(preorder(node), (visited) => findInOwn(visited, threshold));
 
 /**
  * The first unwritable construct in the doctype, the prolog, the root and the epilog, in writing
  * order.
  */
-const findUnwritable = (doc: XmlDocument, threshold: number): EncodeError | undefined => {
-  const doctype = Option.getOrUndefined(doc.doctype);
-
-  return (
-    (doctype === undefined ? undefined : unwritable(doctype, "doctype", threshold)) ??
-    [...doc.prolog, doc.root, ...doc.epilog]
-      .map((node) => findInNode(node, threshold))
-      .find((error) => error !== undefined)
+const findUnwritable = (doc: XmlDocument, threshold: number): Option.Option<EncodeError> =>
+  Option.orElse(
+    doc.doctype.pipe(Option.flatMap((doctype) => unwritable(doctype, "doctype", threshold))),
+    () =>
+      Arr.findFirst([...doc.prolog, doc.root, ...doc.epilog], (node) =>
+        findInNode(node, threshold),
+      ),
   );
-};
 
 /**
  * Serialize a document: the declaration as stored, the doctype text as stored, the prolog, the root
@@ -375,8 +353,8 @@ export const writeXml = (
   const threshold = options?.threshold ?? Number.POSITIVE_INFINITY;
   const failure = findUnwritable(doc, threshold);
 
-  if (failure !== undefined) {
-    return Effect.fail(failure);
+  if (Option.isSome(failure)) {
+    return Effect.fail(failure.value);
   }
 
   const declaration = Option.match(doc.declaration, {
