@@ -22,6 +22,7 @@ import { refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
 import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
+import { aboveRefusalOf } from "#pantry/import/above.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
 import { WitnessKind } from "#pantry/package/refusal-origin.ts";
@@ -269,6 +270,32 @@ describe("describeFailure, a refused import", () => {
       assert.strictEqual(help.includes("The database names no row for this law"), !named, witness);
       assert.include(help, "Nothing was written.");
     }
+  });
+
+  it("a level above Qti refusing the package exits 1 as import-refused, never as a defect of qti", () => {
+    // Oracle: the refusal's tag, `RefusedAbove`, which takes `ImportRefused`'s kind and exit code
+    // (decision 483) and is no named defect, so its help is the import-refused kind's. Bound: one
+    // refusal of one level's check; residual: its message, which `above.test.ts` covers.
+    const refused = Option.getOrThrow(
+      aboveRefusalOf(
+        [
+          {
+            kind: "above",
+            law: { kind: "check", name: "CdnOrigin", relation: "CdnUrl" },
+            level: "Cdn",
+          },
+        ],
+        { kind: "unreported" },
+      ),
+    );
+
+    assert.deepStrictEqual(describeFailure(refused), {
+      exitCode: 1,
+      help: kindHelp["import-refused"],
+      kind: "import-refused",
+    });
+    assert.strictEqual(kindExitCode["import-refused"], 1);
+    assert.isTrue(Option.isNone(namedFailureOf(refused)));
   });
 
   it("a database origin without all of its laws, sources and witness is no refusal's", () => {

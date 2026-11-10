@@ -21,6 +21,8 @@ import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpage
 import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
+import { aboveRefusalOf } from "#pantry/import/above.ts";
+import type { RefusedAbove } from "#pantry/import/above.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOfLaws } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
@@ -194,7 +196,9 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * @param dir - The package directory or `.zip` file.
  * @param options - Replacements for the retry schedule and the apply step, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
- *   broke, whether the reader, the codec or the database refused it; with the platform's error
+ *   broke, whether the reader, the codec or the database refused it; with `RefusedAbove` naming
+ *   the level and its rule when every law the database refused it under is stated by one level
+ *   above `Qti`, which no rule of the roster owns; with the platform's error
  *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
  *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
  *   own error when the database failed for a reason that is not a refusal.
@@ -204,7 +208,12 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   options: ImportOptions = {},
 ): Effect.fn.Return<
   Uuid,
-  ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
+  | ImportRefused
+  | RefusedAbove
+  | PlatformError.PlatformError
+  | ApplyError
+  | OpenError
+  | CommitUnresolved,
   FileSystem.FileSystem | DbLayer<AuthorRole>
 > {
   const schedule = options.schedule ?? retrySchedule;
@@ -243,6 +252,15 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // that breaks the law, or `unreported` for a foreign key and for a law no stated row breaks as
     // the host judges it (README "Errors and outcomes"). Laws no rule owns die as `UnownedLaws`, a
     // defect of the law table, never a verdict on the package.
+    // A refusal whose every law one level above `Qti` states holds no law of the table, so it is
+    // named by that level first (`aboveRefusalOf`); a set with any `Qti` law, or laws of two
+    // levels, takes the table's path, whose rule names `Qti`.
+    const above = aboveRefusalOf(outcome.refused.laws, outcome.witness);
+
+    if (Option.isSome(above)) {
+      return yield* Effect.fail(above.value);
+    }
+
     return yield* Result.match(refusalOfLaws(outcome.refused.laws, outcome.witness, grammar), {
       onFailure: (unowned) => Effect.die(unowned),
       onSuccess: (refused) => Effect.fail(refused),
