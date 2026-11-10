@@ -16,7 +16,6 @@
  * of them (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { Option } from "effect";
 import { booleanTrue, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
@@ -120,11 +119,7 @@ const referencing: ReadonlySet<string> = new Set(
 const holdsReference = (element: NodeRow<Composed>, lexical: string): boolean => {
   const governor = governorOf(element.version, element.kind, element.governs);
 
-  return (
-    Option.isSome(governor) &&
-    referencing.has(`${element.version} ${governor.value}`) &&
-    collapse(lexical) !== ""
-  );
+  return referencing.has(`${element.version} ${governor}`) && collapse(lexical) !== "";
 };
 
 /**

@@ -32,7 +32,7 @@ import {
 } from "#pantry/test/declaration-cases.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 /**
  * Every (site, state) of the scope, by its number.
@@ -44,7 +44,6 @@ const cases = declarationSites.flatMap((site) =>
 describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", () => {
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
-    timeout: authorLayerHookTimeoutMs,
   })("declarations whose cardinality or base type spells nothing, judged by PostgreSQL", (it) => {
     it.effect(
       "the database refuses every case under a rule the law oracle predicts",

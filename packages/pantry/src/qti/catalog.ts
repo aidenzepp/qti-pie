@@ -61,17 +61,15 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { booleanTrue, namingPattern } from "#pantry/grammar/domains.ts";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
-  GoverningOf,
   NodeKind,
   SchemaVersion,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -246,16 +244,9 @@ type AttributeRow = RowScalars<typeof Attribute>;
  * @returns The closed read.
  */
 const identityOf = (a: AttributeRow) => {
-  const model = AttributeModelOf.at(
-    "model",
-    a.version,
-    GoverningOf.at("governor", a.version, a.kind, a.governs),
-  );
+  const model = AttributeModelOf.at("model", a.version, a.governor);
 
-  return ValueIdentity.at(
-    "identity",
-    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
-  );
+  return ValueIdentity.at("identity", AttributeGrammar.at("domain", model, a.name));
 };
 
 /**
