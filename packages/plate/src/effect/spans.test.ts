@@ -223,7 +223,9 @@ const withoutSavedBaseType = (stored: StoredTestSession) => {
 const drawnTemplate = (record: StoredRecord): string => {
   const single = record.templates["T"]?.values[0];
 
-  return single === undefined ? assert.fail("the record holds no T") : String(single.value);
+  return single?.baseType === "integer"
+    ? single.value
+    : assert.fail("the record holds no integer T");
 };
 
 /**
