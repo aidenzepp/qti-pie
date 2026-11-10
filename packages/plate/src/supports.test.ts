@@ -202,7 +202,7 @@ describe("PnpSupportsSchema", () => {
 
 describe("the supports option", () => {
   it.effect(
-    "is accepted by redact and render, and changes nothing while every content module is a stub",
+    "is accepted by redact and render, and changes only what a landed module reads of them",
     () =>
       Effect.gen(function* sameHtml() {
         const configuration = yield* configure({});
@@ -244,7 +244,13 @@ describe("the supports option", () => {
           render(plain, configuration, { instance: "q1", supports: noSupports }),
         );
 
-        assert.strictEqual(withSupports.html, without.html);
+        assert.strictEqual(
+          withSupports.html.replace(
+            ' style="font-size: 200%; color: #ffffff; background-color: #000000"',
+            "",
+          ),
+          without.html,
+        );
         assert.strictEqual(withNone.html, without.html);
       }),
   );

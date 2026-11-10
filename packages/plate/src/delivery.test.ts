@@ -52,6 +52,7 @@ import type {
   TestSession,
   Value,
 } from "#plate/index.ts";
+import { modules } from "#plate/model/interactions.ts";
 import { isRecordValue } from "#plate/model/values.ts";
 import { attribute, checkTree, inputType } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
@@ -1196,8 +1197,11 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
         // and title, than their documents have: reading 62 ("an item's or test's identifier and
         // title are those its package's LOM metadata gives it"). That item also sets
         // `completion_status`, which it never declares and which is not the built-in
-        // `completionStatus` (info.txt:8488), so the item is refused, while its test and its
-        // hotspot item are accepted with their unsupported features marked.
+        // `completionStatus` (info.txt:8488), so the item is refused, while its test is accepted
+        // with its unsupported features marked, and its hotspot item earns the verdict the table of
+        // modules gives a Hotspot: `accepted-with-unsupported` while that module is a stub, which
+        // shows the element as a notice, and `accepted` once it renders. A module lands by setting
+        // `implemented: true` and editing nothing shared, so this test writes no verdict for it.
         assert.deepStrictEqual(refusalsOf(minFiles), [
           ["lom-title", "imsmanifest.xml"],
           ["lom-identifier", "imsmanifest.xml"],
@@ -1209,7 +1213,11 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
           ["RTEST-02", "hotspot", "adaptiveTemplate"].map((identifier) =>
             documentVerdict(minFiles, identifier),
           ),
-          ["accepted-with-unsupported", "accepted-with-unsupported", "refused"],
+          [
+            "accepted-with-unsupported",
+            modules.hotspot.implemented ? "accepted" : "accepted-with-unsupported",
+            "refused",
+          ],
         );
 
         for (const directory of [corpusPackages.lti, corpusPackages.testWithLti]) {

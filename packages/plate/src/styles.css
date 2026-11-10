@@ -1161,6 +1161,1322 @@
 /* end supports */
 
 /* begin vocabulary (issue m3e-06) */
+
+/*
+ * The item body's general-purpose classes (the shared vocabulary's Section 1.1) and its CSS
+ * utilities (Section 2), on any element of the item body. Each class stands alone, so it counts
+ * once and outranks the theme's rules, which sit in :where(). Sides, sizes and spacing are logical
+ * properties in relative units, so content follows the writing mode and a reader's own text
+ * spacing (WCAG 1.4.10, 1.4.12), and a float or a column only changes how an element looks, never
+ * its place in the source, so reading order stays the document's (WCAG 1.3.2). Where two classes
+ * of one family can meet on an element, the narrower follows the broader and so wins. No rule
+ * in this block sets a colour. Left out until the operator rules: the text indent scale, the writing-mode names
+ * for horizontal text, and the list styles only one section of the vocabulary lists.
+ */
+
+/*
+ * The layout grid: a row of columns that wraps, in percentages so it stays fluid. A column is N
+ * twelfths of the row wide, border-box so its own padding stays inside it; an offset is N twelfths
+ * of margin before it. Columns and offsets that add up to 12 or less fit one row, each
+ * percentage rounded to six places so no pair adds up to more than 100%.
+ */
+.qti-layout-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.qti-layout-col1 {
+  flex: 0 0 8.333333%;
+  max-inline-size: 8.333333%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col2 {
+  flex: 0 0 16.666667%;
+  max-inline-size: 16.666667%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col3 {
+  flex: 0 0 25%;
+  max-inline-size: 25%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col4 {
+  flex: 0 0 33.333333%;
+  max-inline-size: 33.333333%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col5 {
+  flex: 0 0 41.666667%;
+  max-inline-size: 41.666667%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col6 {
+  flex: 0 0 50%;
+  max-inline-size: 50%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col7 {
+  flex: 0 0 58.333333%;
+  max-inline-size: 58.333333%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col8 {
+  flex: 0 0 66.666667%;
+  max-inline-size: 66.666667%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col9 {
+  flex: 0 0 75%;
+  max-inline-size: 75%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col10 {
+  flex: 0 0 83.333333%;
+  max-inline-size: 83.333333%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col11 {
+  flex: 0 0 91.666667%;
+  max-inline-size: 91.666667%;
+  box-sizing: border-box;
+}
+
+.qti-layout-col12 {
+  flex: 0 0 100%;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.qti-layout-offset1 {
+  margin-inline-start: 8.333333%;
+}
+
+.qti-layout-offset2 {
+  margin-inline-start: 16.666667%;
+}
+
+.qti-layout-offset3 {
+  margin-inline-start: 25%;
+}
+
+.qti-layout-offset4 {
+  margin-inline-start: 33.333333%;
+}
+
+.qti-layout-offset5 {
+  margin-inline-start: 41.666667%;
+}
+
+.qti-layout-offset6 {
+  margin-inline-start: 50%;
+}
+
+.qti-layout-offset7 {
+  margin-inline-start: 58.333333%;
+}
+
+.qti-layout-offset8 {
+  margin-inline-start: 66.666667%;
+}
+
+.qti-layout-offset9 {
+  margin-inline-start: 75%;
+}
+
+.qti-layout-offset10 {
+  margin-inline-start: 83.333333%;
+}
+
+.qti-layout-offset11 {
+  margin-inline-start: 91.666667%;
+}
+
+/* Display: each class sets the display of its name. */
+.qti-display-inline {
+  display: inline;
+}
+
+.qti-display-inline-block {
+  display: inline-block;
+}
+
+.qti-display-block {
+  display: block;
+}
+
+.qti-display-flex {
+  display: flex;
+}
+
+.qti-display-inline-flex {
+  display: inline-flex;
+}
+
+.qti-display-grid {
+  display: grid;
+}
+
+.qti-display-inline-grid {
+  display: inline-grid;
+}
+
+.qti-display-table {
+  display: table;
+}
+
+.qti-display-table-cell {
+  display: table-cell;
+}
+
+.qti-display-table-row {
+  display: table-row;
+}
+
+.qti-display-list-item {
+  display: list-item;
+}
+
+.qti-display-inherit {
+  display: inherit;
+}
+
+/* Flex: the direction of a flex container, and whether a flex item grows. */
+.qti-flex-direction-column {
+  flex-direction: column;
+}
+
+.qti-flex-direction-row {
+  flex-direction: row;
+}
+
+.qti-flex-grow-0 {
+  flex-grow: 0;
+}
+
+.qti-flex-grow-1 {
+  flex-grow: 1;
+}
+
+/*
+ * Margin: steps 0 to 5 are 0, 0.25rem, 0.5rem, 1rem, 1.5rem and 3rem, and auto. The sides are
+ * logical: t and b the block start and end, s and e the inline start and end, x both inline sides
+ * and y both block sides. All sides come first, then the axes, then the single sides, so a side
+ * outranks its axis and an axis all sides.
+ */
+.qti-margin-0 {
+  margin: 0;
+}
+
+.qti-margin-1 {
+  margin: 0.25rem;
+}
+
+.qti-margin-2 {
+  margin: 0.5rem;
+}
+
+.qti-margin-3 {
+  margin: 1rem;
+}
+
+.qti-margin-4 {
+  margin: 1.5rem;
+}
+
+.qti-margin-5 {
+  margin: 3rem;
+}
+
+.qti-margin-auto {
+  margin: auto;
+}
+
+.qti-margin-x-0 {
+  margin-inline: 0;
+}
+
+.qti-margin-x-1 {
+  margin-inline: 0.25rem;
+}
+
+.qti-margin-x-2 {
+  margin-inline: 0.5rem;
+}
+
+.qti-margin-x-3 {
+  margin-inline: 1rem;
+}
+
+.qti-margin-x-4 {
+  margin-inline: 1.5rem;
+}
+
+.qti-margin-x-5 {
+  margin-inline: 3rem;
+}
+
+.qti-margin-x-auto {
+  margin-inline: auto;
+}
+
+.qti-margin-y-0 {
+  margin-block: 0;
+}
+
+.qti-margin-y-1 {
+  margin-block: 0.25rem;
+}
+
+.qti-margin-y-2 {
+  margin-block: 0.5rem;
+}
+
+.qti-margin-y-3 {
+  margin-block: 1rem;
+}
+
+.qti-margin-y-4 {
+  margin-block: 1.5rem;
+}
+
+.qti-margin-y-5 {
+  margin-block: 3rem;
+}
+
+.qti-margin-y-auto {
+  margin-block: auto;
+}
+
+.qti-margin-t-0 {
+  margin-block-start: 0;
+}
+
+.qti-margin-t-1 {
+  margin-block-start: 0.25rem;
+}
+
+.qti-margin-t-2 {
+  margin-block-start: 0.5rem;
+}
+
+.qti-margin-t-3 {
+  margin-block-start: 1rem;
+}
+
+.qti-margin-t-4 {
+  margin-block-start: 1.5rem;
+}
+
+.qti-margin-t-5 {
+  margin-block-start: 3rem;
+}
+
+.qti-margin-t-auto {
+  margin-block-start: auto;
+}
+
+.qti-margin-b-0 {
+  margin-block-end: 0;
+}
+
+.qti-margin-b-1 {
+  margin-block-end: 0.25rem;
+}
+
+.qti-margin-b-2 {
+  margin-block-end: 0.5rem;
+}
+
+.qti-margin-b-3 {
+  margin-block-end: 1rem;
+}
+
+.qti-margin-b-4 {
+  margin-block-end: 1.5rem;
+}
+
+.qti-margin-b-5 {
+  margin-block-end: 3rem;
+}
+
+.qti-margin-b-auto {
+  margin-block-end: auto;
+}
+
+.qti-margin-s-0 {
+  margin-inline-start: 0;
+}
+
+.qti-margin-s-1 {
+  margin-inline-start: 0.25rem;
+}
+
+.qti-margin-s-2 {
+  margin-inline-start: 0.5rem;
+}
+
+.qti-margin-s-3 {
+  margin-inline-start: 1rem;
+}
+
+.qti-margin-s-4 {
+  margin-inline-start: 1.5rem;
+}
+
+.qti-margin-s-5 {
+  margin-inline-start: 3rem;
+}
+
+.qti-margin-s-auto {
+  margin-inline-start: auto;
+}
+
+.qti-margin-e-0 {
+  margin-inline-end: 0;
+}
+
+.qti-margin-e-1 {
+  margin-inline-end: 0.25rem;
+}
+
+.qti-margin-e-2 {
+  margin-inline-end: 0.5rem;
+}
+
+.qti-margin-e-3 {
+  margin-inline-end: 1rem;
+}
+
+.qti-margin-e-4 {
+  margin-inline-end: 1.5rem;
+}
+
+.qti-margin-e-5 {
+  margin-inline-end: 3rem;
+}
+
+.qti-margin-e-auto {
+  margin-inline-end: auto;
+}
+
+/* Padding: the margin's steps without auto, on the same sides, in the same order. */
+.qti-padding-0 {
+  padding: 0;
+}
+
+.qti-padding-1 {
+  padding: 0.25rem;
+}
+
+.qti-padding-2 {
+  padding: 0.5rem;
+}
+
+.qti-padding-3 {
+  padding: 1rem;
+}
+
+.qti-padding-4 {
+  padding: 1.5rem;
+}
+
+.qti-padding-5 {
+  padding: 3rem;
+}
+
+.qti-padding-x-0 {
+  padding-inline: 0;
+}
+
+.qti-padding-x-1 {
+  padding-inline: 0.25rem;
+}
+
+.qti-padding-x-2 {
+  padding-inline: 0.5rem;
+}
+
+.qti-padding-x-3 {
+  padding-inline: 1rem;
+}
+
+.qti-padding-x-4 {
+  padding-inline: 1.5rem;
+}
+
+.qti-padding-x-5 {
+  padding-inline: 3rem;
+}
+
+.qti-padding-y-0 {
+  padding-block: 0;
+}
+
+.qti-padding-y-1 {
+  padding-block: 0.25rem;
+}
+
+.qti-padding-y-2 {
+  padding-block: 0.5rem;
+}
+
+.qti-padding-y-3 {
+  padding-block: 1rem;
+}
+
+.qti-padding-y-4 {
+  padding-block: 1.5rem;
+}
+
+.qti-padding-y-5 {
+  padding-block: 3rem;
+}
+
+.qti-padding-t-0 {
+  padding-block-start: 0;
+}
+
+.qti-padding-t-1 {
+  padding-block-start: 0.25rem;
+}
+
+.qti-padding-t-2 {
+  padding-block-start: 0.5rem;
+}
+
+.qti-padding-t-3 {
+  padding-block-start: 1rem;
+}
+
+.qti-padding-t-4 {
+  padding-block-start: 1.5rem;
+}
+
+.qti-padding-t-5 {
+  padding-block-start: 3rem;
+}
+
+.qti-padding-b-0 {
+  padding-block-end: 0;
+}
+
+.qti-padding-b-1 {
+  padding-block-end: 0.25rem;
+}
+
+.qti-padding-b-2 {
+  padding-block-end: 0.5rem;
+}
+
+.qti-padding-b-3 {
+  padding-block-end: 1rem;
+}
+
+.qti-padding-b-4 {
+  padding-block-end: 1.5rem;
+}
+
+.qti-padding-b-5 {
+  padding-block-end: 3rem;
+}
+
+.qti-padding-s-0 {
+  padding-inline-start: 0;
+}
+
+.qti-padding-s-1 {
+  padding-inline-start: 0.25rem;
+}
+
+.qti-padding-s-2 {
+  padding-inline-start: 0.5rem;
+}
+
+.qti-padding-s-3 {
+  padding-inline-start: 1rem;
+}
+
+.qti-padding-s-4 {
+  padding-inline-start: 1.5rem;
+}
+
+.qti-padding-s-5 {
+  padding-inline-start: 3rem;
+}
+
+.qti-padding-e-0 {
+  padding-inline-end: 0;
+}
+
+.qti-padding-e-1 {
+  padding-inline-end: 0.25rem;
+}
+
+.qti-padding-e-2 {
+  padding-inline-end: 0.5rem;
+}
+
+.qti-padding-e-3 {
+  padding-inline-end: 1rem;
+}
+
+.qti-padding-e-4 {
+  padding-inline-end: 1.5rem;
+}
+
+.qti-padding-e-5 {
+  padding-inline-end: 3rem;
+}
+
+/*
+ * Height: the block size. A step is that many quarter rems, with p5 adding half a step, 1px for
+ * px, a share of the container for a fraction, and auto or the whole container for auto and full.
+ */
+.qti-height-px {
+  block-size: 1px;
+}
+
+.qti-height-0 {
+  block-size: 0;
+}
+
+.qti-height-0p5 {
+  block-size: 0.125rem;
+}
+
+.qti-height-1 {
+  block-size: 0.25rem;
+}
+
+.qti-height-1p5 {
+  block-size: 0.375rem;
+}
+
+.qti-height-2 {
+  block-size: 0.5rem;
+}
+
+.qti-height-2p5 {
+  block-size: 0.625rem;
+}
+
+.qti-height-3 {
+  block-size: 0.75rem;
+}
+
+.qti-height-3p5 {
+  block-size: 0.875rem;
+}
+
+.qti-height-4 {
+  block-size: 1rem;
+}
+
+.qti-height-5 {
+  block-size: 1.25rem;
+}
+
+.qti-height-6 {
+  block-size: 1.5rem;
+}
+
+.qti-height-7 {
+  block-size: 1.75rem;
+}
+
+.qti-height-8 {
+  block-size: 2rem;
+}
+
+.qti-height-9 {
+  block-size: 2.25rem;
+}
+
+.qti-height-10 {
+  block-size: 2.5rem;
+}
+
+.qti-height-11 {
+  block-size: 2.75rem;
+}
+
+.qti-height-12 {
+  block-size: 3rem;
+}
+
+.qti-height-14 {
+  block-size: 3.5rem;
+}
+
+.qti-height-16 {
+  block-size: 4rem;
+}
+
+.qti-height-20 {
+  block-size: 5rem;
+}
+
+.qti-height-24 {
+  block-size: 6rem;
+}
+
+.qti-height-28 {
+  block-size: 7rem;
+}
+
+.qti-height-32 {
+  block-size: 8rem;
+}
+
+.qti-height-36 {
+  block-size: 9rem;
+}
+
+.qti-height-40 {
+  block-size: 10rem;
+}
+
+.qti-height-44 {
+  block-size: 11rem;
+}
+
+.qti-height-48 {
+  block-size: 12rem;
+}
+
+.qti-height-52 {
+  block-size: 13rem;
+}
+
+.qti-height-56 {
+  block-size: 14rem;
+}
+
+.qti-height-60 {
+  block-size: 15rem;
+}
+
+.qti-height-64 {
+  block-size: 16rem;
+}
+
+.qti-height-72 {
+  block-size: 18rem;
+}
+
+.qti-height-80 {
+  block-size: 20rem;
+}
+
+.qti-height-96 {
+  block-size: 24rem;
+}
+
+.qti-height-1-2 {
+  block-size: 50%;
+}
+
+.qti-height-1-3 {
+  block-size: 33.333333%;
+}
+
+.qti-height-2-3 {
+  block-size: 66.666667%;
+}
+
+.qti-height-1-4 {
+  block-size: 25%;
+}
+
+.qti-height-2-4 {
+  block-size: 50%;
+}
+
+.qti-height-3-4 {
+  block-size: 75%;
+}
+
+.qti-height-1-5 {
+  block-size: 20%;
+}
+
+.qti-height-2-5 {
+  block-size: 40%;
+}
+
+.qti-height-3-5 {
+  block-size: 60%;
+}
+
+.qti-height-4-5 {
+  block-size: 80%;
+}
+
+.qti-height-1-6 {
+  block-size: 16.666667%;
+}
+
+.qti-height-2-6 {
+  block-size: 33.333333%;
+}
+
+.qti-height-3-6 {
+  block-size: 50%;
+}
+
+.qti-height-4-6 {
+  block-size: 66.666667%;
+}
+
+.qti-height-5-6 {
+  block-size: 83.333333%;
+}
+
+.qti-height-auto {
+  block-size: auto;
+}
+
+.qti-height-full {
+  block-size: 100%;
+}
+
+/* Width: the inline size, in the height's steps and also the twelfths. */
+.qti-width-px {
+  inline-size: 1px;
+}
+
+.qti-width-0 {
+  inline-size: 0;
+}
+
+.qti-width-0p5 {
+  inline-size: 0.125rem;
+}
+
+.qti-width-1 {
+  inline-size: 0.25rem;
+}
+
+.qti-width-1p5 {
+  inline-size: 0.375rem;
+}
+
+.qti-width-2 {
+  inline-size: 0.5rem;
+}
+
+.qti-width-2p5 {
+  inline-size: 0.625rem;
+}
+
+.qti-width-3 {
+  inline-size: 0.75rem;
+}
+
+.qti-width-3p5 {
+  inline-size: 0.875rem;
+}
+
+.qti-width-4 {
+  inline-size: 1rem;
+}
+
+.qti-width-5 {
+  inline-size: 1.25rem;
+}
+
+.qti-width-6 {
+  inline-size: 1.5rem;
+}
+
+.qti-width-7 {
+  inline-size: 1.75rem;
+}
+
+.qti-width-8 {
+  inline-size: 2rem;
+}
+
+.qti-width-9 {
+  inline-size: 2.25rem;
+}
+
+.qti-width-10 {
+  inline-size: 2.5rem;
+}
+
+.qti-width-11 {
+  inline-size: 2.75rem;
+}
+
+.qti-width-12 {
+  inline-size: 3rem;
+}
+
+.qti-width-14 {
+  inline-size: 3.5rem;
+}
+
+.qti-width-16 {
+  inline-size: 4rem;
+}
+
+.qti-width-20 {
+  inline-size: 5rem;
+}
+
+.qti-width-24 {
+  inline-size: 6rem;
+}
+
+.qti-width-28 {
+  inline-size: 7rem;
+}
+
+.qti-width-32 {
+  inline-size: 8rem;
+}
+
+.qti-width-36 {
+  inline-size: 9rem;
+}
+
+.qti-width-40 {
+  inline-size: 10rem;
+}
+
+.qti-width-44 {
+  inline-size: 11rem;
+}
+
+.qti-width-48 {
+  inline-size: 12rem;
+}
+
+.qti-width-52 {
+  inline-size: 13rem;
+}
+
+.qti-width-56 {
+  inline-size: 14rem;
+}
+
+.qti-width-60 {
+  inline-size: 15rem;
+}
+
+.qti-width-64 {
+  inline-size: 16rem;
+}
+
+.qti-width-72 {
+  inline-size: 18rem;
+}
+
+.qti-width-80 {
+  inline-size: 20rem;
+}
+
+.qti-width-96 {
+  inline-size: 24rem;
+}
+
+.qti-width-1-2 {
+  inline-size: 50%;
+}
+
+.qti-width-1-3 {
+  inline-size: 33.333333%;
+}
+
+.qti-width-2-3 {
+  inline-size: 66.666667%;
+}
+
+.qti-width-1-4 {
+  inline-size: 25%;
+}
+
+.qti-width-2-4 {
+  inline-size: 50%;
+}
+
+.qti-width-3-4 {
+  inline-size: 75%;
+}
+
+.qti-width-1-5 {
+  inline-size: 20%;
+}
+
+.qti-width-2-5 {
+  inline-size: 40%;
+}
+
+.qti-width-3-5 {
+  inline-size: 60%;
+}
+
+.qti-width-4-5 {
+  inline-size: 80%;
+}
+
+.qti-width-1-6 {
+  inline-size: 16.666667%;
+}
+
+.qti-width-2-6 {
+  inline-size: 33.333333%;
+}
+
+.qti-width-3-6 {
+  inline-size: 50%;
+}
+
+.qti-width-4-6 {
+  inline-size: 66.666667%;
+}
+
+.qti-width-5-6 {
+  inline-size: 83.333333%;
+}
+
+.qti-width-auto {
+  inline-size: auto;
+}
+
+.qti-width-full {
+  inline-size: 100%;
+}
+
+.qti-width-1-12 {
+  inline-size: 8.333333%;
+}
+
+.qti-width-2-12 {
+  inline-size: 16.666667%;
+}
+
+.qti-width-3-12 {
+  inline-size: 25%;
+}
+
+.qti-width-4-12 {
+  inline-size: 33.333333%;
+}
+
+.qti-width-5-12 {
+  inline-size: 41.666667%;
+}
+
+.qti-width-6-12 {
+  inline-size: 50%;
+}
+
+.qti-width-7-12 {
+  inline-size: 58.333333%;
+}
+
+.qti-width-8-12 {
+  inline-size: 66.666667%;
+}
+
+.qti-width-9-12 {
+  inline-size: 75%;
+}
+
+.qti-width-10-12 {
+  inline-size: 83.333333%;
+}
+
+.qti-width-11-12 {
+  inline-size: 91.666667%;
+}
+
+/*
+ * Alignment: the text alignment and the vertical alignment as named, and the full inline size.
+ * left and right are the physical sides the class names say.
+ */
+.qti-align-left {
+  text-align: left;
+}
+
+.qti-align-center {
+  text-align: center;
+}
+
+.qti-align-right {
+  text-align: right;
+}
+
+.qti-valign-top {
+  vertical-align: top;
+}
+
+.qti-valign-middle {
+  vertical-align: middle;
+}
+
+.qti-valign-baseline {
+  vertical-align: baseline;
+}
+
+.qti-valign-bottom {
+  vertical-align: bottom;
+}
+
+.qti-fullwidth {
+  inline-size: 100%;
+}
+
+/*
+ * Floats and clears, as named. The clearfix clears after its own content, so it contains its
+ * floated children; it sets no float itself.
+ */
+.qti-float-left {
+  float: left;
+}
+
+.qti-float-right {
+  float: right;
+}
+
+.qti-float-none {
+  float: none;
+}
+
+.qti-float-clear-left {
+  clear: left;
+}
+
+.qti-float-clear-right {
+  clear: right;
+}
+
+.qti-float-clear-both {
+  clear: both;
+}
+
+.qti-float-clearfix::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/*
+ * Vertical writing and upright text: the vertical-rl and vertical-lr writing modes, characters
+ * stood upright, and a run of characters set in one em-square.
+ */
+.qti-writing-mode-vertical-rl {
+  writing-mode: vertical-rl;
+}
+
+.qti-writing-mode-vertical-lr {
+  writing-mode: vertical-lr;
+}
+
+.qti-text-orientation-upright {
+  text-orientation: upright;
+}
+
+.qti-text-combine-upright-all {
+  text-combine-upright: all;
+}
+
+/*
+ * List styles: the 45 names both sections of the vocabulary list, each class setting the
+ * list-style-type of its own name.
+ */
+.qti-list-style-type-arabic-indic {
+  list-style-type: arabic-indic;
+}
+
+.qti-list-style-type-armenian {
+  list-style-type: armenian;
+}
+
+.qti-list-style-type-bengali {
+  list-style-type: bengali;
+}
+
+.qti-list-style-type-cambodian {
+  list-style-type: cambodian;
+}
+
+.qti-list-style-type-circle {
+  list-style-type: circle;
+}
+
+.qti-list-style-type-cjk-earthly-branch {
+  list-style-type: cjk-earthly-branch;
+}
+
+.qti-list-style-type-cjk-heavenly-stem {
+  list-style-type: cjk-heavenly-stem;
+}
+
+.qti-list-style-type-cjk-ideographic {
+  list-style-type: cjk-ideographic;
+}
+
+.qti-list-style-type-decimal {
+  list-style-type: decimal;
+}
+
+.qti-list-style-type-decimal-leading-zero {
+  list-style-type: decimal-leading-zero;
+}
+
+.qti-list-style-type-devanagari {
+  list-style-type: devanagari;
+}
+
+.qti-list-style-type-disc {
+  list-style-type: disc;
+}
+
+.qti-list-style-type-georgian {
+  list-style-type: georgian;
+}
+
+.qti-list-style-type-gujarati {
+  list-style-type: gujarati;
+}
+
+.qti-list-style-type-gurmukhi {
+  list-style-type: gurmukhi;
+}
+
+.qti-list-style-type-hebrew {
+  list-style-type: hebrew;
+}
+
+.qti-list-style-type-hiragana {
+  list-style-type: hiragana;
+}
+
+.qti-list-style-type-hiragana-iroha {
+  list-style-type: hiragana-iroha;
+}
+
+.qti-list-style-type-khmer {
+  list-style-type: khmer;
+}
+
+.qti-list-style-type-korean-hangul-formal {
+  list-style-type: korean-hangul-formal;
+}
+
+.qti-list-style-type-korean-hanja-formal {
+  list-style-type: korean-hanja-formal;
+}
+
+.qti-list-style-type-korean-hanja-informal {
+  list-style-type: korean-hanja-informal;
+}
+
+.qti-list-style-type-lao {
+  list-style-type: lao;
+}
+
+.qti-list-style-type-lower-alpha {
+  list-style-type: lower-alpha;
+}
+
+.qti-list-style-type-lower-armenian {
+  list-style-type: lower-armenian;
+}
+
+.qti-list-style-type-lower-greek {
+  list-style-type: lower-greek;
+}
+
+.qti-list-style-type-lower-latin {
+  list-style-type: lower-latin;
+}
+
+.qti-list-style-type-lower-roman {
+  list-style-type: lower-roman;
+}
+
+.qti-list-style-type-malayalam {
+  list-style-type: malayalam;
+}
+
+.qti-list-style-type-mongolian {
+  list-style-type: mongolian;
+}
+
+.qti-list-style-type-myanmar {
+  list-style-type: myanmar;
+}
+
+.qti-list-style-type-oriya {
+  list-style-type: oriya;
+}
+
+.qti-list-style-type-persian {
+  list-style-type: persian;
+}
+
+.qti-list-style-type-simp-chinese-formal {
+  list-style-type: simp-chinese-formal;
+}
+
+.qti-list-style-type-simp-chinese-informal {
+  list-style-type: simp-chinese-informal;
+}
+
+.qti-list-style-type-square {
+  list-style-type: square;
+}
+
+.qti-list-style-type-telugu {
+  list-style-type: telugu;
+}
+
+.qti-list-style-type-thai {
+  list-style-type: thai;
+}
+
+.qti-list-style-type-tibetan {
+  list-style-type: tibetan;
+}
+
+.qti-list-style-type-trad-chinese-formal {
+  list-style-type: trad-chinese-formal;
+}
+
+.qti-list-style-type-trad-chinese-informal {
+  list-style-type: trad-chinese-informal;
+}
+
+.qti-list-style-type-upper-alpha {
+  list-style-type: upper-alpha;
+}
+
+.qti-list-style-type-upper-armenian {
+  list-style-type: upper-armenian;
+}
+
+.qti-list-style-type-upper-latin {
+  list-style-type: upper-latin;
+}
+
+.qti-list-style-type-upper-roman {
+  list-style-type: upper-roman;
+}
+
 /* end vocabulary */
 
 /* begin m3f (issue m3f-01) */

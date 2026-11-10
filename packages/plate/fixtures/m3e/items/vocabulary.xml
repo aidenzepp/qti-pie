@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m3e-vocabulary" title="Harbour tide table" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <div class="qti-layout-row qti-display-flex qti-flex-direction-row qti-margin-b-3 qti-padding-y-1">
+      <div class="qti-layout-col4 qti-padding-2 qti-align-center qti-valign-top qti-height-16">
+        <p class="qti-italic qti-margin-0">First: the morning tide comes in at the harbour wall.</p>
+      </div>
+      <div class="qti-layout-col4 qti-layout-offset4 qti-padding-s-2 qti-align-right qti-valign-bottom qti-width-full">
+        <p class="qti-underline qti-float-right qti-margin-x-1 qti-flex-grow-1">Second: the boats ride higher and the ropes slacken.</p>
+        <p class="qti-float-clear-both qti-margin-t-2">Third: a clear line begins under the floated note.</p>
+      </div>
+    </div>
+    <div class="qti-float-clearfix qti-fullwidth qti-bordered qti-margin-e-1">
+      <p class="qti-float-left qti-float-clear-left qti-margin-y-1 qti-display-inline-block">Fourth: the harbourmaster records the height of each tide.</p>
+      <p class="qti-float-none qti-float-clear-right qti-margin-1">Fifth: the afternoon tide goes out again.</p>
+    </div>
+    <div class="qti-well qti-margin-auto qti-padding-b-3 qti-width-3-4 qti-height-auto">
+      <p class="qti-padding-3 qti-height-full">Sixth: spring tides reach <span class="qti-display-inline-block qti-writing-mode-vertical-rl qti-text-orientation-upright qti-text-combine-upright-all">12</span> metres.</p>
+    </div>
+    <ol class="qti-list-style-type-lower-roman qti-margin-t-3 qti-padding-e-2 qti-width-80">
+      <li>Seventh: the keeper reads the tide table aloud.</li>
+      <li>Eighth: the crew checks the mooring lines.</li>
+    </ol>
+    <p>
+      Ninth: low water is
+      <span class="qti-display-inline-block qti-margin-s-2 qti-padding-x-1 qti-valign-middle qti-writing-mode-vertical-lr">6.1</span>
+      metres below the quay and
+      <span class="qti-visually-hidden">Tenth: a note for screen readers.</span><span class="qti-hidden">Eleventh: a note shown to nobody.</span>
+      the harbour dries out.
+    </p>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>When do the boats ride highest?</qti-prompt>
+      <qti-simple-choice identifier="A">At low water</qti-simple-choice>
+      <qti-simple-choice identifier="B">At high water</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>

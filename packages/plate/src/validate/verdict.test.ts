@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { anyElement } from "#plate/content/contract.ts";
+import { bodyModules } from "#plate/content/modules.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
@@ -209,6 +211,15 @@ const matchCorrect = el(
 const verdictOf = (source: SourceDocument): Verdict => check(source, tables, Option.none());
 
 /**
+ * The content module whose `check` still leaves a document holding an island of its namespace
+ * unchecked: the SSML stub, read from the content modules table. A test that needs an unchecked
+ * verdict builds its island in this module's namespace, so no test names a kind that has landed.
+ * The constant moves to the next such stub when SSML lands (issue m4-02), and the tests that use it
+ * need another source of an unchecked verdict once no content module leaves one.
+ */
+const uncheckedStub = bodyModules[anyElement];
+
+/**
  * Read the accepted item of a verdict that must accept an item.
  *
  * @param verdict The verdict.
@@ -395,17 +406,13 @@ describe("check", () => {
     ]);
   });
 
-  it("leaves a MathML child unchecked, with no accepted document", () => {
+  it("accepts an item holding MathML, which the MathML module judges", () => {
     const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
     const verdict = verdictOf(item([body([el("p", [], [text("Solve "), math])])]));
 
-    assert.strictEqual(verdict.verdict, "unchecked");
-    assert.isFalse("accepted" in verdict);
-    if (verdict.verdict === "unchecked") {
-      assert.deepStrictEqual(verdict.reasons, [
-        { path: `${bodyPath}/p/{${mathmlNamespace}}math`, reason: "mathml" },
-      ]);
-    }
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.isTrue("accepted" in verdict);
+    assert.isFalse("reasons" in verdict, "no mathml reason leaves the document unchecked");
   });
 
   it("leaves an XInclude child unchecked, with no accepted document", () => {
@@ -1686,18 +1693,16 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("leaves a stimulus holding MathML unchecked, of kind stimulus", () => {
+  it("accepts a stimulus holding MathML, which the MathML module judges, of kind stimulus", () => {
     const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
     const verdict = verdictOf(stimulus([el("p", [], [math])]));
 
-    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
     assert.strictEqual(verdict.kind, "stimulus");
-    if (verdict.verdict === "unchecked") {
-      assert.deepStrictEqual(verdict.reasons, [
-        {
-          path: `qti-assessment-stimulus/qti-stimulus-body/p/{${mathmlNamespace}}math`,
-          reason: "mathml",
-        },
+    assert.isFalse("reasons" in verdict, "no mathml reason leaves the document unchecked");
+    if (verdict.verdict === "accepted-with-unsupported") {
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-stimulus@qti-assessment-stimulus",
       ]);
     }
   });
@@ -2384,8 +2389,8 @@ describe("acceptedItem", () => {
   });
 
   it("gives none for an unchecked verdict", () => {
-    const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
-    const verdict = verdictOf(item([body([el("p", [], [math])])]));
+    const island = el("speak", [], [text("x")], uncheckedStub.namespace);
+    const verdict = verdictOf(item([body([el("p", [], [island])])]));
 
     assert.strictEqual(verdict.verdict, "unchecked");
     assert.deepStrictEqual(acceptedItem(verdict), Option.none());
