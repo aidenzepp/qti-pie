@@ -52,6 +52,7 @@ import {
   modules,
   regionsOf,
   stubSteps,
+  variablesOf,
 } from "#plate/model/interactions.ts";
 import type {
   ModelOf,
@@ -577,6 +578,21 @@ export interface RedactedFields {
    * The document's location as the host named it.
    */
   readonly document: string;
+  /**
+   * The template values the redaction held for the modules' nodes on content the page sees, by
+   * the node's response, then by the template variable's identifier ({@link HeldValues}); absent
+   * when nothing was held. A node holds the record's template value, read from the record's own
+   * `templates` keys and from nothing else of it, of each identifier its module's `variables`
+   * names, and nothing for any other identifier or any other node. The operator's ruling: "Expose
+   * template-variable and context-variable values to configuration, through RedactKit, with a
+   * node-scoped exemption. Never expose response or outcome correct values, mappings, or anything
+   * response processing withholds." With no record, an item whose template processing does not
+   * run holds its declared defaults, as it prints them, and one whose template processing runs
+   * holds nothing (H3). `RedactKit.held` (`#plate/interactions/contract.ts`) hands each module its
+   * node's values back at its `redact`. Context variables are not in a record today; issue
+   * `m3f-08` brings them, and their values join a node's here through the same member.
+   */
+  readonly held?: HeldValues;
   readonly identifier: string;
   /**
    * The root's `xml:lang`.
@@ -600,6 +616,14 @@ export interface RedactedFields {
     readonly limit: "budget" | "text";
     readonly path: string;
   }>;
+}
+
+/**
+ * The values a redaction holds for its modules' nodes: by the node's response, then by the
+ * template variable's identifier the module's `variables` named, the record's template value.
+ */
+export interface HeldValues {
+  readonly [response: string]: { readonly [identifier: string]: Value };
 }
 
 /**
@@ -674,6 +698,11 @@ interface Build {
    * Whether the view's mode lets the candidate change a response ({@link ModePayload}).
    */
   readonly editable: boolean;
+  /**
+   * The values the redaction held for the modules' nodes ({@link RedactedFields.held}), which
+   * {@link redactKit} hands each module through `held`; absent when it held none.
+   */
+  readonly held: HeldValues | undefined;
   /**
    * The host's facts, the view's or the empty record, handed whole to each module's `redact`.
    */
@@ -1337,6 +1366,10 @@ type Printer = (bound: number) => Option.Option<string>;
 const redactKit = (interaction: Interaction, build: Build): RedactKit => ({
   autofocus: Option.exists(build.autofocus, (first) => first === interaction),
   formName: (response) => formNameOf(build, response),
+  held: (identifier) =>
+    build.held !== undefined && Object.hasOwn(build.held, interaction.response)
+      ? own(build.held[interaction.response], identifier)
+      : Option.none(),
   host: build.host,
   instance: build.instance,
   nodes: (nodes) => copyNodes(nodes, build),
@@ -1436,6 +1469,11 @@ interface RedactedBody {
    * The responses some interaction binds that no interaction of `body` binds, in the order the
    * walk first meets them: {@link hiddenOnlyResponses}' set.
    */
+  /**
+   * The template values held for the modules' nodes on content the page sees
+   * ({@link RedactedFields.held}); none when nothing is held. Always none under `"structure"`.
+   */
+  readonly held: Option.Option<HeldValues>;
   readonly hiddenOnly: ReadonlySet<string>;
   readonly notices: readonly string[];
   /**
@@ -1839,6 +1877,30 @@ const printBody = (
   let unprinted: RedactedFields["unprinted"] = Option.none();
   let spent = 0;
   let exhausted = false;
+  // The template values held for the modules' nodes the page sees, by response, then identifier.
+  const holding: Record<string, Record<string, Value>> = {};
+
+  /**
+   * Hold, for a module's node the page sees, the record's template value of each identifier its
+   * module's `variables` names, under the node's response: read from the record's own `templates`
+   * keys alone and from nothing else of it, and only under `"text"`, since `"structure"` carries
+   * no value. With no values (no record and template processing that runs, H3) nothing is held.
+   *
+   * @param node The module's node.
+   */
+  const hold = (node: Interaction): void => {
+    if (writing.kind === "structure" || Option.isNone(printing)) {
+      return;
+    }
+
+    const { templates } = printing.value;
+    for (const identifier of variablesOf(node)) {
+      const value = own(templates, identifier);
+      if (Option.isSome(value)) {
+        holding[node.response] = { ...holding[node.response], [identifier]: value.value };
+      }
+    }
+  };
 
   /**
    * Give the text a printed variable or a parameter writes, formatted within what remains of the
@@ -1960,6 +2022,9 @@ const printBody = (
       if (isStubbed(node)) {
         reach(node.path, () => true, seen);
         bind([node.response], seen);
+        if (seen) {
+          hold(node);
+        }
 
         return [mapRegions(node, (region) => nodesOf(region.nodes, seen))];
       }
@@ -2180,7 +2245,14 @@ const printBody = (
 
   const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
 
-  return { body, content, hiddenOnly, notices, unprinted };
+  return {
+    body,
+    content,
+    held: Object.keys(holding).length > 0 ? Option.some(holding) : Option.none(),
+    hiddenOnly,
+    notices,
+    unprinted,
+  };
 };
 
 /**
@@ -2330,7 +2402,7 @@ export const redactItem = (
   supports: Supports = noSupports,
   view: OutcomeView = defaultView,
 ): Redacted => {
-  const { body, content, hiddenOnly, notices, unprinted } = printBody(
+  const { body, content, held, hiddenOnly, notices, unprinted } = printBody(
     item,
     printingOf(item, record),
     textWithin(limits),
@@ -2342,6 +2414,7 @@ export const redactItem = (
     body,
     ...Option.match(content, { onNone: () => ({}), onSome: (kept) => ({ content: kept }) }),
     document: item.document,
+    ...Option.match(held, { onNone: () => ({}), onSome: (values) => ({ held: values }) }),
     identifier: item.identifier,
     lang: item.lang,
     notices,
@@ -2698,6 +2771,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
       messages.some((entry) => entry.response === interaction.response),
     ),
     editable: view.mode === "answering",
+    held: redacted.held,
     host: view.host ?? {},
     instance: view.instance,
     messages,
@@ -2726,7 +2800,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
  * Copy body nodes that belong to no item into payload nodes, as {@link payload} copies an item's
  * body, for the content a test shows beside its items: the nodes carry no response to restore and
  * no message to show, so the copy is the item body's with no values, no names, no posted strings,
- * no host facts and no messages.
+ * no held values, no host facts and no messages.
  *
  * It is the item copy's own walk, `copyNodes`, which stays private: a printed variable or a
  * template block left in the nodes becomes its notice, as it does in a body {@link redactItem} did
@@ -2744,6 +2818,7 @@ export const copyBodyNodes = (
   copyNodes(nodes, {
     autofocus: Option.none(),
     editable: false,
+    held: undefined,
     host: {},
     ids: new Set(authoredIdsIn(nodes)),
     instance,
