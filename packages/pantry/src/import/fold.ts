@@ -171,9 +171,19 @@ const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 const startState = 0;
 
 /**
- * The state a member claims by its placement: an `at` member's one position, a `shared` member's
- * first, a `carries` member's predecessor's. It is the state written where no position follows, so
- * that `N5_Follow` refuses the member by name; a `carries` member always steps to it.
+ * The state a member claims by its placement: an `at` member's one position, a `carries` member's
+ * predecessor's, and a `shared` member's predecessor's where that is one of its positions, else its
+ * first. It is the state written where no position follows, so that `N5_Follow` refuses the member
+ * by name; a `carries` member always steps to it.
+ *
+ * A `shared` member reaches its claim only when none of its positions follows, since no state lets
+ * two of them follow (`content.test.ts`, "decide every child's position"), so `N5_Follow` refuses
+ * it whichever it claims. Claiming its predecessor's state leaves the family's automaton where it
+ * was, as the law oracle folds the family with the member set aside (`src/test/oracle.ts`
+ * `foldedOf`), so no later sibling and no owner's `lastState` reads a state the member alone
+ * reached. Its first position does not: the third `m:mi` of an `m:mfrac` would claim the
+ * numerator's position, where the model does not end, so the owner's row would break `N7_Last`
+ * beside the member's `N5_Follow`, and the refusal would name whichever row PostgreSQL meets first.
  *
  * @param placement - The member's placement.
  * @param was - Its predecessor's state, {@link startState} for the first member.
@@ -183,7 +193,7 @@ const claimedState = (placement: Placement, was: number): number =>
   Match.valueTags(placement, {
     at: ({ position }) => position,
     carries: () => was,
-    shared: ({ positions }) => positions[0],
+    shared: ({ positions }) => (positions.includes(was) ? was : positions[0]),
   });
 
 /**
