@@ -747,7 +747,7 @@ describe("check, E3: attributes only a wildcard admits", () => {
     );
   });
 
-  it("keeps a wildcard data-* parameter on qti-card-entry and qti-portable-custom-interaction as written, and still removes and marks one on a body p", () => {
+  it("keeps a wildcard data-* parameter on qti-card-entry and qti-portable-custom-interaction as written, by D24 as it keeps an author data-* on a body p", () => {
     const catalogPath = `${root}/qti-catalog-info/qti-catalog/qti-card`;
     const portablePath = `${bodyPath}/qti-portable-custom-interaction`;
     const accepted = acceptedOf(
@@ -800,9 +800,9 @@ describe("check, E3: attributes only a wildcard admits", () => {
 
     assert.deepStrictEqual(
       accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
-      [{ feature: "attribute:data-note", path: `${bodyPath}/p`, shown: "mark" }],
+      [],
     );
-    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), []);
+    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), ["data-note"]);
     assert.isFalse(
       accepted.unsupported.some(
         (mark) => mark.path.startsWith(portablePath) && mark.feature.startsWith("attribute:"),
