@@ -11,15 +11,13 @@
  * - `CdnDataUriText`: every element whose governor reads its text in an `xs:anyURI`'s domain
  *   (`TextDomain`), judged by its string value, by {@link dataScheme}.
  *
- * A value written through an entity reference is refused whole, wherever the reference stands
- * (decision 488), by a relation of its own beside each of the three and a `CdnData` check that no
- * row of it meets: `CdnDataUriAttributeEntity` and `CdnDataAddressListEntity`, the attributes
- * holding one (`Attribute.entities`, its count of `AttributeEntity` rows), and
- * `CdnDataUriTextEntity`, each `entityRef` child of such an element, since a string value cannot
- * tell one from text that reads `&name;`. The reader keeps a reference to an entity the document
- * does not declare as `&name;`, while a player that reads the external DTD expands it, so the text
- * the patterns read is not the address the player reads, and an expansion could begin or carry a
- * `data:` address the patterns never see.
+ * A value that keeps an entity reference anywhere is refused too (decision 488): crust keeps one
+ * only where its declaration may sit in the external subset, which it never reads, while a player
+ * that reads the subset expands it, so the kept form may hide a `data:` address the patterns never
+ * see. An attribute's relation carries its count of kept references (`Attribute.entities`), and its
+ * check refuses any row with one. A string value cannot tell a kept reference from text that reads
+ * `&name;`, so `CdnDataUriTextEntity` selects each `entityRef` child of such an element, with a
+ * `CdnData` check that no row of it meets.
  *
  * A `srcset`'s candidates and a media URL are fetched fields, typed `URLDType` rather than
  * `xs:anyURI`, which `CdnOrigin` holds to the origin (`#pantry/levels/cdn-origin.ts`).
@@ -97,20 +95,13 @@ const uriDomains = ValueDomainOf.rows.flatMap(({ domain, primitive }) =>
 );
 
 /**
- * Which of a set of values a query selects: every one, or only those written through an
- * unexpanded entity reference.
- */
-type Written = "any" | "entity";
-
-/**
  * Select, over a base level, the attributes whose domain under their element's governor is an
- * `xs:anyURI`'s: each `(node, id)` with its lexical form and its count of entity references.
+ * `xs:anyURI`'s: each `(node, id)` with its lexical form and its count of kept entity references.
  *
  * @param base - The level the query reads, pantry's `Qti`.
- * @param written - Every such attribute, or only those holding an entity reference.
  * @returns The query.
  */
-const uriAttributesOf = (base: QtiSchema, written: Written) =>
+const uriAttributesOf = (base: QtiSchema) =>
   query(base).rule((r) => {
     const { entities, governs, id, kind, lexical, name, node, version } = v(Attribute, "attribute");
     const model = AttributeModelOf.at(
@@ -118,56 +109,47 @@ const uriAttributesOf = (base: QtiSchema, written: Written) =>
       version,
       GoverningOf.at("governor", version, kind, governs),
     );
-    const uri = r.inSet(
-      AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, name)),
-      uriDomains,
-    );
 
     return r
       .match(Attribute, { entities, governs, id, kind, lexical, name, node, version })
-      .where(written === "entity" ? r.and(uri, r.gt(entities, 0n)) : uri)
+      .where(
+        r.inSet(
+          AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, name)),
+          uriDomains,
+        ),
+      )
       .find({ entities, id, lexical, node });
   });
 
 /**
  * Select, over a base level, the attributes of an address list: each `(node, id)` with its lexical
- * form and its count of entity references.
+ * form and its count of kept entity references.
  *
  * @param base - The level the query reads, pantry's `Qti`.
- * @param written - Every such attribute, or only those holding an entity reference.
  * @returns The query.
  */
-const addressListsOf = (base: QtiSchema, written: Written) =>
+const addressListsOf = (base: QtiSchema) =>
   query(base).rule((r) => {
     const { entities, id, lexical, name, node } = v(Attribute, "attribute");
-    const listed = r.inSet(name, addressLists);
 
     return r
       .match(Attribute, { entities, id, lexical, name, node })
-      .where(written === "entity" ? r.and(listed, r.gt(entities, 0n)) : listed)
+      .where(r.inSet(name, addressLists))
       .find({ entities, id, lexical, node });
   });
 
 /**
  * Build the data rule for one base level: the relations it derives from the base, by name, and a
- * `CdnData` check over each, those over the values written through an entity reference holding of
- * no row they select. The rule reads no origin: a `data:` address is refused whatever the CDN.
+ * `CdnData` check over each. The rule reads no origin: a `data:` address is refused whatever the
+ * CDN.
  *
  * @param base - The level the derived relations read, pantry's `Qti`.
  * @param _origin - The origin the CDN serves, as the level's options hold it.
  * @returns The relations and statements the rule adds to the `Cdn` level.
  */
 export const cdnDataRule = (base: QtiSchema, _origin: string) => {
-  const CdnDataUriAttribute = derived("CdnDataUriAttribute", uriAttributesOf(base, "any"));
-  const CdnDataUriAttributeEntity = derived(
-    "CdnDataUriAttributeEntity",
-    uriAttributesOf(base, "entity"),
-  );
-  const CdnDataAddressList = derived("CdnDataAddressList", addressListsOf(base, "any"));
-  const CdnDataAddressListEntity = derived(
-    "CdnDataAddressListEntity",
-    addressListsOf(base, "entity"),
-  );
+  const CdnDataUriAttribute = derived("CdnDataUriAttribute", uriAttributesOf(base));
+  const CdnDataAddressList = derived("CdnDataAddressList", addressListsOf(base));
 
   const CdnDataUriText = derived(
     "CdnDataUriText",
@@ -201,26 +183,17 @@ export const cdnDataRule = (base: QtiSchema, _origin: string) => {
   );
 
   return {
-    relations: {
-      CdnDataAddressList,
-      CdnDataAddressListEntity,
-      CdnDataUriAttribute,
-      CdnDataUriAttributeEntity,
-      CdnDataUriText,
-      CdnDataUriTextEntity,
-    },
+    relations: { CdnDataAddressList, CdnDataUriAttribute, CdnDataUriText, CdnDataUriTextEntity },
     statements: [
       check("CdnData", CdnDataUriAttribute, (a) =>
-        a.not(Compute.matches(a.lexical, dataSchemeMatch)),
+        a.and(a.eq(a.entities, 0n), a.not(Compute.matches(a.lexical, dataSchemeMatch))),
       ),
       check("CdnData", CdnDataAddressList, (a) =>
-        a.not(Compute.matches(a.lexical, dataTokenMatch)),
+        a.and(a.eq(a.entities, 0n), a.not(Compute.matches(a.lexical, dataTokenMatch))),
       ),
       check("CdnData", CdnDataUriText, (n) =>
         n.not(Compute.matches(n.stringValue, dataSchemeMatch)),
       ),
-      check("CdnData", CdnDataUriAttributeEntity, (a) => a.eq(a.entities, 0n)),
-      check("CdnData", CdnDataAddressListEntity, (a) => a.eq(a.entities, 0n)),
       check("CdnData", CdnDataUriTextEntity, (n) => n.ne(n.kind, "entityRef")),
     ] as const,
   };

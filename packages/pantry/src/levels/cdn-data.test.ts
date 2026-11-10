@@ -10,9 +10,9 @@
  *   rule's checks are known to compile however `lawsOf` reads them.
  * - **Its two patterns** read a `data:` address exactly as the URL Standard's parser reads its scheme
  *   (Node's `URL`), over #55's value pieces.
- * - **An entity reference hides a value from them** (decision 488): `Qti` admits a URI written as an
- *   entity reference its document never declares, which a player that reads the external DTD
- *   expands, so the level also refuses every judged value written through one.
+ * - **A kept entity reference hides a value from them** (decision 488): `Qti` admits an address list
+ *   and a URI text that keep an entity reference the document never declares, which a player that
+ *   reads the external DTD expands, so the level refuses every judged value that keeps one.
  */
 import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -21,7 +21,8 @@ import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Formatter } from "effect";
-import { dataScheme, dataToken } from "#pantry/levels/cdn-data.ts";
+import { ValueDomainOf } from "#pantry/grammar/install.ts";
+import { cdnDataRule, dataScheme, dataToken } from "#pantry/levels/cdn-data.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
 import { asi, breachesOf, judged, shown, withItem } from "#pantry/test/probe.ts";
 import { Qti } from "#pantry/test/qti.ts";
@@ -93,14 +94,12 @@ const two = extended(one);
 const values: readonly string[] = ["", ...one, ...two, ...extended(two)];
 
 /**
- * The derived relations the data rule judges, sorted: the three sets of values, and beside each the
- * values written through an entity reference (decision 488).
+ * The derived relations the data rule judges, sorted: the three sets of values, and the entity
+ * references kept in a URI text (decision 488).
  */
 const dataRelations = [
   "CdnDataAddressList",
-  "CdnDataAddressListEntity",
   "CdnDataUriAttribute",
-  "CdnDataUriAttributeEntity",
   "CdnDataUriText",
   "CdnDataUriTextEntity",
 ] as const;
@@ -305,6 +304,48 @@ describe("an entity reference in a judged value", () => {
         );
         assert.isFalse(pattern.test(`${asi} &payload;`));
         assert.isTrue(pattern.test(`${asi} data:text/xml,payload`));
+      }),
+  );
+
+  it("refuses an attribute that keeps an entity reference: each attribute relation carries its count", () => {
+    // Oracle: decision 488 and the case above. Evidence without a database: the patterns admit the
+    // kept form, so each check must judge the row's count of kept references, which each relation
+    // of attributes then carries.
+    const { relations } = cdnDataRule(Qti, origin);
+
+    for (const relation of [relations.CdnDataUriAttribute, relations.CdnDataAddressList]) {
+      assert.include(
+        Object.keys(relation.heading),
+        "entities",
+        `${relation.name} judges no count of kept entity references`,
+      );
+    }
+  });
+
+  it.effect(
+    "a URI text keeps an entity reference as a child its xs:anyURI domain admits, which the data pattern does not read",
+    () =>
+      Effect.gen(function* keptInText() {
+        // Oracle: XML 1.0 section 4.4 (a reference in content to an entity the external subset
+        // may declare, kept by a reader that never reads it), and `Qti`'s TextDomain, which judges
+        // an `xs:anyURI` text's string value, the kept `&payload;` included, by the domain's
+        // pattern. A string value cannot tell the kept reference from text, so the level selects
+        // the `entityRef` child itself (decision 488).
+        const xml = yield* Effect.orDie(
+          readXml(
+            new TextEncoder().encode(
+              `<!DOCTYPE drd:hasAdaptation SYSTEM "drd.dtd"><drd:hasAdaptation xmlns:drd="urn:x">&payload;</drd:hasAdaptation>`,
+            ),
+          ),
+        );
+        const uri = ValueDomainOf.rows.find(({ domain }) => domain === "xs:anyURI");
+
+        assert.isTrue(
+          xml.root.children.some((child) => child.kind === "entityRef"),
+          "the reader keeps the reference as a child",
+        );
+        assert.isTrue(new RegExp(uri?.pattern ?? "(?!)", "u").test("&payload;"));
+        assert.isFalse(new RegExp(dataScheme, "u").test("&payload;"));
       }),
   );
 });
