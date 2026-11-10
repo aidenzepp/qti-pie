@@ -42,9 +42,7 @@ export interface AttlistEntry {
  * declares the entity after it: a declaration must precede a default's reference, so the lexer
  * refuses that one at the end of the subset.
  */
-export type Undeclared =
-  | { readonly _tag: "kept" }
-  | { readonly _tag: "refused"; readonly why: string };
+type Undeclared = { readonly _tag: "kept" } | { readonly _tag: "refused"; readonly why: string };
 
 /**
  * What the prolog of a document says, read before any of the body is parsed.
@@ -105,28 +103,45 @@ const undeclaredOf = (
 };
 
 /**
- * Build the refusal for a reference to an entity the document never declares, or declares only
- * after an attribute default that uses it, and has nowhere else to declare.
+ * Build the refusal for a reference in the body to an entity the document never declares and has
+ * nowhere else to declare.
  *
  * @param name - The entity's name.
  * @param why - Why no declaration can exist, from {@link Undeclared}.
  * @param position - Where the reference is, in the text the caller reads, or none.
- * @param owner - The attribute whose default holds the reference; none for the body.
- * @param owner.attribute - The attribute's name.
- * @param owner.element - The name of the element the attribute is declared for.
  * @returns The refusal, under rule `undeclared-entity`.
  */
 export const undeclaredEntity = (
   name: string,
   why: string,
   position: ReaderRefusal["position"],
-  owner?: { readonly attribute: string; readonly element: string },
 ): ReaderRefusal =>
   new ReaderRefusal({
-    detail:
-      owner === undefined
-        ? `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`
-        : `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" but not declared before that attribute-list declaration, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared). Declare the entity before the attribute-list declaration, or write its text in the default.`,
+    detail: `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`,
+    position,
+    rule: "undeclared-entity",
+  });
+
+/**
+ * Build the refusal for a reference in an attribute default to an entity the internal subset never
+ * declares, in a document that has nowhere else to declare it.
+ *
+ * @param name - The entity's name.
+ * @param why - Why no declaration can exist, from {@link Undeclared}.
+ * @param position - Where the reference is, in the decoded source.
+ * @param owner - The attribute whose default holds the reference.
+ * @param owner.attribute - The attribute's name.
+ * @param owner.element - The name of the element the attribute is declared for.
+ * @returns The refusal, under rule `undeclared-entity`.
+ */
+const undeclaredInDefault = (
+  name: string,
+  why: string,
+  position: ReaderRefusal["position"],
+  owner: { readonly attribute: string; readonly element: string },
+): ReaderRefusal =>
+  new ReaderRefusal({
+    detail: `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" but not declared before that attribute-list declaration, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared). Declare the entity before the attribute-list declaration, or write its text in the default.`,
     position,
     rule: "undeclared-entity",
   });
@@ -277,14 +292,14 @@ interface Cursor {
 /**
  * The most replacement texts that may be open at once, one inside another. It is `xmllint`'s depth.
  */
-export const EXPANSION_DEPTH = 20;
+const EXPANSION_DEPTH = 20;
 
 /**
  * The characters a document may open through entity references, and how many it has opened.
  *
  * `expanded` grows as `charge` is called; `limit` is fixed when the budget is made.
  */
-export interface ExpansionBudget {
+interface ExpansionBudget {
   expanded: number;
   readonly limit: number;
 }
@@ -312,7 +327,7 @@ const EXPANSION_REFERENCE_COST = 20;
  * @param textLength - The length of the whole document text.
  * @param expanded - The characters already counted, when a later stage continues the count.
  */
-export const expansionBudget = (textLength: number, expanded = 0): ExpansionBudget => ({
+const expansionBudget = (textLength: number, expanded = 0): ExpansionBudget => ({
   expanded,
   limit: Math.max(EXPANSION_ALLOWED, EXPANSION_FACTOR * textLength),
 });
@@ -427,7 +442,7 @@ const overBudget = (
  * @returns Nothing; fails with a refusal under rule `entity-expansion` when the depth or the
  *   budget is exceeded.
  */
-export const charge = (
+const charge = (
   budget: ExpansionBudget,
   length: number,
   depth: number,
@@ -1682,23 +1697,24 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     ? Option.some(yield* lexDoctype(tables, cursor))
     : Option.none();
   const undeclared = undeclaredOf(standalone, tables.externalSubset, tables.referencesParameters);
-  const early = tables.kept.find(({ name }) => tables.bound.has(`&${name}`));
-  if (early !== undefined) {
+  const early = Arr.findFirst(tables.kept, ({ name }) => tables.bound.has(`&${name}`));
+  if (Option.isSome(early)) {
     return yield* declaredAfterDefault(
-      early.name,
-      early.owner,
+      early.value.name,
+      early.value.owner,
       undeclared._tag === "refused",
-      Option.some(positionAt(early.at)),
+      Option.some(positionAt(early.value.at)),
     );
   }
 
-  const never = tables.kept.find(({ name }) => !tables.bound.has(`&${name}`));
-  if (never !== undefined && undeclared._tag === "refused") {
-    return yield* undeclaredEntity(
-      never.name,
+  // Every kept reference now names an entity the subset never declares.
+  const never = Arr.head(tables.kept);
+  if (Option.isSome(never) && undeclared._tag === "refused") {
+    return yield* undeclaredInDefault(
+      never.value.name,
       undeclared.why,
-      Option.some(positionAt(never.at)),
-      never.owner,
+      Option.some(positionAt(never.value.at)),
+      never.value.owner,
     );
   }
 
@@ -1790,6 +1806,9 @@ const declaredReferenceAt = (
  * references are left as written. Each replacement text opened is charged against the budget the
  * prolog began, so nesting past `EXPANSION_DEPTH` or amplification past its limit is refused.
  *
+ * @param text - The decoded document text.
+ * @param prolog - The prolog, for its general entities, where the body starts and the replacement
+ *   text it has opened.
  * @returns The substituted text; fails with a refusal under rule `entity-expansion` when the
  *   references open too much.
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#entproc XML 1.0, section 4.4}
