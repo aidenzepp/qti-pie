@@ -1,7 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { emitBody, emitNodes, htmlSubset, writesMalformedHeading } from "#plate/emit/body.ts";
-import type { ReferencingElement, RenderContainer, RenderInteraction } from "#plate/emit/body.ts";
+import type {
+  AttachAnswer,
+  ReferencingElement,
+  RenderContainer,
+  RenderInteraction,
+} from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -1120,7 +1125,7 @@ describe("emitBody, the XSD's HTML subset", () => {
   );
 
   it.effect(
-    "[I-8] a p keeps only lang: handlers, style and every undeclared data-* are dropped",
+    "[I-8] [W0-AU] a p keeps lang and an author data-*: handlers, style and plate's reserved data-* are dropped",
     () =>
       Effect.gen(function* undeclaredAttributes() {
         const nodes = yield* emit([
@@ -1138,8 +1143,100 @@ describe("emitBody, the XSD's HTML subset", () => {
           ),
         ]);
 
-        assert.deepStrictEqual(nodes, [h("p", { lang: "fr" }, [text("Oui")])]);
+        assert.deepStrictEqual(nodes, [h("p", { "data-foo": "1", lang: "fr" }, [text("Oui")])]);
       }),
+  );
+
+  it.effect(
+    "[W0-AU] the emitter admits an author data-* on every authored element and writes it unchanged",
+    () =>
+      Effect.gen(function* authorData() {
+        const nodes = yield* emit([
+          el("p", { "data-author-note": "x" }, [
+            el("span", { "data-a.b-c": 'say "hi" & <go>' }, [txt("Oui")]),
+            el("br", { "data-_": "1" }),
+            el("img", { alt: "x", "data-9": "", src: "https://cdn.example/x.png" }),
+          ]),
+        ]);
+
+        assert.deepStrictEqual(nodes, [
+          h("p", { "data-author-note": "x" }, [
+            h("span", { "data-a.b-c": 'say "hi" & <go>' }, [text("Oui")]),
+            h("br", { "data-_": "1" }),
+            h("img", { alt: "x", "data-9": "", src: "https://cdn.example/x.png" }),
+          ]),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AU] the emitter's own guard drops a reserved name a payload carries, and keeps its author neighbour",
+    () =>
+      Effect.gen(function* reservedGuard() {
+        const nodes = yield* emit([
+          el(
+            "div",
+            {
+              "data-area": "1",
+              "data-disabled": "",
+              "data-empty": "",
+              "data-kept": "1",
+              "data-mode": "review",
+              "data-position": "2",
+              "data-qti-custom": "1",
+              "data-slot": "x",
+            },
+            [txt("Hi")],
+          ),
+        ]);
+
+        assert.deepStrictEqual(nodes, [h("div", { "data-kept": "1" }, [text("Hi")])]);
+      }),
+  );
+
+  it.effect(
+    "[W0-AU] the emitter drops a data-* name the reading's form refuses, so the serialiser never meets it",
+    () =>
+      Effect.gen(function* misformedData() {
+        const nodes = yield* emit([
+          el(
+            "p",
+            {
+              "data-": "1",
+              "data-A": "1",
+              "data-SLOT": "1",
+              "data-kept": "1",
+              "data-x y": "1",
+              'data-x"onfocus': "1",
+              "data-é": "1",
+            },
+            [txt("Hi")],
+          ),
+        ]);
+
+        assert.deepStrictEqual(nodes, [h("p", { "data-kept": "1" }, [text("Hi")])]);
+        assert.strictEqual(
+          nodes.map((node) => Result.getOrThrow(toHtml(node))).join(""),
+          '<p data-kept="1">Hi</p>',
+        );
+      }),
+  );
+
+  it.effect("[W0-AU] the D22 names pass beside an author data-*, as they do without one", () =>
+    Effect.gen(function* speechBeside() {
+      const ssml = '{"say-as":{"interpret-as":"characters"}}';
+      const nodes = yield* emit([
+        el("p", { "data-author-note": "x", "data-ssml": ssml }, [
+          el("span", { "data-qti-suppress-tts": "true" }, [txt("QTI")]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(nodes, [
+        h("p", { "data-author-note": "x", "data-ssml": ssml }, [
+          h("span", { "data-qti-suppress-tts": "true" }, [text("QTI")]),
+        ]),
+      ]);
+    }),
   );
 
   it.effect("[I-8] a javascript: href placed straight into the payload is dropped", () =>
@@ -1399,9 +1496,14 @@ const referencing = (
 ): ElementPayload => ({ ...el(tag, attributes, children), catalog: idref });
 
 /**
+ * The answer that attaches nothing.
+ */
+const unattached: AttachAnswer = { attributes: {}, nodes: [], place: "after-element" };
+
+/**
  * A render function whose attachment hook answers each catalog in `answered` with one `span` that
- * names the catalog and points at the referencing element's id, and nothing for any other
- * catalog, recording every reference it is handed.
+ * names the catalog and points at the referencing element's id, placed right after it, and nothing
+ * for any other catalog, recording every reference it is handed.
  *
  * @param handed The references the hook is handed, in order, filled as the body is emitted.
  * @param answered The catalogs the hook answers with a node.
@@ -1417,13 +1519,50 @@ const attaching = (
 
       return Result.succeed(
         answered.has(reference.idref)
-          ? [h("span", { "data-defines": reference.id }, [text(reference.idref)])]
-          : [],
+          ? {
+              ...unattached,
+              nodes: [h("span", { "data-defines": reference.id }, [text(reference.idref)])],
+            }
+          : unattached,
       );
     },
   });
 
 describe("emitBody, the catalog attachment hook", () => {
+  it.effect(
+    "[W0-AS.2] an element without an authored id gets a minted id only for a non-empty answer: an empty answer leaves it without one, an answer of an attribute alone mints it",
+    () =>
+      Effect.gen(function* mintsForAttributes() {
+        const state = yield* stateAt(2);
+        const answering: RenderInteraction = Object.assign(
+          (interaction: InteractionPayload) => stub(interaction),
+          {
+            attach: (reference: ReferencingElement) =>
+              Result.succeed(
+                reference.idref === "glossary"
+                  ? { ...unattached, attributes: { "aria-details": "x" } }
+                  : unattached,
+              ),
+          },
+        );
+        const nodes = yield* Effect.fromResult(
+          emitBody(
+            payloadOf([
+              referencing("p", "notes", {}, [txt("plain")]),
+              referencing("p", "glossary", {}, [txt("marked")]),
+            ]),
+            state,
+            answering,
+          ),
+        );
+
+        assert.deepStrictEqual(nodes, [
+          h("p", {}, [text("plain")]),
+          h("p", { "aria-details": "x", id: "i1-catalog-glossary-0" }, [text("marked")]),
+        ]);
+      }),
+  );
+
   it.effect(
     "places the hook's nodes right after the element that references the catalog, and hands it the element's scoped id",
     () =>

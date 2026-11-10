@@ -156,8 +156,8 @@ server-side: a host that does not import it loads none of it, and no browser mod
 It exports every name of `@qti-pie/plate`. Each function there that returns a `Result` or takes a
 configuration, and `acceptedItem`, is an Effect here. It calls the plain function, and succeeds
 and fails as that function does. The rest are the plain functions themselves: `open`,
-`openPackage` and `configure`, which already return Effects, and the functions that never fail,
-such as `partition`, `postings` and `solution`.
+`openPackage`, `configure` and `readPnp`, which already return Effects, and the functions that never
+fail, such as `partition`, `postings` and `solution`.
 
 ```ts
 import { readFile } from "node:fs/promises";
