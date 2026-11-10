@@ -32,6 +32,7 @@ import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { xsiNamespace } from "#pantry/vocab/namespaces.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -158,7 +159,9 @@ const namespaceOf = (prefix: string): string => `urn:qname-scope:${prefix}`;
  * @returns The kinds from the root to the target, none where no chain reaches it.
  */
 const chainTo = (version: SchemaVersion, target: string): Option.Option<readonly string[]> => {
-  const rows = grammar.admission.rows.filter((row) => row.version === version);
+  const rows = admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn).filter(
+    (row) => row.version === version,
+  );
   const named = (kind: string) => Option.isSome(grammar.kinds.elementName.lookup({ kind }));
   const parents = new Map<string, string>();
   let frontier = rows
@@ -304,7 +307,7 @@ interface Placed {
  * @returns The parents' kinds.
  */
 const foreignHosts = (version: SchemaVersion): readonly string[] =>
-  grammar.admission.rows
+  admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)
     .filter((row) => row.version === version && row.child === "foreign-element")
     .map(({ parent }) => parent);
 

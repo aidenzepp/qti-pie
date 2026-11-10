@@ -9,23 +9,24 @@ import { Effect, Option, Result } from "effect";
 import type { PlatformError } from "effect";
 import { inject } from "vitest";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { oracleCodecRule, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * Name the rule a read failed under: a refusal's own, or the platform failure's tag, which no
- * refusal names.
+ * Name the rule a read failed under: a refusal's own, the one rule a refusal made before the
+ * database carries, written as the verdict file writes a refusal's rules, or the platform
+ * failure's tag, which no refusal names.
  *
  * @param failure - The read's failure.
  * @returns Its rule.
  */
 const ruleOf = (failure: ImportRefused | PlatformError.PlatformError): string =>
-  failure instanceof ImportRefused ? failure.rule : failure._tag;
+  failure instanceof ImportRefused ? failure.rules.join("|") : failure._tag;
 
 layer(NodeServices.layer, { excludeTestServices: true })(
   "readProgram over the packaging fixtures",
