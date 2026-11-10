@@ -1255,6 +1255,118 @@
 /* end drawing-interaction */
 
 /* begin slider-interaction (issue ei-16) */
+
+/*
+ * The Slider Root: a block whose Prompt takes a line of its own, then the Control between the
+ * labels of its two bounds, wrapping when the line is short. The parts stand in the order the page
+ * shows them (a reversed range puts the high bound first), so no rule reorders them.
+ */
+:where([data-slot="slider-interaction"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+/* The Slider Prompt: its own line, set apart by weight as Choice's and Extended Text's are. */
+:where([data-slot="slider-interaction-prompt"]) {
+  flex: 0 0 100%;
+  margin-block-end: 0.5rem;
+  font-weight: 500;
+}
+
+/*
+ * The Slider Control, a native range: it takes the line the labels leave, and is 24px tall at the
+ * least, so the whole slider, one target (WCAG 2.5.8, note 1), is not smaller than that. The
+ * thumb and track stay the browser's own, which the host's `accent-color` sets.
+ */
+:where([data-slot="slider-interaction-control"]) {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+  min-block-size: 24px;
+  margin: 0;
+}
+
+/*
+ * A vertical Slider (`orientation`): the parts in a column, its Control upright and a fixed length.
+ * A range in a vertical writing mode runs with its low bound at the top; the Control's own `dir`
+ * turns it, as `reverse` and the orientation ask, so no rule here reads `reverse`.
+ */
+:where([data-slot="slider-interaction"][data-orientation="vertical"]) {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-prompt"]
+) {
+  flex: none;
+  align-self: stretch;
+}
+
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-control"]
+) {
+  flex: none;
+  inline-size: 10rem;
+  writing-mode: vertical-lr;
+}
+
+/* The bounds' labels of a vertical Slider: centred over the Control, which is a column's width. */
+:where(
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-lower-bound"],
+  [data-slot="slider-interaction"][data-orientation="vertical"]
+    [data-slot="slider-interaction-upper-bound"]
+) {
+  min-inline-size: 24px;
+  text-align: center;
+}
+
+/*
+ * A Slider holding a refused answer: a bar down its start edge. A native range takes no border,
+ * shadow or fill from a browser such as WebKit, so the mark is on the Root. The page is rendered
+ * with the refusal, never changed to it, so the bar's width moves nothing.
+ */
+:where(
+  [data-slot="slider-interaction"]:has(
+    [data-slot="slider-interaction-control"][aria-invalid="true"]
+  )
+) {
+  padding-inline-start: 0.75rem;
+  border-inline-start: 0.25rem solid var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A disabled Slider Control. */
+:where([data-slot="slider-interaction-control"]:disabled) {
+  opacity: 0.5;
+}
+
+/*
+ * The Slider Control in review or solution: at full strength, after the rule above. A range has no
+ * readonly, so it is disabled there only because the answer it shows cannot change; a Root the
+ * author disabled, which carries data-disabled, stays dimmed in every mode.
+ */
+:where(
+  [data-slot="slider-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="slider-interaction-control"],
+  [data-slot="slider-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="slider-interaction-control"]
+) {
+  opacity: 1;
+}
+
+/* Focus on the Slider Control: the same ring as a text Control's. */
+:where([data-slot="slider-interaction-control"]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
 /* end slider-interaction */
 
 /* begin media-interaction (issue ei-03) */
