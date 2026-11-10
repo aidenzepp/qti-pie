@@ -30,7 +30,7 @@ import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
-import type { ModuleKind } from "#plate/interactions/contract.ts";
+import type { ModuleKind, RedactKit } from "#plate/interactions/contract.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -1225,6 +1225,28 @@ const structureOnly: Writing = { kind: "structure" };
 type Printer = (bound: number) => Option.Option<string>;
 
 /**
+ * Give the kit a module's `redact` reads one interaction's content and the view through: the copy
+ * of body nodes, and the view's facts about the interaction as the shipped kinds' payloads read
+ * them ({@link shown}, {@link formNameOf}, the posted strings, the seed, the instance, `autofocus`
+ * and the unnamed position), so a module bakes into its payload node what a Choice's or a Text
+ * Entry's payload holds, and no hub names its kind.
+ *
+ * @param interaction The interaction being redacted.
+ * @param build The build.
+ * @returns The kit.
+ */
+const redactKit = (interaction: Interaction, build: Build): RedactKit => ({
+  autofocus: Option.exists(build.autofocus, (first) => first === interaction),
+  formName: (response) => formNameOf(build, response),
+  instance: build.instance,
+  nodes: (nodes) => copyNodes(nodes, build),
+  posted: (response) => build.posted.pipe(Option.map((posted) => posted.get(response) ?? [])),
+  seed: build.seed,
+  shown: (response) => shown(build, response),
+  unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
+});
+
+/**
  * Copy one body node into its payload node.
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
@@ -1239,7 +1261,7 @@ type Printer = (bound: number) => Option.Option<string>;
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   if (isStubbed(node)) {
-    return stubSteps(node).redact({ nodes: (nodes) => copyNodes(nodes, build) });
+    return stubSteps(node).redact(redactKit(node, build));
   }
 
   switch (node.kind) {

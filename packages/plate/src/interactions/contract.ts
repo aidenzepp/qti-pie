@@ -52,8 +52,14 @@ import type { Locale } from "#plate/messages.ts";
 import type { Region } from "#plate/model/interactions.ts";
 import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
 import type { AttributeReaders } from "#plate/model/reader.ts";
-import type { ResponseValue, Value } from "#plate/model/values.ts";
-import type { EmitState, Payload, PayloadNode, ValidationMessage } from "#plate/payload.ts";
+import type { ResponseValue, Single, Value } from "#plate/model/values.ts";
+import type {
+  EmitState,
+  Payload,
+  PayloadNode,
+  UnnamedPosition,
+  ValidationMessage,
+} from "#plate/payload.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
@@ -250,11 +256,35 @@ export interface ParseContext {
 }
 
 /**
- * What the payload hands a module's `redact`: the copy of body nodes into payload nodes the payload
- * makes of every content it copies, so a module's content, its Prompt or a choice's, reaches the
- * payload as a Choice's does.
+ * What the payload hands a module's `redact`, for the one interaction being redacted: the copy of
+ * body nodes into payload nodes the payload makes of every content it copies, so a module's
+ * content, its Prompt or a choice's, reaches the payload as a Choice's does, and the view's facts
+ * about the interaction's responses, each as the payload reads it for the four shipped kinds, so a
+ * module restores a stored response into its parts, writes its hidden inputs under the name the
+ * host chose, and shuffles by the configuration's seed, with no hub naming its kind. The view's
+ * values are the host's: a value a module's interaction binds has passed the module's `restore`
+ * (through `restore` in `#plate/restore.ts`) or `solution` (`#plate/solution.ts`) when the host
+ * read them from there, so what a module shows is what its own step gave.
  */
 export interface RedactKit {
+  /**
+   * Whether the interaction's first Control takes `autofocus`: it is the first interaction, in
+   * document order, that one of the view's validation messages names.
+   */
+  readonly autofocus: boolean;
+  /**
+   * Give the name a response's controls post under: the view's name for it, else
+   * `entryName(instance, response)`.
+   *
+   * @param response The response identifier, one of the module's `bindings`.
+   * @returns The entry name.
+   */
+  readonly formName: (response: string) => string;
+  /**
+   * The item instance key, which scopes every id and entry name, and keys a shuffle with the seed
+   * and the response.
+   */
+  readonly instance: string;
   /**
    * Copy body nodes into payload nodes, in order, as the payload copies a Prompt's.
    *
@@ -262,6 +292,33 @@ export interface RedactKit {
    * @returns The payload nodes.
    */
   readonly nodes: (nodes: readonly BodyNode[]) => readonly PayloadNode[];
+  /**
+   * Give the strings a refused post sent for a response, which the controls show in place of the
+   * value: none when the view has no messages, and the strings posted, none of them when the post
+   * carried none for the response, when it has.
+   *
+   * @param response The response identifier, one of the module's `bindings`.
+   * @returns The posted strings, when the view restores a post.
+   */
+  readonly posted: (response: string) => Option.Option<readonly string[]>;
+  /**
+   * The configuration's `seed`, written as given, none when it has none: with the instance and
+   * the response, the key of a shuffle (`choiceOrder` in `#plate/payload.ts`).
+   */
+  readonly seed: Option.Option<string>;
+  /**
+   * Give the values the view shows for a response: the value's members, a record's `stringValue`
+   * alone, none when it is NULL, a record without one, or the view gives none.
+   *
+   * @param response The response identifier, one of the module's `bindings`.
+   * @returns The values shown.
+   */
+  readonly shown: (response: string) => readonly Single[];
+  /**
+   * Where the interaction's first Control stands among the Controls the renderer names, set
+   * exactly when the module's `unnamed` said the renderer names them.
+   */
+  readonly unnamed: Option.Option<UnnamedPosition>;
 }
 
 /**
@@ -377,7 +434,10 @@ export interface InteractionModule<
    */
   readonly payloadSchema: (kit: SchemaKit) => Schema.Codec<I, J>;
   /**
-   * Copy the model node into the payload node the page may know, its content through the kit.
+   * Copy the model node into the payload node the page may know: its content through the kit, and
+   * what it shows of the view, the stored values, the posted strings, the host's entry name, the
+   * seed and the rest, read from the kit ({@link RedactKit}) and baked into the payload node, since
+   * the render sees the `Payload` and none of the view beyond it.
    */
   readonly redact: (interaction: I, kit: RedactKit) => P;
   /**
@@ -401,7 +461,9 @@ export interface InteractionModule<
    */
   readonly replaceRegions: (interaction: I, contents: readonly (readonly BodyNode[])[]) => I;
   /**
-   * The value the interaction shows for a stored response.
+   * The value the interaction shows for a stored response: `restore` in `#plate/restore.ts` hands
+   * each response the interaction binds through it, so the values the host passes to `render` are
+   * what the module gave, and its `redact` reads them back through the kit's `shown`.
    */
   readonly restore: (interaction: I, stored: ResponseValue) => ResponseValue;
   /**
@@ -414,7 +476,9 @@ export interface InteractionModule<
     instance: string,
   ) => Option.Option<string>;
   /**
-   * The value the interaction shows for its response's correct value.
+   * The value the interaction shows for its response's correct value: `solution` in
+   * `#plate/solution.ts` hands each response the interaction binds through it, as `restore` does a
+   * stored one.
    */
   readonly solution: (interaction: I, correct: ResponseValue) => ResponseValue;
   /**
