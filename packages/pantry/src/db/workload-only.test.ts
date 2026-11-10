@@ -3,11 +3,11 @@
  * calls a `Db` outside its `workload` handles. A served `Db` runs the programs `grizzle generate`
  * compiled into the login's served file alone, and refuses every other operation before any SQL,
  * yet its type still declares `apply`, `compile`, `execute`, `explain`, `get`, `page` and
- * `refresh`, so a call of one typechecks and fails only when it runs. This search refuses it until
- * grizzle's type does.
+ * `refresh`, so a call of one typechecks and fails only when it runs. This search refuses it.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/1685e15c8f245dace46ddf6a75765dd2e060b218/packages/grizzle/src/adapter/db/served.ts#L133-L160
+ * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/db/served.ts#L144-L171
  */
+// GRIZZLE-PENDING: Q1 (a Db that holds only `workload`): once grizzle's type declares no other operation, tsc refuses such a call and this file goes.
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";

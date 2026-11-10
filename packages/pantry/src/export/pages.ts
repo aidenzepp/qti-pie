@@ -342,11 +342,12 @@ export const assembleScan = <V extends XdmVocabulary>(
  * order, and nothing is buffered beyond the page being read. A page that says another follows but
  * has no end cursor ends the stream there: no request can name what follows it.
  *
- * @param page - Reads one page of the query for a request: `db.page` or a workload handle's `page`,
- *   with the query's parameters bound.
+ * @param page - Reads one page of the query for a request: a workload handle's `page`, with the
+ *   query's parameters bound.
  * @param size - The rows each page asks for, at least 1.
  * @returns The rows of every page, in order; fails with the first page's read error.
  */
+// GRIZZLE-PENDING: Q15 (a stream over an ordered query): grizzle pages an ordered query and streams none, so the export follows the cursors itself.
 export const scannedRows = <Row, Q, E, R>(
   page: (request: PageRequest) => Effect.Effect<Page<Row, Q>, E, R>,
   size: number,
