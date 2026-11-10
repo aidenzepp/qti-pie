@@ -79,15 +79,13 @@ export interface ImportOptions {
 
 /**
  * Whether the database refused an attempt for a reason outside the call's inputs, so the same call
- * may succeed again: grizzle's `TransientFailure`, or an `OpenError` whose admission was refused by
- * `SERIALIZABLE`. Nothing else is retried.
+ * may succeed again: grizzle's `TransientFailure`. `Db.open` contacts no database, so no
+ * `OpenError` is transient. Nothing else is retried.
  *
  * @param error - The failure.
  * @returns Whether it is transient.
  */
-const isTransient = (error: ApplyError | OpenError): boolean =>
-  error._tag === "TransientFailure" ||
-  (error._tag === "OpenError" && error.reason._tag === "AdmissionTransient");
+const isTransient = (error: ApplyError | OpenError): boolean => error._tag === "TransientFailure";
 
 /**
  * Run `attempt` again while the database calls the failure transient, on `schedule`. Each retry

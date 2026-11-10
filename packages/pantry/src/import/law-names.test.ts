@@ -5,7 +5,7 @@
  * names for a statement is named by its group, so the law table reads each name from the
  * statement's site and restates none.
  */
-import { lawsOf } from "@bjornpagen/grizzle";
+import { lawsByStatement } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
@@ -16,7 +16,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 describe("the laws each module names where it states them", () => {
   it("names each group by a law of the table, holds each check in its own law's group, groups every statement of Qti once, and names each law by its statement's group", () => {
     // Oracle: the law table's own names, Qti's statements, and grizzle's laws of each statement
-    // as an `invariant-rejected` outcome names them (`lawsOf`). Bound: every statement of Qti.
+    // as an `invariant-rejected` outcome names them (`lawsByStatement`). Bound: every statement of Qti.
     const known: ReadonlySet<string> = new Set(lawNames);
     const groups = new Map<Statement, readonly LawName[]>();
     for (const byName of namedLaws) {
@@ -35,7 +35,11 @@ describe("the laws each module names where it states them", () => {
       }
     }
 
-    const statements = lawsOf(Qti);
+    const lawsOfStatement = lawsByStatement(Qti);
+    const statements = Qti.statements.map((statement) => ({
+      laws: lawsOfStatement(statement),
+      statement,
+    }));
     assert.strictEqual(groups.size, statements.length, "a group holds a statement Qti does not");
     for (const { laws, statement } of statements) {
       const names = groups.get(statement) ?? [];

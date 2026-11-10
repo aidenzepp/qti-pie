@@ -63,8 +63,9 @@ const SCAN = new RegExp(
 );
 
 /**
- * The undeclared entity names the body references, in order of first use, and the code points the
- * body already holds in the sentinel range, whether written out or named by a character reference.
+ * The undeclared entity names the body references, in order of first use, each with where its first
+ * reference stands in the body, and the code points the body already holds in the sentinel range,
+ * whether written out or named by a character reference.
  */
 interface Scanned {
   /**
@@ -72,7 +73,7 @@ interface Scanned {
    * breaks the production.
    */
   readonly colon: Option.Option<{ readonly offset: number; readonly violation: string }>;
-  readonly names: readonly string[];
+  readonly names: ReadonlyMap<string, number>;
   readonly used: ReadonlySet<number>;
 }
 
@@ -81,7 +82,7 @@ interface Scanned {
  * neither predefined nor declared.
  */
 const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
-  const names = new Set<string>();
+  const names = new Map<string, number>();
   const used = sentinelsWritten(body);
   let colon: Scanned["colon"] = Option.none();
   for (const match of body.matchAll(SCAN)) {
@@ -92,13 +93,15 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
     }
 
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
-      names.add(name);
+      if (!names.has(name)) {
+        names.set(name, match.index);
+      }
     } else if (hex !== undefined || decimal !== undefined) {
       used.add(hex === undefined ? Number(decimal) : Number.parseInt(hex, 16));
     }
   }
 
-  return { colon, names: [...names], used };
+  return { colon, names, used };
 };
 
 /**
@@ -110,7 +113,8 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
  * treatment decides, as it decided each attribute default's references: a refused reference is a
  * well-formedness error, refused naming the entity. A kept one may be declared in the external
  * subset, which is never read: the name gets a private use character that occurs nowhere in the
- * body, and the parser appends it as plain text.
+ * body, and the parser appends it as plain text. Either refusal stands at the name's first
+ * reference, in `substituted`.
  *
  * @param substituted - The document text with its declared entities substituted.
  * @param prolog - The prolog, for its declared entities and its treatment of undeclared ones.
@@ -138,18 +142,22 @@ const assignSentinels = (
         );
       }
 
-      const [firstName] = scanned.names;
-      if (firstName === undefined) {
+      const at = (offset: number) =>
+        Option.some(positionOf(substituted, prolog.bodyStart + offset));
+      const [first] = scanned.names;
+      if (first === undefined) {
         return Effect.succeed(new Map<string, string>());
       }
 
       if (prolog.undeclared._tag === "refused") {
-        return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
+        const [name, offset] = first;
+
+        return Effect.fail(undeclaredEntity(name, prolog.undeclared.why, at(offset)));
       }
 
       const sentinels = new Map<string, string>();
       let point = SENTINEL_FIRST;
-      for (const name of scanned.names) {
+      for (const [name, offset] of scanned.names) {
         while (point <= SENTINEL_LAST && scanned.used.has(point)) {
           point += 1;
         }
@@ -159,6 +167,7 @@ const assignSentinels = (
             undeclaredEntity(
               name,
               "the document leaves no private use character free to stand for it",
+              at(offset),
             ),
           );
         }
@@ -273,6 +282,7 @@ const parse = (
         if (open.length >= elementDepth) {
           throw new ReaderRefusal({
             detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
+            position: Option.some({ column: parser.column, line: parser.line }),
             rule: "element-depth",
           });
         }

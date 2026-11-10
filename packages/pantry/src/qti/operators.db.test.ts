@@ -110,10 +110,7 @@ const containedIn =
   (from: readonly [string, ...string[]], to: readonly [string, ...string[]]) =>
   (law: Law): boolean =>
     law.kind === "contained" &&
-    [
-      law.from.relation,
-      ...law.from.terms.map((term) => (term.kind === "constant" ? "constant" : term.field)),
-    ].join(" ") === from.join(" ") &&
+    [law.from.relation, ...law.from.terms.map(({ field }) => field)].join(" ") === from.join(" ") &&
     [law.to.relation, ...law.to.terms.map(({ field }) => field)].join(" ") === to.join(" ");
 
 /**

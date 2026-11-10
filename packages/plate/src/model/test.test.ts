@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { attr, doc, el, text, xincludeNamespace } from "#plate/document/source.ts";
+import { attr, doc, el, text } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -10,7 +10,7 @@ import type {
 import { buildItem } from "#plate/model/item.ts";
 import type { Rule } from "#plate/model/expression.ts";
 import type { UnsupportedFeature } from "#plate/model/item.ts";
-import { absentControl, buildTest } from "#plate/model/test.ts";
+import { absentControl, buildTest, withLtiLinks } from "#plate/model/test.ts";
 import type {
   MarkedFeature,
   Section,
@@ -419,10 +419,10 @@ describe("buildTest", () => {
   );
 
   it.effect(
-    "marks an adaptive selection and an xi:include at their paths, and leaves the include out of the tree",
+    "marks an adaptive selection at its path, and keeps its section's item refs in the tree",
     () =>
-      Effect.gen(function* marksAdaptiveAndInclude() {
-        const included = test([
+      Effect.gen(function* marksAdaptiveSelection() {
+        const adaptive = test([
           part("P1", "linear", "individual", [
             section("S1", [
               el(
@@ -437,24 +437,16 @@ describe("buildTest", () => {
               ),
               itemRef("I1", "items/one.xml"),
             ]),
-            section("S2", [
-              itemRef("I2", "items/two.xml"),
-              el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace),
-              itemRef("I3", "items/three.xml"),
-            ]),
+            section("S2", [itemRef("I2", "items/two.xml"), itemRef("I3", "items/three.xml")]),
           ]),
         ]);
-        const built = yield* buildTest(included);
+        const built = yield* buildTest(adaptive);
 
-        assert.deepStrictEqual(checkStructure(included, tables), []);
+        assert.deepStrictEqual(checkStructure(adaptive, tables), []);
         assert.deepStrictEqual(built.unsupported, [
           mark(
             "qti-adaptive-selection",
             `${firstPart}/qti-assessment-section[1]/qti-adaptive-selection`,
-          ),
-          mark(
-            "xi:include",
-            `${firstPart}/qti-assessment-section[2]/{${xincludeNamespace}}include`,
           ),
         ]);
         assert.deepStrictEqual(
@@ -869,6 +861,37 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
   );
 
   it.effect(
+    "align-54 R3 test declarations F2: one that declares an outcome numAttempts and reads it has no structural refusal and runs, the declared outcome held (reading 168)",
+    () =>
+      Effect.gen(function* declaresAttempts() {
+        const document = processed(
+          [
+            el(
+              "qti-outcome-condition",
+              [],
+              [
+                el(
+                  "qti-outcome-if",
+                  [],
+                  [
+                    el("qti-gte", [], [variable("numAttempts"), baseValue("integer", "1")]),
+                    setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          [outcome("numAttempts", "integer")],
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+      }),
+  );
+
+  it.effect(
     "[T-9] absent, marked or runs: one that reads a part's, a section's or an item ref's duration is marked by each name, unless the test declares it whole",
     () =>
       Effect.gen(function* readsDurations() {
@@ -949,23 +972,6 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
         assert.deepInclude(built.unsupported, mark("variable:duration", processingPath));
-      }),
-  );
-
-  it.effect(
-    "[T-9] absent, marked or runs: one that holds an xi:include is marked xi:include at the include, once",
-    () =>
-      Effect.gen(function* holdsInclude() {
-        const document = processed([
-          setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
-          el("include", [attr("href", "shared/processing.xml")], [], xincludeNamespace),
-        ]);
-        const built = yield* buildTest(document);
-
-        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
-        assert.deepStrictEqual(built.unsupported, [
-          mark("xi:include", `${processingPath}/{${xincludeNamespace}}include`),
-        ]);
       }),
   );
 
@@ -1142,6 +1148,15 @@ const otherOutcomeOnly: readonly (readonly [string, readonly SourceAttribute[], 
   ["qti-outcome-maximum", [attr("outcome-identifier", "SCORE")], "F"],
 ];
 
+/**
+ * Construct a `qti-selection` of one child with a `with-replacement`.
+ *
+ * @param replacement Its `with-replacement`, as written.
+ * @returns The element.
+ */
+const replacingSelection = (replacement: string): SourceElement =>
+  el("qti-selection", [attr("select", "1"), attr("with-replacement", replacement)]);
+
 describe("buildTest's template defaults", () => {
   it.effect(
     "[T-9] reads the template default of each qti-template-default on an item ref, in document order with its expression",
@@ -1295,6 +1310,188 @@ describe("buildTest's template defaults", () => {
   );
 
   it.effect(
+    "align-54 r11 numbered reading counted once P1-1: in a test that holds a section ref, a.2.SCORE through an own a that no selection with replacement can repeat is marked by name at the processing, and runs through a repeatable a",
+    () =>
+      Effect.gen(function* marksUncountedNumbered() {
+        const rules = [setting("qti-set-outcome-value", "SCORE", variable("a.2.SCORE"))];
+        const once = referring("a", rules);
+        const replacing = test([
+          outcome("SCORE", "float", [defaultValue("0")]),
+          outcome("TIME", "duration"),
+          part("P1", "linear", "individual", [
+            section("S1", [
+              el("qti-selection", [attr("select", "2"), attr("with-replacement", "1")]),
+              itemRef("a", "items/one.xml"),
+            ]),
+            el("qti-assessment-section-ref", [
+              attr("href", "sections/more.xml"),
+              attr("identifier", "R1"),
+            ]),
+          ]),
+          el("qti-outcome-processing", [], rules),
+        ]);
+        const built = yield* buildTest(once);
+        const repeated = yield* buildTest(replacing);
+
+        assert.deepStrictEqual(checkStructure(once, tables), []);
+        assert.deepStrictEqual(checkStructure(replacing, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark("variable:a.2.SCORE", processingPath),
+        ]);
+        assert.deepStrictEqual(built.repeatable, new Set());
+        assert.strictEqual(repeated.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(repeated.unsupported, [
+          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.deepStrictEqual(repeated.repeatable, new Set(["a"]));
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: buildTest gives as repeatable exactly the item refs under a section whose qti-selection has with-replacement true, a nested section's included",
+    () =>
+      Effect.gen(function* collectsRepeatable() {
+        const document = test([
+          outcome("SCORE", "float"),
+          part("P1", "linear", "individual", [
+            section("S1", [
+              replacingSelection(" true "),
+              itemRef("a", "items/a.xml"),
+              section("S2", [itemRef("b", "items/b.xml")]),
+            ]),
+            section("S3", [replacingSelection("false"), itemRef("c", "items/c.xml")]),
+            section("S4", [
+              el("qti-selection", [attr("select", "1")]),
+              itemRef("d", "items/d.xml"),
+            ]),
+            section("S5", [itemRef("e", "items/e.xml")]),
+          ]),
+          part("P2", "linear", "individual", [
+            section("S6", [
+              replacingSelection("1"),
+              section("S7", [section("S8", [itemRef("f", "items/f.xml")])]),
+            ]),
+          ]),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.repeatable, new Set(["a", "b", "f"]));
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: in a test that holds a section ref, a.b.SCORE, a.SCORE.SCORE and a.0.SCORE through an own a, S1.x.SCORE through an own section and P1.x.SCORE through an own part, each with no own longer prefix, are marked by name at the processing",
+    () =>
+      Effect.gen(function* marksDottedRests() {
+        const names = ["a.b.SCORE", "a.SCORE.SCORE", "a.0.SCORE", "S1.x.SCORE", "P1.x.SCORE"];
+        const document = referring(
+          "a",
+          names.map((name) => setting("qti-set-outcome-value", "SCORE", variable(name))),
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          ...names.map((name) => mark(`variable:${name}`, processingPath)),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: in a test that holds a section ref, a template default that reads a.b.SCORE, S1.x.SCORE, P1.x.SCORE or a.SCORE.SCORE through an own prefix is marked by name at its path and left out, and the one that reads no variable stays",
+    () =>
+      Effect.gen(function* leavesDottedRestDefaults() {
+        const names = ["a.b.SCORE", "S1.x.SCORE", "P1.x.SCORE", "a.SCORE.SCORE"];
+        const document = referring(
+          "a",
+          [setting("qti-set-outcome-value", "SCORE", baseValue("float", "1"))],
+          [
+            ...names.map((name, index) => templateDefault(`T${String(index + 1)}`, variable(name))),
+            templateDefault("T5", baseValue("integer", "2")),
+          ],
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(nodeNamed(built, "a", "item-ref").templateDefaults, [
+          { expression: integerValue(2n), templateIdentifier: "T5" },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          ...names.map((name, index) =>
+            mark(
+              `variable:${name}`,
+              `${firstPart}/qti-assessment-section/qti-assessment-item-ref/qti-template-default[${String(index + 1)}]`,
+            ),
+          ),
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: the controls: beside a section ref, own a and a.b hold a.b.SCORE; through an a a selection with replacement can repeat, a.2.SCORE stays held where a.b.SCORE and a.2.b.SCORE do not; with no section ref, every dotted rest runs as before",
+    () =>
+      Effect.gen(function* keepsOwnReads() {
+        const sectionRef = el("qti-assessment-section-ref", [
+          attr("href", "sections/more.xml"),
+          attr("identifier", "R1"),
+        ]);
+        const withSection = (
+          body: readonly SourceChild[],
+          names: readonly string[],
+        ): SourceDocument =>
+          test([
+            outcome("SCORE", "float", [defaultValue("0")]),
+            part("P1", "linear", "individual", [section("S1", body), sectionRef]),
+            el(
+              "qti-outcome-processing",
+              [],
+              names.map((name) => setting("qti-set-outcome-value", "SCORE", variable(name))),
+            ),
+          ]);
+        const ownAB = withSection(
+          [itemRef("a", "items/one.xml"), itemRef("a.b", "items/two.xml")],
+          ["a.b.SCORE"],
+        );
+        const repeatable = withSection(
+          [replacingSelection("true"), itemRef("a", "items/one.xml")],
+          ["a.2.SCORE", "a.b.SCORE", "a.2.b.SCORE"],
+        );
+        const apart = processed(
+          ["I1.b.SCORE", "I1.SCORE.SCORE", "I1.0.SCORE", "S1.x.SCORE", "P1.x.SCORE"].map((name) =>
+            setting("qti-set-outcome-value", "SCORE", variable(name)),
+          ),
+        );
+        const ownBuilt = yield* buildTest(ownAB);
+        const repeatableBuilt = yield* buildTest(repeatable);
+        const apartBuilt = yield* buildTest(apart);
+
+        for (const document of [ownAB, repeatable, apart]) {
+          assert.deepStrictEqual(checkStructure(document, tables), []);
+        }
+        assert.strictEqual(ownBuilt.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(ownBuilt.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.deepStrictEqual(repeatableBuilt.unsupported, [
+          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark("variable:a.b.SCORE", processingPath),
+          mark("variable:a.2.b.SCORE", processingPath),
+        ]);
+        assert.strictEqual(apartBuilt.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(apartBuilt.unsupported, []);
+      }),
+  );
+
+  it.effect(
     "[T-9] an outcome-only kind beside a section ref marks the outcome processing: qti-test-variables and qti-number-selected each at its own path",
     () =>
       Effect.gen(function* marksBesideSectionRef() {
@@ -1374,6 +1571,106 @@ describe("buildTest's template defaults", () => {
         assert.deepStrictEqual(built.unsupported, [
           mark("qti-assessment-section-ref", sectionRefPath),
         ]);
+      }),
+  );
+});
+
+describe("withLtiLinks", () => {
+  it.effect(
+    "align-54 LTI item ref E21: leaves each item ref that names an LTI link out of the tree, a nested section's included, and marks it lti-link at its path after the test's own marks, once each; with none it gives the test back",
+    () =>
+      Effect.gen(function* linkedItemRefs() {
+        const built = yield* buildTest(twoParts);
+        const nested = `${root}/qti-test-part[1]/qti-assessment-section/qti-assessment-section/qti-assessment-item-ref`;
+        const second = `${root}/qti-test-part[2]/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(
+          built,
+          [
+            { identifier: "I2", path: nested },
+            { identifier: "I4", path: second },
+            { identifier: "I2", path: nested },
+          ],
+          twoParts,
+        );
+
+        assert.deepStrictEqual(
+          linked.parts.map((testPart) => testPart.children.map(outline)),
+          [[["S1", ["I1", ["S1a", []], "I3"]]], [["S2", []]]],
+        );
+        assert.deepStrictEqual(linked.unsupported, [
+          ...built.unsupported,
+          mark("lti-link", nested),
+          mark("lti-link", second),
+        ]);
+        assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
+        assert.strictEqual(withLtiLinks(built, [], twoParts), built);
+      }),
+  );
+
+  it.effect(
+    "align-54 LOM languages E21: a test whose processing counts over its items, with an LTI ref left out, marks each outcome-only expression at its own path and the processing, as a section ref does, once each",
+    () =>
+      Effect.gen(function* linkedCounts() {
+        const document = processed(
+          [
+            setting(
+              "qti-set-outcome-value",
+              "N",
+              el("qti-sum", [], [el("qti-number-presented", [])]),
+            ),
+            ...aggregating,
+          ],
+          counters,
+        );
+        const built = yield* buildTest(document);
+        const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(
+          {
+            ...built,
+            unsupported: [
+              mark(
+                "qti-number-selected",
+                `${processingPath}/qti-set-outcome-value[3]/qti-number-selected`,
+              ),
+            ],
+          },
+          [{ identifier: "I1", path: ref }],
+          document,
+        );
+
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(linked.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(linked.unsupported, [
+          mark(
+            "qti-number-selected",
+            `${processingPath}/qti-set-outcome-value[3]/qti-number-selected`,
+          ),
+          mark("lti-link", ref),
+          mark(
+            "qti-number-presented",
+            `${processingPath}/qti-set-outcome-value[1]/qti-sum/qti-number-presented`,
+          ),
+          mark(
+            "qti-test-variables",
+            `${processingPath}/qti-set-outcome-value[2]/qti-sum/qti-test-variables`,
+          ),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "align-54 LOM languages E21, control: a test whose processing counts over no items keeps it running when an LTI ref is left out",
+    () =>
+      Effect.gen(function* linkedNoCounts() {
+        const document = processed([
+          setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE")),
+        ]);
+        const built = yield* buildTest(document);
+        const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(built, [{ identifier: "I1", path: ref }], document);
+
+        assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
+        assert.deepStrictEqual(linked.unsupported, [mark("lti-link", ref)]);
       }),
   );
 });

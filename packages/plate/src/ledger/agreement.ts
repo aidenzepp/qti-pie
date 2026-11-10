@@ -19,6 +19,61 @@
  * is never kept past the state of the package it is tied to. It records the copy's commit too, as
  * provenance only, so re-pointing the copy at a commit with the same rows keeps it.
  *
+ * The run sees only the corpus, so a difference no corpus package shows has no row. Each such
+ * difference known is recorded here instead, pantry's side read from its source, not from a run:
+ *
+ * - A reference from inside a section document a test places twice, through a name one of its
+ *   placements gives, reads the placement that holds it and is accepted (reading 86, "a section
+ *   document a test places twice is written once"; `#plate/package/open.ts`). Pantry's law
+ *   `Prefixed_reference` (`packages/pantry/src/qti/expressions.ts`) refuses any reading through a
+ *   name two placements give, wherever the reference stands. No corpus package holds a section
+ *   ref.
+ * - Under an item ref that names an item, a variable mapping whose `target-identifier` is
+ *   `QTI_CONTEXT` is refused `duplicate-identifier`, since every item holds that built-in (reading
+ *   97, "a variable mapping's target names no other variable its item ref's item holds", with
+ *   reading 106's built-ins). Pantry's `Variable_mapping_target`
+ *   (`packages/pantry/src/qti/tests.ts`) holds a target outside the three session variables only,
+ *   so it accepts the mapping where the item writes no declaration of `QTI_CONTEXT`.
+ * - Under an item ref that names an LTI link, a variable mapping whose target is its own source, such
+ *   as source and target `duration`, is accepted: reading 97 says "a mapping whose target is its
+ *   own source maps nothing away and is valid". Pantry's `Variable_mapping_target`
+ *   (`packages/pantry/src/qti/tests.ts`) refuses a session variable as any mapping's target, its
+ *   own source included.
+ * - An href that reading 102 reads and pantry reads no name from is accepted: `a%zz.png`, `a%FF.png`,
+ *   `a%00.png`, `1:a.png` and `a%2Fb.png`, and a `srcset` of two candidates
+ *   (`#plate/document/href.ts`). Pantry refuses each under its stated limit `Href_form`
+ *   (`packages/pantry/src/qti/package.ts`).
+ * - A file key with a `..` segment that does not climb out of the package, such as `a/../b.xml`, is
+ *   accepted, as reading 138 refuses only a backslash and a drive prefix. Pantry's
+ *   `unsafeEntryPath` (`packages/pantry/src/package/zip.ts`) refuses every `..` segment.
+ * - A LOM, usage-data or fragment document whose root is not its type's, or that cannot be read, is
+ *   accepted: plate reads these documents for their root alone and refuses only a QTI 2 root, a
+ *   limit the README records. Pantry refuses both: a root that its closed relation `RootOfType`
+ *   (`packages/pantry/src/grammar/install.ts`) does not pair with the resource's type, and a
+ *   document it cannot read.
+ * - A LOM `learningResourceType` of `exam` or `self assessment` from the LOM vocabulary in an
+ *   external record file, a `resourcemetadata/xml` document, is accepted. Plate holds reading 122
+ *   ("a LOM `learningResourceType` of the LOM vocabulary is neither `exam` nor `self assessment`")
+ *   in the manifest alone (`#plate/package/manifest.ts`), and reads a record file for its root
+ *   alone, the limit the README records. Pantry refuses it `lom-learning-resource-type`: reading
+ *   122, as decision 460 amended it, holds over the records of the manifest and of each external
+ *   record file (`recordDocumentTypes`, `packages/pantry/src/qti/metadata.ts`).
+ * - Through an item ref `lti` that names an LTI link, `lti.1.SCORE` is read as a numbered reading and
+ *   refused (reading 88, "a numbered reference such as `Q01.2.SCORE` names an instance of an item
+ *   ref that a selection with replacement can repeat, and nothing else"). Pantry resolves its split
+ *   reading through the link unchecked (`packages/pantry/src/qti/expressions.ts`) and accepts it.
+ *   Which reading holds is a question for the shared readings.
+ * - A gap match interaction of one gap bound to an `ordered` or a `record` response is accepted:
+ *   plate holds a gap match's binding only to reading 169, which counts two or more gaps. Pantry's
+ *   `BindingFit` (`packages/pantry/src/grammar/facets.ts`) admits `single` and `multiple` alone.
+ * - A section ref whose `href` names no section document, such as the test itself, an item, a
+ *   webcontent file, an empty `href` or `#x`, is accepted and judged no further. Pantry refuses it
+ *   by its law `Document_entry` (`packages/pantry/src/qti/package.ts`).
+ * - A package whose tests together place section documents more than 2,048 times, or place more than
+ *   4 MiB of them, is refused `assembly-limit`, plate's own stated limit and no rule of QTI
+ *   (`#plate/package/open.ts`). Pantry states no bound on a test's assembly, and judges such a
+ *   package by its laws.
+ *
  * @module
  */
 import { readdir, readFile } from "node:fs/promises";
@@ -41,7 +96,7 @@ export const verdictsSource = "packages/pantry/verdicts/qti-examples-0a92fbb.tsv
  * The commit of `main` whose {@link verdictsSource} `qti-verdicts.tsv` copies byte for byte: the
  * `main` the agreement was last run on.
  */
-export const verdictsCommit = "8d8832a";
+export const verdictsCommit = "c6e55307";
 
 /**
  * The copy's path, beside this module.
@@ -133,10 +188,12 @@ export type RulingState = typeof RulingState.Type;
 /**
  * The Schema of the operator's ruling that a disagreement is an expected difference.
  *
- * `expectedWhile` ties the ruling to the state of the other package, never to all time ("pantry
- * does not yet model this vocabulary (its phases 6 to 11)"); `group` is the ruling's group, 1 to
- * 3; `source` names where it was ruled; and `state` is the state it was made on, whose sides
- * {@link staleRulings} compares with the agreement's run.
+ * `expectedWhile` ties the ruling to the state of the package that does not model what the other
+ * judges, never to all time ("pantry does not yet model this vocabulary (its phases 6 to 11)",
+ * "plate does not validate MathML (M3)"); `group` is the ruling's group, one of criterion 5's three
+ * expected differences: 1, either package's unmodeled vocabulary; 2, metaData and LOM; 3,
+ * usageData, which carries QTI 2.2 usage data; `source` names where it was ruled; and `state` is
+ * the state it was made on, whose sides {@link staleRulings} compares with the agreement's run.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Ruling` is the Schema and the type of a ruling under one name, so a decoder and a signature read as one thing.
 export const Ruling = Schema.Struct({

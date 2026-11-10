@@ -1647,6 +1647,7 @@ describe("an Extended Text the renderer does not support", () => {
             ),
           ),
           tables,
+          Option.none(),
         );
         const accepted = acceptedItem(verdict).pipe(
           Option.filter(() => verdict.verdict === "accepted-with-unsupported"),

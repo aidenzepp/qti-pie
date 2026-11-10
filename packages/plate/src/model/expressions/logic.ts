@@ -21,8 +21,9 @@ import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts
 /**
  * The rule of `qti-and`, `qti-or` and `qti-not`: a single boolean, of operands that must each be a
  * single boolean, so each operand of another type is a mismatch that accepts `boolean`, `single`.
- * The qti package refuses the same (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * The qti package refuses the same (P23, the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`, over the kinds' typings in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpAnd
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpOr

@@ -193,6 +193,7 @@ const templated = Option.getOrElse(
         ),
       ),
       tables,
+      Option.none(),
     ),
   ),
   () => assert.fail("the hand-built templated item is not accepted"),

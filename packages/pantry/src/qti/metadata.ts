@@ -185,20 +185,22 @@ const xmlNonSpace = "\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}"
  * A text with no XML whitespace at either end, the empty text included: a piece's `token` once its
  * text's outer whitespace is set apart.
  */
-export const trimmedPattern = `^(?:[${xmlNonSpace}](?:[${xmlChar}]*[${xmlNonSpace}])?)?$`;
+export const trimmedPattern = Compute.pattern(
+  `^(?:[${xmlNonSpace}](?:[${xmlChar}]*[${xmlNonSpace}])?)?$`,
+);
 
 /**
  * A nonempty text holding no XML whitespace: an assessment object's identifier, collapsed. That it
  * is an NCName is AL1's lexical half over the attribute.
  */
-export const identifierPattern = `^[${xmlNonSpace}]+$`;
+export const identifierPattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
 
 /**
  * A well-formed BCP 47 language tag as a whole text (`languageTag`, spec reading 129): the compared
  * forms of an `xml:lang` that states a language to `lom-title`. A form that is no tag, the empty
  * one included, names no language (RFC 5646 §2.1), so the root states none (spec reading 151).
  */
-export const languageTagPattern = `^(?:${languageTag})$`;
+export const languageTagPattern = Compute.pattern<string>(`^(?:${languageTag})$`);
 
 /**
  * A resource as the LOM laws read it, keyed by its `cp:resource` node: `named`, the type of the

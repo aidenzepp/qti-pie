@@ -181,10 +181,12 @@ const readValue = (read: PrefixedRead, name: string): Result.Result<Value, Recor
  */
 export interface PrefixedName {
   /**
-   * Whether the name reads the item's one occurrence: `ITEMREF.VAR` or `ITEMREF.1.VAR`. A name
-   * `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not exist, since selection
-   * with replacement is marked (reading 4; G-R3, pending), and its value is NULL of the variable's
-   * type.
+   * Whether the name reads the item's one occurrence: `ITEMREF.VAR`, or `ITEMREF.1.VAR` through an
+   * item ref a selection with replacement can repeat, the only one through which a numbered name
+   * reads an occurrence (reading 88; `TestScope.repeatable` in `#plate/engine/scope.ts`). A name
+   * `ITEMREF.N.VAR` with `N` other than 1 through such an item ref names an occurrence that does
+   * not exist, since selection with replacement is marked (reading 4; G-R3, pending), and its value
+   * is NULL of the variable's type.
    */
   readonly first: boolean;
   readonly item: ScopeItem;
@@ -194,9 +196,11 @@ export interface PrefixedName {
 
 /**
  * Read a prefixed name of a test's processing through its item ref, as a value: the one reading of
- * the name that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts`
- * resolves it (a name the test declares whole never split, a mapping target before the item's own
- * declaration), with what it names in the item and whether it reads the item's one occurrence.
+ * the name that resolves, by reading 48 ("a dotted reference is accepted when exactly one reading
+ * names a real item ref, test part or section and its variable"), as `prefixedVariable` in
+ * `#plate/engine/scope.ts` resolves it (a name the test declares whole never split, a mapping
+ * target before the item's own declaration), with what it names in the item and whether it reads
+ * the item's one occurrence.
  *
  * A name that resolves to an item's record response reads a record, which is no value: it fails,
  * as a value read of the run's own record response does ({@link variableRead}); `qti-field-value`,
@@ -329,7 +333,10 @@ const prefixedOf = (variables: Variables, name: string): Option.Option<PrefixedR
  * is then never read through an item ref, as their value reads decide (`namedResponse` and
  * `evaluateDefault` in `#plate/engine/expressions/references.ts`): for `qti-correct` a response
  * the holder declares; for `qti-default` a response, an outcome or a template variable it
- * declares, or a built-in the run holds ({@link builtInType}).
+ * declares, or a built-in the run holds ({@link builtInType}). A `qti-correct` also reads a held
+ * built-in it names, `numAttempts` or `duration` (E22a, reading 111), which `namedResponse` takes
+ * before any item ref; this test leaves it out, since a built-in's name has no dot, so no prefixed
+ * reading resolves it, and it holds no record.
  *
  * @param kind The kind.
  * @param identifier The name it writes.
@@ -370,9 +377,10 @@ const declaredRecord = (kind: "correct" | "default", declared: RecordDeclaration
  * do not hold may name an item's record response through its item ref (`prefixedVariable` in
  * `#plate/engine/scope.ts`), and reads it there: a `qti-variable` the record the item's record
  * holds, the NULL record when it holds none; a `qti-correct` or a `qti-default` the item's
- * declared correct response or default, the NULL record when it declares none. `ITEMREF.N.VAR`
- * with `N` other than 1 names an occurrence that does not exist and reads the NULL record (G-R3,
- * pending).
+ * declared correct response or default, the NULL record when it declares none. Through an item ref
+ * a selection with replacement can repeat, the only one through which a numbered name reads an
+ * occurrence (reading 88), `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not
+ * exist and reads the NULL record (G-R3, pending).
  *
  * @param operand The operand.
  * @param scope The holder and the variables of the run.

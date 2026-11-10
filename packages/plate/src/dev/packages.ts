@@ -313,8 +313,9 @@ const realPathOf = (
  *
  * {@link openDirectory} gives `openPackage` the walk's paths in the walk's order, and
  * `packageFiles` keeps, of two keys with one normal form, the first, so the same walk through
- * `packageFiles` gives the key whose bytes were judged. A file named `foo\secret.png` is judged as
- * `foo/secret.png`, and its key is the name with the backslash, never the path through `foo`.
+ * `packageFiles` gives the key whose bytes were judged. A walk that finds a key `packageFiles`
+ * refuses, such as a file named `foo\secret.png` (reading 138), gives no key, so no file of that
+ * package is read, and never one through a link `foo`.
  *
  * @param source The package.
  * @param file The file's path in normal form.

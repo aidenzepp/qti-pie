@@ -90,8 +90,10 @@ interface HeldResponse {
   readonly declaration: ResponseDeclaration;
   /**
    * Whether the name reads the one occurrence of its item: always for a response the holder
-   * declares, and for a prefixed name but `ITEMREF.N.VAR` with `N` other than 1, an occurrence that
-   * does not exist (`PrefixedName.first` in `#plate/engine/refs.ts`).
+   * declares, and for a prefixed name but `ITEMREF.N.VAR` with `N` other than 1 through an item ref
+   * a selection with replacement can repeat, an occurrence that does not exist
+   * (`PrefixedName.first` in `#plate/engine/refs.ts`); through any other item ref a numbered name
+   * reads no occurrence (reading 88).
    */
   readonly first: boolean;
   readonly kind: "held";
@@ -103,17 +105,27 @@ interface HeldResponse {
  * {@link HeldResponse}; or, in a test's run, `unheld`, a variable a prefixed name reads through its
  * item ref whose declared type the value model does not hold, base type `file`, a record response
  * with a field of it, or a record outcome or template variable, with the NULL a read of it gives
- * (`prefixedRead` in `#plate/engine/refs.ts`). The engine holds no declaration of such a variable,
- * so no correct response, mapping or area mapping of it. A prefixed name of an item's record
- * response is neither: its read fails before ({@link namedResponse}).
+ * (`prefixedRead` in `#plate/engine/refs.ts`); or `built-in`, a built-in variable the run holds,
+ * the run's own or an item's through its item ref, with the correct response a `qti-correct` of it
+ * reads. The engine holds no declaration of an unheld variable or a built-in, so no mapping or area
+ * mapping of it. A prefixed name of an item's record response is none of these: its read fails
+ * before ({@link namedResponse}).
  */
-type NamedResponse = HeldResponse | { readonly kind: "unheld"; readonly value: Value };
+type NamedResponse =
+  | HeldResponse
+  | { readonly correct: Value; readonly kind: "built-in" }
+  | { readonly kind: "unheld"; readonly value: Value };
 
 /**
  * Find the response a `qti-correct`, a `qti-map-response` or a `qti-map-response-point` names.
  *
  * A response the holder declares is read from the holder and the variables: the correct response
- * template processing set (`Variables.correct`) and the response's value. In a test's run, whose
+ * template processing set (`Variables.correct`) and the response's value. A name the holder
+ * declares no response by that names a built-in the run holds (`builtInType` in
+ * `#plate/engine/refs.ts`) is that built-in, which a `qti-correct` names as a response (reading
+ * 111, "a processing element's `identifier` names a variable of the kind the element reads or
+ * sets"): its correct response is the one template processing set, else NULL of its type, since no
+ * declaration gives it one. In a test's run, whose
  * holder declares no response, a prefixed name is read through its item ref (`prefixedRead` in
  * `#plate/engine/refs.ts`; 0.14 decision 7): the item's declaration of the response it names, the
  * correct response its record's template processing set, and its value in the record. The prefixed
@@ -121,8 +133,10 @@ type NamedResponse = HeldResponse | { readonly kind: "unheld"; readonly value: V
  * record's gap before the declaration is judged. A prefixed name whose one reading names a
  * variable of base type `file`, or a record outcome or template variable, a mapping target whose
  * source is one included, is `unheld`, with the NULL its read gives (G-R3, pending; G-R4, pending:
- * such a variable reads NULL). One that names an item's record response reads a record, no value,
- * and fails as `prefixedRead` fails it.
+ * such a variable reads NULL). One whose reading names an item-session built-in is that built-in,
+ * with the correct response its record's template processing set, else NULL of its type, and NULL
+ * of its type for `ITEMREF.N.VAR` with `N` other than 1. One that names an item's record response
+ * reads a record, no value, and fails as `prefixedRead` fails it.
  *
  * @param item The declarations holder: an item, or a test's outcome declarations, which declare no
  *   response.
@@ -140,6 +154,18 @@ const namedResponse = (
   variables: Variables,
   identifier: string,
 ): Result.Result<NamedResponse, RecordOperandError | UnknownIdentifierError> => {
+  const builtIn = builtInType(variables, identifier);
+  if (!item.responses.has(identifier) && Option.isSome(builtIn)) {
+    const { baseType, cardinality } = builtIn.value;
+
+    return Result.succeed({
+      correct: Option.getOrElse(own(variables.correct, identifier), () =>
+        nullOf(baseType, cardinality),
+      ),
+      kind: "built-in",
+    });
+  }
+
   if (item.responses.has(identifier) || variables.test === undefined) {
     return Result.map(responseOf(item, identifier), (declaration) => ({
       correct: own(variables.correct, identifier),
@@ -155,6 +181,18 @@ const namedResponse = (
     (read): Result.Result<NamedResponse, RecordOperandError | UnknownIdentifierError> => {
       if (read.named.kind === "unheld") {
         return Result.succeed({ kind: "unheld", value: read.value });
+      }
+
+      const { baseType, cardinality } = read.named.type;
+      if (read.named.kind === "built-in" && baseType !== "file" && cardinality !== "record") {
+        const nothing = nullOf(baseType, cardinality);
+
+        return Result.succeed({
+          correct: read.first
+            ? Option.getOrElse(own(read.item.record.correct, read.named.identifier), () => nothing)
+            : nothing,
+          kind: "built-in",
+        });
       }
 
       const declaration =
@@ -178,15 +216,15 @@ const namedResponse = (
 /**
  * Find the response a `qti-map-response` or a `qti-map-response-point` maps ({@link
  * namedResponse}), which must be held: the engine holds no mapping or area mapping of a variable of
- * base type `file` or cardinality `record`, so a prefixed name that reads an unheld one fails as a
- * name of no response does, and one that reads an item's record response fails as a value read of
- * it does.
+ * base type `file` or cardinality `record`, nor of a built-in, which no declaration gives one, so a
+ * name of a built-in, and a prefixed name that reads an unheld variable, fail as a name of no
+ * response does, and one that reads an item's record response fails as a value read of it does.
  *
  * @param item The declarations holder.
  * @param variables The variables of the run.
  * @param identifier The response's identifier, prefixed in a test's run.
  * @returns The held response; or an {@link UnknownIdentifierError} with holder `item` when the name
- *   reads an unheld variable; or the failure {@link namedResponse} gives.
+ *   reads an unheld variable or a built-in; or the failure {@link namedResponse} gives.
  */
 const heldResponse = (
   item: Declarations,
@@ -289,10 +327,11 @@ const keyMatches = (entry: MapEntry, single: Single): boolean =>
  *
  * Overlapping entries are valid, so a value two or more entries match maps by the first of them
  * listed. That is the order QTI gives an area mapping ("each area is tested in turn, with those
- * listed first taking priority in the case where areas overlap"), and pantry's reading 150
- * (decision 425), which this renderer follows: a mapping that lists `York` then `york`, both
- * compared with case folded, maps `york` by `York`. BG010 lists its case-sensitive `York` before
- * its `york`, so its `York` maps by the first and `YORK` by the second.
+ * listed first taking priority in the case where areas overlap"), and reading 165 ("Two string map
+ * keys that differ only by case are two keys, and a response that matches several entries takes
+ * the first one listed"), which this renderer follows: a mapping that lists `York` then `york`,
+ * both compared with case folded, maps `york` by `York`. BG010 lists its case-sensitive `York`
+ * before its `york`, so its `York` maps by the first and `YORK` by the second.
  *
  * @param mapping The response's mapping.
  * @param single The response value.
@@ -538,12 +577,17 @@ const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
  * Give the value of a `qti-correct`: the correct response template processing set for the response
  * (`Variables.correct`), else its declaration's correct response, else NULL of its declared type.
  *
- * The response must be declared either way, so an override map never makes an undeclared name
- * readable; `qti-set-correct-response` names only a declared response on a checked item. In a
+ * The response must be declared or be a built-in the run holds, so an override map never makes an
+ * undeclared name readable; `qti-set-correct-response` names only a declared response or a built-in
+ * response on a checked item. A built-in, `numAttempts`, reads the correct response template
+ * processing set for it, else NULL of its own type, a single integer, since it declares none
+ * (reading 111; OD-A54-15), and never the attempt count. In a
  * test's run a prefixed name reads the item's correct response through its item ref
  * ({@link namedResponse}; 0.14 decision 7): the one its record's template processing set, else
- * its declaration's, else NULL of its declared type; `ITEMREF.N.VAR` with `N` other than 1 names
- * an occurrence that does not exist and reads NULL of the response's type (G-R3, pending). A
+ * its declaration's, else NULL of its declared type; through an item ref a selection with
+ * replacement can repeat, the only one through which a numbered name reads an occurrence (reading
+ * 88), `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not exist and reads NULL
+ * of the response's type (G-R3, pending). A
  * prefixed name of a response of base type `file`, or of a record response with a field of it,
  * which the value model holds no value of, reads the NULL `qti-variable` reads of it (G-R3,
  * pending: such a variable reads NULL). A prefixed name of an item's record response reads a
@@ -561,6 +605,10 @@ const evaluateCorrect: Evaluator<"correct"> = (expression, scope) =>
   Result.map(namedResponse(scope.item, scope.variables, expression.identifier), (named) => {
     if (named.kind === "unheld") {
       return named.value;
+    }
+
+    if (named.kind === "built-in") {
+      return named.correct;
     }
 
     const { baseType, cardinality } = named.declaration;
@@ -642,8 +690,11 @@ const prefixedDeclaration = (
  * its declared type, as a `qti-default` reads its own item's.
  *
  * An item-session built-in (`numAttempts`, `completionStatus`) has no declaration and so no
- * declared default: it gives NULL of its own type. `ITEMREF.N.VAR` with `N` other than 1 names an
- * occurrence that does not exist and gives NULL of the variable's type (G-R3, pending). A variable
+ * declared default: it gives the default its record's template processing set (reading 111), else
+ * NULL of its own type. Through an item ref a selection with replacement can repeat, the only one
+ * through which a numbered name reads an occurrence (reading 88), `ITEMREF.N.VAR` with `N` other
+ * than 1 names an occurrence that does not exist and gives NULL of the variable's type (G-R3,
+ * pending). A variable
  * of base type `file`, or a record outcome or template variable, whose default the item model does
  * not hold, gives the NULL `qti-variable` reads of it (G-R3, pending: such a variable reads NULL).
  * An item's record response never reaches here: `prefixedRead` fails its value read first, and
@@ -677,10 +728,17 @@ const prefixedDefault = (read: PrefixedName): Option.Option<Value> => {
   }
 
   const { baseType, cardinality } = read.named.type;
+  if (read.named.kind !== "built-in" || baseType === "file" || cardinality === "record") {
+    return Option.none();
+  }
 
-  return read.named.kind === "built-in" && baseType !== "file" && cardinality !== "record"
-    ? Option.some(nullOf(baseType, cardinality))
-    : Option.none();
+  const nothing = nullOf(baseType, cardinality);
+
+  return Option.some(
+    read.first
+      ? Option.getOrElse(own(read.item.record.defaults, read.named.identifier), () => nothing)
+      : nothing,
+  );
 };
 
 /**
@@ -689,22 +747,23 @@ const prefixedDefault = (read: PrefixedName): Option.Option<Value> => {
  * type, as the information model says: it "returns the associated defaultValue or NULL if no
  * default value was declared".
  *
- * It reads the defaults and the declaration, never the attempt's value. A response, an outcome or
- * a template variable with no `qti-default-value` and no default set gives NULL of its base type
- * and cardinality, a single integer or float outcome included: the 0 an attempt starts such an
- * outcome at is not a declared default, and a template variable's current value is not its default
- * either. The variable must be declared for a set default to be read, so an override map never
- * makes an undeclared name readable; `qti-set-default-value` names only a declared response or
- * outcome on a checked item. A declared variable wins over a built-in of the same name, as
- * `qti-variable` reads it. A built-in the run holds, `numAttempts` or `completionStatus`, and in a
- * test's run the test's own `duration`, has no declaration and so declares no default: it gives
- * NULL of the built-in's own type ({@link builtInType}), a single integer, a single identifier or
- * a single duration, whatever the attempt holds of it and whether or not the test's scope holds a
- * time. In a test's run a prefixed name reads the default of the item variable it names through its
- * item ref ({@link prefixedDefault}), a variable of base type `file` or a record outcome or
- * template variable its NULL; a prefixed name of an item's record response reads a record, no
- * value, and fails, while `qti-field-value`, `qti-is-null` and `qti-match` read its declared
- * default (`recordOrValue` in `#plate/engine/refs.ts`).
+ * It reads the defaults and the declaration, never the attempt's value. A response, an outcome or a
+ * template variable with no `qti-default-value` and no default set gives NULL of its base type and
+ * cardinality, a single integer or float outcome included: the 0 an attempt starts such an outcome
+ * at is not a declared default, and a template variable's current value is not its default either.
+ * The variable must be declared, or be a built-in the run holds, for a set default to be read, so
+ * an override map never makes an undeclared name readable; `qti-set-default-value` names only a
+ * declared response or outcome, or a built-in of either kind, on a checked item. A declared
+ * variable wins over a built-in of the same name, as `qti-variable` reads it. A built-in the run
+ * holds, `numAttempts` or `completionStatus`, and in a test's run the test's own `duration`, has no
+ * declaration and so declares no default: it gives the default template processing set for it
+ * (reading 111; OD-A54-15), else NULL of the built-in's own type ({@link builtInType}), a single
+ * integer, a single identifier or a single duration, never what the attempt holds of it, and
+ * whether or not the test's scope holds a time. In a test's run a prefixed name reads the default
+ * of the item variable it names through its item ref ({@link prefixedDefault}), a variable of base
+ * type `file` or a record outcome or template variable its NULL; a prefixed name of an item's
+ * record response reads a record, no value, and fails, while `qti-field-value`, `qti-is-null` and
+ * `qti-match` read its declared default (`recordOrValue` in `#plate/engine/refs.ts`).
  *
  * @param expression The `qti-default`.
  * @param scope The holder, whose declarations give the defaults, and the variables, whose set
@@ -737,7 +796,11 @@ const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
 
   const builtIn = builtInType(scope.variables, expression.identifier);
   if (Option.isSome(builtIn)) {
-    return Result.succeed(nullOf(builtIn.value.baseType, builtIn.value.cardinality));
+    return Result.succeed(
+      Option.getOrElse(own(scope.variables.defaults, expression.identifier), () =>
+        nullOf(builtIn.value.baseType, builtIn.value.cardinality),
+      ),
+    );
   }
 
   const unknown = new UnknownIdentifierError({

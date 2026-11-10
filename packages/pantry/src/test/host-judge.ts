@@ -49,7 +49,7 @@ import {
   judgedSideOf,
   SideSchema,
 } from "#pantry/test/key-copies.ts";
-import type { Datum, JudgedLaw, JudgedSide, JudgedSourceSide } from "#pantry/test/key-copies.ts";
+import type { Datum, JudgedLaw, JudgedSide } from "#pantry/test/key-copies.ts";
 
 /**
  * A row as the host holds it: each of its fields' values that is a datum.
@@ -444,9 +444,9 @@ interface AxisCopy {
 }
 
 /**
- * A law side's term that reads a field as it is: no `pred` term and no constant.
+ * A law side's term that reads a field as it is: no `pred` term.
  */
-type FieldTerm = Extract<JudgedSourceSide["law"]["terms"][number], { readonly kind: "field" }>;
+type FieldTerm = Extract<JudgedSide["law"]["terms"][number], { readonly kind: "field" }>;
 
 /**
  * Test whether a law side's term reads a field as it is.
@@ -454,7 +454,7 @@ type FieldTerm = Extract<JudgedSourceSide["law"]["terms"][number], { readonly ki
  * @param term - The term.
  * @returns Whether it is a field term.
  */
-const isFieldTerm = (term: JudgedSourceSide["law"]["terms"][number]): term is FieldTerm =>
+const isFieldTerm = (term: JudgedSide["law"]["terms"][number]): term is FieldTerm =>
   term.kind === "field";
 
 /**
@@ -551,7 +551,7 @@ const copyAlong = (rows: ReadonlyMap<string, FilledRow[]>, copies: readonly Axis
 interface StepCopy {
   readonly axis: "last" | "predecessor";
   readonly family: Family;
-  readonly from: JudgedSourceSide;
+  readonly from: JudgedSide;
   readonly pairs: readonly (readonly [string, string, Datum])[];
   readonly to: JudgedSide;
 }
@@ -1040,26 +1040,13 @@ interface LawRead {
 }
 
 /**
- * Whether a constant's literal is a scalar a row holds as it is: a text, a number, a bigint or a
- * boolean.
- *
- * @param value - The literal.
- * @returns Whether it is one.
- */
-const isScalar = (value: unknown): value is bigint | boolean | number | string =>
-  Predicate.isString(value) ||
-  Predicate.isBigInt(value) ||
-  Predicate.isNumber(value) ||
-  Predicate.isBoolean(value);
-
-/**
  * Project one side over a relation's rows ({@link Projection}).
  *
  * @param side - The side.
  * @param held - The rows.
  * @returns The tuples and the absent values.
  */
-const projectionOf = (side: JudgedSourceSide, held: readonly HostRow[]): Projection => {
+const projectionOf = (side: JudgedSide, held: readonly HostRow[]): Projection => {
   const absent = new Set(side.unread.map((kind) => `${side.relation}: a ${kind} term`));
   const tuples = new Map<string, HostRow>();
   for (const row of held) {
@@ -1077,18 +1064,6 @@ const projectionOf = (side: JudgedSourceSide, held: readonly HostRow[]): Project
     const values: Datum[] = [];
     let outside = false;
     for (const term of side.law.terms) {
-      if (term.kind === "constant") {
-        // A containment source's constant is its value on every row (grizzle's `constant(v)`).
-        const { value: constant } = term;
-        if (isScalar(constant)) {
-          values.push(constant);
-        } else {
-          absent.add(`${side.relation}: a constant term`);
-        }
-
-        continue;
-      }
-
       const value = row[term.field];
       if (value === undefined) {
         absent.add(`${side.relation}.${term.field}`);

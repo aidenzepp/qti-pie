@@ -437,6 +437,12 @@ const located = (scheme: string | undefined, authority: string | undefined, path
  * segments decoded the same way. An `href` with a scheme or an authority is a URI, kept as written
  * but for its dot segments. A package refuses both as naming no file inside it.
  *
+ * `openPackage` resolves an item ref through the `xml:base` in scope (reading 103), which the test
+ * model does not keep. An accepted test holds no `xml:base` above an item ref: no test element,
+ * from `qti-assessment-test` to `qti-assessment-item-ref`, declares one, so `check` refuses it
+ * (reading 90). So the test's location is the base both sides resolve an accepted test's item ref
+ * against.
+ *
  * @param test The test.
  * @param ref The item ref.
  * @returns The location of the document the ref names.

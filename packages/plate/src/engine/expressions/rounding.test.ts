@@ -212,7 +212,7 @@ describe("the rounding family's evaluators", () => {
     );
   });
 
-  it("[I-9a] qti-round-to of the largest finite float to 1 significant figure gives that float, of its sign, not an infinity (readings 45 and 56)", () => {
+  it('[I-9a] qti-round-to of the largest finite float to 1 significant figure gives that float, of its sign, not an infinity, by reading 45 and reading 56 ("an `xs:double` literal beyond the largest finite double names the largest finite double of its sign")', () => {
     const one = literal(1n);
 
     assert.deepStrictEqual(

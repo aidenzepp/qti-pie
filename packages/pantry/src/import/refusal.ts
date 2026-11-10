@@ -21,7 +21,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { lawsByStatement, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -335,6 +335,7 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 const relationsOf = (law: Law): readonly string[] =>
   Match.value(law).pipe(
     Match.discriminatorsExhaustive("kind")({
+      above: ({ law: below }) => relationsOf(below),
       check: ({ relation }) => [relation],
       contained: ({ from, to }) => [from.relation, to.relation],
       contract: () => [],
@@ -403,10 +404,19 @@ const generatedOf = <R extends { readonly fields: object; readonly name: string 
 ): LawOf<"generated"> => ({ field, kind: "generated", relation: relation.name });
 
 /**
- * A text field type, as `str.regex` and `str.bytes` build it: its pattern's source and flags.
+ * A text field type, as `str.regex`, `str.bytes` and `str.and` build it: its patterns, each with
+ * its source and flags, in declared order.
  */
 export interface TextType {
-  readonly pattern: { readonly flags: "su" | "u"; readonly source: string };
+  readonly patterns: readonly [PatternSource, ...PatternSource[]];
+}
+
+/**
+ * One pattern of a text field type: its source and flags.
+ */
+interface PatternSource {
+  readonly flags: "su" | "u";
+  readonly source: string;
 }
 
 /**
@@ -415,7 +425,9 @@ export interface TextType {
  */
 const isTextType: (value: unknown) => value is TextType = Schema.is(
   Schema.Struct({
-    pattern: Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+    patterns: Schema.NonEmptyArray(
+      Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+    ),
   }),
 );
 
@@ -486,8 +498,7 @@ export const patternLawsOf = (
           return Result.fail({ field, relation });
         }
 
-        const { flags, source } = type.pattern;
-        named.push([{ field, flags, kind: "pattern", relation, source }, name]);
+        named.push([{ field, kind: "pattern", patterns: type.patterns, relation }, name]);
       }
     }
   }
@@ -1005,7 +1016,7 @@ const groupsOf = (byName: LawsByName): readonly (readonly [LawName, readonly Sta
 
 /**
  * The name of the law each statement of {@link namedLaws} states, by the statement: the very value
- * a module declares and `Qti` lists, which grizzle's `lawsOf` returns beside its laws.
+ * a module declares and `Qti` lists, which grizzle's `lawsByStatement` looks its laws up by.
  */
 const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
   namedLaws.flatMap((byName) =>
@@ -1026,27 +1037,30 @@ interface Stated {
 
 /**
  * Read the laws a schema states that are no check, each as an `invariant-rejected` outcome names
- * it, with its name in {@link lawTable}: each statement's laws as grizzle's `lawsOf` gives them, a
- * mirrors' two containments and an alternatives law's each its statement's, under the name its
- * module groups the statement by ({@link nameOfStatement}); then {@link writtenLaws}' rows, the
- * primary keys, patterns and generated fields no statement states. A check is named by its own
- * name ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
+ * it, with its name in {@link lawTable}: each statement's laws as grizzle's `lawsByStatement` gives
+ * them, a mirrors' two containments and an alternatives law's each its statement's, under the name
+ * its module groups the statement by ({@link nameOfStatement}); then {@link writtenLaws}' rows, the
+ * primary keys, patterns and generated fields no statement states. A check is named by its own name
+ * ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
  * laws, which the census in `refusal.oracle.test.ts` refuses.
  *
- * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema's identity: the first refusal compiles it once per process, loading this module never
+ * `lawsByStatement` compiles the schema's law model, which takes seconds, so this is memoized by
+ * the schema's identity: the first refusal compiles it once per process, loading this module never
  * does, and every later call returns the same laws.
  *
  * @param schema - The schema, `Qti`.
  * @returns Its laws, with their names.
  */
 const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
+  const lawsOfStatement = lawsByStatement(schema);
   const laws = [
-    ...lawsOf(schema).flatMap(({ laws: own, statement }) =>
+    ...schema.statements.flatMap((statement) =>
       Option.match(Option.fromUndefinedOr(nameOfStatement.get(statement)), {
         onNone: () => [],
         onSome: (name) =>
-          own.flatMap((law) => (law.kind === "check" ? [] : [[law, name] as const])),
+          lawsOfStatement(statement).flatMap((law) =>
+            law.kind === "check" ? [] : [[law, name] as const],
+          ),
       }),
     ),
     ...writtenLaws,
@@ -1600,6 +1614,8 @@ export type ReadRefusal =
  * under no name or open class (reason `unadmitted`, AL1's rule) and `unmodeled-vocabulary` for
  * every other name it cannot represent; `PackageReadError` is `manifest-root` for a missing
  * manifest and `href-path` for an entry outside the package; a `ZipRefusal` names its own rule.
+ * A `ReaderRefusal`'s detail starts with its own rule and, when it has a position, ends with its
+ * line and column, as a `WellFormednessError`'s does.
  *
  * @param e - The error raised.
  * @returns The refusal naming its rule.
@@ -1618,7 +1634,11 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
         }),
       ReaderRefusal: (refused) =>
         new ImportRefused({
-          detail: `${refused.rule}: ${refused.detail}`,
+          detail: Option.match(refused.position, {
+            onNone: () => `${refused.rule}: ${refused.detail}`,
+            onSome: ({ column, line }) =>
+              `${refused.rule}: ${refused.detail} at line ${String(line)}, column ${String(column)}`,
+          }),
           origin: readerOrigin,
           rule: "reader-refusal",
         }),

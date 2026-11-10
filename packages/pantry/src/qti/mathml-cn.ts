@@ -94,6 +94,13 @@ export const typeSpellings = [
 ] as const;
 
 /**
+ * {@link typeSpellings} as `Compute.matches` patterns, each handle beside its spelling's.
+ */
+const typeMatches = typeSpellings.map(
+  ([handle, spelling]) => [handle, Compute.pattern<string>(spelling)] as const,
+);
+
+/**
  * What spells each `base` a {@link MathCn} row is judged under: the numeral with any leading zeros,
  * in XML whitespace, `cn/@base` being a positive integer (reading 2). A literal for each handle,
  * as {@link typeSpellings}.
@@ -135,6 +142,13 @@ export const baseSpellings = [
   ["35", "^[ \\t\\n\\r]*0*35[ \\t\\n\\r]*$"],
   ["36", "^[ \\t\\n\\r]*0*36[ \\t\\n\\r]*$"],
 ] as const;
+
+/**
+ * {@link baseSpellings} as `Compute.matches` patterns, each handle beside its spelling's.
+ */
+const baseMatches = baseSpellings.map(
+  ([handle, spelling]) => [handle, Compute.pattern<string>(spelling)] as const,
+);
 
 /**
  * One judged `m:cn`, keyed by its node.
@@ -323,13 +337,13 @@ export const cnLaws = [
     c.and(
       c.or(
         c.and(c.eq(c.typeLexical, ""), c.eq(c.type, "real")),
-        ...typeSpellings.map(([type, spelling]) =>
+        ...typeMatches.map(([type, spelling]) =>
           c.and(c.eq(c.type, type), Compute.matches(c.typeLexical, spelling)),
         ),
       ),
       c.or(
         c.and(c.eq(c.baseLexical, ""), c.eq(c.base, "10")),
-        ...baseSpellings.map(([base, spelling]) =>
+        ...baseMatches.map(([base, spelling]) =>
           c.and(c.eq(c.base, base), Compute.matches(c.baseLexical, spelling)),
         ),
       ),
@@ -352,7 +366,7 @@ export const cnLaws = [
   check("E1_derived", CnCount, (c) =>
     c.or(
       c.and(c.eq(c.typeLexical, ""), c.eq(c.type, "real")),
-      ...typeSpellings.map(([type, spelling]) =>
+      ...typeMatches.map(([type, spelling]) =>
         c.and(c.eq(c.type, type), Compute.matches(c.typeLexical, spelling)),
       ),
     ),

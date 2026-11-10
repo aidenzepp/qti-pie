@@ -5,18 +5,20 @@
  *
  * QTI bases `format` on the C conversion specifiers (ISO 9899) and gives a worked table
  * (`B#format-attribute-of-printed-variable`, Appendix E), but leaves open the default form, the
- * text around a conversion, the base of `index`, an exact tie, a float under an integer
- * conversion, a `base` outside 2 to 36, a negative under `o`, `x` or `X`, an infinity or NaN under
- * an integer conversion, and a width, a precision or a whole text too long to hold. The defaults
- * here are drafted readings, each marked "G-R2, pending" where it is applied. The two size bounds
- * are approved: a text that would pass {@link fieldBound} or {@link textBound} is not printed at
- * all, and {@link formatPrinted} says so, so its caller can fail rather than show a blank slot. A
- * caller may hold a text to a smaller bound, as `redactItem` holds each printed text to what
- * remains of its output budget, and the formatter stops building as soon as the text would pass
- * it. Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
- * step, and is rounded or truncated as that decimal, never as the double's binary expansion, so a
- * page and Node print the same text. A duration prints as a float does, its seconds, `format`
- * applying (G-R3, pending).
+ * text around a conversion, the base of `index`, an exact tie, a float under an integer conversion,
+ * a `base` outside 2 to 36, a negative under `o`, `x` or `X`, an infinity or NaN under an integer
+ * conversion, and a width, a precision or a whole text too long to hold. The defaults here are
+ * drafted readings, each marked "G-R2, pending" where it is applied. C's `d` prints as `i` does, a
+ * conversion after the first prints as written and `%%` prints `%`, as the operator ruled on P1
+ * (readings 132 and 161 admit `%%` and any number of conversions, and leave the printing to the
+ * renderer). The two size bounds are approved: a text that would pass {@link fieldBound} or
+ * {@link textBound} is not printed at all, and {@link formatPrinted} says so, so its caller can fail
+ * rather than show a blank slot. A caller may hold a text to a smaller bound, as `redactItem` holds
+ * each printed text to what remains of its output budget, and the formatter stops building as soon
+ * as the text would pass it. Every float reaches decimal digits through {@link shortestDecimal}, the
+ * one approximated step, and is rounded or truncated as that decimal, never as the double's binary
+ * expansion, so a page and Node print the same text. A duration prints as a float does, its
+ * seconds, `format` applying (G-R3, pending).
  *
  * @module
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Derived_PrintedVariable
@@ -32,8 +34,8 @@ import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
  *
  * - `format`: the conversion specifier, with any text around it; absent, the value prints in its
  *   default form.
- * - `base`: the radix of the `i` conversion, 10 when absent; a base outside 2 to 36 writes base 10
- *   (G-R2, pending).
+ * - `base`: the radix of the `i` and `d` conversions, 10 when absent; a base outside 2 to 36 writes
+ *   base 10 (G-R2, pending).
  * - `index`: the member of an `ordered` value to print, counting from 1 (G-R2, pending); absent or
  *   out of range, every member prints. The information model scopes it to `ordered`, so another
  *   cardinality ignores it.
@@ -73,7 +75,8 @@ const isFormatted = (single: Single): single is Formatted =>
   formattedBaseTypes.has(single.baseType);
 
 /**
- * The conversion letters `format` admits (QTI 2.3.4). C's `d` and `u` are not among them.
+ * The conversion letters a value is printed under (QTI 2.3.4). C's `d`, which the operator's ruling
+ * on P1 admits, is read as `i` ({@link codeOf}); C's `u` is not admitted.
  */
 const codes = ["E", "e", "f", "G", "g", "r", "R", "i", "o", "X", "x"] as const;
 
@@ -91,6 +94,22 @@ type Code = (typeof codes)[number];
 const isCode = (letter: string): letter is Code => codes.some((code) => code === letter);
 
 /**
+ * Read a specifier's conversion letter as the letter it prints under: `d` as `i`, which C's
+ * `printf` treats alike, so `%d` prints as `%i` would, `base` included (the operator's ruling on
+ * P1); each of {@link codes} as itself.
+ *
+ * @param letter The letter {@link conversionPattern} matched.
+ * @returns The letter, or none for one that is no conversion letter.
+ */
+const codeOf = (letter: string): Option.Option<Code> => {
+  if (letter === "d") {
+    return Option.some("i");
+  }
+
+  return isCode(letter) ? Option.some(letter) : Option.none();
+};
+
+/**
  * One conversion specifier as written: its flags from `# 0 - space +`, its minimum field width (0
  * when none is written), its precision (none when no `.` is written; `.` alone is 0, as in C) and
  * its conversion letter.
@@ -103,9 +122,10 @@ interface Conversion {
 }
 
 /**
- * How a `format` lays out a numeric value: all literal text when it holds no conversion; the text
- * before the first conversion, that conversion and the text after it; or `oversized` when that
- * conversion's width or precision passes {@link fieldBound}.
+ * How a `format` lays out a numeric value: its printed text when it holds no conversion; the text
+ * printed before the first conversion, that conversion and the text printed after it; or
+ * `oversized` when that conversion's width or precision passes {@link fieldBound}. Printed text
+ * writes each `%%` as `%` and each later conversion as written.
  */
 type Layout =
   | { readonly kind: "literal"; readonly text: string }
@@ -149,11 +169,13 @@ interface Decimal {
 }
 
 /**
- * The first conversion specifier of a `format`, as QTI 2.3.4 writes one (G-R2, pending): `%`,
- * flags, a width, a precision of `.` and zero or more digits, and one conversion letter.
+ * The escape `%%` and the conversion specifiers of a `format`, read left to right as C reads a
+ * format string, the escape first, so the `%i` inside `%%i` is no conversion: a specifier as QTI
+ * 2.3.4 writes one, `%`, flags, a width, a precision of `.` and zero or more digits, and one
+ * conversion letter, or C's `d`. A `%` that starts neither is text.
  */
 const conversionPattern =
-  /%(?<flags>[#0 +-]*)(?<width>[0-9]*)(?:\.(?<precision>[0-9]*))?(?<code>[EefGgrRioXx])/u;
+  /%%|%(?<flags>[#0 +-]*)(?<width>[0-9]*)(?:\.(?<precision>[0-9]*))?(?<code>[EefGgrRidoXx])/gu;
 
 /**
  * The longest text the formatter writes for one value, 1,000,000 characters (UTF-16 code units, as
@@ -383,8 +405,9 @@ const floatingField = (negative: boolean, decimal: Decimal, conversion: Conversi
 };
 
 /**
- * Choose the radix of an integer conversion: 8 for `o`, 16 for `x` and `X`, and for `i` the base
- * given, or 10 when it is outside 2 to 36, which have no digits to write it in (G-R2, pending).
+ * Choose the radix of an integer conversion: 8 for `o`, 16 for `x` and `X`, and for `i`, which `d`
+ * is read as, the base given, or 10 when it is outside 2 to 36, which have no digits to write it in
+ * (G-R2, pending).
  *
  * @param conversion The conversion, one of `i o x X`.
  * @param base The resolved `base`.
@@ -557,41 +580,56 @@ const fitted = (field: Field, conversion: Conversion): string => {
 };
 
 /**
- * Read how a `format` lays out a value: the value fills its first conversion, the text around that
- * conversion prints as written, and so does any later conversion, so `%i of %i` of 3 prints
- * `3 of %i` (G-R2, pending). A format with no conversion prints as written.
+ * Read how a `format` lays out a value, left to right: the value fills its first conversion, the
+ * text around that conversion prints as written but for each `%%`, which prints `%`, and so does
+ * any later conversion, so `%i of %i` of 3 prints `3 of %i` and `Score: %i%%` prints `Score: 3%`
+ * (the operator's ruling on P1; G-R2 160, restated). A format with no conversion prints its text,
+ * so `100%%` prints `100%` and `%%i` prints `%i`.
  *
  * @param format The `format` attribute.
  * @returns The layout.
  */
 const layoutOf = (format: string): Layout => {
-  const match = conversionPattern.exec(format);
-  const groups = match?.groups ?? {};
-  const code = groups["code"] ?? "";
-  if (match === null || !isCode(code)) {
-    return { kind: "literal", text: format };
+  let text = "";
+  let cursor = 0;
+  let first: { readonly before: string; readonly conversion: Conversion } | undefined;
+  for (const match of format.matchAll(conversionPattern)) {
+    text += format.slice(cursor, match.index);
+    cursor = match.index + match[0].length;
+    const groups = match.groups ?? {};
+    const code = codeOf(groups["code"] ?? "");
+    if (match[0] === "%%") {
+      text += "%";
+    } else if (first !== undefined || Option.isNone(code)) {
+      text += match[0];
+    } else {
+      const width = BigInt(`0${groups["width"] ?? ""}`);
+      const precision = Option.map(Option.fromNullishOr(groups["precision"]), (digits) =>
+        BigInt(`0${digits}`),
+      );
+
+      if (width > fieldBound || Option.exists(precision, (digits) => digits > fieldBound)) {
+        return { kind: "oversized" };
+      }
+
+      first = {
+        before: text,
+        conversion: {
+          code: code.value,
+          flags: groups["flags"] ?? "",
+          precision: pipe(precision, Option.map(Number)),
+          width: Number(width),
+        },
+      };
+      text = "";
+    }
   }
 
-  const width = BigInt(`0${groups["width"] ?? ""}`);
-  const precision = Option.map(Option.fromNullishOr(groups["precision"]), (digits) =>
-    BigInt(`0${digits}`),
-  );
+  text += format.slice(cursor);
 
-  if (width > fieldBound || Option.exists(precision, (digits) => digits > fieldBound)) {
-    return { kind: "oversized" };
-  }
-
-  return {
-    after: format.slice(match.index + match[0].length),
-    before: format.slice(0, match.index),
-    conversion: {
-      code,
-      flags: groups["flags"] ?? "",
-      precision: pipe(precision, Option.map(Number)),
-      width: Number(width),
-    },
-    kind: "conversion",
-  };
+  return first === undefined
+    ? { kind: "literal", text }
+    : { after: text, before: first.before, conversion: first.conversion, kind: "conversion" };
 };
 
 /**
