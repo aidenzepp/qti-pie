@@ -11,11 +11,19 @@ import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * A supports value with every field on: every predefined catalog support and one extension, every
- * tool, each display preference set.
+ * tool, each display preference set, an `ext:` braille type.
  */
 const everySupport: Supports = {
   additionalTestingTime: Option.some({ factor: 1.5, kind: "multiplier" }),
   answerMasking: true,
+  braille: Option.some({
+    brailleType: Option.some("ext:sample-braille"),
+    deliveryMode: "embossed",
+    grade: 1,
+    language: Option.some("en"),
+    mathType: Option.some("nemeth"),
+  }),
+  breaks: true,
   catalog: new Set([...catalogSupports, "ext:sample-support"]),
   display: {
     invertDisplayPolarity: true,
@@ -28,7 +36,10 @@ const everySupport: Supports = {
       fontColor: Option.some("#ffffff"),
     }),
   },
+  keywordTranslationLanguage: Option.some("es"),
+  longDescriptionVisible: true,
   readAloud: Option.some("computer-read-aloud"),
+  signLanguage: Option.some("ase"),
   suppressTts: true,
   tools: new Set(toolPreferences),
 };
@@ -40,21 +51,12 @@ const everySupport: Supports = {
 const everyPnpSupport: PnpSupports = {
   ...everySupport,
   atStart: new Set(["spoken"]),
-  braille: Option.some({
-    brailleType: Option.some("ext:sample-braille"),
-    deliveryMode: "embossed",
-    grade: 1,
-    language: Option.some("en"),
-    mathType: Option.some("nemeth"),
-  }),
-  breaks: true,
   features: new Set(["captions", "encouragement", "spoken"]),
   hazards: new Set(["flashing", "ext:sample-hazard"]),
   ignored: ["{urn:example:notes}note"],
   inputRequirements: new Set(["full-switch-control"]),
   invertedColors: Option.some({ background: Option.some("#000000"), foreground: Option.none() }),
-  languages: new Map([["sign-language", "ase"]]),
-  longDescriptionVisible: true,
+  languages: new Map([["item-translation", "fr"]]),
   optional: new Set(["calculator-on-screen"]),
   prohibited: new Set(["captions"]),
   spoken: Option.some({
@@ -99,7 +101,12 @@ describe("noSupports", () => {
     assert.strictEqual(noSupports.tools.size, 0);
     assert.isTrue(Option.isNone(noSupports.additionalTestingTime));
     assert.isFalse(noSupports.answerMasking);
+    assert.isTrue(Option.isNone(noSupports.braille));
+    assert.isFalse(noSupports.breaks);
+    assert.isTrue(Option.isNone(noSupports.keywordTranslationLanguage));
+    assert.isFalse(noSupports.longDescriptionVisible);
     assert.isTrue(Option.isNone(noSupports.readAloud));
+    assert.isTrue(Option.isNone(noSupports.signLanguage));
     assert.isFalse(noSupports.suppressTts);
     assert.deepStrictEqual(noSupports.display, {
       invertDisplayPolarity: false,
@@ -118,6 +125,28 @@ describe("SupportsSchema", () => {
 
     assert.deepStrictEqual(decode(noSupports), Result.succeed(noSupports));
     assert.deepStrictEqual(decode(everySupport), Result.succeed(everySupport));
+  });
+
+  it("decodes the PNP preferences a renderer reads, as given", () => {
+    const preferences: Supports = {
+      ...noSupports,
+      braille: Option.some({
+        brailleType: Option.some("ueb"),
+        deliveryMode: "refreshable",
+        grade: 2,
+        language: Option.some("en"),
+        mathType: Option.none(),
+      }),
+      breaks: true,
+      keywordTranslationLanguage: Option.some("es"),
+      longDescriptionVisible: true,
+      signLanguage: Option.some("ase"),
+    };
+
+    assert.deepStrictEqual(
+      Schema.decodeUnknownResult(SupportsSchema)(preferences),
+      Result.succeed(preferences),
+    );
   });
 
   it("refuses a catalog support neither predefined nor `ext:`, and a time factor that is not positive", () => {
@@ -154,16 +183,20 @@ describe("PnpSupportsSchema", () => {
   });
 
   it("holds noSupports' contract fields and every PNP preference off", () => {
-    const { atStart, braille, breaks, features, hazards, ignored, inputRequirements } =
-      noPnpSupports;
+    const { atStart, features, hazards, ignored, inputRequirements, languages } = noPnpSupports;
 
     assert.deepStrictEqual(Schema.decodeUnknownSync(SupportsSchema)(noPnpSupports), noSupports);
     assert.deepStrictEqual(
-      [atStart.size, features.size, hazards.size, ignored.length, inputRequirements.size],
-      [0, 0, 0, 0, 0],
+      [
+        atStart.size,
+        features.size,
+        hazards.size,
+        ignored.length,
+        inputRequirements.size,
+        languages.size,
+      ],
+      [0, 0, 0, 0, 0, 0],
     );
-    assert.isTrue(Option.isNone(braille));
-    assert.isFalse(breaks);
   });
 });
 

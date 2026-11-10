@@ -62,34 +62,6 @@ const TextAppearance = Schema.Struct({
 });
 
 /**
- * The fields of a {@link Supports}, which {@link SupportsSchema} checks and
- * {@link PnpSupportsSchema} widens.
- */
-const supportsFields = {
-  additionalTestingTime: Schema.Option(AdditionalTestingTime),
-  answerMasking: Schema.Boolean,
-  catalog: Schema.ReadonlySet(CatalogSupport),
-  display: Schema.Struct({
-    invertDisplayPolarity: Schema.Boolean,
-    keywordEmphasis: Schema.Boolean,
-    languageOfInterface: Schema.Option(Schema.String),
-    layoutSingleColumn: Schema.Boolean,
-    magnification: Schema.Option(Positive),
-    textAppearance: Schema.Option(TextAppearance),
-  }),
-  readAloud: Schema.Option(Schema.Literals(["computer-read-aloud", "screen-reader"])),
-  suppressTts: Schema.Boolean,
-  tools: Schema.ReadonlySet(Schema.Literals(toolPreferences)),
-};
-
-/**
- * The checks of a {@link Supports}: every field present, each catalog support predefined or
- * `ext:`, each tool one of the PNP's, each factor, number of minutes and magnification a finite
- * number above 0. A value it decodes is the value it was given.
- */
-export const SupportsSchema: Schema.Codec<Supports> = Schema.Struct(supportsFields);
-
-/**
  * A value outside a PNP vocabulary: `ext:` followed by one or more non-space characters.
  */
 const PnpExtension = Schema.TemplateLiteral(["ext:", Schema.String]).check(
@@ -106,24 +78,17 @@ const extensible = <const Values extends readonly string[]>(values: Values) =>
   Schema.Union([Schema.Literals(values), PnpExtension]);
 
 /**
- * A PNP feature, by the schema's local name.
- */
-const PnpFeature = Schema.Literals(pnpFeatures);
-
-/**
  * An optional colour or language, as written.
  */
 const Written = Schema.Option(Schema.String);
 
 /**
- * The checks of a {@link PnpSupports}: the checks of {@link SupportsSchema}, and every PNP-only
- * field present, each feature one of the PNP's, each vocabulary value the schema's spelling or an
- * `ext:` value where the vocabulary takes one. A value it decodes is the value it was given, the
- * contract's fields and the PNP's alike.
+ * The fields of a {@link Supports}, which {@link SupportsSchema} checks and
+ * {@link PnpSupportsSchema} widens.
  */
-export const PnpSupportsSchema: Schema.Codec<PnpSupports> = Schema.Struct({
-  ...supportsFields,
-  atStart: Schema.ReadonlySet(PnpFeature),
+const supportsFields = {
+  additionalTestingTime: Schema.Option(AdditionalTestingTime),
+  answerMasking: Schema.Boolean,
   braille: Schema.Option(
     Schema.Struct({
       brailleType: Schema.Option(extensible(brailleTypes)),
@@ -134,13 +99,51 @@ export const PnpSupportsSchema: Schema.Codec<PnpSupports> = Schema.Struct({
     }),
   ),
   breaks: Schema.Boolean,
+  catalog: Schema.ReadonlySet(CatalogSupport),
+  display: Schema.Struct({
+    invertDisplayPolarity: Schema.Boolean,
+    keywordEmphasis: Schema.Boolean,
+    languageOfInterface: Schema.Option(Schema.String),
+    layoutSingleColumn: Schema.Boolean,
+    magnification: Schema.Option(Positive),
+    textAppearance: Schema.Option(TextAppearance),
+  }),
+  keywordTranslationLanguage: Written,
+  longDescriptionVisible: Schema.Boolean,
+  readAloud: Schema.Option(Schema.Literals(["computer-read-aloud", "screen-reader"])),
+  signLanguage: Written,
+  suppressTts: Schema.Boolean,
+  tools: Schema.ReadonlySet(Schema.Literals(toolPreferences)),
+};
+
+/**
+ * The checks of a {@link Supports}: every field present, each catalog support predefined or
+ * `ext:`, each tool one of the PNP's, each braille value the schema's spelling or an `ext:` value
+ * where the vocabulary takes one, each factor, number of minutes and magnification a finite number
+ * above 0. A value it decodes is the value it was given.
+ */
+export const SupportsSchema: Schema.Codec<Supports> = Schema.Struct(supportsFields);
+
+/**
+ * A PNP feature, by the schema's local name.
+ */
+const PnpFeature = Schema.Literals(pnpFeatures);
+
+/**
+ * The checks of a {@link PnpSupports}: the checks of {@link SupportsSchema}, and every PNP-only
+ * field present, each feature one of the PNP's, each vocabulary value the schema's spelling or an
+ * `ext:` value where the vocabulary takes one. A value it decodes is the value it was given, the
+ * contract's fields and the PNP's alike.
+ */
+export const PnpSupportsSchema: Schema.Codec<PnpSupports> = Schema.Struct({
+  ...supportsFields,
+  atStart: Schema.ReadonlySet(PnpFeature),
   features: Schema.ReadonlySet(PnpFeature),
   hazards: Schema.ReadonlySet(extensible(hazardAvoidances)),
   ignored: Schema.Array(Schema.String),
   inputRequirements: Schema.ReadonlySet(extensible(inputRequirementValues)),
   invertedColors: Schema.Option(Schema.Struct({ background: Written, foreground: Written })),
   languages: Schema.ReadonlyMap(Schema.Literals(languageFeatures), Schema.String),
-  longDescriptionVisible: Schema.Boolean,
   optional: Schema.ReadonlySet(PnpFeature),
   prohibited: Schema.ReadonlySet(PnpFeature),
   spoken: Schema.Option(
