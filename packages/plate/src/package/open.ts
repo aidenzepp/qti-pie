@@ -186,6 +186,8 @@ import { buildTest, withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, Test, UnheldRead } from "#plate/model/test.ts";
 import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { assembleTest } from "#plate/package/assemble.ts";
+import { includeTargets, performIncludes } from "#plate/package/include.ts";
+import type { IncludeCount, Included, ReferenceCensus } from "#plate/package/include.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
@@ -1594,9 +1596,77 @@ const readAs = (
 };
 
 /**
+ * How many placements of section documents a package's assembled tests may hold, across all of its
+ * tests, before plate refuses the package `assembly-limit`: a placement is one section document
+ * under one test and one {@link PlacementContext}, and the test's own document is not one.
+ *
+ * It is plate's own stated limit, no rule of QTI, as the reader's limit of 256 nested elements is
+ * (rule `db2ef322`). A section document is judged once for each test and context that places it
+ * (reading 5, its references "resolve once for each test that includes the section"; reading 145, a
+ * fragment it splices "is judged in the test that places it, once per placement"), and its views
+ * and branch rules are read over the placements above it (readings 86 and 87), so the work of
+ * judging a package's tests follows its assembled tests, which its tests, its test parts, the
+ * contexts each places a document under and a chain of documents multiply past the package's own
+ * size. Within the limit each such shape measured opens in under 2 s of thread CPU. No placement
+ * for each test part, and a section document judged once across tests whose reaches agree, would
+ * lift it.
+ */
+const assemblyPlacementLimit = 2048;
+
+/**
+ * How many bytes of section documents a package's assembled tests may place, across all of its
+ * tests, before plate refuses the package `assembly-limit`, 4 MiB: each placement
+ * ({@link assemblyPlacementLimit}) counts its document's size in the package once. A few placements
+ * of one large section document cost what that many documents would, since each is judged again,
+ * so a count of placements alone does not bound the work.
+ */
+const assemblyByteLimit = 4 * 1024 * 1024;
+
+/**
+ * Give the paths inside the package that the includes of a document's reading name
+ * (`includeTargets` in `#plate/package/include.ts`), none for a reading the reader refused.
+ *
+ * @param path The document's path.
+ * @param source Its reading.
+ * @returns The paths.
+ */
+const includeTargetsOf = (
+  path: string,
+  source: Result.Result<SourceDocument, Refusal>,
+): readonly string[] => (Result.isSuccess(source) ? includeTargets(source.success, path) : []);
+
+/**
+ * Reading 103's census as the splice of a fragment rewrites by it (`performIncludes` in
+ * `#plate/package/include.ts`; issue m3f-06): the attributes {@link censusOf} names and the text
+ * {@link textCensusOf} names, so what the splice rewrites is what {@link checkReferences} checks.
+ */
+const includeCensus: ReferenceCensus = {
+  attributesOf: censusOf,
+  textOf: (element, parent) => Option.map(textCensusOf(element, parent), (entry) => entry.space),
+};
+
+/**
  * Read each document the manifest's document resources name, once, as the type {@link readAs}
- * gives it, and judge each one read as a type plate judges, under the version the manifest states,
- * each judgement under its own `plate.check` span. The manifest is never read here (reading 146).
+ * gives it, perform the includes of each one read as a type plate judges, and judge the merged
+ * document under the version the manifest states, each judgement under its own `plate.check`
+ * span. The manifest is never read here (reading 146).
+ *
+ * Each document is read, then, for one of a judged type, every file its includes name through the
+ * `xml:base` in scope, and in turn every file an include of one of those names (`includeTargets`
+ * in `#plate/package/include.ts`), where the package holds it and the manifest lists it, each file
+ * of the package read once however many documents name it; a file no include of a read document
+ * names is not read. Then the document's includes are performed against those readings
+ * (`performIncludes`; I-12, S-6; issue m3f-06), and the merged document is judged and stands for
+ * the read one everywhere the package uses it after this: its verdict, the assembly of its tests,
+ * its references, and the items and tests delivered. So a package with no include reads and judges
+ * each document in turn, as before. The type a document is read as is its own root's, which no
+ * include changes. Every include performed across the package's documents counts one placement,
+ * and its fragment's bytes, toward the assembly limit section refs are held to
+ * ({@link assemblyPlacementLimit}, {@link assemblyByteLimit}), in the manifest's order of the
+ * documents; a refusal of a document's includes, a missing or external fragment without a
+ * fallback, a cycle, the depth or that limit, stands as the document's verdict, refused, so the
+ * package is refused with it. A fragment resource's own document is still read, and judged, for
+ * its root alone.
  *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
@@ -1609,25 +1679,110 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
   files: ReadonlyMap<string, Uint8Array>,
   location: string,
 ): Effect.fn.Return<ReadonlyMap<string, Document>> {
+  const listed = new Set(
+    manifest.resources.flatMap((resource) =>
+      resource.files.flatMap((file) => Option.toArray(file.path)),
+    ),
+  );
+  // Every file read so far, as the reader read it, and those of them the manifest lists.
+  const read = new Map<string, Result.Result<SourceDocument, Refusal>>();
+  const sources = new Map<string, Result.Result<SourceDocument, Refusal>>();
+  /**
+   * Read a file of the package once, under its own `plate.readSource` span the first time.
+   *
+   * @param path The file's path.
+   * @param bytes Its bytes.
+   * @returns Its reading.
+   */
+  const readOnce = Effect.fnUntraced(function* readOnce(path: string, bytes: Uint8Array) {
+    const known = read.get(path);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const source = yield* Effect.result(readSource(fileLocation(location, path), bytes));
+    read.set(path, source);
+    if (listed.has(path)) {
+      sources.set(path, source);
+    }
+
+    return source;
+  });
+  // Each path whose includes' targets are read once: the judged documents' and the targets'.
+  const expanded = new Set<string>();
+  const limits: IncludeCount = { bytes: assemblyByteLimit, placements: assemblyPlacementLimit };
+  /**
+   * Perform the includes of a judged document's reading, counting from what the documents before
+   * it placed.
+   *
+   * @param path The document's path.
+   * @param source Its reading.
+   * @param placed What the documents before it placed.
+   * @returns The merged document with the count, or the refusal, the reader's included.
+   */
+  const included = (
+    path: string,
+    source: Result.Result<SourceDocument, Refusal>,
+    placed: IncludeCount,
+  ): Result.Result<Included, Refusal> =>
+    source.pipe(
+      Result.flatMap((document) =>
+        performIncludes({
+          census: includeCensus,
+          document,
+          limits,
+          location,
+          path,
+          placed,
+          sizeOf: (at) => files.get(at)?.byteLength ?? 0,
+          sources,
+        }),
+      ),
+    );
+  let placed: IncludeCount = { bytes: 0, placements: 0 };
   const documents = new Map<string, Document>();
   for (const [path, [first, ...others]] of namingTypes(manifest)) {
     const bytes = files.get(path);
-    if (bytes !== undefined && first !== undefined) {
-      const documentLocation = fileLocation(location, path);
-      const source = yield* Effect.result(readSource(documentLocation, bytes));
-      const type = readAs([first, ...others], Option.some(source));
-      documents.set(path, {
-        source,
-        type,
-        verdict: judgedTypes.has(type)
-          ? Option.some(
-              yield* judgedInSpan(documentLocation, () =>
-                judge(documentLocation, source, manifest.version),
-              ),
-            )
-          : Option.none(),
-      });
+    if (bytes === undefined || first === undefined) {
+      continue;
     }
+
+    const documentLocation = fileLocation(location, path);
+    const asRead = yield* readOnce(path, bytes);
+    const type = readAs([first, ...others], Option.some(asRead));
+    if (!judgedTypes.has(type)) {
+      documents.set(path, { source: asRead, type, verdict: Option.none() });
+      continue;
+    }
+
+    expanded.add(path);
+
+    const pending = [...includeTargetsOf(path, asRead)];
+    for (let target = pending.pop(); target !== undefined; target = pending.pop()) {
+      const targetBytes = files.get(target);
+      if (expanded.has(target) || targetBytes === undefined || !listed.has(target)) {
+        continue;
+      }
+
+      expanded.add(target);
+      pending.push(...includeTargetsOf(target, yield* readOnce(target, targetBytes)));
+    }
+
+    const merged = included(path, asRead, placed);
+    if (Result.isSuccess(merged)) {
+      ({ placed } = merged.success);
+    }
+
+    const source = merged.pipe(Result.map((one) => one.document));
+    documents.set(path, {
+      source,
+      type,
+      verdict: Option.some(
+        yield* judgedInSpan(documentLocation, () =>
+          judge(documentLocation, source, manifest.version),
+        ),
+      ),
+    });
   }
 
   return documents;
@@ -4016,33 +4171,6 @@ interface Assembly {
    */
   readonly placements: readonly Placement[];
 }
-
-/**
- * How many placements of section documents a package's assembled tests may hold, across all of its
- * tests, before plate refuses the package `assembly-limit`: a placement is one section document
- * under one test and one {@link PlacementContext}, and the test's own document is not one.
- *
- * It is plate's own stated limit, no rule of QTI, as the reader's limit of 256 nested elements is
- * (rule `db2ef322`). A section document is judged once for each test and context that places it
- * (reading 5, its references "resolve once for each test that includes the section"; reading 145, a
- * fragment it splices "is judged in the test that places it, once per placement"), and its views
- * and branch rules are read over the placements above it (readings 86 and 87), so the work of
- * judging a package's tests follows its assembled tests, which its tests, its test parts, the
- * contexts each places a document under and a chain of documents multiply past the package's own
- * size. Within the limit each such shape measured opens in under 2 s of thread CPU. No placement
- * for each test part, and a section document judged once across tests whose reaches agree, would
- * lift it.
- */
-const assemblyPlacementLimit = 2048;
-
-/**
- * How many bytes of section documents a package's assembled tests may place, across all of its
- * tests, before plate refuses the package `assembly-limit`, 4 MiB: each placement
- * ({@link assemblyPlacementLimit}) counts its document's size in the package once. A few placements
- * of one large section document cost what that many documents would, since each is judged again,
- * so a count of placements alone does not bound the work.
- */
-const assemblyByteLimit = 4 * 1024 * 1024;
 
 /**
  * What a package's assembled tests have placed so far, counted across its tests toward the
