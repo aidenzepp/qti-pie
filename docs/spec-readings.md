@@ -1079,7 +1079,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     example packages declare `3.0.0` and give resources the type `imslti_xmlv1p1`, which only the 3.0.1 profile lists,
     so they are refused, under `attribute-lexical`. This follows the profile XSDs, the schemas a manifest is validated
     against, and sets aside the implementation guide's version and spelling. This binds pantry and plate alike, so the
-    two never read the same package differently, and both implement it. (Bjorn's ruling, accepting the
+    two never read the same package differently, and both implement it. (The operator's ruling, accepting the
     renderer's default; applied in plate by its phase-4 delivery spec, section 4.3; 2026-11-04. Amended 2026-11-07 by
     RV seat VD (`6fd1d67d`), on the corpus verdict review: the rule was stated twice, by the enumeration and by a
     `ResourceTypeOf` relation read from it under the rule `resource-type`; the coordinator ruled the XSD's enumeration
