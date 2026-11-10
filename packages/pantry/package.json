@@ -34,6 +34,7 @@
   "devDependencies": {
     "@effect/vitest": "4.1.2",
     "@grizzle/testing": "file:../../vendor/grizzle-testing-0.0.0.tgz",
+    "@qti-pie/plate": "workspace:*",
     "@types/pg": "8.23.1",
     "vitest": "5.1.0"
   }
