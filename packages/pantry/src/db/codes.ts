@@ -1,6 +1,5 @@
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { Array, Effect, FileSystem, Schema } from "effect";
-import { SnapshotLoadError, snapshotPath } from "#pantry/db/snapshot.ts";
+import { Array } from "effect";
+import rosters from "#pantry/db/rosters.json" with { type: "json" };
 
 /**
  * A roster's handles in the one order grizzle accepts: the handles the committed snapshot holds
@@ -32,70 +31,14 @@ export const inCommittedOrder = <H extends string>(
 };
 
 /**
- * One slot of a roster's codes in the snapshot: the handle that holds the code, or the hole a
- * removed handle left (`grizzle-engine/src/ir/cells.ts:33-35`).
- */
-const Slot = Schema.Union([
-  Schema.Struct({ handle: Schema.String, kind: Schema.Literal("live") }),
-  Schema.Struct({ kind: Schema.Literal("hole") }),
-]);
-
-/**
- * The part of grizzle's snapshot this module reads: each roster's codes, by the roster's name,
- * which `snapshot.json` records under `rosters` (`manifest.json` holds the rest of the snapshot).
- * grizzle's public index exports no reader for it, so a layout this does not know fails the
- * decode.
- */
-const CommittedSnapshot = Schema.fromJsonString(
-  Schema.Struct({ rosters: Schema.Record(Schema.String, Schema.Array(Slot)) }),
-);
-
-/**
- * Each roster's live handles in code order, read from the text of a snapshot; holes are skipped.
+ * Each roster's live handles in code order, from the snapshot committed in this checkout, by the
+ * roster's name. Empty when the checkout has no snapshot, which is a schema with no migration and
+ * so no history.
  *
- * Fails with {@link SnapshotLoadError} when the text is not JSON of the layout grizzle writes, as
- * a git-lfs pointer file is not.
- *
- * @param path - The file the text came from, named by the error
- * @param text - The snapshot file's text
+ * They come from `rosters.json`, which `pnpm --filter @qti-pie/pantry run rosters` writes from
+ * `migrations/qti/snapshot.json` (`#pantry/db/rosters.ts`), so evaluating this module opens no file
+ * and parses no megabytes of snapshot; `rosters.committed.test.ts` fails when the two disagree.
  */
-export const decodeCommittedRosters = (
-  path: string,
-  text: string,
-): Effect.Effect<ReadonlyMap<string, readonly string[]>, SnapshotLoadError> =>
-  Schema.decodeUnknownEffect(CommittedSnapshot)(text).pipe(
-    Effect.map(
-      ({ rosters }) =>
-        new Map(
-          Object.entries(rosters).map(
-            ([name, codes]) =>
-              [name, codes.flatMap((slot) => (slot.kind === "live" ? [slot.handle] : []))] as const,
-          ),
-        ),
-    ),
-    Effect.mapError((reason) => new SnapshotLoadError({ path, reason })),
-  );
-
-/**
- * Each roster's live handles in code order, from the snapshot committed in this checkout, read
- * once when this module is evaluated. Empty when the checkout has no snapshot, which is a schema
- * with no migration and so no history.
- *
- * Evaluating this module fails with {@link SnapshotLoadError} when the file exists and cannot be
- * decoded, as a checkout made without git-lfs leaves it.
- */
-export const committedRosters: ReadonlyMap<string, readonly string[]> = await Effect.runPromise(
-  Effect.gen(function* readCommittedRosters() {
-    const fs = yield* FileSystem.FileSystem;
-
-    if (!(yield* fs.exists(snapshotPath).pipe(Effect.orDie))) {
-      return new Map<string, readonly string[]>();
-    }
-
-    const text = yield* fs
-      .readFileString(snapshotPath)
-      .pipe(Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })));
-
-    return yield* decodeCommittedRosters(snapshotPath, text);
-  }).pipe(Effect.provide(NodeFileSystem.layer)),
+export const committedRosters: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries(rosters),
 );

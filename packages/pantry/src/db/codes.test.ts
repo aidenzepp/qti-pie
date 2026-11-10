@@ -1,13 +1,7 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { committedRosters, decodeCommittedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
-
-type Codes = readonly { readonly handle?: string; readonly kind: string }[];
-
-const slots = (...entries: readonly (string | null)[]) =>
-  entries.map((entry) => (entry === null ? { kind: "hole" } : { handle: entry, kind: "live" }));
-
-const snapshotText = (rosters: Readonly<Record<string, Codes>>) => JSON.stringify({ rosters });
+import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 
 describe("inCommittedOrder", () => {
   it("keeps the committed order and appends new handles in the grammar's order", () => {
@@ -30,49 +24,34 @@ describe("inCommittedOrder", () => {
   });
 });
 
-describe("decodeCommittedRosters", () => {
-  it.effect("reads each roster's live handles in code order and skips holes", () =>
-    Effect.gen(function* readsLive() {
-      const rosters = yield* decodeCommittedRosters(
-        "/snapshot.json",
-        snapshotText({ Closed: slots("a", null, "b"), Empty: slots(null) }),
-      );
-
-      assert.deepStrictEqual(
-        [...rosters],
-        [
-          ["Closed", ["a", "b"]],
-          ["Empty", []],
-        ],
-      );
-    }),
-  );
-
-  it.effect("fails with SnapshotLoadError for a git-lfs pointer", () =>
-    Effect.gen(function* failsOnPointer() {
-      const failure = yield* decodeCommittedRosters(
-        "/snapshot.json",
-        "version https://git-lfs.github.com/spec/v1\noid sha256:0\nsize 16200679\n",
-      ).pipe(Effect.flip);
-
-      assert.strictEqual(failure._tag, "SnapshotLoadError");
-    }),
-  );
-
-  it.effect("fails with SnapshotLoadError for a codes layout it does not know", () =>
-    Effect.gen(function* failsOnLayout() {
-      const failure = yield* decodeCommittedRosters(
-        "/snapshot.json",
-        snapshotText({ Closed: [{ kind: "other" }] }),
-      ).pipe(Effect.flip);
-
-      assert.strictEqual(failure._tag, "SnapshotLoadError");
-    }),
-  );
-});
-
 describe("committedRosters", () => {
   it("holds the committed snapshot's rosters", () => {
     assert.isAbove(committedRosters.get("ContentModel")?.length ?? 0, 0);
+  });
+});
+
+describe("db/codes.ts, when it loads", () => {
+  // Oracle: criterion 5, importing a program opens no file. The module's own text is read: a
+  // top-level statement starts at column 0, so a top-level `await` sits on such a line, and a read
+  // of a file needs a file-system module or a `readFile` call.
+  const source = readFileSync(fileURLToPath(import.meta.resolve("#pantry/db/codes.ts")), "utf-8");
+  const specifiers = [
+    ...source.matchAll(/^[ \t]*import\b[^;]*?["'](?<specifier>[^"']+)["']/gmu),
+  ].map(({ groups }) => groups?.["specifier"] ?? "");
+
+  it("awaits nothing at top level and reads no file", () => {
+    assert.deepStrictEqual(
+      source.split("\n").filter((line) => /^\S.*\bawait\b/u.test(line)),
+      [],
+    );
+    assert.notMatch(source, /\breadFile|\bFileSystem\b/u);
+    assert.deepStrictEqual(
+      specifiers.filter((specifier) => /^(?:@effect\/platform-node|node:fs)/u.test(specifier)),
+      [],
+    );
+  });
+
+  it("takes the roster orders from the generated module", () => {
+    assert.include(specifiers, "#pantry/db/rosters.json");
   });
 });
