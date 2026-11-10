@@ -129,13 +129,15 @@ const selectPlaceStates: ReadonlySet<string> = new Set([
  * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
  * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
  * the authored orientation on the Choice Root; `aria-current`, which the current item's button
- * carries; `readonly`, which a text Control carries in review and solution; and the
+ * carries; `readonly`, which a text Control carries in review and solution;
+ * `data-magnification`, the Root's magnification step (issue m3e-09b); and the
  * {@link selectPlaceStates}.
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-current",
   "aria-invalid",
   "data-disabled",
+  "data-magnification",
   "data-mode",
   "data-orientation",
   "data-slot",

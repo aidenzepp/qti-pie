@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { magnificationSteps } from "#plate/content/root.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { partForSlot, rowFor } from "#plate/emit/parts.ts";
@@ -880,6 +881,36 @@ const maskedTrees = Effect.fnUntraced(function* maskedTrees(configuration: Confi
 });
 
 /**
+ * Open and render {@link choiceItem} once for each step of {@link magnificationSteps}, with the
+ * supports of a candidate whose magnification factor is that step as a factor (A-30a): the
+ * support-driven witness of the supports block's step rules (issue m3e-09b), each of which keys on
+ * a Root that carries its step. The redaction takes the same supports as the render, as the render
+ * contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The trees of the eight renders.
+ */
+const magnifiedTrees = Effect.fnUntraced(function* magnifiedTrees(configuration: Configuration) {
+  const accepted = yield* acceptedOf(choiceItem);
+  const trees = yield* Effect.all(
+    magnificationSteps.map((step) => {
+      const supports: Supports = {
+        ...noSupports,
+        display: { ...noSupports.display, magnification: Option.some(step / 100) },
+      };
+      const redacted = redact(accepted, undefined, configuration, { supports });
+
+      return Effect.map(
+        Effect.fromResult(render(redacted, configuration, { instance, supports })),
+        (rendered) => parseHtml(rendered.html),
+      );
+    }),
+  );
+
+  return trees.flat();
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -888,7 +919,8 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * the navigation, the navigation of a timed test and a Choice with answer masking on.
+ * the navigation, the navigation of a timed test, a Choice with answer masking on and a Choice at
+ * each magnification step.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -911,6 +943,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...(yield* navigationTrees(configuration)),
       ...(yield* timedNavigationTrees(configuration)),
       ...(yield* maskedTrees(configuration)),
+      ...(yield* magnifiedTrees(configuration)),
     ],
   };
 });

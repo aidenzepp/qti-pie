@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Predicate } from "effect";
+import { Effect, Option } from "effect";
+import { magnificationSteps } from "#plate/content/root.ts";
 import { acceptedItem, configure, noSupports, open, redact, render } from "#plate/index.ts";
 import type { Accepted, DisplayPreferences, Element, Node, Supports } from "#plate/index.ts";
 import { checkTree } from "#plate/test/accessibility.ts";
@@ -12,7 +13,7 @@ const instance = "q1";
 
 /**
  * A complete QTI 3 item with a paragraph and one Choice, written fresh for this file: the Root
- * wraps content that inherits whatever the Root's style sets.
+ * wraps content that a data attribute on the Root must not reach.
  */
 const itemText = `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
@@ -127,27 +128,56 @@ const below = (node: Node): readonly Element[] =>
     : node.children.flatMap((child) => (child.kind === "text" ? [] : [child, ...below(child)]));
 
 /**
- * List the tags of the elements below a Root that carry a `style` attribute, in document order.
+ * The attributes the Root hook writes, in the order it writes them: the magnification step, then
+ * the font colour and the background colour (issue m3e-09b).
+ */
+const hookNames: readonly string[] = [
+  "data-magnification",
+  "data-font-color",
+  "data-background-color",
+];
+
+/**
+ * The attribute names no element may carry for the hook's sake: its three data attributes, and
+ * `style`, which a `style-src` policy without `'unsafe-inline'` drops.
+ */
+const refusedNames: readonly string[] = [...hookNames, "style"];
+
+/**
+ * List the tags of the elements below a Root that carry an attribute the hook writes or a `style`
+ * attribute, in document order.
  *
  * @param root The Root.
- * @returns The tag of each styled element below it.
+ * @returns The tag of each such element below it.
  */
-const styledBelow = (root: Element): readonly string[] =>
+const hookedBelow = (root: Element): readonly string[] =>
   below(root)
-    .filter((element) => Object.hasOwn(element.attrs, "style"))
+    .filter((element) => refusedNames.some((name) => Object.hasOwn(element.attrs, name)))
     .map((element) => element.tag);
 
 /**
- * Read the `style` attribute the Root carries when the item renders under display preferences.
+ * Read the attributes the hook wrote on a Root, by name, in the order the HTML carries them.
+ *
+ * @param root The Root.
+ * @returns Each of the hook's three attributes the Root carries, none for one it does not.
+ */
+const hookAttributesOf = (root: Element): Readonly<Record<string, string | true>> =>
+  Object.fromEntries(Object.entries(root.attrs).filter(([name]) => hookNames.includes(name)));
+
+/**
+ * Read the hook's attributes the Root carries when the item renders under display preferences,
+ * and hold that the Root carries no `style`.
  *
  * @param display The display preferences to set.
- * @returns The Root's `style` attribute, none when it carries none.
+ * @returns The hook's attributes on the Root, none for one it does not write.
  */
-const rootStyleOf = (display: Partial<DisplayPreferences>) =>
+const rootAttributesOf = (display: Partial<DisplayPreferences>) =>
   Effect.map(htmlWith(supportsWith(display)), (html) => {
-    const { style } = rootOf(html).attrs;
+    const root = rootOf(html);
 
-    return Option.liftPredicate(style, Predicate.isString);
+    assert.isUndefined(root.attrs["style"], "the Root carries no style");
+
+    return hookAttributesOf(root);
   });
 
 describe("the item Root's hook (issue m3e-09)", () => {
@@ -167,44 +197,62 @@ describe("the item Root's hook (issue m3e-09)", () => {
 
       assert.strictEqual(withNone, without);
       assert.strictEqual(withOthers, without);
-      assert.isUndefined(rootOf(without).attrs["style"]);
-      assert.isUndefined(rootOf(withOthers).attrs["style"]);
+
+      for (const name of refusedNames) {
+        assert.isUndefined(rootOf(without).attrs[name], name);
+        assert.isUndefined(rootOf(withOthers).attrs[name], name);
+      }
     }),
   );
 
-  it.effect("[A-30a] a magnification factor is written on the Root as font-size", () =>
+  it.effect("[A-30a] a magnification factor is written on the Root as its nearest step", () =>
     Effect.gen(function* written() {
       const html = yield* htmlWith(supportsWith({ magnification: Option.some(2) }));
 
-      assert.strictEqual(rootOf(html).attrs["style"], "font-size: 200%");
-      assert.include(html, 'style="font-size: 200%"');
+      assert.strictEqual(rootOf(html).attrs["data-magnification"], "200");
+      assert.include(html, 'data-magnification="200"');
+      assert.isUndefined(rootOf(html).attrs["style"]);
 
-      for (const [factor, style] of [
-        [1.5, "font-size: 150%"],
-        [1.333, "font-size: 133.3%"],
-        [4, "font-size: 400%"],
-        [0.5, "font-size: 50%"],
+      for (const [factor, step] of [
+        [1.5, "150"],
+        [1.333, "125"],
+        [1.6, "150"],
+        [3.2, "300"],
+        [1.125, "125"],
+        [4, "400"],
+        [6, "400"],
       ] as const) {
         assert.deepStrictEqual(
-          yield* rootStyleOf({ magnification: Option.some(factor) }),
-          Option.some(style),
+          yield* rootAttributesOf({ magnification: Option.some(factor) }),
+          { "data-magnification": step },
           `factor ${factor}`,
         );
       }
     }),
   );
 
-  it.effect("[A-30a] a factor that is not a positive finite number is not written", () =>
+  it.effect("[A-30a] a factor that is not above 1, or is not finite, writes nothing", () =>
     Effect.gen(function* refused() {
-      const control = yield* rootStyleOf({ magnification: Option.some(2) });
+      const control = yield* rootAttributesOf({ magnification: Option.some(2) });
 
-      assert.deepStrictEqual(control, Option.some("font-size: 200%"));
+      assert.deepStrictEqual(control, { "data-magnification": "200" });
 
       const without = yield* htmlWith();
 
-      for (const factor of [0, -0, -2, Number.NaN, Number.POSITIVE_INFINITY, -Infinity]) {
+      for (const factor of [
+        1,
+        1.1,
+        0.5,
+        0,
+        -0,
+        -2,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+      ]) {
         const html = yield* htmlWith(supportsWith({ magnification: Option.some(factor) }));
 
+        assert.isUndefined(rootOf(html).attrs["data-magnification"], `factor ${factor}`);
         assert.isUndefined(rootOf(html).attrs["style"], `factor ${factor}`);
         assert.strictEqual(html, without, `factor ${factor}`);
       }
@@ -212,83 +260,160 @@ describe("the item Root's hook (issue m3e-09)", () => {
   );
 
   it.effect(
-    "[A-30a] a factor is written to at most three decimals of its percentage, with no exponent, and never as a zero size",
+    "[A-30a] the step is the nearest of the scale with a tie to the larger, whatever the factor's digits, and the top step for any factor above it",
     () =>
-      Effect.gen(function* formatted() {
-        for (const [factor, style] of [
-          [1.15, "font-size: 115%"],
-          [1.23456, "font-size: 123.456%"],
-          [1.2345678, "font-size: 123.457%"],
-          [1.00001, "font-size: 100.001%"],
-          [1e21, "font-size: 100000000000000000000000%"],
+      Effect.gen(function* nearest() {
+        for (const [factor, step] of [
+          [1.15, "125"],
+          [1.2345678, "125"],
+          [1.37, "125"],
+          [1.375, "150"],
+          [1.625, "175"],
+          [1.87, "175"],
+          [1.875, "200"],
+          [2.24, "200"],
+          [2.25, "250"],
+          [2.75, "300"],
+          [3.25, "350"],
+          [3.74, "350"],
+          [3.75, "400"],
+          [1e21, "400"],
+          [Number.MAX_VALUE, "400"],
         ] as const) {
           assert.deepStrictEqual(
-            yield* rootStyleOf({ magnification: Option.some(factor) }),
-            Option.some(style),
+            yield* rootAttributesOf({ magnification: Option.some(factor) }),
+            { "data-magnification": step },
             `factor ${factor}`,
           );
         }
 
-        for (const factor of [1e-9, Number.MIN_VALUE, 4e-6, Number.MAX_VALUE]) {
-          assert.isTrue(
-            Option.isNone(yield* rootStyleOf({ magnification: Option.some(factor) })),
+        for (const factor of [1.00001, 1.1, 1.1249, 1e-9, Number.MIN_VALUE, 4e-6]) {
+          assert.deepStrictEqual(
+            yield* rootAttributesOf({ magnification: Option.some(factor) }),
+            {},
             `factor ${factor}`,
           );
         }
       }),
-  );
-
-  it.effect("[A-42a] text and background colours are written on the Root", () =>
-    Effect.gen(function* written() {
-      const html = yield* htmlWith(
-        supportsWith(appearance({ backgroundColor: "#ffffcc", fontColor: "#1a1a1a" })),
-      );
-
-      assert.strictEqual(rootOf(html).attrs["style"], "color: #1a1a1a; background-color: #ffffcc");
-      assert.include(html, 'style="color: #1a1a1a; background-color: #ffffcc"');
-    }),
   );
 
   it.effect(
-    "[A-42a] only the colour given is written, and a factor and colours combine in a fixed order",
+    "[A-30a] each step of the scale is written for its own factor, and no value off the scale is ever written",
     () =>
-      Effect.gen(function* combined() {
-        assert.deepStrictEqual(
-          yield* rootStyleOf(appearance({ fontColor: "#1a1a1a" })),
-          Option.some("color: #1a1a1a"),
-        );
-        assert.deepStrictEqual(
-          yield* rootStyleOf(appearance({ backgroundColor: "#ffffcc" })),
-          Option.some("background-color: #ffffcc"),
-        );
-        assert.deepStrictEqual(
-          yield* rootStyleOf({
+      Effect.gen(function* scale() {
+        assert.deepStrictEqual(magnificationSteps, [125, 150, 175, 200, 250, 300, 350, 400]);
+
+        for (const step of magnificationSteps) {
+          assert.deepStrictEqual(
+            yield* rootAttributesOf({ magnification: Option.some(step / 100) }),
+            { "data-magnification": String(step) },
+            `step ${step}`,
+          );
+        }
+
+        const written = new Set(magnificationSteps.map(String));
+
+        for (let tenth = 0; tenth <= 50; tenth += 1) {
+          const factor = 1 + tenth / 10;
+          const { "data-magnification": step } = yield* rootAttributesOf({
+            magnification: Option.some(factor),
+          });
+
+          assert.isTrue(step === undefined || written.has(String(step)), `factor ${factor}`);
+        }
+      }),
+  );
+
+  it.effect(
+    "[A-30a] [A-42a] the Root carries no inline style under any supports, so a style-src policy drops nothing",
+    () =>
+      Effect.gen(function* unstyled() {
+        const bare = yield* htmlWith();
+
+        assert.notInclude(bare, "style=");
+
+        const preferred = yield* htmlWith(
+          supportsWith({
+            invertDisplayPolarity: true,
+            keywordEmphasis: true,
+            layoutSingleColumn: true,
             magnification: Option.some(2),
             ...appearance({ backgroundColor: "#000000", fontColor: "#ffffff" }),
           }),
-          Option.some("font-size: 200%; color: #ffffff; background-color: #000000"),
         );
+        const root = rootOf(preferred);
+
+        assert.notInclude(preferred, "style=");
+        assert.isUndefined(root.attrs["style"]);
         assert.deepStrictEqual(
-          yield* rootStyleOf({
-            magnification: Option.some(1.5),
-            ...appearance({ backgroundColor: "#ffffcc" }),
-          }),
-          Option.some("font-size: 150%; background-color: #ffffcc"),
+          below(root).filter((element) => Object.hasOwn(element.attrs, "style")),
+          [],
         );
       }),
   );
 
-  it.effect("[A-42a] a colour that is not a hex colour is not written", () =>
+  it.effect(
+    "[A-42a] the text and background colours are written on the Root as data attributes",
+    () =>
+      Effect.gen(function* written() {
+        const html = yield* htmlWith(
+          supportsWith(appearance({ backgroundColor: "#ffffcc", fontColor: "#1a1a1a" })),
+        );
+
+        assert.strictEqual(rootOf(html).attrs["data-font-color"], "#1a1a1a");
+        assert.strictEqual(rootOf(html).attrs["data-background-color"], "#ffffcc");
+        assert.include(html, 'data-font-color="#1a1a1a" data-background-color="#ffffcc"');
+        assert.isUndefined(rootOf(html).attrs["style"]);
+        assert.isUndefined(rootOf(html).attrs["data-magnification"]);
+      }),
+  );
+
+  it.effect(
+    "[A-42a] only the colour given is written, and a factor and colours combine as three attributes in a fixed order",
+    () =>
+      Effect.gen(function* combined() {
+        assert.deepStrictEqual(yield* rootAttributesOf(appearance({ fontColor: "#1a1a1a" })), {
+          "data-font-color": "#1a1a1a",
+        });
+        assert.deepStrictEqual(
+          yield* rootAttributesOf(appearance({ backgroundColor: "#ffffcc" })),
+          {
+            "data-background-color": "#ffffcc",
+          },
+        );
+
+        const both = yield* rootAttributesOf({
+          magnification: Option.some(2),
+          ...appearance({ backgroundColor: "#000000", fontColor: "#ffffff" }),
+        });
+
+        assert.deepStrictEqual(both, {
+          "data-background-color": "#000000",
+          "data-font-color": "#ffffff",
+          "data-magnification": "200",
+        });
+        assert.deepStrictEqual(Object.keys(both), hookNames);
+        assert.deepStrictEqual(
+          yield* rootAttributesOf({
+            magnification: Option.some(1.5),
+            ...appearance({ backgroundColor: "#ffffcc" }),
+          }),
+          { "data-background-color": "#ffffcc", "data-magnification": "150" },
+        );
+      }),
+  );
+
+  it.effect("[A-42a] a colour that is not a hex colour is not written, in any form", () =>
     Effect.gen(function* refused() {
       for (const colour of ["#ABC", "#abcd", "#aabbccdd", "#AaBbCc", "#0a0"]) {
         assert.deepStrictEqual(
-          yield* rootStyleOf(appearance({ fontColor: colour })),
-          Option.some(`color: ${colour}`),
+          yield* rootAttributesOf(appearance({ fontColor: colour })),
+          { "data-font-color": colour },
           `font colour ${colour}`,
         );
         assert.deepStrictEqual(
-          yield* rootStyleOf(appearance({ backgroundColor: colour })),
-          Option.some(`background-color: ${colour}`),
+          yield* rootAttributesOf(appearance({ backgroundColor: colour })),
+          { "data-background-color": colour },
           `background colour ${colour}`,
         );
       }
@@ -310,6 +435,7 @@ describe("the item Root's hook (issue m3e-09)", () => {
         " #abc",
         "#abc ",
         "#abc\n",
+        "#fff\n",
         "#abc;",
         '#abc" onload="x',
         "#ａｂｃ",
@@ -322,12 +448,14 @@ describe("the item Root's hook (issue m3e-09)", () => {
           const html = yield* htmlWith(supportsWith(attempt));
 
           assert.isUndefined(rootOf(html).attrs["style"], JSON.stringify(colour));
+          assert.isUndefined(rootOf(html).attrs["data-font-color"], JSON.stringify(colour));
+          assert.isUndefined(rootOf(html).attrs["data-background-color"], JSON.stringify(colour));
           assert.strictEqual(html, without, JSON.stringify(colour));
         }
 
         assert.deepStrictEqual(
-          yield* rootStyleOf(appearance({ backgroundColor: "#ffffcc", fontColor: colour })),
-          Option.some("background-color: #ffffcc"),
+          yield* rootAttributesOf(appearance({ backgroundColor: "#ffffcc", fontColor: colour })),
+          { "data-background-color": "#ffffcc" },
           `font colour ${JSON.stringify(colour)} beside a valid background`,
         );
       }
@@ -352,7 +480,9 @@ describe("the item Root's hook (issue m3e-09)", () => {
           }),
         ),
       );
-      const { style: _style, ...others } = preferred.attrs;
+      const others = Object.fromEntries(
+        Object.entries(preferred.attrs).filter(([name]) => !refusedNames.includes(name)),
+      );
 
       for (const name of ["data-mode", "data-slot", "id", "lang"]) {
         assert.isString(bare.attrs[name], name);
@@ -363,7 +493,7 @@ describe("the item Root's hook (issue m3e-09)", () => {
     }),
   );
 
-  it.effect("[A-30a] [A-42a] only the Root carries a style attribute", () =>
+  it.effect("[A-30a] [A-42a] only the Root carries the hook's attributes", () =>
     Effect.gen(function* rootOnly() {
       const bare = rootOf(yield* htmlWith());
       const preferred = rootOf(
@@ -374,9 +504,11 @@ describe("the item Root's hook (issue m3e-09)", () => {
           }),
         ),
       );
-      assert.isUndefined(bare.attrs["style"]);
-      assert.isString(preferred.attrs["style"]);
-      assert.deepStrictEqual(styledBelow(preferred), styledBelow(bare));
+
+      assert.deepStrictEqual(hookAttributesOf(bare), {});
+      assert.deepStrictEqual(Object.keys(hookAttributesOf(preferred)), hookNames);
+      assert.deepStrictEqual(hookedBelow(bare), []);
+      assert.deepStrictEqual(hookedBelow(preferred), []);
     }),
   );
 
@@ -391,10 +523,11 @@ describe("the item Root's hook (issue m3e-09)", () => {
       const root = rootOf(html);
 
       assert.deepStrictEqual(checkTree(root, { baseLevel: 2 }), []);
-      assert.strictEqual(
-        root.attrs["style"],
-        "font-size: 150%; color: #1a1a1a; background-color: #ffffcc",
-      );
+      assert.deepStrictEqual(hookAttributesOf(root), {
+        "data-background-color": "#ffffcc",
+        "data-font-color": "#1a1a1a",
+        "data-magnification": "150",
+      });
       assert.isTrue(roundTrips(root));
     }),
   );

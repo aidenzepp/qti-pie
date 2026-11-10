@@ -1202,6 +1202,50 @@
 /* end mathml */
 
 /* begin supports (issue m3e-09) */
+
+/*
+ * Magnification (A-30a, D25, issue m3e-09b): the Root carries its step as data-magnification, one
+ * of the eight percentages below and nothing else, and the step is the Root's font size, so the
+ * item's text and every length this sheet states in em, ch or lh scale from the first paint with
+ * no script. The rules sit in this linked sheet, so a page policy of style-src 'self' drops none of
+ * them. An image keeps its authored size and a length in rem follows the page's root, not the
+ * Root; zoom and transform: scale are not used (reflow, WCAG 1.4.10). The text and background
+ * colours are on the Root as data-font-color and data-background-color and no rule here reads
+ * them: the host applies them through its own sheet.
+ */
+
+:where([data-slot="item"][data-magnification="125"]) {
+  font-size: 125%;
+}
+
+:where([data-slot="item"][data-magnification="150"]) {
+  font-size: 150%;
+}
+
+:where([data-slot="item"][data-magnification="175"]) {
+  font-size: 175%;
+}
+
+:where([data-slot="item"][data-magnification="200"]) {
+  font-size: 200%;
+}
+
+:where([data-slot="item"][data-magnification="250"]) {
+  font-size: 250%;
+}
+
+:where([data-slot="item"][data-magnification="300"]) {
+  font-size: 300%;
+}
+
+:where([data-slot="item"][data-magnification="350"]) {
+  font-size: 350%;
+}
+
+:where([data-slot="item"][data-magnification="400"]) {
+  font-size: 400%;
+}
+
 /* end supports */
 
 /* begin vocabulary (issue m3e-06) */
