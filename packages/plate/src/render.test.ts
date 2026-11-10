@@ -1,14 +1,16 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Struct } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
-import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { ItemContentModule } from "#plate/content/contract.ts";
+import { attr, doc, el, qtiNamespace, text as sourceText } from "#plate/document/source.ts";
 import type { SourceDocument } from "#plate/document/source.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { MarkupRefused } from "#plate/emit/serialise.ts";
+import { PartSwapRefused } from "#plate/emit/swap.ts";
 import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
@@ -39,6 +41,7 @@ import { solution } from "#plate/solution.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
+import type { AcceptedStimulus } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -2535,5 +2538,141 @@ describe("render, an element that references a catalog", () => {
         );
         assert.notInclude(expected, "glossary");
       }),
+  );
+});
+
+describe("render, an element that names a stimulus", () => {
+  it.effect(
+    "[W0-AR] renders the same HTML as the element without the stimulus key, before and after the JSON codec: no module docks by default",
+    () =>
+      Effect.gen(function* docksNothingByDefault() {
+        const configuration = yield* defaults;
+        const hosting: BodyNode = {
+          attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+          children: [words("Loading.")],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/div[0]",
+          stimulus: "S1",
+          tag: "div",
+        };
+        const { stimulus: _stimulus, ...unhosting } = hosting;
+        const naming = redact(acceptForTest({ ...item, body: [hosting, ...item.body] }));
+        const control = redact(acceptForTest({ ...item, body: [unhosting, ...item.body] }));
+        const decoded = Result.getOrThrow(
+          decodeRedacted(Result.getOrThrow(encodeRedacted(naming))),
+        );
+        const expected = Result.getOrThrow(render(control, configuration, { instance })).html;
+
+        assert.strictEqual(
+          Result.getOrThrow(render(naming, configuration, { instance })).html,
+          expected,
+        );
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          expected,
+        );
+        assert.include(expected, "<div>Loading.</div>");
+      }),
+  );
+});
+
+describe("redact, the stimulus documents", () => {
+  /**
+   * The documents each redaction's kit was handed, in order.
+   */
+  const handed: ReadonlyMap<string, AcceptedStimulus>[] = [];
+
+  /**
+   * A test-only item-placed module in the stimulus ref stub's place that reads the element's `href`
+   * and records the documents its redaction is handed, keeping no node. Nothing here is `m3e-02`'s
+   * reading of the element.
+   */
+  const recording: ItemContentModule<"qti-assessment-stimulus-ref", string, never, string> = {
+    content: () => [],
+    copy: () => {
+      throw new PartSwapRefused({
+        cause: "root-not-allowed",
+        detail: "the recording module keeps no node",
+        interaction: "stimulus",
+        part: "passage",
+      });
+    },
+    element: "qti-assessment-stimulus-ref",
+    feature: ["I-4"],
+    implemented: true,
+    namespace: qtiNamespace,
+    parse: (element, context) =>
+      Result.map(context.read.requiredValue(element, "href"), Option.some),
+    payloadSchema: ({ Schema }) => Schema.String,
+    placement: "item",
+    redact: (_node, kit) => {
+      handed.push(kit.documents);
+
+      return Option.none();
+    },
+    render: () =>
+      Result.fail(
+        new PartSwapRefused({
+          cause: "root-not-allowed",
+          detail: "the recording module keeps no node",
+          interaction: "stimulus",
+          part: "passage",
+        }),
+      ),
+  };
+
+  /**
+   * The item with one fake stimulus ref under its root.
+   */
+  const referencing: SourceDocument = doc(
+    "hosting.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "hosting"), attr("title", "Hosting")],
+      [
+        el("qti-item-body", [], [el("p", [], [sourceText("Hello.")])]),
+        el("qti-assessment-stimulus-ref", [
+          attr("identifier", "S1"),
+          attr("href", "passages/tide.xml"),
+        ]),
+      ],
+    ),
+  );
+
+  it.effect(
+    "[W0-AR] redact passes documents through to the kit, and hands an empty map when the host passed none",
+    () =>
+      Effect.gen(function* passesDocuments() {
+        vi.resetModules();
+        vi.doMock("#plate/content/stimulus-ref.ts", () => ({ stimulusRefModule: recording }));
+
+        const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+        const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+        const verdict = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+        const built = yield* Effect.fromResult(model.buildItem(referencing));
+        const tide = verdict.acceptStimulusForTest({
+          body: [],
+          document: "passages/tide.xml",
+          identifier: "tide",
+          lang: Option.none(),
+          title: "Tide",
+          unsupported: [],
+        });
+        const documents = new Map([["passages/tide.xml", tide]]);
+
+        plate.redact(verdict.acceptForTest(built), undefined, undefined, { documents });
+        plate.redact(verdict.acceptForTest(built));
+
+        assert.lengthOf(handed, 2);
+        assert.strictEqual(handed[0], documents);
+        assert.strictEqual(handed[1]?.size, 0);
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            vi.doUnmock("#plate/content/stimulus-ref.ts");
+            vi.resetModules();
+          }),
+        ),
+      ),
   );
 });

@@ -64,6 +64,8 @@ export type { Configuration } from "#plate/configuration.ts";
 
 export { configure, InvalidConfiguration } from "#plate/configuration.ts";
 
+export type { DockStimulus } from "#plate/emit/body.ts";
+
 export type { StatusInput } from "#plate/emit/item.ts";
 
 export type { Attributes, Element, Node, PartFunction, Text } from "#plate/emit/node.ts";

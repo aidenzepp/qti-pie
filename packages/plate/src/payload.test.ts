@@ -4353,6 +4353,37 @@ describe("payload, catalog references", () => {
   });
 });
 
+describe("payload, stimulus references", () => {
+  it("[W0-AR] copies a body element's stimulus key through redaction and payload, with its path left behind, and gives an element without one no stimulus key", () => {
+    const hosting: BodyNode = {
+      attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+      children: [text("Loading.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/div[0]",
+      stimulus: "S1",
+      tag: "div",
+    };
+    const redaction = redactItem({ ...item, body: [hosting, ...item.body] });
+    const built = payload(redaction, answering);
+
+    const [kept] = redaction.body;
+
+    assert.strictEqual(kept?.kind === "element" ? kept.stimulus : undefined, "S1");
+    assert.deepStrictEqual(kept?.kind === "element" ? kept.attributes : [], [
+      { name: "data-stimulus-idref", value: "S1" },
+    ]);
+    assert.deepStrictEqual(built.body[0], {
+      attributes: [{ name: "data-stimulus-idref", value: "S1" }],
+      children: [{ kind: "text", text: "Loading." }],
+      kind: "element",
+      stimulus: "S1",
+      tag: "div",
+    });
+    assert.isFalse(Object.hasOwn(redaction.body[1] ?? {}, "stimulus"));
+    assert.isFalse(Object.hasOwn(built.body[1] ?? {}, "stimulus"));
+  });
+});
+
 describe("redactItem and payload on a module's container", () => {
   /**
    * The hand-built item with its whole body inside one container a module owns, as a stage holds

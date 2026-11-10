@@ -43,7 +43,14 @@ import {
   describeRefusal,
   unsupportedFeatures,
 } from "#plate/validate/verdict.ts";
-import type { Accepted, AcceptedTest, RootSummary, Verdict } from "#plate/validate/verdict.ts";
+import type {
+  Accepted,
+  AcceptedStimulus,
+  AcceptedTest,
+  RootSummary,
+  StimulusSummary,
+  Verdict,
+} from "#plate/validate/verdict.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
@@ -1673,7 +1680,7 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("accepts a stimulus holding an interaction with unsupported features, marked as a stimulus root", () => {
+  it("accepts a stimulus holding an interaction with unsupported features, marked as a stimulus root, the interaction a notice in its body since a stimulus binds no response", () => {
     const verdict = verdictOf(stimulus([el("div", [], [choiceInteraction()])]));
 
     assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
@@ -1682,8 +1689,11 @@ describe("check, every QTI 3 root", () => {
       assert.strictEqual(verdict.accepted.document, "stimulus.xml");
       assert.strictEqual(verdict.accepted.identifier, "stimulus-1");
       assert.strictEqual(verdict.accepted.title, "Stimulus");
+      // The pin moved with W0-AR: the stimulus body is read, so the interaction in it is a notice
+      // after the root mark, where it was the root mark alone.
       assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
         "root:qti-assessment-stimulus@qti-assessment-stimulus",
+        "qti-choice-interaction@qti-assessment-stimulus/qti-stimulus-body/div/qti-choice-interaction",
       ]);
     }
   });
@@ -2312,9 +2322,11 @@ describe("acceptTestForTest, acceptSectionForTest and acceptStimulusForTest", ()
         { feature: "root:qti-assessment-section", path: "qti-assessment-section", shown: "mark" },
       ],
     };
+    // The pin moved with W0-AR: a stimulus summary carries its body and its language.
+    const stimulusSummary: StimulusSummary = { ...summary, body: [], lang: Option.none() };
 
     assert.deepStrictEqual({ ...acceptSectionForTest(summary) }, summary);
-    assert.deepStrictEqual({ ...acceptStimulusForTest(summary) }, summary);
+    assert.deepStrictEqual({ ...acceptStimulusForTest(stimulusSummary) }, stimulusSummary);
   });
 
   it("give an AcceptedTest that redact does not take", () => {
@@ -2324,6 +2336,142 @@ describe("acceptTestForTest, acceptSectionForTest and acceptStimulusForTest", ()
       redact(accepted);
 
     assert.isFunction(redactTest);
+  });
+});
+
+/**
+ * Read the accepted stimulus of a verdict that must accept one.
+ *
+ * @param verdict The verdict.
+ * @returns Its accepted stimulus.
+ */
+const acceptedStimulusOf = (verdict: Verdict): AcceptedStimulus => {
+  assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+  assert.strictEqual(verdict.kind, "stimulus");
+
+  return verdict.verdict === "accepted-with-unsupported" && verdict.kind === "stimulus"
+    ? verdict.accepted
+    : assert.fail(`The verdict is ${verdict.verdict} on a ${verdict.kind}, not on a stimulus.`);
+};
+
+describe("check, a stimulus document's body", () => {
+  /**
+   * The two paragraphs the stimulus documents here hold.
+   */
+  const passage: readonly SourceChild[] = [
+    el("p", [], [text("The tide "), el("em", [], [text("turns")]), text(".")]),
+    el("p", [], [text("Night falls.")]),
+  ];
+
+  /**
+   * The two paragraphs as the body walk reads them, at the stimulus body's path.
+   */
+  const passageNodes: readonly BodyNode[] = [
+    {
+      attributes: [],
+      children: [
+        { kind: "text", text: "The tide " },
+        {
+          attributes: [],
+          children: [{ kind: "text", text: "turns" }],
+          kind: "element",
+          path: "qti-assessment-stimulus/qti-stimulus-body/p[1]/em",
+          tag: "em",
+        },
+        { kind: "text", text: "." },
+      ],
+      kind: "element",
+      path: "qti-assessment-stimulus/qti-stimulus-body/p[1]",
+      tag: "p",
+    },
+    {
+      attributes: [],
+      children: [{ kind: "text", text: "Night falls." }],
+      kind: "element",
+      path: "qti-assessment-stimulus/qti-stimulus-body/p[2]",
+      tag: "p",
+    },
+  ];
+
+  it("[W0-AR] a stimulus document opens with its body read and its language", () => {
+    const spoken = verdictOf(
+      doc(
+        "passages/tide.xml",
+        el(
+          "qti-assessment-stimulus",
+          [attr("identifier", "tide"), attr("title", "The tide"), attr("lang", "en", xmlNamespace)],
+          [el("qti-stimulus-body", [], passage)],
+        ),
+      ),
+    );
+    const accepted = acceptedStimulusOf(spoken);
+
+    assert.deepStrictEqual(accepted.body, passageNodes);
+    assert.deepStrictEqual(accepted.lang, Option.some("en"));
+    assert.strictEqual(accepted.document, "passages/tide.xml");
+    assert.strictEqual(accepted.identifier, "tide");
+    assert.strictEqual(accepted.title, "The tide");
+    assert.deepStrictEqual(featuresOf(accepted.unsupported), [
+      "root:qti-assessment-stimulus@qti-assessment-stimulus",
+    ]);
+
+    const unspoken = acceptedStimulusOf(verdictOf(stimulus(passage)));
+
+    assert.deepStrictEqual(unspoken.body, passageNodes);
+    assert.deepStrictEqual(unspoken.lang, Option.none());
+  });
+
+  it("[W0-AR] a notice inside a stimulus body lands in the stimulus's unsupported, after the root mark", () => {
+    // A `qti-hottext` outside a Hottext interaction is a `qti-*` element the walk does not read.
+    const accepted = acceptedStimulusOf(
+      verdictOf(
+        stimulus([
+          el("p", [], [text("Before.")]),
+          el("div", [], [el("qti-hottext", [attr("identifier", "H1")], [text("Dropped.")])]),
+        ]),
+      ),
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      { feature: "root:qti-assessment-stimulus", path: "qti-assessment-stimulus", shown: "mark" },
+      {
+        feature: "qti-hottext",
+        path: "qti-assessment-stimulus/qti-stimulus-body/div/qti-hottext",
+        shown: "notice",
+      },
+    ]);
+    assert.deepStrictEqual(outline(accepted.body), [
+      { p: ["Before."] },
+      { div: ["notice:qti-hottext@qti-assessment-stimulus/qti-stimulus-body/div/qti-hottext"] },
+    ]);
+  });
+
+  it("[W0-AR] an interaction in a stimulus body is a notice keyed by its element, the shipped and the module-parsed alike, since a stimulus binds no response", () => {
+    const accepted = acceptedStimulusOf(
+      verdictOf(
+        stimulus([
+          el("div", [], [choiceInteraction()]),
+          el(
+            "div",
+            [],
+            [el("qti-upload-interaction", [attr("response-identifier", "RESPONSE")], [])],
+          ),
+        ]),
+      ),
+    );
+
+    assert.deepStrictEqual(outline(accepted.body), [
+      {
+        div: [
+          "notice:qti-choice-interaction@qti-assessment-stimulus/qti-stimulus-body/div[1]/qti-choice-interaction",
+        ],
+      },
+      {
+        div: [
+          "notice:qti-upload-interaction@qti-assessment-stimulus/qti-stimulus-body/div[2]/qti-upload-interaction",
+        ],
+      },
+    ]);
   });
 });
 
