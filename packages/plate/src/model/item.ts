@@ -69,7 +69,12 @@ import { positionObjectModule } from "#plate/interactions/position-object.ts";
 import { selectPointModule } from "#plate/interactions/select-point.ts";
 import { sliderModule } from "#plate/interactions/slider.ts";
 import { uploadModule } from "#plate/interactions/upload.ts";
-import type { BoundDeclaration, ParseContext, ReaderKit } from "#plate/interactions/contract.ts";
+import type {
+  BoundDeclaration,
+  ModuleKind,
+  ParseContext,
+  ReaderKit,
+} from "#plate/interactions/contract.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import type {
   Branch,
@@ -86,6 +91,7 @@ import type {
 import { expressionKinds, integerOrRefOf } from "#plate/model/expression.ts";
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
+import { containerFor } from "#plate/model/interactions.ts";
 import type { ModuleModel } from "#plate/model/interactions.ts";
 import { readersOf } from "#plate/model/reader.ts";
 import { translate } from "#plate/model/regex.ts";
@@ -736,6 +742,26 @@ export interface Unsupported {
 }
 
 /**
+ * An element an interaction module owns as the container of its interactions, such as the
+ * `qti-position-object-stage` Position Objects stand inside (`ModuleContainer` in
+ * `#plate/interactions/contract.ts`): the module that owns it, and its children as the body walk
+ * read them, the interactions inside it among them. It is no interaction and binds no response;
+ * the walks that find a body's interactions enter it as they enter an element.
+ *
+ * @template K The kind of the module that owns the container.
+ */
+export interface ContainerNode<K extends ModuleKind = ModuleKind> {
+  readonly children: readonly BodyNode[];
+  readonly kind: "container";
+  /**
+   * The kind of the module whose container `parse` gave the node, and whose container `render`
+   * the emitter hands it to.
+   */
+  readonly module: K;
+  readonly path: string;
+}
+
+/**
  * An interaction of the item model: the four plate renders, Choice, Extended Text, Inline Choice
  * and Text Entry, and the seventeen it parses through a module, each node as its module declares
  * it (`ModuleModel` in `#plate/model/interactions.ts`, read from the table of modules), so this
@@ -750,12 +776,14 @@ export type Interaction =
 
 /**
  * A node of the item body: an element, a text, an interaction, a printed variable, a template
- * block or inline, a notice, or the node of a body-placed content element (`ContentNode` in
- * `#plate/content/modules.ts`, one member per content module, each as its module declares it).
+ * block or inline, a notice, the node of a body-placed content element (`ContentNode` in
+ * `#plate/content/modules.ts`, one member per content module, each as its module declares it), or
+ * the container an interaction module owns ({@link ContainerNode}).
  */
 export type BodyNode =
   | BodyElement
   | BodyText
+  | ContainerNode
   | ContentNode
   | Interaction
   | PrintedVariable
@@ -2594,6 +2622,30 @@ const contentNode = (
   );
 
 /**
+ * Read an element an interaction module owns as the container of its interactions, by the module's
+ * container `parse` (`containerFor` in `#plate/model/interactions.ts`): the element's children are
+ * read as body nodes first, so the interactions inside it reach their own modules, then the
+ * element, those nodes and the element's context are handed to the module.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param own The `qti-*` elements the module reading this content owns, passed to the children.
+ * @returns Its body node, or a refusal; none when no module declares the element as its container.
+ */
+const containerNode = (
+  build: Build,
+  element: SourceElement,
+  own: Owned,
+): Option.Option<Result.Result<BodyNode, Refusal>> =>
+  (isQti(element) ? containerFor(element.local) : Option.none()).pipe(
+    Option.map((container) =>
+      Result.flatMap(bodyNodes(build, element, own), (children) =>
+        container.parse(element, children, contextOf(build, element)),
+      ),
+    ),
+  );
+
+/**
  * Read an item root child by the `parse` of the item-placed content module that reads it.
  *
  * @template K The child's element.
@@ -2723,9 +2775,10 @@ const catalogOf = (build: Build, element: SourceElement): Pick<BodyElement, "cat
  * @param child The child.
  * @param own The `qti-*` elements the module reading this content owns, each read as an element.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model
- *   or, for one a module or a body-placed content module reads, what its `parse` gives, a printed
- *   variable's, a template block's or inline's with its content, a module's own element as an
- *   element with its subtree, or a notice for anything else, its subtree dropped; or a refusal.
+ *   or, for one a module or a body-placed content module reads, what its `parse` gives, a module's
+ *   container with its children ({@link containerNode}), a printed variable's, a template block's
+ *   or inline's with its content, a module's own element as an element with its subtree, or a
+ *   notice for anything else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -2754,6 +2807,11 @@ const bodyNode = (
   const content = contentNode(build, child);
   if (Option.isSome(content)) {
     return content.value;
+  }
+
+  const container = containerNode(build, child, own);
+  if (Option.isSome(container)) {
+    return container.value;
   }
 
   if (isQti(child, "qti-printed-variable")) {
