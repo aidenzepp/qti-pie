@@ -390,7 +390,9 @@ describe("the core, from src/index.ts", () => {
 
   it("[effect entry boundary] publishes src/index.ts as . and src/effect.ts as ./effect, the exports map's only script modules beside the React layer and the runtime", () => {
     assert.deepStrictEqual(
-      Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]sx?$/u.test(target)),
+      Object.entries(readManifest().exports).filter(([, target]) =>
+        /\.[cm]?[jt]sx?$/u.test(target),
+      ),
       [
         [".", "./src/index.ts"],
         ["./effect", "./src/effect.ts"],

@@ -263,6 +263,7 @@ plate's work runs in spans:
   a `plate.check` for each document they judge, which carries `document.location`,
   `document.kind` and `document.verdict`.
 - `plate.configure` runs `configure` and `ConfigurationFromEnv`.
+- `plate.readPnp` runs `readPnp`, which reads a PNP document into supports.
 - The tooling reads the corpus under `plate.readCorpusFile` and `plate.corpusDocuments`, and
   builds its tables under `plate.generateTables` and `plate.generateOccurrences`.
 - The Effect functions that do an item's or a session's work run under `plate.` and their name:
