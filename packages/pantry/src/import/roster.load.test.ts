@@ -1,13 +1,13 @@
 /**
- * The import roster's name lists: loading `#pantry/import/roster.ts` builds no schema, and the
- * written names are read from the schema on first call and kept (GOAL "Architecture direction" 1,
- * criterion 5).
+ * The import roster's name lists: loading `#pantry/import/roster.ts` builds no schema, since its
+ * names are committed constants the type checker holds to the schema (GOAL "Architecture
+ * direction" 1, criterion 5).
  *
  * This file imports only `#pantry/import/roster.ts` and `#pantry/qti/schema.ts`: the fixture
  * `#pantry/test/qti.ts` builds the schema when it loads.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { writtenNamesOf } from "#pantry/import/roster.ts";
+import { writtenNames } from "#pantry/import/roster.ts";
 import { qtiBuilt } from "#pantry/qti/schema.ts";
 
 describe("the import roster", () => {
@@ -17,14 +17,11 @@ describe("the import roster", () => {
     assert.isFalse(qtiBuilt());
   });
 
-  it("reads the written names on first call and keeps them", () => {
+  it("lists the written names without building the schema", () => {
     // Oracle: the two roots, `Node` and `Package`, are stored relations no ordered family nests,
-    // so an import writes each directly; a memoized list is one array on every call.
-    const names = writtenNamesOf();
-
-    assert.isNotEmpty(names);
-    assert.include(names, "Node");
-    assert.include(names, "Package");
-    assert.strictEqual(writtenNamesOf(), names);
+    // so an import writes each directly.
+    assert.include(writtenNames, "Node");
+    assert.include(writtenNames, "Package");
+    assert.isFalse(qtiBuilt());
   });
 });
