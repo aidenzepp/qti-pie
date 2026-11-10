@@ -54,6 +54,15 @@ import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
+ * The markers of parts the part table carries ahead of the issue that renders them, which no
+ * render emits until its issue lands.
+ */
+const prewiredSlots: ReadonlySet<string> = new Set([
+  "choice-interaction-mask",
+  "choice-interaction-mask-toggle",
+]);
+
+/**
  * The part table, one entry per row: interaction, part, `data-slot` marker and
  * default element. The markers are the operator's ruling (rule `0e767b8d`): a Root carries its
  * component's name, and every other part `<component>-<part>` in kebab case.
@@ -73,6 +82,8 @@ const specRows = [
   ["choice-interaction", "control", "choice-interaction-control", "input"],
   ["choice-interaction", "indicator", "choice-interaction-indicator", "span"],
   ["choice-interaction", "label", "choice-interaction-label", "label"],
+  ["choice-interaction", "mask", "choice-interaction-mask", "details"],
+  ["choice-interaction", "maskToggle", "choice-interaction-mask-toggle", "summary"],
   ["text-entry-interaction", "root", "text-entry-interaction", "qti-text-entry-interaction"],
   ["text-entry-interaction", "control", "text-entry-interaction-control", "input"],
   [
@@ -1106,7 +1117,7 @@ describe("the merged column", () => {
           rowFor("choice-interaction", "prompt", { promptMarkup: "legend" }),
           rowFor("choice-interaction", "root", { promptMarkup: "legend" }),
         ];
-        for (const row of rows) {
+        for (const row of rows.filter((candidate) => !prewiredSlots.has(candidate.slot))) {
           const names = observed.get(rowKey(row));
 
           assert.isDefined(names, `${rowKey(row)} was never rendered`);
