@@ -30,7 +30,7 @@ import type {
 } from "#plate/model/interactions.ts";
 import { parseContextOf } from "#plate/model/item.ts";
 import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
-import { format, isRecordValue } from "#plate/model/values.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type {
   ElementPayload,
@@ -635,6 +635,33 @@ const landedGapMatch: InteractionModule<
    */
   countsAttempt: (interaction, posted) => Object.hasOwn(posted, interaction.response),
   element: `qti-${landedKind}-interaction`,
+  /**
+   * The one posted text read as a single integer, `{"n":<integer>}`, empty text as its NULL, and
+   * any other text refused with what to post, the way pci-05's entry reads Appendix C JSON: a toy,
+   * so a test sees the postings and the decoder route a post through this member.
+   */
+  entry: () => ({
+    decode: (json) => {
+      if (json === "") {
+        return Result.succeed(nullOf("integer", "single"));
+      }
+
+      const n = /^\{"n":(?<n>-?\d+)\}$/u.exec(json)?.groups?.["n"];
+
+      return n === undefined
+        ? Result.fail('post {"n":<integer>}, as the toy control gives it')
+        : Result.succeed({
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: BigInt(n) }],
+          });
+    },
+    encode: (encoded) => {
+      const [first] = isRecordValue(encoded) ? [] : encoded.values;
+
+      return first === undefined ? "" : `{"n":${format(first)}}`;
+    },
+  }),
   feature: features[landedKind],
   implemented: true,
   kind: landedKind,
@@ -1584,6 +1611,55 @@ describe("a module that lands", () => {
           assert.deepStrictEqual(
             Result.getSuccess(form.decode([], posting.binding, posting.options)),
             Option.some(absent),
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "[W0-PCIJSON] declares an entry the postings read through the module table, so its response posts under a module binding the decoder routes to it",
+    () =>
+      withLanded(
+        Effect.gen(function* moduleEntry() {
+          const interactions = yield* Effect.promise(() => import("#plate/model/interactions.ts"));
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const form = yield* Effect.promise(() => import("#plate/form/encoding.ts"));
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+
+          // The table of modules holds the fake's member, where the hub reads it.
+          assert.strictEqual(interactions.modules[landedKind].entry, landedGapMatch.entry);
+
+          const [posting, ...others] = payload.postings(payload.redactItem(built), "q1");
+
+          assert.lengthOf(others, 0);
+
+          const { binding, options } = posting ?? assert.fail("RESPONSE has no posting.");
+
+          if (!("kind" in binding)) {
+            assert.fail("RESPONSE's binding is not its module's.");
+          }
+
+          assert.strictEqual(binding.kind, "module");
+          assert.strictEqual(binding.cardinality, "multiple");
+          assert.strictEqual(binding.name, form.entryName("q1", "RESPONSE"));
+
+          const seven: Value = {
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: 7n }],
+          };
+
+          assert.deepStrictEqual(
+            Result.getSuccess(form.decode([[binding.name, '{"n":7}']], binding, options)),
+            Option.some(seven),
+          );
+          assert.deepStrictEqual(
+            Option.map(
+              Result.getFailure(form.decode([[binding.name, "oops"]], binding, options)),
+              ({ reason }) => reason,
+            ),
+            Option.some("module"),
           );
         }),
       ),

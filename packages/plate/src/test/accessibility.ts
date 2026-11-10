@@ -604,21 +604,31 @@ export const nameOf = (element: Element, tree: Element): string => {
  * `a` or `area` with an `href`, an `audio` or `video` with `controls`, the first `summary` child of
  * a `details`, and any element with a `tabindex`, `-1` included. A disabled control is not
  * focusable, and neither is a control below a disabled `fieldset` unless it sits in that
- * `fieldset`'s first `legend` child.
+ * `fieldset`'s first `legend` child. An element that carries the `hidden` attribute, or sits below
+ * one that does, is not focusable either: a focusable area must be being rendered, and `hidden`
+ * makes the element `display: none` through the user agent's stylesheet, so a host's hidden
+ * default submit is no tab stop, as in the browser.
  *
  * @param element The element to classify.
  * @param tree The tree the element sits in, which places a `summary` under its `details` and a
  *   control under its `fieldset`s; an element outside it is judged as a root.
  * @returns Whether the element can take focus.
  * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-disabled
+ * @see https://html.spec.whatwg.org/multipage/interaction.html#focusable-area
+ * @see https://html.spec.whatwg.org/multipage/interaction.html#the-hidden-attribute
  */
-export const isFocusable = (element: Element, tree: Element): boolean =>
-  isFocusableAt(
-    visitsOf(tree).find((candidate) => candidate.element === element) ?? {
-      ancestors: [],
-      element,
-    },
+export const isFocusable = (element: Element, tree: Element): boolean => {
+  const visit = visitsOf(tree).find((candidate) => candidate.element === element) ?? {
+    ancestors: [],
+    element,
+  };
+
+  return (
+    ![...visit.ancestors, visit.element].some(
+      (candidate) => attribute(candidate, "hidden") !== undefined,
+    ) && isFocusableAt(visit)
   );
+};
 
 /**
  * Decide whether a Root is the group its Prompt names: `role="group"`, and `aria-labelledby` naming
@@ -861,18 +871,27 @@ const rules = {
       }
 
       const form = visit.ancestors.findLast((ancestor) => ancestor.tag === "form");
+      if (form === undefined) {
+        return true;
+      }
 
-      return (
-        form === undefined ||
-        visits
-          .slice(index + 1)
-          .some(
-            (later) =>
-              later.ancestors.includes(form) &&
-              isFormControl(later.element) &&
-              !isSubmitButton(later.element),
-          )
+      // The form's first submit button in tree order is HTML's default button; when it is
+      // `hidden`, it is the host's default submit and may precede the form's controls.
+      const first = visits.find(
+        (candidate) => candidate.ancestors.includes(form) && isSubmitButton(candidate.element),
       );
+      if (first === visit && attribute(visit.element, "hidden") !== undefined) {
+        return false;
+      }
+
+      return visits
+        .slice(index + 1)
+        .some(
+          (later) =>
+            later.ancestors.includes(form) &&
+            isFormControl(later.element) &&
+            !isSubmitButton(later.element),
+        );
     }),
   "tabindex-minus-one": ({ visits }) =>
     visits.filter(
@@ -890,7 +909,12 @@ const rules = {
  * item's Status, and an interaction's Root, Prompt, Choice, Control and Label. The form and its
  * submit buttons are the host's composition, not parts, so `submit-order` reads them from the HTML:
  * a submit button must sit inside a `form`, after every control of that form other than its submit
- * buttons, so a form may end in several, as a navigation swapped to submit buttons does. A Choice
+ * buttons, so a form may end in several, as a navigation swapped to submit buttons does; the one
+ * exception is the form's first submit button in tree order when it carries `hidden`, the host's
+ * default submit, which may stand before the form's controls, since HTML's default button is that
+ * first submit button and a host puts its own there so that Enter in a text field never activates a
+ * submit button the item holds, an End Attempt's. Every other submit button, a `hidden` one that is
+ * not the first among them included, is held to the order. A Choice
  * Root's Prompt must take one of the two ruled markups, a `legend` first in the `fieldset` or a
  * `qti-prompt` the `fieldset` names through `aria-labelledby`. A text interaction's Prompt names
  * its one Control; an Extended Text Root that holds several Controls is a group its Prompt names,
