@@ -33,6 +33,7 @@ import {
   choiceOrder,
   hiddenOnlyResponses,
   identifyMessages,
+  isRedacted,
   payload,
   postings,
   redactItem,
@@ -4133,5 +4134,14 @@ describe("a record-bound control", () => {
         options: { base: 10 },
       },
     ]);
+  });
+});
+
+describe("isRedacted", () => {
+  it("[redaction mark refused] is true for redactItem's value, and false for a spread copy of it, a plain object and null", () => {
+    assert.isTrue(isRedacted(redacted));
+    assert.isFalse(isRedacted({ ...redacted }));
+    assert.isFalse(isRedacted({ identifier: redacted.identifier }));
+    assert.isFalse(isRedacted(null));
   });
 });
