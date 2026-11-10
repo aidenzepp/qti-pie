@@ -64,8 +64,8 @@ export interface PackageSource {
 }
 
 /**
- * The reader of an opened package's files, in the shape of `Options.files` of `#plate/render.ts`:
- * the text of a package-relative path, none when the package holds no such file.
+ * The reader of an opened package's files, which a host hands `render` as `files`: the text of a
+ * package-relative path, none when the package holds no such file.
  *
  * It holds the package's accepted text files only: a stylesheet, an HTML document, a text track or
  * an SVG image the package lists, as UTF-8. A QTI document is withheld by the verdict, as it is
@@ -73,6 +73,14 @@ export interface PackageSource {
  * package, `../` ones included, and any file that is not UTF-8.
  */
 export type PackageFileReader = (path: string) => Option.Option<string>;
+
+/**
+ * The member of the options a host hands `render` that `Options` of `#plate/render.ts` does not
+ * declare: the reader of the files of the item's package, none for an item outside a package.
+ */
+export interface FileOptions {
+  readonly files?: PackageFileReader;
+}
 
 /**
  * One package with the verdict `openPackage` gave it, and the reader of its files.

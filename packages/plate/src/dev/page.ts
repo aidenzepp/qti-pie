@@ -62,6 +62,7 @@ import {
 import type {
   PackageCache,
   PackageEntry,
+  FileOptions,
   PackageFileReader,
   PackagesFailure,
 } from "#plate/dev/packages.ts";
@@ -710,7 +711,7 @@ const itemPage = (
         onSome: (input) =>
           Result.map(renderStatus(input, configuration), (rendered) => [rendered.html]),
       });
-      const item = yield* render(redacted, configuration, {
+      const options: FileOptions & Options = {
         ...view.options,
         assetBase: assetBaseOf(session.path),
         disabled: view.disabled,
@@ -719,7 +720,8 @@ const itemPage = (
           onSome: (files) => ({ files }),
         }),
         instance: session.instance,
-      });
+      };
+      const item = yield* render(redacted, configuration, options);
       const submitAttributes: Attributes = view.disabled
         ? { disabled: true, type: "submit" }
         : { type: "submit" };

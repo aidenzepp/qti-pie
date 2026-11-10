@@ -7,15 +7,20 @@ import { configure } from "#plate/configuration.ts";
 import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { openDirectory, packageCache, testField } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
+import type {
+  FileOptions,
+  PackageCache,
+  PackageOpener,
+  PackageSource,
+} from "#plate/dev/packages.ts";
+import { commentName } from "#plate/dev/post.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
-import type { SessionPlayground } from "#plate/dev/test-page.ts";
+import type { CommentedStep, SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme } from "#plate/dev/theme.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
-import { commentName } from "#plate/form/comment.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 import { message } from "#plate/messages.ts";
@@ -26,7 +31,7 @@ import { resultValues } from "#plate/results/values.ts";
 import type * as RenderModule from "#plate/render.ts";
 import type { Options } from "#plate/render.ts";
 import type * as AdvanceModule from "#plate/session/advance.ts";
-import type { Intent, Step } from "#plate/session/session.ts";
+import type { Intent } from "#plate/session/session.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
@@ -1437,7 +1442,7 @@ interface Recorded {
   /**
    * The options each `render` call received, in call order.
    */
-  readonly renders: Options[];
+  readonly renders: (FileOptions & Options)[];
   /**
    * The session routes, from a module graph the recording replaced `render` and `advance` in.
    */
@@ -1445,7 +1450,7 @@ interface Recorded {
   /**
    * The step each `advance` call received, in call order.
    */
-  readonly steps: Step[];
+  readonly steps: CommentedStep[];
 }
 
 /**
@@ -1457,8 +1462,8 @@ interface Recorded {
  * @returns The effect under those replacements.
  */
 const recordingSession = <A, E>(use: (recorded: Recorded) => Effect.Effect<A, E>) => {
-  const renders: Options[] = [];
-  const steps: Step[] = [];
+  const renders: (FileOptions & Options)[] = [];
+  const steps: CommentedStep[] = [];
 
   return Effect.sync(() => {
     vi.resetModules();

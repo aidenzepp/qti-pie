@@ -44,7 +44,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import { page, pageHeaders, slot } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { testField, testIn } from "#plate/dev/packages.ts";
-import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
+import type { FileOptions, PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
 import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import type { Post } from "#plate/dev/post.ts";
 import {
@@ -97,6 +97,14 @@ export interface SessionPlayground {
   readonly packages: PackageCache;
   readonly seed: Option.Option<string>;
   readonly sessions: SessionStore;
+}
+
+/**
+ * The step a session page hands `advance`: a {@link Step} that also carries the comment the
+ * candidate posted with the request, which `Step` of `#plate/session/session.ts` does not declare.
+ */
+export interface CommentedStep extends Step {
+  readonly comment?: string;
 }
 
 /**
@@ -406,16 +414,17 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
         onSome: (input) =>
           Result.map(renderStatus(input, view.configuration), (rendered) => [rendered.html]),
       });
+      const options: FileOptions & Options = {
+        ...shown.options,
+        assetBase: itemAssetBase(sitting, document),
+        disabled: view.disabled,
+        files: sitting.package.files,
+        instance: view.instance,
+      };
       const item = yield* render(
         redact(document, view.record, view.configuration),
         view.configuration,
-        {
-          ...shown.options,
-          assetBase: itemAssetBase(sitting, document),
-          disabled: view.disabled,
-          files: sitting.package.files,
-          instance: view.instance,
-        },
+        options,
       );
       const form = h(
         "form",
@@ -811,7 +820,7 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
   const carried: Intent = confirming
     ? { kind: "go", sequenceIndex: view.sequenceIndex }
     : intent.value;
-  const step: Step = view.disabled
+  const step: CommentedStep = view.disabled
     ? { intent: carried }
     : {
         ...Option.match(post.comment, { onNone: () => ({}), onSome: (comment) => ({ comment }) }),

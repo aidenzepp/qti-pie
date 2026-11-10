@@ -86,16 +86,10 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * member through its `redact` kit and writes what its controller needs onto its own Root, and the
  * shipped kinds read none, so for an item of those alone the HTML is the same with or without it.
  * It is a render input, never item data: nothing of it reaches the redacted item or its JSON.
- * `files` is the host's reader of package-relative paths, none when the host holds
- * no such file: plate reads no file itself (`openPackage` gives the host the package's paths, and
- * the host holds the texts), so a content module's render reads one through the kit's `files`, as
- * the two stylesheet modules of issue `m5-06` will, together with the kit's `instance` that scopes
- * the Root's id. With no `files`, every path reads as none.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
-  readonly files?: (path: string) => Option.Option<string>;
   readonly host?: HostFacts;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];

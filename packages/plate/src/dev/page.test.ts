@@ -12,15 +12,15 @@ import {
   verdictOrder,
 } from "#plate/dev/listing.ts";
 import { Packages, testField } from "#plate/dev/packages.ts";
+import type { FileOptions } from "#plate/dev/packages.ts";
 import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
-import { postOf, valuesOf } from "#plate/dev/post.ts";
+import { commentName, postOf, valuesOf } from "#plate/dev/post.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import type { Handler, PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
-import { commentName } from "#plate/form/comment.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
 import { begin, configure, redact, render, restore } from "#plate/index.ts";
@@ -2522,9 +2522,9 @@ describe("dev/post.ts", () => {
  * @returns The effect under that replacement.
  */
 const recordingRender = <A, E>(
-  use: (calls: Options[]) => Effect.Effect<A, E>,
+  use: (calls: (FileOptions & Options)[]) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E> => {
-  const calls: Options[] = [];
+  const calls: (FileOptions & Options)[] = [];
 
   return Effect.sync(() => {
     vi.resetModules();
