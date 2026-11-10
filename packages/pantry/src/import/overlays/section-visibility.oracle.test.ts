@@ -217,6 +217,13 @@ const situations = pipe(
   ),
 );
 
+/**
+ * The timeout, in milliseconds, of the one test here: a hang guard, never a budget. Measured
+ * 2026-11-10: 301.3 s at a load average of 89 to 103, its slowest test. Measured 2026-11-10: 247.6
+ * s at a load average of 72 to 86, its lighter run.
+ */
+const testTimeoutMs = 660_000;
+
 layer(NodeServices.layer, { excludeTestServices: true })("a section's visibility", (it) => {
   it.effect(
     "is its own visible alone, so one that writes none is refused by AL3 alone, on the import's rows as in the law oracle",
@@ -275,6 +282,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a section's visibility
           );
         }).pipe(Effect.scoped),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });

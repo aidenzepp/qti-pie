@@ -25,14 +25,20 @@
  *   and 240 s;
  * - Each timeout a test, a `describe`, a `layer` or a hook of the free project states is such a
  *   constant, or a conditional of them, and never a number or a string written in place, so every
- *   stated timeout carries its measurement.
+ *   stated timeout carries its measurement;
+ * - The guard reads each test file to its end: none opens a string, a template or a comment the
+ *   reader never closes ({@link openIn}), so no call after one goes unread, and the reader takes a
+ *   regular expression and a template's substitution as the code they are;
+ * - {@link exempt} holds only test files of either package that still write a timeout in place, so an
+ *   entry outlives neither its file nor its literal.
  *
  * The database project's files, named `*.db.test.ts` or `*.packaging.test.ts` or gated on the lease
  * (`vite.config.ts` reads them so), run one at a time on a lease, which a free run does not hold,
- * so the last two rules leave their timeouts to a measurement taken there. A test that runs only
- * under `GR8DES_GENETIC=1`, or sits in a `describe` that does, is a long budget, as a conditional
- * constant's other branch is: it states a named constant, and its measurement is the long run's.
- * {@link exempt} names the files no lane may edit, which the last rule leaves as they are.
+ * so the measured-constant and literal rules leave their timeouts to a measurement taken there. A
+ * test that runs only under `GR8DES_GENETIC=1`, or sits in a `describe` that does, is a long
+ * budget, as a conditional constant's other branch is: it states a named constant, and its
+ * measurement is the long run's. {@link exempt} names the files no lane may edit, which the literal
+ * rule leaves as they are.
  *
  * The floor is measured, not chosen: every suite was run once on 2026-11-07, pantry's free project
  * and crust's, each under `nice -n 15` with 3 workers at a load average of 63 to 73 (lane TD-B).
@@ -134,24 +140,20 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/refusal-ruling.oracle.test.ts",
-    "measurement owed: its 8-package exhaust, which compiles Qti's law model once, ran 137.4 s in the final run of 2026-11-08, whose load average was 4 to 47; its 1_800_000 stays in place until it is remeasured at a load average of at least 60",
+    "pantry/src/grammar/attributes.test.ts",
+    "measurement owed: its describe's literal 300_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; it stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/qti/identity.copyback.test.ts",
-    "measurement owed: its three exhausts, of 440, 616 and 5,896 cases, ran 10.4 s at the slowest in the final run of 2026-11-08, whose load average was 4 to 47; its 120_000 stays in place until it is remeasured at a load average of at least 60",
+    "pantry/src/model/shred.oracle.test.ts",
+    "measurement owed: its literals 150_000 and 420_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; they stay in place until they are remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/overlays/reading-declarations.oracle.test.ts",
-    "measurement owed: its 280-case exhaust ran 53.6 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+    "pantry/src/test/complete.oracle.test.ts",
+    "measurement owed: its literal 300_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; it stays in place until it is remeasured at a load average of at least 60",
   ],
   [
-    "pantry/src/import/overlays/section-template-references.oracle.test.ts",
-    "measurement owed: its 24-case exhaust ran 3.5 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
-  ],
-  [
-    "pantry/src/import/overlays/section-visibility.oracle.test.ts",
-    "measurement owed: its 64-case exhaust ran 39.2 s in the final run of 2026-11-08, whose load average was 4 to 47; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+    "pantry/src/test/fixtures.test.ts",
+    "measurement owed: its two literals of 120_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; they stay in place until they are remeasured at a load average of at least 60",
   ],
 ]);
 
@@ -202,13 +204,131 @@ interface Source {
 }
 
 /**
- * The offset just past a string literal, a comment, or none: what the reader skips whole, so a
- * bracket or a comma inside one is no syntax. A string or a block comment the text never closes
- * ends one past the text's end, so every reader stops there and {@link openIn} finds it: a block
- * comment's missing close once read as offset 1, which sent the reader back to the text's start
- * forever while its spans filled the heap. A quotation mark in a regular expression literal of
- * `db/workload-only.test.ts` opened a string that a glob's quotation mark closed, and the glob's
- * `/*` was then read as a comment.
+ * The words after which a `/` opens a regular expression literal rather than dividing.
+ */
+const beforeRegex: ReadonlySet<string> = new Set([
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "of",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
+]);
+
+/**
+ * Whether the `/` at an offset opens a regular expression literal, read from the text before it: it
+ * divides after a name, a number, a literal or a closing parenthesis or bracket, and opens a
+ * regular expression after anything else, an operator, an opening bracket, a comma or a `}`, or one
+ * of {@link beforeRegex}.
+ *
+ * @param text - The module's text.
+ * @param at - The offset of the `/`.
+ * @returns Whether a regular expression may open there.
+ */
+const opensRegex = (text: string, at: number): boolean => {
+  let back = at - 1;
+  while (back >= 0 && /\s/u.test(text.charAt(back))) {
+    back -= 1;
+  }
+
+  const last = text.charAt(back);
+  if (/[\w$]/u.test(last)) {
+    let first = back;
+    while (first > 0 && /[\w$]/u.test(text.charAt(first - 1))) {
+      first -= 1;
+    }
+
+    return beforeRegex.has(text.slice(first, back + 1));
+  }
+
+  return back < 0 || !")]\u0022\u0027\u0060".includes(last);
+};
+
+/**
+ * Find the end of the regular expression literal that opens at an offset: its closing `/`, outside
+ * a character class and an escape. A literal ends on its line, so a `/` the line never closes was a
+ * division.
+ *
+ * @param text - The module's text.
+ * @param at - The offset of the opening `/`.
+ * @returns The offset past the closing `/`, or -1 where the line closes none.
+ */
+const regexEnd = (text: string, at: number): number => {
+  let inClass = false;
+  for (let next = at + 1; next < text.length && text[next] !== "\n"; next += 1) {
+    const character = text[next];
+    if (character === "\\") {
+      next += 1;
+    } else if (character === "[") {
+      inClass = true;
+    } else if (character === "]") {
+      inClass = false;
+    } else if (character === "/" && !inClass) {
+      return next + 1;
+    }
+  }
+
+  return -1;
+};
+
+/**
+ * Find the end of the template literal that opens at an offset: its closing backtick, past each
+ * substitution, which is read as code.
+ *
+ * @param text - The module's text.
+ * @param at - The offset of the opening backtick.
+ * @param skip - Reads the literal or comment that starts at an offset of a substitution, as
+ *   {@link skipped} does.
+ * @returns The offset past the closing backtick, past the text's end where there is none.
+ */
+const templateEnd = (
+  text: string,
+  at: number,
+  skip: (text: string, at: number) => number,
+): number => {
+  let next = at + 1;
+  while (next < text.length && text[next] !== "`") {
+    if (text[next] === "\\") {
+      next += 2;
+    } else if (text.startsWith("${", next)) {
+      let depth = 1;
+      next += 2;
+      while (next < text.length && depth > 0) {
+        const past = skip(text, next);
+        if (past === -1) {
+          depth += text[next] === "{" ? 1 : 0;
+          depth -= text[next] === "}" ? 1 : 0;
+          next += 1;
+        } else {
+          next = past;
+        }
+      }
+    } else {
+      next += 1;
+    }
+  }
+
+  return next + 1;
+};
+
+/**
+ * The offset just past a string literal, a template literal, a regular expression literal, a
+ * comment, or none: what the reader skips whole, so a bracket, a comma or a quotation mark inside
+ * one is no syntax. A template's substitutions are read as code, where a literal of their own may
+ * hold a backtick or a brace. A string ends on its line, as a string does, and a string, a template
+ * or a block comment the text never closes ends one past the text's end, so every reader stops
+ * there and {@link openIn} finds it: a block comment's missing close once read as offset 1, which
+ * sent the reader back to the text's start forever while its spans filled the heap. A quotation
+ * mark in a regular expression literal of `db/workload-only.test.ts` once opened a string that a
+ * glob's quotation mark closed, and the glob's `/*` was then read as a comment.
  *
  * @param text - The module's text.
  * @param at - The offset of the character to read.
@@ -217,13 +337,17 @@ interface Source {
  */
 const skipped = (text: string, at: number): number => {
   const quote = text[at];
-  if (quote === '"' || quote === "'" || quote === "`") {
+  if (quote === '"' || quote === "'") {
     let next = at + 1;
-    while (next < text.length && text[next] !== quote) {
+    while (next < text.length && text[next] !== quote && text[next] !== "\n") {
       next += text[next] === "\\" ? 2 : 1;
     }
 
-    return next + 1;
+    return text[next] === quote ? next + 1 : text.length + 1;
+  }
+
+  if (quote === "`") {
+    return templateEnd(text, at, skipped);
   }
 
   if (text.startsWith("//", at)) {
@@ -232,13 +356,13 @@ const skipped = (text: string, at: number): number => {
     return end === -1 ? text.length : end;
   }
 
-  if (!text.startsWith("/*", at)) {
-    return -1;
+  if (text.startsWith("/*", at)) {
+    const end = text.indexOf("*/", at + 2);
+
+    return end === -1 ? text.length + 1 : end + 2;
   }
 
-  const end = text.indexOf("*/", at + 2);
-
-  return end === -1 ? text.length + 1 : end + 2;
+  return quote === "/" && opensRegex(text, at) ? regexEnd(text, at) : -1;
 };
 
 /**
@@ -283,10 +407,8 @@ const argumentsAt = (text: string, open: number): readonly [readonly string[], n
 };
 
 /**
- * Mark where a module's string literals and comments stand, so a call written inside one, as a
- * planted case's text, is no call. A regular expression literal is read as code, so one that holds
- * a quotation mark or a backtick opens a string the reader never closes, and the planted cases
- * after it read as calls: a pattern in this file writes them `\u0022`, `\u0027` and `\u0060`.
+ * Mark where a module's string literals, template literals, regular expression literals and
+ * comments stand, so a call written inside one, as a planted case's text, is no call.
  *
  * @param text - The module's text.
  * @returns Each literal's or comment's start and end offsets.
@@ -308,9 +430,9 @@ const quotedIn = (text: string): readonly (readonly [number, number])[] => {
 };
 
 /**
- * Find the string literal or block comment a module opens and never closes, as the reader reads it:
- * a regular expression literal that holds a quotation mark or a backtick can open one, and every
- * call after it then reads as quoted, so the guard reads none of them.
+ * Find the string literal, template literal or block comment a module opens and never closes, as
+ * the reader reads it: a literal the reader misreads can open one, and every call after it then
+ * reads as quoted, so the guard reads none of them.
  *
  * @param text - The module's text.
  * @returns The offset where the unclosed literal or comment starts, or none.
@@ -815,15 +937,88 @@ describe("the timeouts a test runs under", () => {
     assert.deepStrictEqual(literal, [], "timeouts written in place, not as a measured constant");
   });
 
-  it("reads a misread module to its end, where a comment it opens never closes", () => {
-    // Oracle: the reader's rule on a planted module. A regular expression's quotation mark opens a
-    // string that a glob's closes, and the glob's `/*` opens a comment the text never closes: the
-    // reader stops at the text's end, where it once went back to offset 1 forever.
-    const misread =
-      'const p = /"/u;\nconst g = "**/*.ts";\nit.effect("a", (ctx) => searched(ctx, x), 5_000);';
+  it("exempts only test files of either package that still write a timeout in place", () => {
+    const sources = Object.values(packages).flatMap(testsOf);
+    const read = new Set(sources.map(({ file }) => file));
+    const literal = new Set(
+      sources.filter((source) => writtenTimeouts(source).length > 0).map(({ file }) => file),
+    );
 
-    assert.strictEqual(openIn(misread), misread.indexOf("/*"));
-    assert.deepStrictEqual(planted(misread), []);
+    assert.deepStrictEqual(
+      [...exempt.keys()].filter((file) => !read.has(file)),
+      [],
+      "exempt files that are no test file of either package: delete the entry of a file that is gone or renamed",
+    );
+    assert.deepStrictEqual(
+      [...exempt.keys()].filter((file) => !literal.has(file)),
+      [],
+      "exempt files that write no timeout in place: delete the entry of a file the literal rule can read",
+    );
+  });
+
+  it("reads every test file to its end, none opening a literal or a comment it never closes", () => {
+    const open = Object.values(packages)
+      .flatMap(testsOf)
+      .flatMap(({ file, text }) => {
+        const at = openIn(text);
+
+        return at === undefined ? [] : [`${file}:${String(text.slice(0, at).split("\n").length)}`];
+      });
+
+    assert.deepStrictEqual(
+      open,
+      [],
+      "test files whose text the reader misreads, so the calls after the unclosed literal go unread",
+    );
+  });
+
+  it("reads past a regular expression, a template and a division, and finds the call after each", () => {
+    // Oracle: the reader's rule on planted modules, each followed by a search at vitest's 5 s that
+    // the guard must find. Live: a regular expression that holds a quotation mark, an apostrophe or
+    // a backtick, one in a character class or after `return`, a template whose substitution holds
+    // a template or a quoted backtick, and a division beside a string that holds a slash. Wild: the
+    // misreads of the reader that took a regular expression for code, where `db/workload-only.test.ts`'s
+    // quotation mark opened a string a glob's closed.
+    const search = 'it.effect("a", (ctx) => searched(ctx, x), 5_000);';
+    /* oxlint-disable no-template-curly-in-string -- planted module text, which holds templates */
+    const read = [
+      'const p = /"/u;\nconst g = "**/*.ts";',
+      "const p = /'/u;\nconst g = '**/*.ts';",
+      'const p = /`/u;\nconst g = "**/*.ts";',
+      'const p = /["\'`/]/u;\nconst g = "**/*.ts";',
+      'const f = () => {\n  return /"/u;\n};\nconst g = "**/*.ts";',
+      'const t = `a ${x ? `"` : "`"} b`;\nconst g = "**/*.ts";',
+      'const t = `a ${{ b: `${c}` }.b} d`;\nconst g = "**/*.ts";',
+      'const half = total / 2;\nconst ratio = (a + b) / 2 / c;\nconst slash = "/";',
+    ];
+    /* oxlint-enable no-template-curly-in-string */
+
+    for (const text of read) {
+      assert.isUndefined(openIn(text), text);
+      assert.deepStrictEqual(planted(`${text}\n${search}`), [5000], text);
+    }
+  });
+
+  it("reads a literal or a comment the text never closes to the text's end, and finds where it opened", () => {
+    // Oracle: the reader's rule on planted modules. Live: a string that reaches the end of its line,
+    // a template and one whose substitution never closes, and a block comment, which once read as
+    // offset 1 and sent the reader back to the text's start forever. Wild: a call after each, which
+    // the reader must leave unread.
+    const search = 'it.effect("a", (ctx) => searched(ctx, x), 5_000);';
+    const unclosed: readonly (readonly [string, string])[] = [
+      ['const s = "never closed;', '"'],
+      ["const s = 'never closed;", "'"],
+      ["const t = `never closed;", "`"],
+      // oxlint-disable-next-line no-template-curly-in-string -- planted module text
+      ["const t = `a ${b;", "`"],
+      ["const c = 1; /* never closed;", "/*"],
+    ];
+
+    for (const [text, opener] of unclosed) {
+      assert.strictEqual(openIn(text), text.indexOf(opener), text);
+      assert.strictEqual(openIn(`${text}\n${search}`), text.indexOf(opener), text);
+      assert.deepStrictEqual(planted(`${text}\n${search}`), [], text);
+    }
   });
 
   it("finds a planted search under a deadline, a project on the 5 s default and an unread timeout", () => {
