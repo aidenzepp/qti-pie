@@ -320,7 +320,7 @@ describe("A-15: glossary on screen, a native disclosure beside each term", () =>
   );
 
   it.effect(
-    "[A-15] each definition sits in a details after the term's enclosing block, closed, its summary named by the term",
+    "[A-15] each definition sits in a details after the term's enclosing block, closed",
     () =>
       Effect.gen(function* sitsAfterBlock() {
         const accepted = yield* acceptFixture();

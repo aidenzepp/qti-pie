@@ -98,7 +98,7 @@ describe(server.browser, () => {
   });
 
   it.effect(
-    "[A-15] in the page Enter or Space on the summary opens the definition and again closes it, and focus stays on the summary",
+    "[A-15] in the page Enter or Space on the summary opens the definition and again closes it",
     () =>
       Effect.gen(function* keyboardToggle() {
         const container = yield* mountGlossary();
@@ -127,7 +127,7 @@ describe(server.browser, () => {
   );
 
   it.effect(
-    "[A-15] in the page a pointer click on the summary opens and closes the definition, and upgrade moves no focus",
+    "[A-15] in the page a pointer click on the summary opens it, and nothing moves focus on load",
     () =>
       Effect.gen(function* pointerToggle() {
         const before = document.createElement("input");
