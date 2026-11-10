@@ -26,6 +26,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { unboundPrefixesOf } from "#pantry/grammar/domains.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { expandedNameOf } from "#pantry/grammar/xsi.ts";
@@ -92,14 +93,15 @@ const contexts = ["foreign", "local", "rebound"] as const;
  * @param type - The built-in's local name.
  * @param context - Where the governed element stands.
  * @param content - What it holds, as written.
- * @param target - An ID the item's body declares, which an `xs:IDREF` text names; none for none.
+ * @param targets - The IDs the item's body declares, each on a paragraph of its own, which an
+ *   `xs:IDREF` or `xs:IDREFS` text names; none for none.
  * @returns The item's text.
  */
 const itemOf = (
   type: string,
   context: (typeof contexts)[number],
   content: string,
-  target: Option.Option<string>,
+  targets: readonly string[],
 ): string => {
   const typed = `xmlns:xsi="${xsiNamespace}" xmlns:xs="${xsNamespace}" xsi:type="xs:${type}"`;
   const governed =
@@ -110,7 +112,7 @@ const itemOf = (
   // it to XML Schema's: the nearest declaration binds it (Namespaces in XML 1.0, §6.1).
   const outer = context === "rebound" ? ` xmlns:xs="urn:qti-pie:no-types"` : "";
 
-  return `<qti-assessment-item xmlns="${asiNamespace}"${outer} identifier="i" title="t" time-dependent="false" adaptive="false"><qti-companion-materials-info><ssml:mark xmlns:ssml="http://www.w3.org/2001/10/synthesis" name="m">${governed}</ssml:mark></qti-companion-materials-info><qti-item-body><p${Option.match(target, { onNone: () => "", onSome: (id) => ` id="${id}"` })}>x</p></qti-item-body></qti-assessment-item>`;
+  return `<qti-assessment-item xmlns="${asiNamespace}"${outer} identifier="i" title="t" time-dependent="false" adaptive="false"><qti-companion-materials-info><ssml:mark xmlns:ssml="http://www.w3.org/2001/10/synthesis" name="m">${governed}</ssml:mark></qti-companion-materials-info><qti-item-body>${targets.length === 0 ? "<p>x</p>" : targets.map((id) => `<p id="${id}">x</p>`).join("")}</qti-item-body></qti-assessment-item>`;
 };
 
 /**
@@ -140,6 +142,13 @@ const judged = Effect.fn("test.judged")(function* judgedItem(
     laws: documentBreaches("doc.xml", rows.success, laws).map(({ law }) => law),
   };
 });
+
+/**
+ * The prefixes bound where every governed element stands: `xml`, and `x`, `xsi`, `xs` and `ssml`,
+ * which the item declares on or above it in each context. A valid text of a QName type is one whose
+ * every prefix is among them, so it names a QName that has a value (XML Schema 1.0 Part 2, 3.2.18).
+ */
+const governedScope: ReadonlySet<string> = new Set(["ssml", "x", "xml", "xs", "xsi"]);
 
 describe("a simple xsi:type on foreign content", () => {
   it.effect(
@@ -172,7 +181,17 @@ describe("a simple xsi:type on foreign content", () => {
             const valid = [
               ...drawnOf(domain),
               ...familiesOf(domain, Option.none()).flatMap((name) => familyTable.get(name) ?? []),
-            ].find((value) => value !== "" && accepts(domain, value));
+            ].find(
+              (value) =>
+                value !== "" &&
+                accepts(domain, value) &&
+                Option.match(domain.qualified, {
+                  onNone: () => true,
+                  onSome: (qualified) =>
+                    unboundPrefixesOf(qualified, value, (prefix) => governedScope.has(prefix))
+                      .length === 0,
+                }),
+            );
             const invalid = invalidCandidates.find((value) => !accepts(domain, value));
             const content = {
               element: Option.some(`<x:g xmlns:x="urn:x"/>`),
@@ -187,15 +206,16 @@ describe("a simple xsi:type on foreign content", () => {
                   continue;
                 }
 
-                // An IDREF's valid text names an ID the document declares (XML Schema 1.0 Part 1,
-                // §3.3.4 and the ID/IDREF table): the body declares the one it names.
-                const target =
+                // An IDREF's or IDREFS's valid text names IDs the document declares (XML Schema 1.0
+                // Part 1, §3.3.4 and the ID/IDREF table): the body declares each one it names.
+                const targets =
                   holding === "valid" &&
+                  valid !== undefined &&
                   Option.exists(domain.identity, (identity) => identity !== "ID")
-                    ? Option.fromUndefinedOr(valid?.split(/\s+/u)[0])
-                    : Option.none();
+                    ? [...new Set(valid.split(/[\t\n\r ]+/u).filter((token) => token !== ""))]
+                    : [];
                 const { codec, laws: broken } = yield* judged(
-                  itemOf(type, context, written.value, target),
+                  itemOf(type, context, written.value, targets),
                   version,
                 );
                 cases += 1;
