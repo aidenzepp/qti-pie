@@ -1,32 +1,30 @@
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_rmoe3heakj" UNIQUE USING INDEX "__attribute_key_node_rmoe3heakj";
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_hroly2h3wu" UNIQUE USING INDEX "__attribute_key_node_hroly2h3wu";
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_name_vdtl6ykgf4" UNIQUE USING INDEX "__attribute_key_node_name_vdtl6ykgf4";
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_53cd4wzjhe" UNIQUE USING INDEX "__attribute_key_node_53cd4wzjhe";
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_z3fpxb33wr" UNIQUE USING INDEX "__attribute_key_node_z3fpxb33wr";
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_6v7u4jhu67" UNIQUE USING INDEX "__attribute_key_node_6v7u4jhu67";
+
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_kind_fhjz7em3nm" UNIQUE USING INDEX "__attribute_key_node_kind_fhjz7em3nm";
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_j3nl2tgoep" UNIQUE USING INDEX "__attribute_key_node_j3nl2tgoep";
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_xtyjppptnf" UNIQUE USING INDEX "__attribute_key_node_xtyjppptnf";
-
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_j5k5x63vk5" UNIQUE USING INDEX "__attribute_key_node_j5k5x63vk5";
-
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_cyiabcbfjg" UNIQUE USING INDEX "__attribute_key_node_cyiabcbfjg";
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_tsbrtp3osw" UNIQUE USING INDEX "__attribute_key_node_tsbrtp3osw";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "double_value";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "double_bound";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "e_1_derived";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "value_domain";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_lexical_b56655356a";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_lexical_wjp7shyhnx";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_name_lexical_document_kind_q6czk6ohxz";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_wk5qyll2a2";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_sdtiny3s64";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_name_kind_lexical_y2g66w3c6u";
 
@@ -86,13 +84,15 @@ ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_c
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_54p7jpspjz";
 
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_lcsazcvmoq";
+
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_4rmgwg3wgo";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_name_lexical_mgnenhufg5";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_name_kind_document_lexical_toebjhhqle";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_lexical_gyd44qmtvi";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_lexical_z7whcrwpn7";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_h7edoee2xc";
 
@@ -102,7 +102,7 @@ ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_name_kind
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_lexical_n3fq766zy6";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_r2xdxyora2";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_arqk2s4arb";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_ug3se24mbh";
 
@@ -110,15 +110,13 @@ ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_document_
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_zedikqrucf";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_piztef2wyq";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_4s7da3gklk";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_ujbnucfaka";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_4stuz5uzd4";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_gnshy64grh";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_w3gp43iei6";
 
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_jygi642c57";
-
-ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_xe2loezx3y";
+ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_ftnkgwpfay";
 
 ALTER TABLE "qti"."attribute" VALIDATE CONSTRAINT "__attribute_fk_node_lexical_tag_selection_written_oopputu4ww";
 
@@ -146,9 +144,9 @@ ALTER TABLE "qti"."catalog_id" ADD CONSTRAINT "__catalog_id_fk_node_kf3go6qa4s" 
 
 ALTER TABLE "qti"."catalog_id" VALIDATE CONSTRAINT "__catalog_id_fk_node_kf3go6qa4s";
 
-ALTER TABLE "qti"."catalog_ref" ADD CONSTRAINT "__catalog_ref_fk_node_zmkvtdbt2z" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_kvvtz4aokl") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
+ALTER TABLE "qti"."catalog_ref" ADD CONSTRAINT "__catalog_ref_fk_node_464i7n4442" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_hiye4nbsxr") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
 
-ALTER TABLE "qti"."catalog_ref" VALIDATE CONSTRAINT "__catalog_ref_fk_node_zmkvtdbt2z";
+ALTER TABLE "qti"."catalog_ref" VALIDATE CONSTRAINT "__catalog_ref_fk_node_464i7n4442";
 
 ALTER TABLE "qti"."declaration_identifier" ADD CONSTRAINT "__declaration_identifier_fk_node_ekjci54ml7" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_k7q6ze3fvq") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
 
@@ -158,14 +156,19 @@ ALTER TABLE "qti"."default_entry" ADD CONSTRAINT "__default_entry_fk_node_vkxcob
 
 ALTER TABLE "qti"."default_entry" VALIDATE CONSTRAINT "__default_entry_fk_node_vkxcobelp3";
 
-ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_node_3lqobcjlo4" FOREIGN KEY ("__node_tpei2g34n6") REFERENCES "qti"."attribute" ("__node_h7ktnl7tci") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
+ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_node_gbpiinkipf" FOREIGN KEY ("__node_tpei2g34n6") REFERENCES "qti"."attribute" ("__node_bxkt3vhspy") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
 
-ALTER TABLE "qti"."document_id" VALIDATE CONSTRAINT "__document_id_fk_node_3lqobcjlo4";
+ALTER TABLE "qti"."document_id" VALIDATE CONSTRAINT "__document_id_fk_node_gbpiinkipf";
 
 ALTER TABLE "qti"."share_fragment" ADD CONSTRAINT "__share_fragment_fk_node_a2epxbrkcq" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_tblig6omlm") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
 
 ALTER TABLE "qti"."share_fragment" VALIDATE CONSTRAINT "__share_fragment_fk_node_a2epxbrkcq";
 
-ALTER TABLE "qti"."table_header" ADD CONSTRAINT "__table_header_fk_node_xfriolo3jk" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_aqtwqbqjlb") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
+ALTER TABLE "qti"."table_header" ADD CONSTRAINT "__table_header_fk_node_tag_kind_th_fppeoqnnbn" FOREIGN KEY ("node", "__tag_kind_th_xngqtwe4yz") REFERENCES "qti"."attribute" ("__node_bxkt3vhspy", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED NOT VALID;
 
-ALTER TABLE "qti"."table_header" VALIDATE CONSTRAINT "__table_header_fk_node_xfriolo3jk";
+ALTER TABLE "qti"."table_header" VALIDATE CONSTRAINT "__table_header_fk_node_tag_kind_th_fppeoqnnbn";
+
+CREATE CONSTRAINT TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct"
+  AFTER DELETE OR UPDATE OF "document_type", "kind", "lexical", "name", "node" ON "qti"."attribute"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_attribute_item_ref_href_in_unread_type_href_5p67b6tn6q"();
