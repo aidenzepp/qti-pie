@@ -179,7 +179,6 @@ export const knownGaps: readonly KnownGap[] = [
   awaiting("m3e-01", "I-11"),
   awaiting("m3f-06", "I-12"),
   awaiting("m5-07", "I-13"),
-  awaiting("m3e-04", "I-14"),
   awaiting("m3f-08", "I-15"),
   awaiting("m3f-01", "I-16"),
   awaiting("m3e-03", "I-17"),
