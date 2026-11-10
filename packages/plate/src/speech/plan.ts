@@ -796,9 +796,11 @@ const substitutionOf = (lexicon: Lexicon): ((spoken: string) => string) => {
  * - A text run that is whitespace only is no segment. The content of `meta`, `metadata`, `lexicon`
  *   and `desc` is not spoken.
  *
- * Where a lexicon and the carriers meet (the lexicon's own order of precedence, a proposed reading:
- * PLS 1.0 says nothing about SSML's, and SSML 1.1's `lexicon` section says a lexicon applies to
- * the text an engine would otherwise pronounce by its own rules):
+ * Where a lexicon and the carriers meet (the order of precedence is a proposed reading: PLS 1.0
+ * says nothing about SSML's, and SSML 1.1 says only that a PLS lexicon's information must be used
+ * for the tokens within a `lookup` (§3.1.5.2), and, under `phoneme` (§3.1.10), that a phoneme's
+ * string is not a token for lexicon lookup while the values of `say-as` and `sub` may undergo text
+ * normalization and lookup both):
  *
  * - The lexicon applies to `spoken` after every carrier, since the substitution runs over the
  *   finished spoken text. A `sub` alias is itself subject to the lexicon's whole-word substitution,
