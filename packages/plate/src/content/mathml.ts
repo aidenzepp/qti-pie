@@ -7,14 +7,22 @@
  * `check`, which gives no reason, so a document holding MathML is built; the body walk hands each
  * `math` to `normalise`, which rewrites every deprecated `mfenced` into the `mrow` and `mo`
  * elements MathML 3 defines it as equivalent to (section 3.3.8), then to `parse`, which reads the
- * tree and refuses nothing; `redact` keeps the node whole; `copy` makes the payload node; and
- * `render` writes the tree as the HTML parser reads a `math` element and its descendants, in the
- * MathML namespace.
+ * tree and checks it once against the MathML 3 Recommendation's structural rules
+ * (`#plate/content/mathml-validity.ts`, issue m3e-05b), refusing the document at the first defect;
+ * `redact` keeps the node whole; `copy` makes the payload node; and `render` writes the tree as the
+ * HTML parser reads a `math` element and its descendants, in the MathML namespace.
  *
  * What this module does not do, each the ruling of a reading or of another issue:
  *
- * - It judges no MathML validity. The MathML 3 Recommendation's RelaxNG schema and prose rules are
- *   issue m3e-05b's; here any MathML tree is read and written as it stands.
+ * - It judges only the validity rules `#plate/content/mathml-validity.ts` lists, the reading "MathML
+ *   validity is the MathML 3 Recommendation" enforced where unambiguous. The rules the reading
+ *   records as limits stay unchecked: `indenttarget` as a reference, the cells a `rowspan` or
+ *   `columnspan` covers, a space inside an `mpadded` length, `mglyph`'s `src` and `alt` as
+ *   required, and every rule that turns on what an expression means (a `sum`'s or `product`'s last
+ *   argument, the coordinate names of `divergence`, `grad`, `curl` and `laplacian`, `definitionURL`
+ *   and `cd` naming a definition). The ids a `share` or an `xref` may name are the island's own.
+ *   Every other content model of the MathML XSD (a child count, an attribute's enumeration) is not
+ *   walked, as the structural validator leaves MathML unwalked.
  * - It adds no `aria-label` from `alttext`, which is kept as written: an ARIA label on MathML
  *   overrides the braille a screen reader generates from the formula (the proposed reading filed
  *   with issue m3e-05).
@@ -38,6 +46,7 @@ import type {
   ContentCopyKit,
   ContentRenderKit,
 } from "#plate/content/contract.ts";
+import { checkMathml } from "#plate/content/mathml-validity.ts";
 import { attr, el, mathmlNamespace, text as sourceText } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -480,17 +489,26 @@ export const mathmlModule: BodyContentModule<typeof element, MathNode, MathPaylo
    */
   normalise: normaliseElement,
   /**
-   * Read the `math` element into its tree, its marks recorded once; it refuses nothing of its own.
+   * Read the `math` element into its tree, its marks recorded once, and check the tree against the
+   * MathML 3 Recommendation's structural rules ({@link checkMathml}, issue m3e-05b) before giving
+   * it: the first defect refuses the document.
    */
   parse: (source, context) => {
     context.read.markElement(source);
 
-    return Result.map(readChildren(source, context), (children): MathNode => ({
-      attributes: attributesOf(source.attributes),
-      children,
-      kind: "element",
-      local: source.local,
-    }));
+    return Result.flatMap(readChildren(source, context), (children) => {
+      const node: MathNode = {
+        attributes: attributesOf(source.attributes),
+        children,
+        kind: "element",
+        local: source.local,
+      };
+
+      return Option.match(checkMathml(node, context.read, context.path), {
+        onNone: () => Result.succeed(node),
+        onSome: (refusal) => Result.fail(refusal),
+      });
+    });
   },
   /**
    * The tree's codec, recursive through its children, an `annotation-xml`'s content through the
