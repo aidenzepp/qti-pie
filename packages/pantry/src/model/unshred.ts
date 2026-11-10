@@ -21,6 +21,7 @@ import { Effect, Option } from "effect";
 import { encode } from "@qti-pie/crust/encode.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import type {
   ClosedName,
   ElementKind,
@@ -35,7 +36,6 @@ import type {
   XdmNamespace,
   XdmVocabulary,
 } from "#pantry/model/xdm.ts";
-import { xmlnsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * An attribute's name as written and as resolved: the prefix it is written with, empty when it has
@@ -99,7 +99,7 @@ const declarationOf = ({ prefix, uri }: XdmNamespace): Attribute =>
   prefix === ""
     ? {
         local: "xmlns",
-        namespace: xmlnsNamespace,
+        namespace: XMLNS_NAMESPACE,
         prefix: "",
         qname: "xmlns",
         references: [],
@@ -107,7 +107,7 @@ const declarationOf = ({ prefix, uri }: XdmNamespace): Attribute =>
       }
     : {
         local: prefix,
-        namespace: xmlnsNamespace,
+        namespace: XMLNS_NAMESPACE,
         prefix: "xmlns",
         qname: `xmlns:${prefix}`,
         references: [],

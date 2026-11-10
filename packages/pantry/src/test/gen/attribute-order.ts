@@ -27,6 +27,7 @@ import { encode } from "@qti-pie/crust/encode.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { unshred } from "#pantry/model/unshred.ts";
@@ -36,7 +37,6 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { everyRelationPackage, memberCounts } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts, PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { xdmDocument } from "#pantry/test/gen/xdm.ts";
-import { xmlNamespace, xmlnsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The packages a case is built on: the every-relation package, valid by construction and holding
@@ -351,7 +351,7 @@ const withAttribute = (element: Element, attribute: Attribute, slot: number): El
  *   it as it was.
  */
 const corrupted = (element: Element, edit: Edit): Element => {
-  const owned = element.attributes.filter(({ namespace }) => namespace !== xmlnsNamespace);
+  const owned = element.attributes.filter(({ namespace }) => namespace !== XMLNS_NAMESPACE);
   const target = owned[edit.slot % Math.max(1, owned.length)];
   switch (edit.corruption) {
     case "lexical": {
@@ -379,7 +379,7 @@ const corrupted = (element: Element, edit: Edit): Element => {
         element,
         {
           local: "lang",
-          namespace: xmlNamespace,
+          namespace: XML_NAMESPACE,
           prefix: "xml",
           qname: "xml:lang",
           references: [],
@@ -391,7 +391,7 @@ const corrupted = (element: Element, edit: Edit): Element => {
     case "declared": {
       const declaration: Attribute = {
         local: "extra",
-        namespace: xmlnsNamespace,
+        namespace: XMLNS_NAMESPACE,
         prefix: "xmlns",
         qname: "xmlns:extra",
         references: [],
@@ -524,7 +524,7 @@ const orderOf =
         return [...positions.slice(by), ...positions.slice(0, by)];
       }
       case "declarationsLast": {
-        const declares = (at: number) => element.attributes[at]?.namespace === xmlnsNamespace;
+        const declares = (at: number) => element.attributes[at]?.namespace === XMLNS_NAMESPACE;
 
         return [
           ...positions.filter((at) => !declares(at)),
@@ -621,11 +621,11 @@ export const elementsOf = (element: Element): readonly Element[] => [
  * @returns Whether a declaration follows an attribute that is none.
  */
 export const declaresLate = (element: Element): boolean => {
-  const first = element.attributes.findIndex(({ namespace }) => namespace !== xmlnsNamespace);
+  const first = element.attributes.findIndex(({ namespace }) => namespace !== XMLNS_NAMESPACE);
 
   return (
     first !== -1 &&
-    element.attributes.slice(first).some(({ namespace }) => namespace === xmlnsNamespace)
+    element.attributes.slice(first).some(({ namespace }) => namespace === XMLNS_NAMESPACE)
   );
 };
 
@@ -647,8 +647,8 @@ export const writtenOf = ({ qname, references, value }: Attribute): string =>
  * @returns Its declarations and attributes in the export's order, each by {@link writtenOf}.
  */
 export const exportOrderOf = (element: Element): readonly string[] => [
-  ...element.attributes.filter(({ namespace }) => namespace === xmlnsNamespace).map(writtenOf),
-  ...element.attributes.filter(({ namespace }) => namespace !== xmlnsNamespace).map(writtenOf),
+  ...element.attributes.filter(({ namespace }) => namespace === XMLNS_NAMESPACE).map(writtenOf),
+  ...element.attributes.filter(({ namespace }) => namespace !== XMLNS_NAMESPACE).map(writtenOf),
 ];
 
 /**

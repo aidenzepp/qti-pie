@@ -30,9 +30,10 @@
  */
 import { Option } from "effect";
 import type { Types } from "effect";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import type { ForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
-import { xlinkNamespace, xmlNamespace, xsiNamespace } from "#pantry/vocab/namespaces.ts";
+import { xlinkNamespace, xsiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The closed handle types a tree is written in: for each roster the grammar composes, the union of
@@ -96,7 +97,7 @@ export type ClosedName<V extends XdmVocabulary> = Exclude<V["name"], OpenClass>;
  * handle and names it back through this one table.
  */
 export const handlePrefixes = [
-  { namespace: xmlNamespace, prefix: "xml" },
+  { namespace: XML_NAMESPACE, prefix: "xml" },
   { namespace: xsiNamespace, prefix: "xsi" },
   { namespace: xlinkNamespace, prefix: "xlink" },
 ] as const;

@@ -31,6 +31,7 @@ import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import type { Swarm } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import {
   attributeCounts,
   baseTypes,
@@ -2048,11 +2049,6 @@ const openNames: ReadonlySet<string> = new Set(openClasses);
  */
 const isLayerName = (name: string): boolean => name.startsWith("xsi:") || openNames.has(name);
 
-/**
- * The XML namespace, whose attributes the grammar names `xml:<local>`.
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
 describe.skipIf(!cached)("The XSD's attribute uses", () => {
   it.effect(
     "are what the composed grammar admits on every kind the XSD reading reaches, with the XSD's use, the layer's names aside",
@@ -2072,7 +2068,7 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
               for (const use of model.attributes) {
                 if (use.use !== "prohibited") {
                   expected.set(
-                    use.name.namespace === xmlNamespace ? `xml:${use.name.local}` : use.name.local,
+                    use.name.namespace === XML_NAMESPACE ? `xml:${use.name.local}` : use.name.local,
                     use.use,
                   );
                 }

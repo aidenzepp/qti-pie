@@ -1,12 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
-import { xmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { loadXsd, resolverOf, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
 
 /**
@@ -61,7 +61,7 @@ describe.skipIf(!cached)("the XSD reader's QNames", () => {
           const strays: string[] = [];
           for (const [kind, models] of contents) {
             for (const { attributes } of models) {
-              const qualified = attributes.filter(({ name }) => name.namespace === xmlNamespace);
+              const qualified = attributes.filter(({ name }) => name.namespace === XML_NAMESPACE);
               strays.push(
                 ...qualified
                   .filter(({ name }) => !xmlAttributes.has(name.local))

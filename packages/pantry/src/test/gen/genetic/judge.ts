@@ -32,6 +32,7 @@ import {
 } from "effect";
 import type { Path, PlatformError } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
@@ -148,11 +149,6 @@ export type Limit =
  * The namespace of IMS Content Packaging's elements, a package manifest's and a record file's.
  */
 const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
-
-/**
- * The XML namespace, which `xml:base` is in.
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
 /**
  * The namespace of IEEE LOM's elements, a resource's metadata record's.
@@ -293,7 +289,7 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
       () =>
         resources.some((resource) =>
           resource.attributes.some(
-            ({ local, namespace }) => namespace === xmlNamespace && local === "base",
+            ({ local, namespace }) => namespace === XML_NAMESPACE && local === "base",
           ),
         ),
     ],

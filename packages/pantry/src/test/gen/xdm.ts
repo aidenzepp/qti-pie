@@ -41,6 +41,7 @@ import {
 } from "@grizzle/testing/gen";
 import { keep, swarm, swarmChoice, weightOf } from "@grizzle/testing/swarm";
 import type { Swarm } from "@grizzle/testing/swarm";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { flags } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
@@ -76,7 +77,6 @@ import {
   namespaceClassOf,
   namespaceNameOf,
   xlinkNamespace,
-  xmlNamespace,
   xsiNamespace,
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
@@ -872,7 +872,7 @@ const closedNameOf =
   (source) => {
     const spelled = handlePrefixOf(handle);
     const uri = handlePrefixes.find(({ prefix }) => prefix === spelled)?.namespace;
-    if (uri === undefined || uri === xmlNamespace) {
+    if (uri === undefined || uri === XML_NAMESPACE) {
       return closedName(handle);
     }
 
@@ -1110,7 +1110,7 @@ type Scope = ReadonlyMap<string, string>;
  */
 const topScope: Scope = new Map([
   ["", ""],
-  ["xml", xmlNamespace],
+  ["xml", XML_NAMESPACE],
 ]);
 
 /**

@@ -16,6 +16,7 @@ import {
   Option,
 } from "effect";
 import { Digest } from "effect/crypto";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { constraintAdmits, probeText, probeValueOf } from "#pantry/test/gen/vocab.ts";
@@ -45,7 +46,6 @@ import type { ValidityError } from "#pantry/test/gen/xmllint.ts";
 import { attributeDeclarations, attributeWildcards } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
-import { xmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
@@ -153,8 +153,8 @@ interface Judged {
 const attributeHandleOf = (reported: ValidityError): Option.Option<string> =>
   reported.attribute.pipe(
     Option.map((written) =>
-      written.startsWith(`{${xmlNamespace}}`)
-        ? xmlHandle(written.slice(xmlNamespace.length + 2))
+      written.startsWith(`{${XML_NAMESPACE}}`)
+        ? xmlHandle(written.slice(XML_NAMESPACE.length + 2))
         : written,
     ),
   );
@@ -177,8 +177,8 @@ const requiredNamesOf = (errors: readonly ValidityError[]): readonly string[] =>
         : [],
     )
     .map((written) =>
-      written.startsWith(`{${xmlNamespace}}`)
-        ? xmlHandle(written.slice(xmlNamespace.length + 2))
+      written.startsWith(`{${XML_NAMESPACE}}`)
+        ? xmlHandle(written.slice(XML_NAMESPACE.length + 2))
         : written,
     )
     .toSorted((left, right) => (left < right ? -1 : 1));

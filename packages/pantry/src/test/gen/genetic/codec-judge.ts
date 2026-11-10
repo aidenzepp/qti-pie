@@ -40,6 +40,7 @@ import { encode } from "@qti-pie/crust/encode.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -94,11 +95,6 @@ interface Found {
   readonly disagreements: readonly CodecDisagreement[];
   readonly features: readonly string[];
 }
-
-/**
- * The namespace name of namespace declarations, which crust reads as attributes.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 /**
  * Run `xmllint` through the oracle's one runner; an `xmllint` that does not start is a defect of
@@ -570,7 +566,7 @@ const bytesDifference = (left: Uint8Array, right: Uint8Array): Option.Option<Tre
  * @param attribute - The attribute.
  * @returns Whether it is in the `xmlns` namespace.
  */
-const isDeclaration = (attribute: Attribute): boolean => attribute.namespace === xmlnsNamespace;
+const isDeclaration = (attribute: Attribute): boolean => attribute.namespace === XMLNS_NAMESPACE;
 
 /**
  * An element as the XDM records it, the erasures unshred states made: each CDATA section as text,

@@ -31,6 +31,7 @@
 import { Effect, Option, Order, Result, Schema } from "effect";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { collapse, qNamePartsOf, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
 import type { Qualified } from "#pantry/grammar/domains.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
@@ -60,8 +61,6 @@ import {
   namespaceClassOf,
   namespaceNameOf,
   qti2Namespaces,
-  xmlNamespace,
-  xmlnsNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { openClassOf, openClassRefusals, typeAvailable } from "#pantry/vocab/open.ts";
@@ -515,7 +514,7 @@ const namespacesOf = (
 ): Result.Result<readonly XdmNamespace[], UnmodeledVocabulary> =>
   Result.all(
     element.attributes
-      .filter((attribute) => attribute.namespace === xmlnsNamespace)
+      .filter((attribute) => attribute.namespace === XMLNS_NAMESPACE)
       .map((attribute) =>
         attribute.references.length === 0
           ? Result.succeed({
@@ -538,7 +537,7 @@ type Scope = ReadonlyMap<string, string>;
  */
 const builtinScope: Scope = new Map([
   ["", ""],
-  ["xml", xmlNamespace],
+  ["xml", XML_NAMESPACE],
 ]);
 
 /**
@@ -902,7 +901,7 @@ const attributesOf = <V extends XdmVocabulary>(
   grammar: ShredGrammar<V>,
 ): Result.Result<readonly XdmAttribute<V>[], UnmodeledVocabulary> => {
   const written = reading.element.attributes.filter(
-    (attribute) => attribute.namespace !== xmlnsNamespace,
+    (attribute) => attribute.namespace !== XMLNS_NAMESPACE,
   );
   const read = written.map((attribute) => ({
     attribute,

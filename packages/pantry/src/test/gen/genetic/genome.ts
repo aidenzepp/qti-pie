@@ -10,6 +10,7 @@
 import { Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 
@@ -17,16 +18,6 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
  * The path of a package's manifest, at its root.
  */
 export const manifestPath = "imsmanifest.xml";
-
-/**
- * The namespace of namespace declarations, which crust reads as attributes.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
-
-/**
- * The XML namespace, bound to `xml` in every document and never declared.
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
 /**
  * One entry's content: an XML document's tree, or bytes that do not read as one.
@@ -215,7 +206,7 @@ export const insertAt = (root: Element, address: Address, at: number, child: Chi
  * @returns Whether it is in the `xmlns` namespace.
  */
 export const isDeclaration = (attribute: Attribute): boolean =>
-  attribute.namespace === xmlnsNamespace || attribute.qname === "xmlns";
+  attribute.namespace === XMLNS_NAMESPACE || attribute.qname === "xmlns";
 
 /**
  * Make a subtree stand on its own wherever it is put: its root declares every namespace prefix
@@ -249,12 +240,12 @@ export const selfContained = (element: Element): Element => {
   }
 
   const declarations = [...needed].flatMap(([prefix, namespace]): readonly Attribute[] =>
-    namespace === xmlNamespace || (prefix !== "" && namespace === "")
+    namespace === XML_NAMESPACE || (prefix !== "" && namespace === "")
       ? []
       : [
           {
             local: prefix === "" ? "xmlns" : prefix,
-            namespace: xmlnsNamespace,
+            namespace: XMLNS_NAMESPACE,
             prefix: prefix === "" ? "" : "xmlns",
             qname: prefix === "" ? "xmlns" : `xmlns:${prefix}`,
             references: [],
@@ -281,7 +272,7 @@ export const attributeOf = (qname: string, value: string, namespace = ""): Attri
 
   return {
     local: colon === -1 ? qname : qname.slice(colon + 1),
-    namespace: qname.startsWith("xml:") ? xmlNamespace : namespace,
+    namespace: qname.startsWith("xml:") ? XML_NAMESPACE : namespace,
     prefix: colon === -1 ? "" : qname.slice(0, colon),
     qname,
     references: [],

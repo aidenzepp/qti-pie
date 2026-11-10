@@ -43,6 +43,7 @@
  */
 import { Match, Option, Result, Schema } from "effect";
 import type { Attribute } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { globalAttributes, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
 import type {
@@ -56,7 +57,6 @@ import {
   namespaceClassOf,
   namespaceNameOf,
   vocabularyNamespaces,
-  xmlNamespace,
   xsiNamespace,
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
@@ -471,7 +471,7 @@ export const openClassOf = (
 
   if (
     (namespace === xsiNamespace && xsiDeclared.has(local)) ||
-    (namespace === xmlNamespace && xmlDeclared.has(local))
+    (namespace === XML_NAMESPACE && xmlDeclared.has(local))
   ) {
     return refuse("declared");
   }

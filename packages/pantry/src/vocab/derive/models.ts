@@ -48,6 +48,7 @@ import { Array as Arr, Console, Effect, Layer, Match, Option, Order, pipe, Resul
 import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
@@ -93,7 +94,6 @@ import {
   handlePrefixOf,
   noNamespace,
   vocabularyNamespaces,
-  xmlNamespace,
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
 
@@ -1439,7 +1439,7 @@ const namespaceNameOf = (namespace: string): Option.Option<string> => {
     return Option.some("xs");
   }
 
-  if (namespace === xmlNamespace) {
+  if (namespace === XML_NAMESPACE) {
     return Option.some("xml");
   }
 

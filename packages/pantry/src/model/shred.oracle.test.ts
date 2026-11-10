@@ -14,6 +14,7 @@ import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import { composed, coveredBy } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
@@ -46,7 +47,6 @@ import {
   mathmlNamespace,
   xlinkNamespace,
   qti2Namespaces,
-  xmlnsNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
@@ -189,9 +189,9 @@ const rewritten =
       const attributes = source.draw(
         shuffled(node.attributes, { max: node.attributes.length, min: node.attributes.length }),
       );
-      const firstOther = attributes.findIndex(({ namespace }) => namespace !== xmlnsNamespace);
+      const firstOther = attributes.findIndex(({ namespace }) => namespace !== XMLNS_NAMESPACE);
       if (
-        attributes.slice(firstOther + 1).some(({ namespace }) => namespace === xmlnsNamespace) &&
+        attributes.slice(firstOther + 1).some(({ namespace }) => namespace === XMLNS_NAMESPACE) &&
         firstOther !== -1
       ) {
         erased.add("declarations among attributes");
@@ -771,7 +771,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                       attributes: [
                         {
                           local: "zq",
-                          namespace: xmlnsNamespace,
+                          namespace: XMLNS_NAMESPACE,
                           prefix: "xmlns",
                           qname: "xmlns:zq",
                           references: [{ name: "e", offset: 0 }],

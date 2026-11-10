@@ -43,6 +43,7 @@ import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 
 /**
  * The packages `materializeCorpus` lists from the pinned examples tarball, pinned so that a run
@@ -54,11 +55,6 @@ const corpusPackages = 28;
  * The namespace of QTI 3's elements, the HTML body elements among them, as crust resolves it.
  */
 const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
-
-/**
- * The namespace `xml:base` is in (Namespaces in XML, §3).
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
 /**
  * The schema versions the reference census is keyed by.
@@ -180,7 +176,7 @@ const referencesIn = (
   for (let top = stack.pop(); top !== undefined; top = stack.pop()) {
     const { element } = top;
     const own = element.attributes.find(
-      (attribute) => attribute.namespace === xmlNamespace && attribute.local === "base",
+      (attribute) => attribute.namespace === XML_NAMESPACE && attribute.local === "base",
     );
     const bases = own === undefined ? top.bases : [...top.bases, own.value];
     if (element.namespace === qtiNamespace) {

@@ -46,6 +46,7 @@ import { Array as Arr, Console, Effect, Layer, Match, Option, pipe, Result, Sche
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE as XML, XMLNS_NAMESPACE as XMLNS } from "@qti-pie/crust/tree.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { readPlaced, sourcePaths, sources } from "#pantry/vocab/derive/sources.ts";
 import type { Placed, SourcePath } from "#pantry/vocab/derive/sources.ts";
@@ -60,12 +61,7 @@ import type {
   ValueType,
   WhiteSpace,
 } from "#pantry/vocab/inventory/types.ts";
-import {
-  noNamespace,
-  xmlNamespace as XML,
-  xmlnsNamespace as XMLNS,
-  xsNamespace as XS,
-} from "#pantry/vocab/namespaces.ts";
+import { noNamespace, xsNamespace as XS } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The XSD does not have a shape the deriver reads.

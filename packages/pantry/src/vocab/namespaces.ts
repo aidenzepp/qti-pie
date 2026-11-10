@@ -103,17 +103,6 @@ export const xsNamespace = "http://www.w3.org/2001/XMLSchema";
 export const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
- * The namespace the `xml` prefix is bound to without a declaration, of the attributes `xml.xsd`
- * declares.
- */
-export const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
-/**
- * The namespace of namespace declarations, which the reader gives every `xmlns` attribute.
- */
-export const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
-
-/**
  * The XLink namespace, of the `xlink:` attributes the content-packaging extension declares.
  */
 export const xlinkNamespace = "http://www.w3.org/1999/xlink";

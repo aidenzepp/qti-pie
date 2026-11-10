@@ -7,6 +7,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Context, Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { composed, coveredBy } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -51,7 +52,6 @@ import {
   namespaceClassOf,
   namespaceNameOf,
   ssmlNamespace,
-  xmlNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { dataName, foreignRoots, openClassOf } from "#pantry/vocab/open.ts";
@@ -73,7 +73,7 @@ const caseHang = Duration.minutes(1);
  * schema processor knows in each, never an open name (fin.md, D2's refinement).
  */
 const declaredIn: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  [xmlNamespace, new Set(["lang", "space", "base", "id"])],
+  [XML_NAMESPACE, new Set(["lang", "space", "base", "id"])],
   [xsiNamespace, new Set(["type", "nil", "schemaLocation", "noNamespaceSchemaLocation"])],
 ]);
 
@@ -158,7 +158,7 @@ const localName: Gen<string> = oneOf([
 /**
  * An attribute name's namespace: none, the XML or instance namespace, or another.
  */
-const namespaces = ["", xmlNamespace, xsiNamespace, "urn:v", asiNamespace] as const;
+const namespaces = ["", XML_NAMESPACE, xsiNamespace, "urn:v", asiNamespace] as const;
 
 /**
  * The namespaces of the element an attribute is on.
@@ -380,9 +380,9 @@ const candidatesFor = (own: string): readonly Candidate[] => [
   ...spellings["xml-declared"].map((local) => ({
     class: "xml-declared",
     local,
-    namespace: xmlNamespace,
+    namespace: XML_NAMESPACE,
   })),
-  { class: "xml-undeclared", local: "zz", namespace: xmlNamespace },
+  { class: "xml-undeclared", local: "zz", namespace: XML_NAMESPACE },
   { class: "xsi-declared", local: "schemaLocation", namespace: xsiNamespace },
   { class: "xsi-declared", local: "noNamespaceSchemaLocation", namespace: xsiNamespace },
   { class: "xsi-undeclared", local: "zz", namespace: xsiNamespace },
@@ -400,7 +400,7 @@ const handleOf = ({ local, namespace }: Candidate): Option.Option<string> => {
     return Option.some(local);
   }
 
-  if (namespace === xmlNamespace) {
+  if (namespace === XML_NAMESPACE) {
     return Option.some(`xml:${local}`);
   }
 
@@ -442,8 +442,8 @@ const vocabularyAdmits = (
   }
 
   if (
-    candidate.namespace === xmlNamespace &&
-    declaredIn.get(xmlNamespace)?.has(candidate.local) === true
+    candidate.namespace === XML_NAMESPACE &&
+    declaredIn.get(XML_NAMESPACE)?.has(candidate.local) === true
   ) {
     return Option.isSome(wildcard);
   }
@@ -475,7 +475,7 @@ const writtenName = ({ local, namespace }: Candidate): string => {
   }
 
   // The `xml` prefix is bound without a declaration; every other namespace by the batch's.
-  return `${namespace === xmlNamespace ? "xml" : (probePrefixes.get(namespace) ?? "x")}:${local}`;
+  return `${namespace === XML_NAMESPACE ? "xml" : (probePrefixes.get(namespace) ?? "x")}:${local}`;
 };
 
 /**
@@ -1088,7 +1088,7 @@ const namespacesAgainst = (target: string): readonly (readonly [NamespaceLabel, 
   ["target", target],
   ["absent", ""],
   ["other", foreignNamespace],
-  ["xml", xmlNamespace],
+  ["xml", XML_NAMESPACE],
 ];
 
 /**

@@ -29,6 +29,7 @@
 import { Option } from "effect";
 import type { Source } from "@grizzle/testing/source";
 import type { Attribute, Child, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { below, oneOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Edited } from "#pantry/test/gen/genetic/engine.ts";
 
@@ -226,11 +227,6 @@ export interface CodecGenome {
 }
 
 /**
- * The namespace name of namespace declarations, which crust reads as attributes.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
-
-/**
  * The labels an XML declaration's encoding is drawn from: each charset's, spelled as XML 1.0
  * section 4.3.3 and IANA spell them, in either case.
  */
@@ -386,7 +382,7 @@ const uris = [
   "",
   "rel",
   "http://www.w3.org/XML/1998/namespace",
-  xmlnsNamespace,
+  XMLNS_NAMESPACE,
 ] as const;
 
 /**
@@ -1096,7 +1092,7 @@ export const genomeOfTree = (document: XmlDocument): CodecGenome => {
         return {
           _tag: "element",
           attributes: child.attributes.map((attribute): Attr | Namespace =>
-            attribute.namespace === xmlnsNamespace
+            attribute.namespace === XMLNS_NAMESPACE
               ? {
                   _tag: "namespace",
                   pieces: valuePieces(attribute),

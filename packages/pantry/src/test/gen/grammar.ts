@@ -15,6 +15,7 @@ import type { Result } from "effect";
 import { Array as Arr, Effect, FileSystem, Layer, Option, pipe } from "effect";
 import { Digest } from "effect/crypto";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import type { Gen } from "@grizzle/testing/gen";
 import type { AdmittedChild } from "#pantry/grammar/admission.ts";
 import type { DomainReader } from "#pantry/grammar/attributes.ts";
@@ -29,18 +30,13 @@ import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { readSource, sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
-import { namespaceNameOf, xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The XML Schema namespace.
  */
 const xs = "http://www.w3.org/2001/XMLSchema";
-
-/**
- * The namespace of namespace declarations.
- */
-const xmlns = "http://www.w3.org/2000/xmlns/";
 
 /**
  * An element or attribute name, as an instance spells it.
@@ -146,7 +142,7 @@ const qnameOf = (document: SchemaDocument, qname: string): XsdName => {
 
   return {
     local: qname.slice(colon + 1),
-    namespace: prefix === "xml" ? xmlNamespace : (document.prefixes.get(prefix) ?? ""),
+    namespace: prefix === "xml" ? XML_NAMESPACE : (document.prefixes.get(prefix) ?? ""),
   };
 };
 
@@ -222,7 +218,7 @@ export const loadXsd = Effect.fn("test.loadXsd")(function* loadXsd(root: SourceP
 
       const prefixes = new Map(
         schema.attributes
-          .filter((held) => held.namespace === xmlns)
+          .filter((held) => held.namespace === XMLNS_NAMESPACE)
           .map((held) => [held.prefix === "" ? "" : held.local, held.value] as const),
       );
       const document: SchemaDocument = {

@@ -52,6 +52,7 @@ import {
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
@@ -102,12 +103,7 @@ import type {
   ValueType,
   VocabularyRoster,
 } from "#pantry/vocab/inventory/types.ts";
-import {
-  vocabularyNamespaces,
-  xlinkNamespace,
-  xmlNamespace,
-  xsNamespace,
-} from "#pantry/vocab/namespaces.ts";
+import { vocabularyNamespaces, xlinkNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * What one version's XSDs declare about one kind: its attributes, its attribute wildcard and its
@@ -201,7 +197,7 @@ const xmlSource = "w3/xml.xsd" satisfies SourcePath;
  * @returns The schema, or an {@link XsdReadingError} when the version reads none.
  */
 const xmlSchemaOf = (world: World): Result.Result<XsdSchema, XsdReadingError> =>
-  Option.match(Option.fromNullishOr(world.get(xmlNamespace)), {
+  Option.match(Option.fromNullishOr(world.get(XML_NAMESPACE)), {
     onNone: () => refuse(`the version reads no ${xmlSource}, which declares the xml: attributes`),
     onSome: ({ schema }) => Result.succeed(schema),
   });

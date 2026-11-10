@@ -53,6 +53,7 @@ import { encode } from "@qti-pie/crust/encode.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -72,11 +73,6 @@ const corpus = { entries: 380, packages: 28 } as const;
  * The namespace of the content package's elements, which a manifest's `schemaversion` is in.
  */
 const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
-
-/**
- * The namespace name every namespace declaration's attribute is in, as crust's reader resolves it.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 /**
  * Where the bytes out are written for the oracle to read: a scoped directory under the package's
@@ -150,7 +146,7 @@ const idOf = (index: number): NodeId =>
  * @param attribute - The attribute as crust read it.
  * @returns Whether it is in the `xmlns` namespace.
  */
-const isDeclaration = (attribute: Attribute): boolean => attribute.namespace === xmlnsNamespace;
+const isDeclaration = (attribute: Attribute): boolean => attribute.namespace === XMLNS_NAMESPACE;
 
 /**
  * Join each stretch of character data into one plain-text run and drop the empty runs, as the XDM

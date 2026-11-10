@@ -15,6 +15,7 @@
  * replay.
  */
 import type { Attribute, Child, Element } from "@qti-pie/crust/tree.ts";
+import { XMLNS_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import {
   attributeValue,
   directoryOf,
@@ -42,11 +43,6 @@ export const noises = [
  * One noise kind.
  */
 export type Noise = (typeof noises)[number];
-
-/**
- * The namespace of namespace declarations.
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 /**
  * The attributes whose value is a reference to another entry, which a path rename rewrites.
@@ -114,7 +110,7 @@ const prefixRename = (genome: Genome, salt: number): Genome =>
     const declared = new Set(
       elementsOf(root).flatMap(({ element }) =>
         element.attributes.flatMap((attribute) =>
-          attribute.namespace === xmlnsNamespace && attribute.prefix === "xmlns"
+          attribute.namespace === XMLNS_NAMESPACE && attribute.prefix === "xmlns"
             ? [attribute.local]
             : [],
         ),

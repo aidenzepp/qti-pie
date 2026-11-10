@@ -41,6 +41,7 @@
  * beyond their enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
  */
 import { Option } from "effect";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { readingRefusals, readingSpellings, readingUses } from "#pantry/grammar/attributes.ts";
 import type { Use, ValueDomain } from "#pantry/grammar/attributes.ts";
 import { coveredBy } from "#pantry/grammar/compose.ts";
@@ -1888,11 +1889,6 @@ const undeclaredRules = (
 };
 
 /**
- * The namespace of XML's own attributes, which `xml.xsd` declares globally.
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
-/**
  * The attributes `xml.xsd` declares globally, which a wildcard that admits the XML namespace
  * admits on its kind.
  */
@@ -1918,7 +1914,7 @@ const wildcardXmlRules = (
   const covered = coveredBy(grammar.kinds);
 
   return attributeWildcards.flatMap((wildcard) =>
-    admits(wildcard.namespace, xmlNamespace, index.namespaces.get(wildcard.kind) ?? "")
+    admits(wildcard.namespace, XML_NAMESPACE, index.namespaces.get(wildcard.kind) ?? "")
       ? wildcard.versions.flatMap((version) =>
           xmlGlobals.map((name): Rule => {
             const held = index.admitted.has(`${version} ${wildcard.kind} ${name}`);

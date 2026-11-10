@@ -19,6 +19,7 @@ import { Effect, Option, Result } from "effect";
 import type { FileSystem } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { XML_NAMESPACE } from "@qti-pie/crust/tree.ts";
 import { governorOf } from "#pantry/grammar/attributes.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -45,7 +46,6 @@ import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import {
   asiNamespace,
   xlinkNamespace,
-  xmlNamespace,
   xsNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
@@ -709,7 +709,7 @@ export const fragmentOnlyRoots: ReadonlySet<string> = (() => {
  * content-packaging sets import, and XLink's ten, which the content-packaging set alone imports.
  */
 const globalAttributeNamespaces: ReadonlyMap<string, string> = new Map([
-  ["xml:", xmlNamespace],
+  ["xml:", XML_NAMESPACE],
   ["xlink:", xlinkNamespace],
 ]);
 
@@ -871,8 +871,8 @@ export const isOutsideSet = (
 
   if (
     xmlIdsKeyed(difference, names.xmlIds) !== undefined &&
-    !names.set.has(xmlNamespace) &&
-    names.lomReads.has(xmlNamespace)
+    !names.set.has(XML_NAMESPACE) &&
+    names.lomReads.has(XML_NAMESPACE)
   ) {
     return true;
   }
