@@ -101,6 +101,44 @@ const equalOf = (left: Value, right: Value, options: EqualOptions = {}): Express
 });
 
 /**
+ * Construct a `qti-match` of two values.
+ *
+ * @param left Its first operand's value.
+ * @param right Its second operand's value.
+ * @returns The expression.
+ */
+const matchOf = (left: Value, right: Value): Expression => ({
+  kind: "match",
+  operands: [operandOf(left), operandOf(right)],
+});
+
+/**
+ * Construct the single file value of a posted file, as plate holds it: no bytes.
+ *
+ * @param name The file's name.
+ * @param size Its size in bytes.
+ * @param type Its MIME type.
+ * @returns The value.
+ */
+const fileOf = (name: string, size: number, type: string): Value => ({
+  baseType: "file",
+  cardinality: "single",
+  values: [{ baseType: "file", value: { name, size, type } }],
+});
+
+/**
+ * Construct the multiple file value holding each single file value's file, in order.
+ *
+ * @param files The single values.
+ * @returns The multiple value.
+ */
+const filesOf = (...files: readonly Value[]): Value => ({
+  baseType: "file",
+  cardinality: "multiple",
+  values: files.flatMap((file) => file.values),
+});
+
+/**
  * The variables of an attempt with no response and no outcome.
  */
 const none: Variables = { outcomes: {}, responses: {} };
@@ -628,5 +666,38 @@ describe("the comparison family's evaluators", () => {
       assert.deepStrictEqual(evaluated(equalOf(integerNull, float(1), options)), unknown);
       assert.deepStrictEqual(evaluated(equalOf(float(1), floatNull, options)), unknown);
     }
+  });
+
+  it("[W0-AY] two equal file values match and differ by any field", () => {
+    const photo = fileOf("photo.png", 4, "image/png");
+
+    assert.deepStrictEqual(
+      evaluated(matchOf(photo, fileOf("photo.png", 4, "image/png"))),
+      truth(true),
+    );
+    assert.deepStrictEqual(
+      evaluated(matchOf(photo, fileOf("photo.png", 5, "image/png"))),
+      truth(false),
+    );
+    assert.deepStrictEqual(
+      evaluated(matchOf(photo, fileOf("other.png", 4, "image/png"))),
+      truth(false),
+    );
+    assert.deepStrictEqual(
+      evaluated(matchOf(photo, fileOf("photo.png", 4, "image/jpeg"))),
+      truth(false),
+    );
+    assert.deepStrictEqual(evaluated(matchOf(photo, nullOf("file", "single"))), unknown);
+    assert.deepStrictEqual(evaluated(matchOf(nullOf("file", "single"), photo)), unknown);
+
+    const notes = fileOf("notes.txt", 1, "text/plain");
+    assert.deepStrictEqual(
+      evaluated(matchOf(filesOf(photo, notes), filesOf(notes, photo))),
+      truth(true),
+    );
+    assert.deepStrictEqual(
+      evaluated(matchOf(filesOf(photo, notes), filesOf(photo, photo))),
+      truth(false),
+    );
   });
 });

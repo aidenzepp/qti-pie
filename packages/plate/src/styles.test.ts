@@ -737,6 +737,7 @@ const contentOwners: ReadonlySet<string> = new Set([
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
+  "test-content",
   "test-navigation-time",
   ...partTable.filter((row) => contentOwners.has(row.interaction)).map((row) => row.slot),
 ]);

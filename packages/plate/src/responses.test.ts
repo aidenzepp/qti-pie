@@ -1,10 +1,16 @@
-import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { assert, describe, it, vi } from "@effect/vitest";
+import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import type { Malformed } from "#plate/form/encoding.ts";
+import type { ModuleEntry } from "#plate/interactions/contract.ts";
 import { message } from "#plate/messages.ts";
+import type { ModelOf, Modules } from "#plate/model/interactions.ts";
 import type { ExtendedTextInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
+import { format, nullOf } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
+import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
+import { stubElement, stubKind } from "#plate/test/stub-kind.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -283,5 +289,164 @@ describe("checkResponses and a record", () => {
           );
         }
       }),
+  );
+});
+
+/**
+ * The module file of the stub kind, which {@link withModuleEntry} mocks.
+ */
+const stubFile = `#plate/interactions/${stubKind}.ts`;
+
+/**
+ * A node of the stub kind bound to the integer response `R`, the bare node the table of modules
+ * holds for a stub: what a body holds for a module whose `entry` decodes its posted text.
+ */
+const moduleNode: ModelOf<typeof stubKind> = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  kind: stubKind,
+  path: `qti-assessment-item/qti-item-body/${stubElement}`,
+  response: "R",
+};
+
+/**
+ * An item built by hand: {@link moduleNode} alone, bound to the single integer response `R`.
+ */
+const moduleItem: Item = {
+  body: [moduleNode],
+  document: "items/module.xml",
+  identifier: "module",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      "R",
+      {
+        areaMapping: Option.none(),
+        baseType: "integer",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: "R",
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
+  title: "Module",
+  unsupported: [],
+};
+
+/**
+ * The single integer the toy module's `entry` reads `{"n":<integer>}` as.
+ *
+ * @param n The integer.
+ * @returns The value.
+ */
+const toyInteger = (n: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value: n }],
+});
+
+/**
+ * A module's entry in the shape pci-05's will have: `decode` reads `{"n":<integer>}` as a single
+ * integer and empty text as its NULL, and refuses any other text; `encode` writes that JSON.
+ */
+const toyEntry: ModuleEntry = {
+  decode: (text) => {
+    if (text === "") {
+      return Result.succeed(nullOf("integer", "single"));
+    }
+
+    const n = /^\{"n":(?<n>-?\d+)\}$/u.exec(text)?.groups?.["n"];
+
+    return n === undefined
+      ? Result.fail('post {"n":<integer>}, as the toy control gives it')
+      : Result.succeed(toyInteger(BigInt(n)));
+  },
+  encode: (encoded) => {
+    const first = encoded.cardinality === "record" ? undefined : encoded.values[0];
+
+    return first === undefined ? "" : `{"n":${format(first)}}`;
+  },
+};
+
+/**
+ * Run an effect with the stub kind's module declaring {@link toyEntry} as its `entry` and a
+ * `validate` that records each input it is handed and refuses it with one message naming the
+ * response, every module it imports loaded afresh, and the module restored after. The mock keeps
+ * the stub's every other member.
+ *
+ * @param seen Where the mocked `validate` records its inputs, in order.
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withModuleEntry = <A, E>(
+  seen: (Value | Malformed)[],
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(stubFile, async (importOriginal) => {
+      const actual = await importOriginal<Record<string, Modules[typeof stubKind]>>();
+
+      return Object.fromEntries(
+        Object.entries(actual).map(([name, module]) => [
+          name,
+          {
+            ...module,
+            entry: () => toyEntry,
+            validate: (
+              interaction: { readonly response: string },
+              input: Value | Malformed,
+            ): readonly ValidationMessage[] => {
+              seen.push(input);
+
+              return [{ response: interaction.response, text: "the toy refuses it" }];
+            },
+          },
+        ]),
+      );
+    });
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(stubFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+describe("checkResponses and a module-decoded value", () => {
+  it.effect(
+    "[W0-PCIJSON] checkResponses validates a module-decoded value as the module's validate sees it",
+    () => {
+      const seen: (Value | Malformed)[] = [];
+
+      return withModuleEntry(
+        seen,
+        Effect.gen(function* validatesModuleValue() {
+          const responses = yield* Effect.promise(() => import("#plate/responses.ts"));
+          const verdict = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+          const configuration = yield* configure({});
+          const decoded = yield* Effect.fromResult(toyEntry.decode('{"n":7}'));
+          const messages = responses.checkResponses(
+            verdict.acceptForTest(moduleItem),
+            { R: decoded },
+            configuration,
+          );
+
+          assert.deepStrictEqual(
+            messages.map(({ response }) => response),
+            ["R"],
+          );
+          assert.deepStrictEqual(seen, [toyInteger(7n)]);
+        }),
+      );
+    },
   );
 });
