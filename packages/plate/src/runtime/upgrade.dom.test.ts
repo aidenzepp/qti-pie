@@ -2,7 +2,9 @@
  * The runtime's entry, its walk and its two page-side services, in each engine's page: `upgrade`
  * attaches nothing and moves no focus over every M2 fixture item as plate renders it, the walk
  * attaches a registered controller once per root with its item's live region, the live region
- * re-announces by clearing first, and the hidden-input wire keeps one input per value.
+ * re-announces by clearing first, and the hidden-input wire keeps one input per value. Through the
+ * page's registry, `upgrade` attaches exactly the roots whose kind has a runtime, tears them down
+ * to the SSR's markup, and never moves focus or speaks on its own.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
@@ -14,8 +16,13 @@ import { configure } from "#plate/configuration.ts";
 import { redact, render } from "#plate/render.ts";
 import { upgrade } from "#plate/runtime.dom.ts";
 import { liveRegionOf } from "#plate/runtime/announce.dom.ts";
-import { runtimeKindOf, upgradeWith } from "#plate/runtime/contract.dom.ts";
-import type { Controller, LiveRegion } from "#plate/runtime/contract.dom.ts";
+import {
+  interactionRootSelector,
+  runtimeKindOf,
+  runtimeKinds,
+  upgradeWith,
+} from "#plate/runtime/contract.dom.ts";
+import type { Controller, LiveRegion, Upgraded } from "#plate/runtime/contract.dom.ts";
 import { entryNameOf, readHidden, writeHidden } from "#plate/runtime/wire.dom.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
@@ -27,39 +34,65 @@ import { acceptedItem } from "#plate/validate/verdict.ts";
 const fixtureFolder = "fixtures/m2";
 
 /**
- * Read one of the M2 fixture package's files as text, through the test server.
- *
- * @param file The file's path relative to the package's root.
- * @returns The file's text.
+ * The fixture packages whose items the runtime walk is counted over: M2's, and the runtime area
+ * M3d's, whose items arrive with the interactions that fill its controllers.
  */
-const fixtureText = (file: string) =>
-  Effect.promise(() => commands.readFile(`${fixtureFolder}/${file}`));
+const runtimeFixtureFolders = [fixtureFolder, "fixtures/m3d"] as const;
 
 /**
- * Read the items of the M2 fixture test, in test order, from its `qti-assessment-item-ref`
- * elements, so an item added to the test is upgraded here too.
+ * Read one of a fixture package's files as text, through the test server.
+ *
+ * @param file The file's path relative to the package's root.
+ * @param folder The package's folder, M2's unless given.
+ * @returns The file's text.
+ */
+const fixtureText = (file: string, folder: string = fixtureFolder) =>
+  Effect.promise(() => commands.readFile(`${folder}/${file}`));
+
+/**
+ * Read the items a fixture test lists, in test order, from its `qti-assessment-item-ref` elements.
+ *
+ * @param xml The test's XML.
+ * @returns Each item's path relative to the package's root.
+ */
+const itemRefs = (xml: string): readonly string[] =>
+  [
+    ...new DOMParser()
+      .parseFromString(xml, "application/xml")
+      .querySelectorAll("qti-assessment-item-ref"),
+  ].flatMap((ref) => Option.toArray(Option.fromNullishOr(ref.getAttribute("href"))));
+
+/**
+ * Read the items of the M2 fixture test, in test order, so an item added to the test is upgraded
+ * here too.
  *
  * @returns Each item's path relative to the package's root.
  */
-const fixtureItems = fixtureText("test.xml").pipe(
-  Effect.map((xml) =>
-    [
-      ...new DOMParser()
-        .parseFromString(xml, "application/xml")
-        .querySelectorAll("qti-assessment-item-ref"),
-    ].flatMap((ref) => Option.toArray(Option.fromNullishOr(ref.getAttribute("href")))),
-  ),
-);
+const fixtureItems = fixtureText("test.xml").pipe(Effect.map(itemRefs));
+
+/**
+ * Read the items of a fixture package that may hold no test yet: a folder without a `test.xml`
+ * (an area whose items have not landed) has no items.
+ *
+ * @param folder The package's folder.
+ * @returns Each item's path relative to the package's root, or none.
+ */
+const fixtureItemsIfAny = (folder: string) =>
+  Effect.tryPromise(() => commands.readFile(`${folder}/test.xml`)).pipe(
+    Effect.option,
+    Effect.map(Option.match({ onNone: (): readonly string[] => [], onSome: itemRefs })),
+  );
 
 /**
  * Render one fixture item as plate's SSR writes it, with the default configuration.
  *
  * @param file The item's path relative to the package's root.
+ * @param folder The package's folder, M2's unless given.
  * @returns The item's HTML.
  */
-const renderedFixture = (file: string) =>
+const renderedFixture = (file: string, folder: string = fixtureFolder) =>
   Effect.gen(function* renderFixture() {
-    const bytes = new TextEncoder().encode(yield* fixtureText(file));
+    const bytes = new TextEncoder().encode(yield* fixtureText(file, folder));
     const accepted = Option.getOrThrow(acceptedItem(yield* open(file, bytes)));
     const configuration = yield* configure({});
 
@@ -101,6 +134,58 @@ const frames = (): Promise<number> =>
  * An item by hand: its root, its live part, a Gap Match root and a Choice root.
  */
 const handBuiltItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><fieldset data-slot="gap-match-interaction"></fieldset><fieldset data-slot="choice-interaction"></fieldset></div>`;
+
+/**
+ * An item by hand holding the roots no fixture renders yet: a Gap Match root, whose kind has a
+ * runtime, and an Inline Choice root, whose kind has none.
+ */
+const unrenderedRootsItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div><fieldset data-slot="gap-match-interaction"></fieldset><span data-slot="inline-choice-interaction"></span></div>`;
+
+/**
+ * An item by hand holding its live part and one root of every runtime kind, in
+ * {@link runtimeKinds} order.
+ */
+const everyKindItem = `<div data-slot="item"><div data-slot="item-live" aria-live="polite" aria-atomic="true"></div>${runtimeKinds
+  .map((kind) => `<div data-slot="${kind}-interaction"></div>`)
+  .join("")}</div>`;
+
+/**
+ * The interactions whose native controls are their whole behaviour, so the runtime attaches
+ * nothing to their roots.
+ */
+const nativeSlots = [
+  "choice-interaction",
+  "text-entry-interaction",
+  "extended-text-interaction",
+  "inline-choice-interaction",
+] as const;
+
+/**
+ * Count, by `data-slot` marker, the interaction roots under a node and how many of them an upgrade
+ * attached a controller to.
+ *
+ * @param root The node the upgrade ran under.
+ * @param upgraded The upgrade.
+ * @returns For each marker present, its roots and its attached roots.
+ */
+const countBySlot = (
+  root: ParentNode,
+  upgraded: Upgraded,
+): ReadonlyMap<string, { readonly attached: number; readonly roots: number }> => {
+  const counts = new Map<string, { attached: number; roots: number }>();
+  const attachedRoots = new Set(upgraded.controllers.map(({ root: element }) => element));
+
+  for (const element of root.querySelectorAll<HTMLElement>(interactionRootSelector)) {
+    const slot = element.dataset["slot"] ?? "";
+    const count = counts.get(slot) ?? { attached: 0, roots: 0 };
+
+    count.roots += 1;
+    count.attached += attachedRoots.has(element) ? 1 : 0;
+    counts.set(slot, count);
+  }
+
+  return counts;
+};
 
 describe(server.browser, () => {
   describe("upgrade", () => {
@@ -187,6 +272,114 @@ describe(server.browser, () => {
       assert.deepStrictEqual(after.controllers, [{ kind: "gap-match", root: gap }]);
 
       after.teardown();
+      container.remove();
+    });
+
+    it.effect(
+      "[runtime] upgrade over the rendered HTML of every fixture item attaches exactly the roots whose kind has a runtime",
+      () =>
+        Effect.gen(function* fixturesAttachByKind() {
+          const rendered: string[] = [];
+
+          for (const folder of runtimeFixtureFolders) {
+            for (const file of yield* fixtureItemsIfAny(folder)) {
+              rendered.push(yield* renderedFixture(file, folder));
+            }
+          }
+
+          assert.isAtLeast(rendered.length, 5);
+
+          const container = mount([...rendered, unrenderedRootsItem].join(""));
+          const roots = [...container.querySelectorAll<HTMLElement>(interactionRootSelector)];
+          const upgraded = upgrade(container);
+          const counts = countBySlot(container, upgraded);
+
+          assert.deepStrictEqual(
+            upgraded.controllers,
+            roots.flatMap((root) => {
+              const kind = runtimeKindOf(root.dataset["slot"]);
+
+              return kind === undefined ? [] : [{ kind, root }];
+            }),
+          );
+
+          for (const slot of nativeSlots) {
+            assert.isAbove(counts.get(slot)?.roots ?? 0, 0, slot);
+            assert.strictEqual(counts.get(slot)?.attached, 0, slot);
+          }
+
+          assert.deepStrictEqual(counts.get("gap-match-interaction"), { attached: 1, roots: 1 });
+
+          upgraded.teardown();
+          container.remove();
+        }),
+    );
+
+    it("[runtime] teardown removes every stub mark and a second upgrade re-attaches", () => {
+      const container = mount(everyKindItem);
+      const first = upgrade(container);
+
+      assert.strictEqual(first.controllers.length, runtimeKinds.length);
+      assert.strictEqual(
+        container.querySelectorAll('[data-runtime="stub"]').length,
+        runtimeKinds.length,
+      );
+
+      first.teardown();
+      assert.strictEqual(container.querySelectorAll("[data-runtime]").length, 0);
+
+      const second = upgrade(container);
+
+      assert.deepStrictEqual(second.controllers, first.controllers);
+
+      second.teardown();
+      assert.strictEqual(container.querySelectorAll("[data-runtime]").length, 0);
+      container.remove();
+    });
+
+    it("[runtime] upgrade never moves focus and announces nothing by itself", async () => {
+      const container = mount(everyKindItem);
+      const live = container.querySelector('[data-slot="item-live"]');
+      const focused: EventTarget[] = [];
+      const record = (event: FocusEvent) => {
+        focused.push(event.target ?? document);
+      };
+      const before = document.activeElement;
+
+      document.addEventListener("focusin", record);
+
+      const upgraded = upgrade(container);
+
+      await frames();
+      document.removeEventListener("focusin", record);
+
+      assert.isNotNull(live);
+      assert.strictEqual(document.activeElement, before);
+      assert.deepStrictEqual(focused, []);
+      assert.strictEqual(live?.textContent, "");
+
+      upgraded.teardown();
+      await frames();
+      assert.strictEqual(live?.textContent, "");
+      container.remove();
+    });
+
+    it("[runtime] an unknown kind in a data-slot attaches nothing and is not in controllers", () => {
+      const container = mount(
+        `<div data-slot="item"><div data-slot="zzz-interaction"></div><fieldset data-slot="gap-match-interaction"></fieldset></div>`,
+      );
+      const unknown = container.querySelector<HTMLElement>('[data-slot="zzz-interaction"]');
+      const upgraded = upgrade(container);
+
+      assert.isNotNull(unknown);
+      assert.isUndefined(runtimeKindOf(unknown?.dataset["slot"]));
+      assert.notInclude(
+        upgraded.controllers.map(({ root }) => root),
+        unknown,
+      );
+      assert.isUndefined(unknown?.dataset["runtime"]);
+
+      upgraded.teardown();
       container.remove();
     });
   });
