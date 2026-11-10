@@ -11,6 +11,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { exportWork } from "#pantry/test/author.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
@@ -27,6 +28,14 @@ const unusedCa = "an unused CA: this layer is built and released without connect
 const buildTimeoutMs = 900_000;
 
 layer(NodeServices.layer)("qti/logins.ts, compiled as the layer compiles it", (it) => {
+  it.effect("holds the listing queries in the author login's export workload", () =>
+    // Oracle: the login value itself, whose workload records are the programs the layer below
+    // compiles. Bound: the two listing members by name; the layer case compiles them.
+    Effect.sync(() => {
+      assert.includeMembers(Object.keys(exportWork.programs), ["packages", "documents"]);
+    }),
+  );
+
   it.effect(
     "builds the author login's layer, compiling every workload program, the import's write program among them, for the author role",
     () =>
