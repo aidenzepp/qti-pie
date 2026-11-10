@@ -2,13 +2,16 @@
  * An item's correct responses: {@link solution}, a plain function a host calls to show the answers
  * an item declares or its template processing set, such as on a solution page.
  *
- * This is a browser module: it value-imports from `effect` only `Option`, so a host that imports
- * `solution` alone bundles no Schema and no Effect runtime.
+ * This is a browser module: it value-imports from `effect` only `Option`, and the interaction
+ * modules through `#plate/model/interactions.ts`, so a host that imports `solution` alone bundles
+ * no Schema and no Effect runtime.
  *
  * @module
  */
 import { Option } from "effect";
+import { own } from "#plate/engine/refs.ts";
 import type { TemplateRule } from "#plate/model/expression.ts";
+import { interactionsIn, isStubbed, stubSteps } from "#plate/model/interactions.ts";
 import type { Item, RecordDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
 import { nullOf, nullRecord } from "#plate/model/values.ts";
@@ -94,7 +97,35 @@ const recorded = (record: SolutionRecord | undefined, identifier: string): Optio
     : Option.none();
 
 /**
- * Give an item's correct responses, by response identifier.
+ * Give the values an item's interactions show for its correct responses: each response an
+ * interaction module binds through the module's `solution`, the value the interaction shows for
+ * the correct one, which its `redact` reads back through its kit at render; every other response
+ * as declared. The four shipped kinds show the correct value itself. Of two module interactions
+ * bound to one response, the later in document order decides.
+ *
+ * @param item The item.
+ * @param correct The correct responses, by identifier.
+ * @returns The values, each a module's interaction binds replaced by what its `solution` shows.
+ */
+const shownBy = (item: Item, correct: Responses): Responses => ({
+  ...correct,
+  ...Object.fromEntries(
+    interactionsIn(item.body).flatMap((interaction) =>
+      isStubbed(interaction)
+        ? Option.toArray(
+            Option.map(
+              own(correct, interaction.response),
+              (value) => [interaction.response, stubSteps(interaction).solution(value)] as const,
+            ),
+          )
+        : [],
+    ),
+  ),
+});
+
+/**
+ * Give an item's correct responses, by response identifier, each as the interaction bound to it
+ * shows it.
  *
  * With a record, each response's correct response is the one the record holds, which the item's
  * template processing set when its first attempt started, else the declaration's
@@ -105,7 +136,8 @@ const recorded = (record: SolutionRecord | undefined, identifier: string): Optio
  * does not run, which its `unsupported` then marks, gives its declarations' correct responses.
  * Each record response gives its declaration's `qti-correct-response`, else the NULL record (a
  * record of no field), with or without a record: template processing that would set one is
- * marked `record-set` and does not run, so no record holds one.
+ * marked `record-set` and does not run, so no record holds one. A response an interaction module
+ * binds then passes the module's `solution` ({@link shownBy}).
  *
  * It takes `check`'s {@link Accepted}, never `redact`'s output, which holds no correct response.
  *
@@ -119,7 +151,7 @@ const recorded = (record: SolutionRecord | undefined, identifier: string): Optio
 export const solution = (document: Accepted, record?: SolutionRecord): Responses => {
   const withheld = record === undefined ? templateCorrectTargets(document.item) : new Set<string>();
 
-  return {
+  return shownBy(document.item, {
     ...Object.fromEntries(
       [...document.item.responses].map(([identifier, declaration]) => [
         identifier,
@@ -134,5 +166,5 @@ export const solution = (document: Accepted, record?: SolutionRecord): Responses
         recordCorrectOf(declaration),
       ]),
     ),
-  };
+  });
 };

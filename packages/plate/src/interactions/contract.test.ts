@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { assert, describe, it, vi } from "@effect/vitest";
-import { Effect, Option, Predicate, Result, pipe } from "effect";
+import { Array as Arr, Effect, Option, Predicate, Result, pipe } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, qtiNamespace, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -30,8 +30,16 @@ import type {
 } from "#plate/model/interactions.ts";
 import { parseContextOf } from "#plate/model/item.ts";
 import type { BodyNode, Interaction, Unsupported } from "#plate/model/item.ts";
+import { format, isRecordValue } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-import type { ElementPayload, EmitState, Payload, PayloadNode } from "#plate/payload.ts";
+import type {
+  ElementPayload,
+  EmitState,
+  Payload,
+  PayloadNode,
+  UnnamedPosition,
+  View,
+} from "#plate/payload.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import type { BaseType } from "#plate/vocabulary.ts";
 
@@ -160,7 +168,16 @@ const placeholderOf = (module: AnyModule): ModuleInteraction<ModuleKind> => ({
 /**
  * The redact kit a stub's `redact` is handed, which it never reads: it throws first.
  */
-const noCopy: RedactKit = { nodes: () => [] };
+const noCopy: RedactKit = {
+  autofocus: false,
+  formName: (response) => response,
+  instance: "",
+  nodes: () => [],
+  posted: () => Option.none(),
+  seed: Option.none(),
+  shown: () => [],
+  unnamed: Option.none(),
+};
 
 /**
  * Construct an item document whose body holds one element.
@@ -389,13 +406,24 @@ interface LandedModel extends ModuleInteraction<"gap-match"> {
 
 /**
  * The payload node of {@link landedGapMatch}: what its `redact` copies of the model node, its
- * gapped content among it, which its render writes through `emitNodes`.
+ * gapped content among it, which its render writes through `emitNodes`, and what it reads of the
+ * view through the kit: the name its hidden inputs post under, the texts they restore (the posted
+ * strings when the view has messages, else the shown pairs), and the other facts the kit carries,
+ * each copied so a test reads what the kit handed the module.
  */
 interface LandedPayload {
+  readonly autofocus: boolean;
   readonly class: string;
   readonly content: readonly PayloadNode[];
+  readonly formName: string;
   readonly gaps: readonly string[];
+  readonly instance: string;
+  readonly posted: Option.Option<readonly string[]>;
   readonly response: string;
+  readonly restore: readonly string[];
+  readonly seed: Option.Option<string>;
+  readonly shown: readonly string[];
+  readonly unnamed: Option.Option<UnnamedPosition>;
 }
 
 /**
@@ -575,12 +603,25 @@ const landedGapMatch: InteractionModule<
       prompt: Schema.OptionFromOptionalKey(BodyNodes),
       response: Schema.String,
     }),
-  redact: (interaction, kit) => ({
-    class: interaction.class,
-    content: kit.nodes(interaction.gapped),
-    gaps: interaction.gaps,
-    response: interaction.response,
-  }),
+  redact: (interaction, kit) => {
+    const posted = kit.posted(interaction.response);
+    const shown = kit.shown(interaction.response).map(format);
+
+    return {
+      autofocus: kit.autofocus,
+      class: interaction.class,
+      content: kit.nodes(interaction.gapped),
+      formName: kit.formName(interaction.response),
+      gaps: interaction.gaps,
+      instance: kit.instance,
+      posted,
+      response: interaction.response,
+      restore: Option.getOrElse(posted, () => shown),
+      seed: kit.seed,
+      shown,
+      unnamed: kit.unnamed,
+    };
+  },
   regions: (interaction) => [
     ...Option.match(interaction.prompt, {
       onNone: () => [],
@@ -615,7 +656,12 @@ const landedGapMatch: InteractionModule<
       return yield* applyPart(
         row,
         { class: interaction.class, "data-response": interaction.response, "data-slot": row.slot },
-        content,
+        [
+          ...content,
+          ...interaction.restore.map((value) =>
+            h("input", { name: interaction.formName, type: "hidden", value }),
+          ),
+        ],
       );
     });
   },
@@ -639,9 +685,18 @@ const landedGapMatch: InteractionModule<
       prompt,
     };
   },
-  restore: (_interaction, stored) => stored,
+  /**
+   * The pairs in the order the gaps show them, the reverse of the stored order: a transform a test
+   * sees in the kit, so a hub that skipped this step is told apart from one that reached it.
+   */
+  restore: (_interaction, stored) =>
+    isRecordValue(stored) ? stored : { ...stored, values: stored.values.toReversed() },
   sequence: () => Option.none(),
-  solution: (_interaction, correct) => correct,
+  /**
+   * The first association alone, as a test sees that a hub reached this step.
+   */
+  solution: (_interaction, correct) =>
+    isRecordValue(correct) ? correct : { ...correct, values: correct.values.slice(0, 1) },
   unnamed: () => false,
   validate: () => [],
 };
@@ -745,7 +800,8 @@ const landedJson = {
 
 /**
  * An item whose body holds one Gap Match the landed module reads: bound to a multiple directed-pair
- * response, shuffled, with a Prompt, one gap text, and a paragraph with two gaps.
+ * response whose correct response fills both gaps with `W`, shuffled, with a Prompt, one gap text,
+ * and a paragraph with two gaps.
  */
 const landedDocument = doc(
   "items/landed.xml",
@@ -753,11 +809,21 @@ const landedDocument = doc(
     "qti-assessment-item",
     [attr("identifier", "landed"), attr("title", "Landed")],
     [
-      el("qti-response-declaration", [
-        attr("base-type", "directedPair"),
-        attr("cardinality", "multiple"),
-        attr("identifier", "RESPONSE"),
-      ]),
+      el(
+        "qti-response-declaration",
+        [
+          attr("base-type", "directedPair"),
+          attr("cardinality", "multiple"),
+          attr("identifier", "RESPONSE"),
+        ],
+        [
+          el(
+            "qti-correct-response",
+            [],
+            [el("qti-value", [], [text("W G1")]), el("qti-value", [], [text("W G2")])],
+          ),
+        ],
+      ),
       el(
         "qti-item-body",
         [],
@@ -817,6 +883,51 @@ const textNode = (value: string): BodyNode => ({ kind: "text", text: value });
  */
 const isLandedModel = (node: BodyNode): node is LandedModel =>
   node.kind === "gap-match" && "gapTexts" in node;
+
+/**
+ * Tell whether a value is the landed Gap Match's payload node at its kind, by the field no stub's
+ * node and no shipped kind's payload holds under that kind.
+ *
+ * @param value A payload node, its type erased.
+ * @returns Whether it holds the landed payload node.
+ */
+const isLandedPayloadNode = (
+  value: unknown,
+): value is { readonly kind: "gap-match"; readonly payload: LandedPayload } =>
+  Predicate.isObject(value) &&
+  value["kind"] === "gap-match" &&
+  Predicate.isObject(value["payload"]) &&
+  Predicate.isString(value["payload"]["formName"]);
+
+/**
+ * Give the landed Gap Match's payload node a payload node holds: the one the mocked module's
+ * `redact` gives, at its kind, which the module table's types, read from the stub, cannot name.
+ *
+ * @param node A payload node.
+ * @returns The landed payload node, none for any other node.
+ */
+const landedPayloadOf = (node: PayloadNode): Option.Option<LandedPayload> => {
+  const candidate: unknown = node;
+
+  return isLandedPayloadNode(candidate) ? Option.some(candidate.payload) : Option.none();
+};
+
+/**
+ * Give a multiple directed-pair value of pairs, each written as `source target`.
+ *
+ * @param pairs The pairs, in stored order.
+ * @returns The value.
+ */
+const pairsValue = (...pairs: readonly (readonly [string, string])[]): Value => ({
+  baseType: "directedPair",
+  cardinality: "multiple",
+  values: pairs.map((value) => ({ baseType: "directedPair", value })),
+});
+
+/**
+ * The name the host chose for the landed Gap Match's response to post under.
+ */
+const hostName = "answer-1";
 
 describe("a module that lands", () => {
   it("types its own model and payload nodes into every hub through the module table", () => {
@@ -926,6 +1037,94 @@ describe("a module that lands", () => {
           );
           assert.include(html, 'data-gap="G2"');
           assert.notInclude(html, "<qti-gap");
+        }),
+      ),
+  );
+
+  it.effect(
+    "sees the view's response facts through the kit, its restore and solution reached by the hubs, and writes its hidden input under the host's name",
+    () =>
+      withLanded(
+        Effect.gen(function* facts() {
+          const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+          const records = yield* Effect.promise(() => import("#plate/model/record.ts"));
+          const codec = yield* Effect.promise(() => import("#plate/codec/record.ts"));
+          const verdict = yield* Effect.promise(() => import("#plate/validate/verdict.ts"));
+          const restoring = yield* Effect.promise(() => import("#plate/restore.ts"));
+          const solving = yield* Effect.promise(() => import("#plate/solution.ts"));
+          const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+          const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+          const configuration = yield* configure({ seed: "7" });
+          const built = yield* Effect.fromResult(model.buildItem(landedDocument));
+          const accepted = verdict.acceptForTest(built);
+          const stored = yield* Effect.fromResult(
+            codec.encodeRecord({
+              ...records.fresh(built, "q1"),
+              responses: { RESPONSE: pairsValue(["W", "G1"], ["W", "G2"]) },
+            }),
+          );
+          const restored = yield* Effect.fromResult(restoring.restore(accepted, stored));
+
+          // The hub handed the stored value to the module's `restore`, which reverses the pairs.
+          assert.deepStrictEqual(restored.values, {
+            RESPONSE: pairsValue(["W", "G2"], ["W", "G1"]),
+          });
+          // The hub handed the correct response to the module's `solution`, which keeps the first.
+          assert.deepStrictEqual(solving.solution(accepted), {
+            RESPONSE: pairsValue(["W", "G1"]),
+          });
+
+          const redactedItem = payload.redactItem(built);
+          const view: View = {
+            finished: false,
+            instance: "q1",
+            locale: configuration.locale,
+            messages: [{ response: "RESPONSE", text: "Fill both gaps." }],
+            mode: "answering",
+            names: new Map([["RESPONSE", hostName]]),
+            posted: Option.some(new Map([["RESPONSE", ["W G2"]]])),
+            seed: "7",
+            values: new Map(Object.entries(restored.values)),
+          };
+          const node = Arr.findFirst(payload.payload(redactedItem, view).body, landedPayloadOf);
+
+          assert.deepStrictEqual(
+            node.pipe(
+              Option.map((landed) => ({
+                autofocus: landed.autofocus,
+                formName: landed.formName,
+                instance: landed.instance,
+                posted: landed.posted,
+                restore: landed.restore,
+                seed: landed.seed,
+                shown: landed.shown,
+                unnamed: landed.unnamed,
+              })),
+            ),
+            Option.some({
+              autofocus: true,
+              formName: hostName,
+              instance: "q1",
+              posted: Option.some(["W G2"]),
+              restore: ["W G2"],
+              seed: Option.some("7"),
+              shown: ["W G2", "W G1"],
+              unnamed: Option.none(),
+            }),
+          );
+
+          const { html } = yield* Effect.fromResult(
+            plate.render(redactedItem, configuration, {
+              instance: "q1",
+              names: { RESPONSE: hostName },
+              values: restored.values,
+            }),
+          );
+
+          assert.match(
+            html,
+            /<input [^>]*name="answer-1"[^>]*type="hidden"[^>]*value="W G2"[^>]*><input [^>]*name="answer-1"[^>]*type="hidden"[^>]*value="W G1"[^>]*>/u,
+          );
         }),
       ),
   );

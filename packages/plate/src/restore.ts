@@ -6,9 +6,12 @@
  *
  * @module
  */
-import { pipe, Result } from "effect";
+import { Option, pipe, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
+import { own } from "#plate/engine/refs.ts";
+import { interactionsIn, isStubbed, stubSteps } from "#plate/model/interactions.ts";
+import type { Item } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { belonging, fitting, templatesHeld } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
@@ -32,10 +35,38 @@ export interface Restored {
   /**
    * The record's responses by identifier, NULL included, to pass to `render` as its `values`: its
    * `responses`, and each record response's record from its `records`, which the control bound to
-   * it shows as its `stringValue`.
+   * it shows as its `stringValue`. A response an interaction module binds holds what the module's
+   * `restore` shows for the stored value ({@link shownBy}).
    */
   readonly values: Responses;
 }
+
+/**
+ * Give the values an item's interactions show for a record's values: each response an interaction
+ * module binds through the module's `restore`, the value the interaction shows for the stored
+ * one, which its `redact` reads back through its kit at render; every other response as stored.
+ * The four shipped kinds show the stored value itself. Of two module interactions bound to one
+ * response, the later in document order decides.
+ *
+ * @param item The item.
+ * @param values The record's responses and record responses.
+ * @returns The values, each a module's interaction binds replaced by what its `restore` shows.
+ */
+const shownBy = (item: Item, values: Responses): Responses => ({
+  ...values,
+  ...Object.fromEntries(
+    interactionsIn(item.body).flatMap((interaction) =>
+      isStubbed(interaction)
+        ? Option.toArray(
+            Option.map(
+              own(values, interaction.response),
+              (stored) => [interaction.response, stubSteps(interaction).restore(stored)] as const,
+            ),
+          )
+        : [],
+    ),
+  ),
+});
 
 /**
  * Give back an item's decoded record and the values its controls showed, from the record the host
@@ -63,7 +94,8 @@ export interface Restored {
  * @param document The document `check` accepted, the item the record is for.
  * @param record The record `begin` or the last `score` of the item returned, as the host stored it
  *   and handed it back.
- * @returns The decoded record and its responses, record responses among them, as {@link Restored};
+ * @returns The decoded record and its responses, record responses among them, each a module's
+ *   interaction binds through its `restore`, as {@link Restored};
  *   {@link InvalidRecord} at stage `decode` for a record the renderer could not have written: the
  *   version found when that is what does not fit, the first response, then the first outcome, then
  *   the first template value, correct response or default, that does not fit its declaration, or,
@@ -81,6 +113,6 @@ export const restore = (
     Result.flatMap((decoded) => templatesHeld(document.item, decoded)),
     Result.map((decoded) => ({
       record: decoded,
-      values: { ...decoded.responses, ...decoded.records },
+      values: shownBy(document.item, { ...decoded.responses, ...decoded.records }),
     })),
   );

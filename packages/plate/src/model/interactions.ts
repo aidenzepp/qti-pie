@@ -59,7 +59,7 @@ import type {
   RedactKit,
 } from "#plate/interactions/contract.ts";
 import type { BodyNode, Interaction, SimpleChoice } from "#plate/model/item.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 import type {
   EmitState,
   ModulePayloadOf,
@@ -206,7 +206,9 @@ type SteppedOf<T extends ModuleTable, K extends ModuleKind> = Pick<
   | "regions"
   | "render"
   | "replaceRegions"
+  | "restore"
   | "sequence"
+  | "solution"
   | "unnamed"
   | "validate"
 >;
@@ -488,7 +490,9 @@ export interface StubSteps<K extends ModuleKind> {
    * @returns The payload node, at its kind.
    */
   readonly redact: (kit: RedactKit) => ModulePayloadOf<K>;
+  readonly restore: (stored: ResponseValue) => ResponseValue;
   readonly sequence: (seed: Option.Option<string>, instance: string) => Option.Option<string>;
+  readonly solution: (correct: ResponseValue) => ResponseValue;
   readonly unnamed: (unauthored: boolean) => boolean;
   readonly validate: (
     input: Value | Malformed,
@@ -511,7 +515,9 @@ const stepsOf = <K extends ModuleKind>(kind: K, interaction: ModelOf<K>): StubSt
     controls: () => module.controls(interaction),
     nullValue: () => module.nullValue(interaction),
     redact: (kit) => ({ kind, payload: module.redact(interaction, kit) }),
+    restore: (stored) => module.restore(interaction, stored),
     sequence: (seed, instance) => module.sequence(interaction, seed, instance),
+    solution: (correct) => module.solution(interaction, correct),
     unnamed: (unauthored) => module.unnamed(interaction, unauthored),
     validate: (input, configuration) => module.validate(interaction, input, configuration),
   };
