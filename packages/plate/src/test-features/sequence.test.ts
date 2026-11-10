@@ -7,6 +7,8 @@ import {
   advance,
   configure,
   current,
+  decodeSession,
+  encodeSession,
   itemRefs,
   open,
   startTest,
@@ -16,8 +18,11 @@ import type {
   AcceptedTest,
   Configuration,
   Intent,
+  InvalidSession,
   ItemView,
   Responses,
+  SessionMismatch,
+  StoredTestSession,
   TestSession,
 } from "#plate/index.ts";
 
@@ -288,6 +293,71 @@ const advanced = (
     ),
     (failure) => assert.fail(`advance refused ${intent.kind}: ${failure.message}`),
   );
+
+/**
+ * Write a session in the form a host stores, failing the test when `encodeSession` refuses.
+ *
+ * @param session The session.
+ * @returns The stored session.
+ */
+const storedOf = (session: TestSession): StoredTestSession =>
+  Result.getOrElse(encodeSession(session), (failure) =>
+    assert.fail(`encodeSession refused: ${failure.message}`),
+  );
+
+/**
+ * Pass a stored session through a host and decode it against a test: write it as JSON text, read
+ * the text back and decode what the host hands back.
+ *
+ * @param given The test the session belongs to.
+ * @param stored The stored session.
+ * @returns The session as the library reads it back, or the failure.
+ */
+const decodedAgainst = (
+  given: Delivery,
+  stored: StoredTestSession,
+): Result.Result<TestSession, InvalidSession | SessionMismatch> => {
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- The session reaches decodeSession as JSON text, the form a host stores.
+  const handedBack: unknown = JSON.parse(JSON.stringify(stored));
+
+  return decodeSession(handedBack, given.test);
+};
+
+/**
+ * Pass a session through a host and read it back, failing the test unless it comes back exactly and
+ * its stored form carries the sequence its items deliver.
+ *
+ * @param given The test the session belongs to.
+ * @param session The session.
+ */
+const assertRestores = (given: Delivery, session: TestSession): void => {
+  const stored = storedOf(session);
+
+  assert.deepStrictEqual(stored.sequence, refsOf(session));
+  assert.deepStrictEqual(
+    Result.getOrElse(decodedAgainst(given, stored), (failure) =>
+      assert.fail(`decodeSession refused: ${failure.message}`),
+    ),
+    session,
+  );
+};
+
+/**
+ * Read why `decodeSession` refuses a stored session, failing the test when it decodes.
+ *
+ * @param given The test the session belongs to.
+ * @param stored The stored session.
+ * @returns The issue an `InvalidSession` names.
+ */
+const refusedBecause = (given: Delivery, stored: StoredTestSession): string => {
+  const failure = Option.getOrElse(Result.getFailure(decodedAgainst(given, stored)), () =>
+    assert.fail("decodeSession accepted the session"),
+  );
+
+  return failure._tag === "InvalidSession"
+    ? failure.issue
+    : assert.fail(`decodeSession failed with ${failure._tag}`);
+};
 
 /**
  * The section `drawn` of `select.xml` writes `select="2"`.
@@ -602,6 +672,99 @@ describe("the session's sequence, selected and ordered under its seed", () => {
           ["a", 2, false, 0],
         );
         assert.notStrictEqual(second.instance, first.instance);
+      }),
+  );
+});
+
+describe("a session of a test that selects or shuffles, stored and restored", () => {
+  it.effect(
+    "[S-3] [S-4] restores exactly through encodeSession and decodeSession: the stored form carries the delivered sequence, a selection with replacement's repeated instances and every move of the session included",
+    () =>
+      Effect.gen(function* restoresExactly() {
+        const configuration = yield* configure({});
+        for (const text of [fixtureText("select.xml"), fixtureText("nested.xml")]) {
+          const given = yield* delivery(text);
+
+          for (const seed of seeds) {
+            assertRestores(given, started(given, configuration, seed));
+          }
+        }
+
+        const repeating = yield* delivery(
+          testXml(
+            sectionXml(
+              "drawn",
+              true,
+              "",
+              `<qti-selection select="4" with-replacement="true"/>${refXml("a")}${refXml("b")}`,
+            ),
+          ),
+        );
+        const begun = started(repeating, configuration, "twice");
+        const submitted = advanced(
+          repeating,
+          configuration,
+          begun,
+          { kind: "submit-item" },
+          correct,
+        );
+        const moved = advanced(repeating, configuration, submitted, { kind: "next" });
+
+        assert.strictEqual(refsOf(begun).length, 4);
+        for (const session of [begun, submitted, moved]) {
+          assertRestores(repeating, session);
+        }
+      }),
+  );
+
+  it.effect(
+    "[S-3] [S-4] refuses a stored session whose items differ from the sequence it carries, or whose sequence is no delivery of the test",
+    () =>
+      Effect.gen(function* refusesBrokenSequences() {
+        const configuration = yield* configure({});
+        const given = yield* delivery(fixtureText("select.xml"));
+        const session = started(given, configuration, "s1");
+        const stored = storedOf(session);
+
+        assert.deepStrictEqual(stored.sequence, ["d", "c", "z"]);
+        assert.include(
+          refusedBecause(given, { ...stored, sequence: stored.sequence.toReversed() }),
+          "stored sequence",
+        );
+        assert.include(
+          refusedBecause(
+            given,
+            storedOf({
+              ...session,
+              items: session.items.map((item, at) => (at === 0 ? { ...item, ref: "ghost" } : item)),
+            }),
+          ),
+          "no item ref of the test",
+        );
+        assert.include(
+          refusedBecause(
+            given,
+            storedOf({
+              ...session,
+              items: [...session.items.slice(0, 2), ...session.items.slice(0, 1)].map(
+                (item, at) => ({ ...item, sequenceIndex: at + 1 }),
+              ),
+            }),
+          ),
+          "already delivers",
+        );
+
+        const everything = yield* delivery(
+          rewritten(fixtureText("select.xml"), ['<qti-selection select="2"/>', ""]),
+        );
+        const whole = started(everything, configuration, "s1");
+
+        assert.strictEqual(whole.items.length, 5);
+        assertRestores(everything, whole);
+        assert.include(
+          refusedBecause(everything, storedOf({ ...whole, items: whole.items.slice(0, 4) })),
+          "delivers each of its item refs",
+        );
       }),
   );
 });
