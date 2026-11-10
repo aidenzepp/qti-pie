@@ -820,8 +820,98 @@ describe("encode and decode", () => {
   );
 });
 
+describe("a file binding", () => {
+  const file = binding("file");
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const photo = new File([bytes], "photo.png", { type: "image/png" });
+  const photoValue: Single = {
+    baseType: "file",
+    value: { name: "photo.png", size: bytes.length, type: "image/png" },
+  };
+
+  it.effect("[W0-AY] a posted file decodes to a file value by its name, size and type", () =>
+    Effect.gen(function* postedFile() {
+      assert.deepStrictEqual(yield* Effect.fromResult(decode(posted(photo), file)), {
+        baseType: "file",
+        cardinality: "single",
+        values: [photoValue],
+      });
+
+      const bare = yield* Effect.fromResult(decode(posted(new Blob([bytes])), file));
+      assert.deepStrictEqual(
+        bare,
+        value(file, { baseType: "file", value: { name: "", size: bytes.length, type: "" } }),
+      );
+
+      const multiple = binding("file", "multiple");
+      const notes = new File(["a"], "notes.txt", { type: "text/plain" });
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted(photo, notes), multiple)),
+        value(multiple, photoValue, {
+          baseType: "file",
+          value: { name: "notes.txt", size: 1, type: "text/plain" },
+        }),
+      );
+    }),
+  );
+
+  it.effect(
+    "[W0-AY] no entry under a file binding is NULL; two entries under a single are single-many",
+    () =>
+      Effect.gen(function* nullAndMany() {
+        assert.deepStrictEqual(yield* Effect.fromResult(decode([], file)), value(file));
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(
+            decode(posted(new File([], "", { type: "application/octet-stream" })), file),
+          ),
+          value(file),
+          "an input of type file left empty posts a nameless empty file, which is NULL",
+        );
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted(new File([], "empty.txt")), file)),
+          value(file, { baseType: "file", value: { name: "empty.txt", size: 0, type: "" } }),
+          "a named empty file is a value",
+        );
+
+        const many = yield* Effect.flip(Effect.fromResult(decode(posted(photo, photo), file)));
+        assert.strictEqual(many.reason, "single-many");
+        assert.strictEqual(many.entry, file.name);
+      }),
+  );
+
+  it.effect("[W0-AY] a text entry under a file binding is malformed as file-text", () =>
+    Effect.gen(function* fileText() {
+      const text = yield* Effect.flip(Effect.fromResult(decode(posted("photo.png"), file)));
+      assert.strictEqual(text.reason, "file-text");
+      assert.strictEqual(text.entry, file.name);
+
+      const mixed = yield* Effect.flip(
+        Effect.fromResult(decode(posted(photo, "photo.png"), binding("file", "multiple"))),
+      );
+      assert.strictEqual(mixed.reason, "file-text");
+
+      const stillFile = yield* Effect.flip(
+        Effect.fromResult(decode(posted(photo), binding("string"))),
+      );
+      assert.strictEqual(stillFile.reason, "file");
+    }),
+  );
+
+  it("[W0-AY] encode of a file value gives no entry", () => {
+    assert.deepStrictEqual(encode(value(file, photoValue), file), []);
+    assert.deepStrictEqual(
+      encode(
+        value(binding("file", "multiple"), photoValue, photoValue),
+        binding("file", "multiple"),
+      ),
+      [],
+    );
+    assert.deepStrictEqual(encode(value(file), file), []);
+  });
+});
+
 describe("a point or boolean binding", () => {
-  it("posts identifier, string, integer, float, directedPair, pair, point and boolean, and nothing else", () => {
+  it("[W0-AY] posts identifier, string, integer, float, directedPair, pair, point, boolean and file, and nothing else", () => {
     assert.deepStrictEqual(modelledBaseTypes.filter(isPosted), [
       "identifier",
       "boolean",
@@ -831,10 +921,11 @@ describe("a point or boolean binding", () => {
       "point",
       "pair",
       "directedPair",
+      "file",
     ]);
     assert.isFalse(isPosted("duration"));
     assert.isFalse(isPosted("uri"));
-    assert.isFalse(isPosted("file"));
+    assert.isTrue(isPosted("file"));
   });
 
   it("names a point's two entries <name>.x and <name>.y", () => {
