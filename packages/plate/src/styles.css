@@ -1187,6 +1187,17 @@
 /* end modal-feedback */
 
 /* begin companion-materials-info (issue m5-07) */
+
+/*
+ * The materials list stands after the body, set apart from it by a rule, so the candidate reads it
+ * as the item's own notice of what may be used and not as more of the question.
+ */
+:where([data-slot="companion-materials"]) {
+  margin-block-start: 1.5rem;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--border, oklch(0.922 0 0));
+}
+
 /* end companion-materials-info */
 
 /* begin stylesheet (issue m5-06) */
