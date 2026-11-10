@@ -1041,6 +1041,50 @@
 
 /* end item-live */
 
+/* begin select-place (unit W0-BA) */
+
+/*
+ * The select-then-place states, which the runtime's select-then-place driver writes on any kind's
+ * tokens and targets after the SSR, which never writes them: aria-pressed on a token ("true" while
+ * it is held), data-cursor on the target the arrow keys have reached, and aria-disabled on a token
+ * or target a move refuses. This one block styles them for every kind, under the item Root and by
+ * no marker; a kind's own block below may say more by marker, and wins by order.
+ */
+
+/* A held token: the primary surface, so it stands apart from the tokens still in the source. */
+:where([data-slot="item"] [aria-pressed="true"]) {
+  border-color: var(--primary, oklch(0.205 0 0));
+  background-color: var(--primary, oklch(0.205 0 0));
+  color: var(--primary-foreground, oklch(0.985 0 0));
+}
+
+/* Focus on a token, held or not (every token carries aria-pressed): the same ring as a Choice row's. */
+:where([data-slot="item"] [aria-pressed]:focus-visible) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
+/*
+ * The target under the cursor: a dashed outline in the primary colour, which forced colours keep,
+ * dashed so it never reads as the solid focus ring. Focus stays on the held token while the cursor
+ * moves, so the two seldom meet; where they do, a kind's focus rule below wins by order.
+ */
+:where([data-slot="item"] [data-cursor]) {
+  outline-width: 2px;
+  outline-offset: 0;
+  outline-style: dashed;
+  outline-color: var(--primary, oklch(0.205 0 0));
+}
+
+/* A token or target a move refuses: dimmed, as a disabled Control is. */
+:where([data-slot="item"] [aria-disabled="true"]) {
+  opacity: 0.5;
+}
+
+/* end select-place */
+
 /* begin gap-match-interaction (issue m3d-03) */
 
 /* The Gap Match Root: a block, holding the Prompt, the word bank and the gapped content. */
