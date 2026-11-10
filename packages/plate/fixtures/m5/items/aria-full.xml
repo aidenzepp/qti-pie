@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m5-aria-full" title="ARIA states and properties" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <div id="results" role="grid" aria-colcount="6" aria-rowcount="12">
+      <div id="results-row" role="row" aria-rowindex="3">
+        <div id="results-west" role="gridcell" aria-colindex="2" aria-rowindex="3" aria-colspan="2" aria-rowspan="1" aria-selected="true">West</div>
+        <div id="results-east" role="gridcell" aria-colindex="5" aria-rowindex="4" aria-colspan="1" aria-rowspan="2" aria-selected="false">East</div>
+      </div>
+    </div>
+    <p>Volume <span id="volume" role="slider" aria-valuemin="-20" aria-valuemax="40" aria-valuenow="12.5" aria-valuetext="Twelve and a half decibels">12.5 dB</span></p>
+    <div id="relations" aria-controls="results volume" aria-owns="owned" aria-flowto="notes" aria-details="details" aria-errormessage="problem">Relations</div>
+    <div id="owned">Owned content</div>
+    <div id="notes">Notes</div>
+    <div id="details">Details</div>
+    <div id="problem">Problem</div>
+    <div id="colours" role="listbox" aria-activedescendant="colour-green" aria-multiselectable="true" aria-orientation="vertical">
+      <div id="colour-red" role="option" aria-posinset="1" aria-setsize="3">Red</div>
+      <div id="colour-green" role="option" aria-selected="true" aria-posinset="2" aria-setsize="3">Green</div>
+      <div id="colour-blue" role="option" aria-posinset="3" aria-setsize="3">Blue</div>
+    </div>
+    <p><img id="shortcut" src="images/shortcut.png" alt="The shortcut keys" aria-keyshorts="Alt+Shift+P"/></p>
+    <p id="status" aria-keyshortcuts="Control+Shift+K" aria-roledescription="status line" aria-current="step" aria-busy="true" aria-atomic="true" aria-relevant="additions text" aria-live="polite">Saved</p>
+    <p><span id="fruit-name">Fruit</span> <span id="fruit-hint">Type to filter the list.</span></p>
+    <div id="fruit" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-haspopup="true" aria-required="true" aria-invalid="spelling" aria-describedby="fruit-hint" aria-labelledby="fruit-name">Apple</div>
+    <div id="notebook" role="textbox" aria-multiline="true" aria-placeholder="Write here" aria-readonly="true" aria-label="Notebook">Draft</div>
+    <p>
+      <span id="toggle" role="button" aria-pressed="mixed" aria-disabled="true">Toggle</span>
+      <span id="agree" role="checkbox" aria-checked="mixed">Agree</span>
+      <span id="asterisk" aria-hidden="true">*</span>
+    </p>
+    <div id="dialog" role="dialog" aria-modal="true">Dialog</div>
+    <div id="heading" role="heading" aria-level="2">Heading</div>
+    <div id="table-head" role="columnheader" aria-sort="ascending">Name</div>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Which colour is listed second?</qti-prompt>
+      <qti-simple-choice identifier="A">Red</qti-simple-choice>
+      <qti-simple-choice identifier="B">Green</qti-simple-choice>
+      <qti-simple-choice identifier="C">Blue</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
