@@ -13,7 +13,7 @@
  */
 import type { ReactNode, RefObject } from "react";
 import type { RedactedJson } from "#plate/codec/redacted.ts";
-import type { StoredTestSession } from "#plate/codec/session.ts";
+import type { SavedResponsesJson, StoredTestSession } from "#plate/codec/session.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import type { Node } from "#plate/emit/node.ts";
@@ -204,9 +204,18 @@ export type UseUpgrade = (ref: RefObject<HTMLElement | null>) => void;
 /**
  * What the server helper sends a page for the current item: serialisable, so it crosses a fetch,
  * and holding no accepted item, record or correct response. Issue m3g-06 fills it.
+ *
+ * `navigation.time` holds `Option`s, which `JSON.stringify` does not write, so a payload crosses
+ * the wire through the codec of `#plate/codec/view.ts`, which writes each as an optional number.
  */
 export interface ItemViewPayload {
   readonly configuration: Configuration;
+  /**
+   * Whether the item is closed, `ItemView.disabled`: the page renders it with `render`'s
+   * `disabled` option, so every control is disabled, since the session ignores the responses a
+   * closed item's post carries.
+   */
+  readonly disabled: boolean;
   /**
    * The item instance key the item is rendered with.
    */
@@ -215,6 +224,12 @@ export interface ItemViewPayload {
    * The navigation, as `navigationState` gives it.
    */
   readonly navigation: NavigationState;
+  /**
+   * The strings a refused post sent, by response identifier: `render`'s `posted` option, which
+   * the controls show instead of {@link ItemViewPayload.values} while the status holds messages.
+   * Present on a `422` answer only.
+   */
+  readonly posted?: Readonly<Record<string, readonly string[]>>;
   /**
    * The redacted item, encoded as `encodeRedacted` writes it.
    */
@@ -227,6 +242,12 @@ export interface ItemViewPayload {
    * The milliseconds left on the tightest time limit in force, when one is.
    */
   readonly timeLeft?: number;
+  /**
+   * The values to show, `ItemView.values` as `encodeSession` writes an item's saved responses:
+   * decoded with `SavedResponsesSchema`, they are `render`'s `values` option, so `previous` and a
+   * reload show what the candidate saved.
+   */
+  readonly values: SavedResponsesJson;
 }
 
 /**
@@ -255,9 +276,10 @@ export interface TestTransport {
   /**
    * Fetch the current view.
    *
-   * @returns The current item's view.
+   * @returns What the server answered: the current item's view while the session is open, and the
+   *   test's end once it is closed.
    */
-  readonly view: () => Promise<ItemViewPayload>;
+  readonly view: () => Promise<Posted>;
 }
 
 /**
@@ -354,8 +376,8 @@ export interface TestServerOptions {
  *
  * - `GET` answers the current view as {@link ItemViewPayload} JSON while the session is open, and `{
  *   "kind": "finished" }`, the finished member of {@link Posted}, once it is closed. The contract
- *   has no finished shape of its own for a view, so the `GET` answer borrows {@link Posted}'s;
- *   {@link TestTransport.view} stays typed to the open answer.
+ *   has no finished shape of its own for a view, so the `GET` answer borrows {@link Posted}'s, and
+ *   {@link TestTransport.view} is typed to it.
  * - `POST` takes the current item's form entries, as the browser encodes them, plus the intent entry:
  *   named `intentName(instance)`, that is `<instance>.intent` for the session's instance, holding
  *   `encodeIntent(intent)`. It answers {@link Posted} JSON: the next view, or the test's end. A
