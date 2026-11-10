@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-order-subset" title="Packing a bag" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="ordered" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>D</qti-value>
+      <qti-value>A</qti-value>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-order-interaction response-identifier="RESPONSE" shuffle="true" min-choices="2" max-choices="3"
+      data-min-selections-message="Put at least two items in order." data-max-selections-message="Put no more than three items in order.">
+      <qti-prompt>Choose two or three things to pack, and put them in the order you pack them.</qti-prompt>
+      <qti-simple-choice identifier="A">Folded clothes</qti-simple-choice>
+      <qti-simple-choice identifier="B">Toothbrush</qti-simple-choice>
+      <qti-simple-choice identifier="C" fixed="true">Passport</qti-simple-choice>
+      <qti-simple-choice identifier="D">Suitcase</qti-simple-choice>
+      <qti-simple-choice identifier="E">Umbrella</qti-simple-choice>
+    </qti-order-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+</qti-assessment-item>
