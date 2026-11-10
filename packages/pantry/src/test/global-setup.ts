@@ -27,9 +27,9 @@ declare module "vitest" {
  * Materialize the base set once and provide it to every test file as `inject("fixtures")`.
  *
  * Vitest runs this before any test file is opened, so a test reads a package directory that already
- * exists. A run whose config never loaded this file has no `fixtures` to inject, which
- * `fixtures.test.ts` reports as a failure, so a leftover tree under `work/fixtures` cannot pass for
- * a working setup. The five paths are logged so a run shows what it read.
+ * exists. A run whose config never loaded this file has no `fixtures` to inject, so a test that
+ * reads one fails rather than reading a leftover tree under `work/fixtures`. The five paths are
+ * logged so a run shows what it read.
  *
  * @param project - The vitest project the run belongs to.
  * @returns Completes once `fixtures` is provided.
