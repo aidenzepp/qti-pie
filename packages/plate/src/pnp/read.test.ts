@@ -47,6 +47,45 @@ const profile = (children: string, namespace: string = namespaces[0]): Uint8Arra
   );
 
 /**
+ * Fresh documents the set and spelling cases share, written for these tests and copying nothing
+ * from 1EdTech.
+ */
+const documents = {
+  atStartOnly: profile(
+    "<activate-at-initiation-set><spoken/><spell-checker/><answer-masking/></activate-at-initiation-set>",
+    namespaces[1],
+  ),
+  optionOnly: profile(
+    '<answer-masking/><spoken/><captions/><calculator-on-screen calculator-type="scientific"/>' +
+      "<additional-testing-time><time-multiplier>2</time-multiplier></additional-testing-time>" +
+      "<activate-as-option-set><additional-testing-time/><answer-masking/><calculator-on-screen/><captions/><spoken/></activate-as-option-set>",
+  ),
+  prohibitedOverSets: profile(
+    '<spoken/><calculator-on-screen calculator-type="scientific"/><spell-checker-on-screen/><line-reader/>' +
+      "<activate-at-initialization-set><spoken/><spell-checker-on-screen/></activate-at-initialization-set>" +
+      "<activate-as-option-set><calculator-on-screen/><line-reader/></activate-as-option-set>" +
+      "<prohibit-set><spoken/><calculator-on-screen/></prohibit-set>",
+  ),
+  ubaeRecords: bytes(`<access-for-all-pnp-records xmlns="${namespaces[0]}">
+  <access-for-all-pnp-record>
+    <person-sourced-id>ubae</person-sourced-id>
+    <appointment-id>ubae</appointment-id>
+    <access-for-all-pnp>
+      <text-appearance><font-face><font-name>ubae</font-name></font-face></text-appearance>
+    </access-for-all-pnp>
+  </access-for-all-pnp-record>
+  <access-for-all-pnp-record>
+    <person-sourced-id>ebae</person-sourced-id>
+    <access-for-all-pnp><tactile/></access-for-all-pnp>
+  </access-for-all-pnp-record>
+  <access-for-all-pnp-record>
+    <person-sourced-id>skip-chemical-equations</person-sourced-id>
+    <access-for-all-pnp><transcript/></access-for-all-pnp>
+  </access-for-all-pnp-record>
+</access-for-all-pnp-records>`),
+};
+
+/**
  * Read a document, failing the test when the reader refuses it.
  *
  * @param document The document's bytes.
@@ -69,6 +108,15 @@ const refuse = (document: Uint8Array, selector?: PnpSelector): Effect.Effect<Inv
     Effect.mapError(() => new Error("readPnp accepted the document")),
     Effect.orDie,
   );
+
+/**
+ * Take the remedy of a refusal's message: what follows the detail it names.
+ *
+ * @param refusal The refusal.
+ * @returns The sentence that says what to change.
+ */
+const remedy = (refusal: InvalidPnp): string =>
+  refusal.message.slice(refusal.message.indexOf(refusal.detail) + refusal.detail.length);
 
 /**
  * Project what `readPnp` read onto the contract's fields, which `SupportsSchema` checks.
@@ -133,7 +181,6 @@ describe("readPnp", () => {
         pnp.tools,
         new Set([
           "calculator-on-screen",
-          "dictionary-on-screen",
           "homophone-checker-on-screen",
           "line-reader",
           "note-taking-on-screen",
@@ -176,7 +223,8 @@ describe("readPnp", () => {
         ]),
       );
       assert.isTrue(pnp.longDescriptionVisible);
-      assert.deepStrictEqual(pnp.optional, new Set(["calculator-on-screen", "line-reader"]));
+      assert.deepStrictEqual(pnp.optional, new Set(["dictionary-on-screen"]));
+      assert.isFalse(pnp.features.has("dictionary-on-screen"));
       assert.deepStrictEqual(pnp.atStart, new Set(["spoken"]));
       assert.deepStrictEqual(pnp.prohibited, new Set(["encouragement"]));
       assert.deepStrictEqual(
@@ -408,14 +456,11 @@ describe("readPnp", () => {
         assert.deepStrictEqual(pnp.optional, new Set(["calculator-on-screen"]));
         assert.deepStrictEqual(pnp.atStart, new Set(["spoken"]));
         assert.deepStrictEqual(pnp.prohibited, new Set(["captions", "answer-masking", "braille"]));
-        assert.deepStrictEqual(
-          pnp.features,
-          new Set(["transcript", "spoken", "calculator-on-screen"]),
-        );
+        assert.deepStrictEqual(pnp.features, new Set(["transcript", "spoken"]));
         assert.deepStrictEqual(pnp.catalog, new Set(["transcript", "spoken"]));
         assert.isFalse(pnp.answerMasking);
         assert.deepStrictEqual(pnp.readAloud, Option.some("screen-reader"));
-        assert.deepStrictEqual(pnp.tools, new Set(["calculator-on-screen"]));
+        assert.deepStrictEqual(pnp.tools, new Set());
       }),
   );
 
@@ -501,6 +546,522 @@ describe("readPnp", () => {
       const empty = yield* read(profile(""));
 
       assert.deepStrictEqual(decode(empty), empty);
+    }),
+  );
+
+  it.effect(
+    "[pnp] a feature named only in activate-as-option-set is optional and off at start (ruling D17)",
+    () =>
+      Effect.gen(function* optionSet() {
+        const named = yield* read(
+          profile("<activate-as-option-set><calculator-on-screen/></activate-as-option-set>"),
+        );
+
+        assert.deepStrictEqual(named.optional, new Set(["calculator-on-screen"]));
+        assert.deepStrictEqual(named.tools, new Set());
+        assert.deepStrictEqual(named.features, new Set());
+        assert.deepStrictEqual(named.atStart, new Set());
+
+        const assigned = yield* read(documents.optionOnly);
+
+        assert.deepStrictEqual(
+          assigned.optional,
+          new Set([
+            "additional-testing-time",
+            "answer-masking",
+            "calculator-on-screen",
+            "captions",
+            "spoken",
+          ]),
+        );
+        assert.deepStrictEqual(assigned.features, new Set());
+        assert.deepStrictEqual(assigned.atStart, new Set());
+        assert.deepStrictEqual(assigned.tools, new Set());
+        assert.deepStrictEqual(assigned.catalog, new Set());
+        assert.isFalse(assigned.answerMasking);
+        assert.isTrue(Option.isNone(assigned.readAloud));
+        assert.isTrue(Option.isNone(assigned.spoken));
+        assert.isTrue(Option.isNone(assigned.additionalTestingTime));
+        assert.isTrue(Option.isNone(assigned.toolSettings.calculatorType));
+        assert.deepStrictEqual(supportsOf(assigned), noSupports);
+      }),
+  );
+
+  it.effect("[pnp] a feature named in activate-at-initiation-set is active at start", () =>
+    Effect.gen(function* atStart() {
+      const guide = yield* read(documents.atStartOnly);
+
+      assert.deepStrictEqual(
+        guide.atStart,
+        new Set(["answer-masking", "spell-checker-on-screen", "spoken"]),
+      );
+      assert.deepStrictEqual(guide.readAloud, Option.some("screen-reader"));
+      assert.deepStrictEqual(
+        guide.spoken,
+        Option.some({
+          linkIndication: Option.none(),
+          pitch: 0.5,
+          readingType: "screen-reader",
+          restrictions: new Set(),
+          speechRate: 180,
+          typingEcho: Option.none(),
+          volume: 0.5,
+        }),
+      );
+      assert.isTrue(guide.answerMasking);
+      assert.deepStrictEqual(guide.catalog, new Set(["spoken"]));
+      assert.deepStrictEqual(guide.tools, new Set(["spell-checker-on-screen"]));
+      assert.deepStrictEqual(
+        guide.features,
+        new Set(["answer-masking", "spell-checker-on-screen", "spoken"]),
+      );
+      assert.deepStrictEqual(guide.optional, new Set());
+
+      const schema = yield* read(
+        profile(
+          "<activate-at-initialization-set><spoken/><spell-checker-on-screen/><answer-masking/></activate-at-initialization-set>",
+        ),
+      );
+
+      assert.deepStrictEqual(schema, guide);
+
+      const both = yield* read(
+        profile(
+          "<activate-at-initialization-set><spoken/></activate-at-initialization-set>" +
+            "<activate-as-option-set><spoken/></activate-as-option-set>",
+        ),
+      );
+
+      assert.deepStrictEqual(both.readAloud, Option.some("screen-reader"));
+      assert.deepStrictEqual(both.atStart, new Set(["spoken"]));
+      assert.deepStrictEqual(both.optional, new Set(["spoken"]));
+    }),
+  );
+
+  it.effect(
+    "[pnp] prohibit-set wins over the at-start and the option set: off and not optional",
+    () =>
+      Effect.gen(function* prohibitedWins() {
+        const pnp = yield* read(documents.prohibitedOverSets);
+
+        assert.deepStrictEqual(pnp.prohibited, new Set(["calculator-on-screen", "spoken"]));
+        assert.deepStrictEqual(pnp.atStart, new Set(["spell-checker-on-screen"]));
+        assert.deepStrictEqual(pnp.optional, new Set(["line-reader"]));
+        assert.deepStrictEqual(pnp.features, new Set(["spell-checker-on-screen"]));
+        assert.deepStrictEqual(pnp.tools, new Set(["spell-checker-on-screen"]));
+        assert.deepStrictEqual(pnp.catalog, new Set());
+        assert.isTrue(Option.isNone(pnp.readAloud));
+        assert.isTrue(Option.isNone(pnp.spoken));
+        assert.isTrue(Option.isNone(pnp.toolSettings.calculatorType));
+      }),
+  );
+
+  it.effect("[pnp] a person-sourced-id or font name spelled ubae is read as written", () =>
+    Effect.gen(function* ubaeText() {
+      const byPerson = yield* read(documents.ubaeRecords, { personSourcedId: "ubae" });
+
+      assert.deepStrictEqual(
+        byPerson.text.pipe(Option.map((text) => text.fontNames)),
+        Option.some(["ubae"]),
+      );
+      assert.isFalse(byPerson.catalog.has("tactile"));
+
+      const byAppointment = yield* read(documents.ubaeRecords, { appointmentId: "ubae" });
+
+      assert.deepStrictEqual(byAppointment, byPerson);
+
+      const other = yield* read(documents.ubaeRecords, { personSourcedId: "ebae" });
+
+      assert.deepStrictEqual(other.catalog, new Set(["tactile"]));
+
+      const chemical = yield* read(documents.ubaeRecords, {
+        personSourcedId: "skip-chemical-equations",
+      });
+
+      assert.deepStrictEqual(chemical.catalog, new Set(["transcript"]));
+
+      const unknown = yield* refuse(documents.ubaeRecords, { personSourcedId: "uebe" });
+
+      assert.strictEqual(unknown.reason, "unknown-record");
+      assert.include(unknown.detail, "ubae");
+      assert.include(unknown.detail, "ebae");
+    }),
+  );
+
+  it.effect(
+    "[pnp] the guide's value spellings read as the schema's in the element each row names",
+    () =>
+      Effect.gen(function* scopedSpellings() {
+        const pnp = yield* read(
+          profile(
+            "<braille><braille-type>ubae</braille-type></braille>" +
+              "<spoken>" +
+              "<restriction-type>skip-chemical-equations</restriction-type>" +
+              "<restriction-type>skip-math-equations</restriction-type>" +
+              "</spoken>" +
+              "<text-appearance><font-face><font-name>ubae</font-name><font-name>skip-chemical-equations</font-name></font-face></text-appearance>",
+          ),
+        );
+
+        assert.deepStrictEqual(
+          pnp.braille.pipe(Option.map((braille) => braille.brailleType)),
+          Option.some(Option.some("ebae")),
+        );
+        assert.deepStrictEqual(
+          pnp.spoken.pipe(Option.map((spoken) => spoken.restrictions)),
+          Option.some(new Set(["skip-chemistry-equations", "skip-math-equations"])),
+        );
+        assert.deepStrictEqual(
+          pnp.text.pipe(Option.map((text) => text.fontNames)),
+          Option.some(["ubae", "skip-chemical-equations"]),
+        );
+
+        const crossed = yield* read(
+          profile(
+            "<braille><braille-type>skip-chemical-equations</braille-type></braille>" +
+              "<spoken><restriction-type>ubae</restriction-type></spoken>",
+          ),
+        );
+
+        assert.deepStrictEqual(
+          crossed.braille.pipe(Option.map((braille) => braille.brailleType)),
+          Option.some(Option.none()),
+        );
+        assert.deepStrictEqual(
+          crossed.spoken.pipe(Option.map((spoken) => spoken.restrictions)),
+          Option.some(new Set()),
+        );
+      }),
+  );
+
+  it.effect("[pnp] encouragement, unprohibited, reads as a feature", () =>
+    Effect.gen(function* encouragement() {
+      const given = yield* read(profile("<encouragement/>"));
+
+      assert.deepStrictEqual(given.features, new Set(["encouragement"]));
+      assert.deepStrictEqual(given.prohibited, new Set());
+      assert.deepStrictEqual(supportsOf(given), noSupports);
+
+      const prohibited = yield* read(
+        profile("<encouragement/><prohibit-set><encouragement/></prohibit-set>"),
+      );
+
+      assert.deepStrictEqual(prohibited.features, new Set());
+      assert.deepStrictEqual(prohibited.prohibited, new Set(["encouragement"]));
+    }),
+  );
+
+  it.effect("[pnp] fixed-minutes and unlimited read into additionalTestingTime", () =>
+    Effect.gen(function* testingTime() {
+      const minutes = yield* read(
+        profile(
+          "<additional-testing-time><fixed-minutes>30</fixed-minutes></additional-testing-time>",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        minutes.additionalTestingTime,
+        Option.some({ kind: "minutes", minutes: 30 }),
+      );
+
+      const unlimited = yield* read(
+        profile("<additional-testing-time><unlimited/></additional-testing-time>"),
+      );
+
+      assert.deepStrictEqual(unlimited.additionalTestingTime, Option.some({ kind: "unlimited" }));
+
+      for (const unread of [
+        "<time-multiplier>0</time-multiplier>",
+        "<fixed-minutes>0</fixed-minutes>",
+        "<fixed-minutes>-5</fixed-minutes>",
+        "<fixed-minutes>soon</fixed-minutes>",
+        "",
+      ]) {
+        const none = yield* read(
+          profile(`<additional-testing-time>${unread}</additional-testing-time>`),
+        );
+
+        assert.isTrue(Option.isNone(none.additionalTestingTime), unread);
+      }
+    }),
+  );
+
+  it.effect("[pnp] a feature that gives no setting reads with the Schema's defaults", () =>
+    Effect.gen(function* defaults() {
+      const pnp = yield* read(
+        profile(
+          "<braille/><spoken/><text-appearance/><long-description/><environment/><invert-display-polarity/><calculator-on-screen/><line-reader/>",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        pnp.braille,
+        Option.some({
+          brailleType: Option.none(),
+          deliveryMode: "refreshable",
+          grade: 2,
+          language: Option.none(),
+          mathType: Option.none(),
+        }),
+      );
+      assert.deepStrictEqual(pnp.readAloud, Option.some("screen-reader"));
+      assert.deepStrictEqual(
+        pnp.spoken,
+        Option.some({
+          linkIndication: Option.none(),
+          pitch: 0.5,
+          readingType: "screen-reader",
+          restrictions: new Set(),
+          speechRate: 180,
+          typingEcho: Option.none(),
+          volume: 0.5,
+        }),
+      );
+      assert.deepStrictEqual(
+        pnp.text,
+        Option.some({
+          colorTheme: Option.none(),
+          fontNames: [],
+          fontSize: Option.none(),
+          genericFontFace: Option.none(),
+          letterSpacing: Option.none(),
+          lineHeight: Option.none(),
+          lineSpacing: Option.none(),
+          uniformFontSizing: false,
+          wordSpacing: Option.none(),
+          wordWrapping: false,
+        }),
+      );
+      assert.isTrue(Option.isNone(pnp.display.textAppearance));
+      assert.isFalse(pnp.longDescriptionVisible);
+      assert.isFalse(pnp.breaks);
+      assert.isTrue(pnp.display.invertDisplayPolarity);
+      assert.deepStrictEqual(
+        pnp.invertedColors,
+        Option.some({ background: Option.none(), foreground: Option.none() }),
+      );
+      assert.deepStrictEqual(pnp.toolSettings, {
+        calculatorType: Option.none(),
+        highlightColor: Option.none(),
+      });
+      assert.deepStrictEqual(pnp.tools, new Set(["calculator-on-screen", "line-reader"]));
+
+      const outside = yield* read(
+        profile(
+          "<braille><delivery-mode>glowing</delivery-mode><grade>4</grade></braille><spoken><reading-type>telepathy</reading-type></spoken>",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        outside.braille.pipe(Option.map((braille) => [braille.deliveryMode, braille.grade])),
+        Option.some(["refreshable", 2]),
+      );
+      assert.deepStrictEqual(outside.readAloud, Option.some("screen-reader"));
+    }),
+  );
+
+  it.effect("[pnp] an empty bulk file fails unknown-record and names no selector", () =>
+    Effect.gen(function* emptyBulk() {
+      const empty = bytes(`<access-for-all-pnp-records xmlns="${namespaces[0]}"/>`);
+      const refusal = yield* refuse(empty);
+
+      assert.strictEqual(refusal.reason, "unknown-record");
+      assert.include(refusal.detail, "holds no record");
+      assert.notInclude(refusal.detail, "selector");
+      assert.notInclude(refusal.message, "selector");
+      assert.deepStrictEqual(refusal.records, []);
+
+      const asked = yield* refuse(empty, { personSourcedId: "person-1" });
+
+      assert.strictEqual(asked.reason, "unknown-record");
+      assert.strictEqual(asked.detail, refusal.detail);
+    }),
+  );
+
+  it.effect(
+    "[pnp] each InvalidPnp reason names its own remedy, and the record ids sit in a field",
+    () =>
+      Effect.gen(function* remedies() {
+        const bulk = fixture("pnp-bulk.xml");
+        const unreadable = yield* refuse(
+          bytes("<access-for-all-pnp><captions></access-for-all-pnp>"),
+        );
+        const notPnp = yield* refuse(bytes('<qti-assessment-item xmlns="urn:example:item"/>'));
+        const ambiguous = yield* refuse(bulk);
+        const unknown = yield* refuse(bulk, { personSourcedId: "person-999" });
+        const empty = yield* refuse(
+          bytes(`<access-for-all-pnp-records xmlns="${namespaces[0]}"/>`),
+        );
+
+        assert.include(remedy(unreadable), "well-formed");
+        assert.include(remedy(notPnp), "access-for-all-pnp");
+        assert.include(remedy(ambiguous), "selector");
+        assert.include(remedy(unknown), "selector");
+        assert.include(remedy(empty), "access-for-all-pnp-record");
+
+        for (const refusal of [unreadable, notPnp, empty]) {
+          assert.notInclude(remedy(refusal), "selector", refusal.reason);
+        }
+
+        assert.strictEqual(
+          new Set([unreadable, notPnp, ambiguous, unknown, empty].map(remedy)).size,
+          5,
+        );
+
+        const held = [
+          { appointmentIds: ["appointment-1"], personSourcedId: "person-100" },
+          { appointmentIds: ["appointment-2", "appointment-3"], personSourcedId: "person-200" },
+        ];
+
+        assert.deepStrictEqual(ambiguous.records, held);
+        assert.deepStrictEqual(unknown.records, held);
+        assert.deepStrictEqual(unreadable.records, []);
+        assert.deepStrictEqual(notPnp.records, []);
+        assert.include(ambiguous.detail, "appointment-3");
+      }),
+  );
+
+  it.effect("[pnp] a document the reader refuses fails unreadable with the reader's own rule", () =>
+    Effect.gen(function* readerRules() {
+      const malformed = yield* refuse(bytes("<access-for-all-pnp><captions></access-for-all-pnp>"));
+
+      assert.strictEqual(malformed.reason, "unreadable");
+      assert.include(malformed.detail, "not-well-formed");
+      assert.include(malformed.detail, "line 1");
+
+      const refused: readonly (readonly [string, Uint8Array])[] = [
+        [
+          "unsupported-encoding",
+          bytes('<?xml version="1.0" encoding="no-such-charset"?><access-for-all-pnp/>'),
+        ],
+        [
+          "nul",
+          new Uint8Array([
+            ...bytes('<?xml version="1.0" encoding="UTF-8"?><access-for-all-pnp>'),
+            0,
+            ...bytes("</access-for-all-pnp>"),
+          ]),
+        ],
+        ["element-depth", bytes("<x>".repeat(257) + "</x>".repeat(257))],
+      ];
+
+      for (const [rule, document] of refused) {
+        const refusal = yield* refuse(document);
+
+        assert.strictEqual(refusal.reason, "unreadable", rule);
+        assert.include(refusal.detail, rule);
+        assert.notInclude(refusal.detail, "reader-refused", rule);
+        assert.include(refusal.message, rule);
+      }
+    }),
+  );
+
+  it.effect("[pnp] a number is read as XML Schema writes it, so 0x1E is not 30 minutes", () =>
+    Effect.gen(function* numbers() {
+      const hex = yield* read(
+        profile(
+          "<additional-testing-time><fixed-minutes>0x1E</fixed-minutes></additional-testing-time>" +
+            "<spoken><pitch>0x1E</pitch></spoken>" +
+            '<magnification><all-content zoom-amount="0x1E"/></magnification>',
+        ),
+      );
+
+      // The Schema admits only a positive number of minutes, so an unreadable value is no time.
+      assert.isTrue(Option.isNone(hex.additionalTestingTime));
+      assert.deepStrictEqual(
+        hex.spoken.pipe(Option.map((spoken) => spoken.pitch)),
+        Option.some(0.5),
+      );
+      assert.isTrue(Option.isNone(hex.display.magnification));
+
+      for (const text of ["0x1E", "0b11", "0o17", "Infinity", "INF", "NaN", "1_0", "1,5", ""]) {
+        const none = yield* read(
+          profile(
+            `<additional-testing-time><time-multiplier>${text}</time-multiplier></additional-testing-time>`,
+          ),
+        );
+
+        assert.isTrue(Option.isNone(none.additionalTestingTime), text);
+      }
+
+      for (const [text, factor] of [
+        ["+1.5", 1.5],
+        [".5", 0.5],
+        ["2.", 2],
+        ["1.5E1", 15],
+        ["  3  ", 3],
+      ] as const) {
+        const some = yield* read(
+          profile(
+            `<additional-testing-time><time-multiplier>${text}</time-multiplier></additional-testing-time>`,
+          ),
+        );
+
+        assert.deepStrictEqual(
+          some.additionalTestingTime,
+          Option.some({ factor, kind: "multiplier" }),
+          text,
+        );
+      }
+    }),
+  );
+
+  it.effect(
+    "[pnp] every result of the set, spelling and default cases satisfies PnpSupportsSchema",
+    () =>
+      Effect.gen(function* everyResult() {
+        const decode = Schema.decodeUnknownSync(PnpSupportsSchema);
+
+        for (const [name, document, selector] of [
+          ["optionOnly", documents.optionOnly, undefined],
+          ["atStartOnly", documents.atStartOnly, undefined],
+          ["prohibitedOverSets", documents.prohibitedOverSets, undefined],
+          ["ubae by person", documents.ubaeRecords, { personSourcedId: "ubae" }],
+          ["ubae by appointment", documents.ubaeRecords, { appointmentId: "ubae" }],
+          [
+            "defaults",
+            profile("<braille/><spoken/><text-appearance/><invert-display-polarity/>"),
+            undefined,
+          ],
+          [
+            "minutes",
+            profile(
+              "<additional-testing-time><fixed-minutes>30</fixed-minutes></additional-testing-time>",
+            ),
+            undefined,
+          ],
+          [
+            "unlimited",
+            profile("<additional-testing-time><unlimited/></additional-testing-time>"),
+            undefined,
+          ],
+          ["encouragement", profile("<encouragement/>"), undefined],
+        ] as const) {
+          const pnp = yield* read(document, selector);
+
+          assert.deepStrictEqual(decode(pnp), pnp, name);
+        }
+      }),
+  );
+
+  it.effect("[pnp] a profile that repeats one feature 10,000 times reads in bounded time", () =>
+    Effect.gen(function* repeated() {
+      const hazards = ["flashing", "sound", "ext:iowa-reading", "olfactory-hazard"] as const;
+      const children = Array.from({ length: 2500 }, () => hazards)
+        .flat()
+        .map((hazard) => `<hazard-avoidance>${hazard}</hazard-avoidance>`)
+        .join("");
+
+      assert.strictEqual(children.split("<hazard-avoidance>").length - 1, 10_000);
+
+      const started = performance.now();
+      const pnp = yield* read(profile(children));
+      const elapsed = performance.now() - started;
+
+      assert.deepStrictEqual(pnp.hazards, new Set(hazards));
+      assert.deepStrictEqual(pnp.features, new Set(["hazard-avoidance"]));
+      assert.deepStrictEqual(pnp.ignored, []);
+      assert.isBelow(elapsed, 1000);
     }),
   );
 });

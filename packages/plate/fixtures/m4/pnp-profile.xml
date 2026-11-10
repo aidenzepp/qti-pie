@@ -78,8 +78,7 @@
     <word-wrapping/>
   </text-appearance>
   <activate-as-option-set>
-    <calculator-on-screen/>
-    <line-reader/>
+    <dictionary-on-screen/>
   </activate-as-option-set>
   <activate-at-initialization-set>
     <spoken/>
