@@ -26,6 +26,7 @@ import {
   cardinalityKinds,
   interactionLaws,
   interactionRelations,
+  itemBuiltInNames,
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -33,7 +34,9 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
+import type { PackageInputs } from "#pantry/import/write.ts";
 import { lawNamesOf } from "#pantry/test/host-law-names.ts";
+import { itemKind } from "#pantry/vocab/terms/tests.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import {
   base,
@@ -431,6 +434,63 @@ const hostLaws = judgedLaws(Qti);
 const choiceNameLawsOf = (laws: readonly { readonly law: Law }[]): readonly string[] =>
   [...lawNamesOf(laws)].filter((law) => choiceNameLaws.has(law));
 
+/**
+ * A name of a document, as {@link queryNameLawsOf} compares names: its document and identifier.
+ *
+ * @param document - The document.
+ * @param identifier - The name.
+ * @returns The name's key.
+ */
+const nameKey = (document: string, identifier: string): string =>
+  JSON.stringify([document, identifier]);
+
+/**
+ * Whether a list of names holds one name twice.
+ *
+ * @param names - The names.
+ * @returns Whether one repeats.
+ */
+const repeats = (names: readonly string[]): boolean => new Set(names).size < names.length;
+
+/**
+ * The names of reading 104's two rules over queries (`#pantry/qti/queries.ts`) that the import's
+ * rows break, restated on the host, which judges no derived relation (`#pantry/test/predicates.ts`
+ * `judgedKinds`): "Choice identifier key" where two choices or hottexts of one document bear one
+ * name, of whichever class, or two its assembly places (`ChoiceOrHottext`,
+ * `PlacedChoiceOrHottext`); and "Choice not variable" where a name one bears is a declaration's of
+ * its document, or in an item a built-in variable's (`UnclaimedName`).
+ *
+ * @param inputs - The import's rows.
+ * @returns The laws' names.
+ */
+const queryNameLawsOf = (inputs: PackageInputs): readonly string[] => {
+  const chosen = [...inputs.Choice.values(), ...inputs.Hottext.values()].map(
+    ({ document, identifier }) => nameKey(document, identifier),
+  );
+  const placed = [...inputs.PlacedChoice.values(), ...inputs.PlacedHottext.values()].map(
+    ({ assembly, identifier }) => nameKey(assembly, identifier),
+  );
+  const declared = new Set(
+    [...inputs.DeclarationIdentifier.values()].map(({ document, identifier }) =>
+      nameKey(document, identifier),
+    ),
+  );
+  const items = new Set(
+    [...inputs.Document.values()].flatMap(({ node, rootKind }) =>
+      rootKind === itemKind ? [node] : [],
+    ),
+  );
+  const builtIns = new Set(
+    [...items].flatMap((node) => itemBuiltInNames.map((name) => nameKey(node, name))),
+  );
+  const claimed = [...chosen, ...placed].some((name) => declared.has(name) || builtIns.has(name));
+
+  return [
+    ...(repeats(chosen) || repeats(placed) ? ["Choice identifier key"] : []),
+    ...(claimed ? ["Choice not variable"] : []),
+  ];
+};
+
 describe("qti/interactions.ts, reading 104 by the law oracle", () => {
   it.effect(
     "breaks Choice not variable and Choice identifier key exactly where reading 104 says, over edits of simple's item",
@@ -472,9 +532,9 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
     () =>
       // Oracle: two implementations side by side, the law oracle's choice names, which group the
       // document's choices by class and by identifier alone, and the schema's laws over the
-      // import's rows (`#pantry/test/host-judge.ts`): the per-class keys and
-      // `Choice_identifier_key` over `ChoiceVariableName`'s counts; each must break exactly the
-      // case's laws among reading 104's two, and judge both.
+      // import's rows (`#pantry/test/host-judge.ts`): the per-class keys, and the two rules over
+      // queries restated on the host ({@link queryNameLawsOf}), which the host judge reads none
+      // of; each must break exactly the case's laws among reading 104's two, and judge both.
       // Bound: the same 12 packages as the oracle's own test above.
       Effect.gen(function* choiceNamesByRows() {
         const files = yield* readPackage(fixtures.simple);
@@ -495,7 +555,11 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
           const host = judgeRows(hostRowsOf(program.inputs), hostLaws);
           assert.deepStrictEqual(choiceNameLawsOf(host.skipped), [], `${name}: judged`);
           assert.sameMembers(oracle, [...breaks], `${name}: the oracle`);
-          assert.sameMembers([...choiceNameLawsOf(host.broken)], [...breaks], `${name}: the rows`);
+          assert.sameMembers(
+            [...new Set([...choiceNameLawsOf(host.broken), ...queryNameLawsOf(program.inputs)])],
+            [...breaks],
+            `${name}: the rows`,
+          );
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

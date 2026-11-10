@@ -61,7 +61,6 @@ export const writtenRelations = {
   CellHeaders: { name: "CellHeaders" },
   Choice: { name: "Choice" },
   ChoiceInteraction: { name: "ChoiceInteraction" },
-  ChoiceVariableName: { name: "ChoiceVariableName" },
   CnAttribute: { name: "CnAttribute" },
   CnCount: { name: "CnCount" },
   CnPartText: { name: "CnPartText" },

@@ -7,9 +7,7 @@
  * - A key the host finds is written through the author role (`db.apply`): two declarations of one
  *   identifier in one document are refused before any SQL, `invariant-rejected` with the key law
  *   among its `refused.laws` (membership, C22). Each is written with its identifier alone, a
- *   `DeclarationIdentifier`, beside the `ChoiceVariableName` row its name's family hangs from (spec
- *   reading 159), its immutable owner (README, "Families": "An immutable owner's family is fixed
- *   when the owner is inserted").
+ *   `DeclarationIdentifier` (spec reading 159).
  * - A containment a declaration's cardinality or a typed name's base type states, a foreign key
  *   grizzle defers, is judged by the same direct SQL writer with that one key set immediate:
  *   SQLSTATE 23503 and its name.
@@ -52,7 +50,6 @@ import {
   ValueBaseType,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 
 import {
@@ -161,12 +158,10 @@ const declarationRow = (fields: {
 };
 
 /**
- * A declaration's rows with its name's owner: its `Declaration`, its `DeclarationCardinality`, its
- * `DeclarationIdentifier`, which copies the row's document, kind and counts, its `DeclarationName`,
- * which copies its identifier and its cardinality (spec readings 157 and 158), and the
- * `ChoiceVariableName` row of its document and identifier, which states no choice, hottext or
- * placement and so counts it as its one declaration, and "Choice not variable" holds whatever the
- * identifier. The writer orders them and fills each member's slot in its family
+ * A declaration's rows: its `Declaration`, its `DeclarationCardinality`, its
+ * `DeclarationIdentifier`, which copies the row's document, kind and counts, and its
+ * `DeclarationName`, which copies its identifier and its cardinality (spec readings 157 and 158).
+ * The writer orders them and fills each member's slot in its family
  * (`#pantry/test/direct-sql.ts` `statedInserts`): a counted family's owner axis is not deferrable,
  * so a member is judged against its owner at its INSERT, and the owner's own foreign keys are
  * deferred.
@@ -183,14 +178,6 @@ const declared = (
   const baseTypes = BigInt(Option.toArray(baseType).length);
 
   return statedInserts([
-    {
-      fact: {
-        document: name["document"] ?? strayDocument,
-        identifier: name["identifier"] ?? "",
-        rootKind: "qti-assessment-item",
-      },
-      relation: ChoiceVariableName,
-    },
     { fact: row, relation: Declaration },
     { fact: cardinality, relation: DeclarationCardinality },
     ...Option.toArray(baseType).map((code): Stated => ({
@@ -367,17 +354,13 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         // Oracle: the specification as a checker, reading 74: no two declarations of a document
         // share an identifier, compared collapsed (XML Schema Part 2, §4.3.6).
         // Bound: two declarations, the second's lexical form `A` and ` A`, each with its
-        // identifier and neither a cardinality nor a name, and the `ChoiceVariableName` row of
-        // their name, whose family counts every declared name (spec reading 159), inserted beside
-        // them; the host finds the key, so `laws` holds it whether or not any SQL ran.
+        // identifier and neither a cardinality nor a name (spec reading 159); the host finds
+        // the key, so `laws` holds it whether or not any SQL ran.
         Effect.gen(function* declarationKey() {
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
           for (const second of ["A", " A"]) {
             const outcome = yield* db.workload.importWrite.apply(
               importFacts({
-                ChoiceVariableName: [
-                  { document: strayDocument, identifier: "A", rootKind: "qti-assessment-item" },
-                ],
                 Declaration: [declarationFact(1), declarationFact(2)],
                 DeclarationIdentifier: [identifierFact(1, "A"), identifierFact(2, second)],
               }),

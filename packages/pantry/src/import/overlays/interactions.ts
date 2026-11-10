@@ -44,7 +44,6 @@ import type {
   BoundVariable,
   Choice,
   ChoiceInteraction,
-  ChoiceVariableName,
   ContextRef,
   ContextRefDeclaration,
   CountBound,
@@ -142,7 +141,6 @@ export interface InteractionRows {
   readonly BoundVariable: ReadonlyMap<string, Addition<typeof BoundVariable>>;
   readonly Choice: ReadonlyMap<string, Addition<typeof Choice>>;
   readonly ChoiceInteraction: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>;
-  readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly ContextRef: ReadonlyMap<string, Addition<typeof ContextRef>>;
   readonly ContextRefDeclaration: ReadonlyMap<string, Addition<typeof ContextRefDeclaration>>;
   readonly CountBound: ReadonlyMap<string, Addition<typeof CountBound>>;
@@ -728,42 +726,6 @@ const hottextsOf = (context: Context) =>
   );
 
 /**
- * Build each identifier's {@link ChoiceVariableName} row: one per identifier a choice, a hottext
- * or a declaration of the document bears, each once, with the document's root kind. Its counts are
- * the families' to draw, so the row is the identifier alone. A declaration is read as Q5.08's
- * builder writes its `DeclarationIdentifier` row (`declarationOf`), whatever its cardinality
- * spells (spec reading 159), so every `DeclarationIdentifier` row has its projection row, and a
- * declaration whose identifier names nothing counts toward no name.
- *
- * @param context - The document.
- * @param choices - Its choices' rows.
- * @param hottexts - Its hottexts' rows.
- * @returns The rows, keyed by (document, identifier).
- */
-const choiceNamesOf = (
-  context: Context,
-  choices: ReadonlyMap<string, Addition<typeof Choice>>,
-  hottexts: ReadonlyMap<string, Addition<typeof Hottext>>,
-) =>
-  new Map(
-    [
-      ...[...choices.values()].map(({ identifier }) => identifier),
-      ...[...hottexts.values()].map(({ identifier }) => identifier),
-      ...context.named.map(({ identifier }) => identifier),
-    ].map(
-      (identifier) =>
-        [
-          keyOf([context.document, identifier]),
-          {
-            document: context.document,
-            identifier,
-            rootKind: context.rootKind,
-          } satisfies Addition<typeof ChoiceVariableName>,
-        ] as const,
-    ),
-  );
-
-/**
  * Build each hotspot's row: its shape, its parent's kind, and its and its parent's element counts.
  *
  * @param context - The document.
@@ -1335,7 +1297,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     BoundVariable: bound,
     Choice: choices,
     ChoiceInteraction: owned,
-    ChoiceVariableName: choiceNamesOf(context, choices, hottexts),
     ContextRef: contexts.references,
     ContextRefDeclaration: contexts.declarations,
     CountBound: counts.bounds,
@@ -1732,7 +1693,6 @@ export const sectionRowsOf = (input: {
  * attribute).
  */
 export interface PlacedBindingRows {
-  readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly PlacedBinding: ReadonlyMap<string, Addition<typeof PlacedBinding>>;
   readonly PlacedBindingBaseType: ReadonlyMap<string, Addition<typeof PlacedBindingBaseType>>;
   readonly PlacedBindingCardinality: ReadonlyMap<string, Addition<typeof PlacedBindingCardinality>>;
@@ -1750,8 +1710,8 @@ export interface PlacedBindingRows {
  * {@link PlacedBindingCardinality} and its `PlacedBindingBaseType` where the declaration has each
  * (spec reading 159): a name none holds has none, which "Binding declared" refuses. Under each
  * instance of every assembly, its document's choices and hottexts, which count among the
- * assembly's, and each identifier they bear as a {@link ChoiceVariableName} of the assembly's root
- * document, which "Choice not variable" holds to the root's declarations.
+ * assembly's: "Choice not variable" holds each identifier they bear to the declarations of the
+ * assembly's root document (`UnclaimedName`, `#pantry/qti/queries.ts`).
  *
  * @param input - The package's rows the bindings read.
  * @param input.adaptive - Every item's mode ({@link rowsOf}'s `ItemMode`).
@@ -1834,15 +1794,6 @@ export const placedBindingRowsOf = (input: {
   );
 
   return {
-    ChoiceVariableName: new Map(
-      [...choices, ...hottexts].map(
-        ({ placement: { assembly, assemblyKind }, row: { identifier } }) =>
-          [
-            keyOf([assembly, identifier]),
-            { document: assembly, identifier, rootKind: assemblyKind },
-          ] as const,
-      ),
-    ),
     PlacedBinding: new Map(
       bound.map(
         ({ binding, key }) =>

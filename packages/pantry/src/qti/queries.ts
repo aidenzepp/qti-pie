@@ -42,6 +42,13 @@ import {
   DeclarationIdentifier,
 } from "#pantry/qti/declarations.ts";
 import {
+  Choice,
+  Hottext,
+  itemBuiltInNames,
+  PlacedChoice,
+  PlacedHottext,
+} from "#pantry/qti/interactions.ts";
+import {
   conditionKindHandles,
   declaredKinds,
   heldKinds,
@@ -96,8 +103,13 @@ import {
   TestDocument,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
+import {
+  itemKind,
+  itemRefKind,
+  itemResourceType,
+  linkResourceTypes,
+} from "#pantry/vocab/terms/tests.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
-import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * Build every query `Qti` names over a stored level, and every rule over one: each query under its
@@ -1281,6 +1293,127 @@ export const queriesOf = (base: QtiBase) => {
   const testQueryLaws = Object.values(testQueryLawsByName).flat();
 
   /**
+   * Each choice and each hottext of a document, by its node, with the document and the identifier
+   * it bears: the nine choice classes' `Choice` rows and `Hottext`'s. Every choice class says of
+   * its identifier "This identifier must not be used by any other choice or item variable"
+   * (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1 alike),
+   * and the nine share one space of identifiers (spec reading 104 as amended, the stricter
+   * normative reading), so "Choice identifier key" keys these rows by (document, identifier): at
+   * most one choice or hottext of a document bears a name, of whichever class.
+   */
+  const choicesAndHottexts = query(base)
+    .rule((r) => {
+      const { document, identifier, node } = v(Choice, "choice");
+
+      return r.match(Choice, { document, identifier, node }).find({ document, identifier, node });
+    })
+    .rule((r) => {
+      const { document, identifier, node } = v(Hottext, "hottext");
+
+      return r.match(Hottext, { document, identifier, node }).find({ document, identifier, node });
+    });
+
+  /**
+   * {@link choicesAndHottexts} as a relation of the schema, which "Choice identifier key" keys.
+   */
+  const ChoiceOrHottext = derived("ChoiceOrHottext", choicesAndHottexts);
+
+  /**
+   * Each choice and each hottext an assembly places, by its instance and node, with the assembly's
+   * root document and the identifier it bears (spec reading 117): an included fragment's choices
+   * are its item's, so "Choice identifier key" keys these rows by (assembly, identifier), and a
+   * fragment placed twice in one item names each of its choices twice.
+   */
+  const placedChoicesAndHottexts = query(base)
+    .rule((r) => {
+      const { assembly, identifier, instance, node } = v(PlacedChoice, "choice");
+
+      return r
+        .match(PlacedChoice, { assembly, identifier, instance, node })
+        .find({ assembly, identifier, instance, node });
+    })
+    .rule((r) => {
+      const { assembly, identifier, instance, node } = v(PlacedHottext, "hottext");
+
+      return r
+        .match(PlacedHottext, { assembly, identifier, instance, node })
+        .find({ assembly, identifier, instance, node });
+    });
+
+  /**
+   * {@link placedChoicesAndHottexts} as a relation of the schema, which "Choice identifier key"
+   * keys.
+   */
+  const PlacedChoiceOrHottext = derived("PlacedChoiceOrHottext", placedChoicesAndHottexts);
+
+  /**
+   * The names a document's choices and hottexts bear, and those its assembly places, that no item
+   * variable of the document bears, by (document, identifier): no `DeclarationIdentifier` of the
+   * document names it, whatever the declaration's cardinality spells (spec reading 159), and in an
+   * item no built-in variable does ({@link itemBuiltInNames}), since the built-ins "are declared
+   * implicitly" (§2.2.2). An assembly's placed names are its root document's, whose own
+   * declarations they are held to (spec reading 117): a fragment declares nothing. "Choice not
+   * variable" holds every choice's and hottext's name to one of these.
+   */
+  const UnclaimedName = derived(
+    "UnclaimedName",
+    query(base)
+      .rule((r) => {
+        const { document, identifier } = v(choicesAndHottexts, "chosen");
+        const { rootKind } = v(Document, "root");
+
+        return r
+          .match(choicesAndHottexts, { document, identifier })
+          .match(Document, { node: document, rootKind })
+          .where(r.not(DeclarationIdentifier, { document, identifier }))
+          .where(r.or(r.ne(rootKind, itemKind), Compute.not(r.inSet(identifier, itemBuiltInNames))))
+          .find({ document, identifier });
+      })
+      .rule((r) => {
+        const { assembly, identifier } = v(placedChoicesAndHottexts, "placed");
+        const { rootKind } = v(Document, "root");
+
+        return r
+          .match(placedChoicesAndHottexts, { assembly, identifier })
+          .match(Document, { node: assembly, rootKind })
+          .where(r.not(DeclarationIdentifier, { document: assembly, identifier }))
+          .where(r.or(r.ne(rootKind, itemKind), Compute.not(r.inSet(identifier, itemBuiltInNames))))
+          .find({ document: assembly, identifier });
+      }),
+  );
+
+  /**
+   * The interaction overlays' rules over a query, each named by its oracle law (spec reading 104):
+   *
+   * - **"Choice identifier key"** (reading 104 as amended): across the nine choice classes, at most
+   *   one choice or hottext of a document bears a name, and at most one its assembly places; the
+   *   per-class keys are `#pantry/qti/interactions.ts`'s;
+   * - **"Choice not variable"**: every name a choice or a hottext bears, its document's own or one
+   *   its assembly places, is one no item variable of the document bears ({@link UnclaimedName}).
+   */
+  const interactionQueryLawsByName = {
+    "Choice identifier key": [
+      key(on(ChoiceOrHottext, "document", "identifier")),
+      key(on(PlacedChoiceOrHottext, "assembly", "identifier")),
+    ],
+    "Choice not variable": [
+      contained(
+        on(ChoiceOrHottext, "document", "identifier"),
+        on(UnclaimedName, "document", "identifier"),
+      ),
+      contained(
+        on(PlacedChoiceOrHottext, "assembly", "identifier"),
+        on(UnclaimedName, "document", "identifier"),
+      ),
+    ],
+  } as const;
+
+  /**
+   * The interaction overlays' rules over a query, in one list.
+   */
+  const interactionQueryLaws = Object.values(interactionQueryLawsByName).flat();
+
+  /**
    * Each property a `data-ssml` member requires, by the member's element, its place and the
    * property's name (Data-SSML 1.0 §3.4: `phoneme`'s `ph`, `say-as`'s `interpret-as`, `sub`'s
    * `alias`): one rule per required property, each a member of that name, beside the property's
@@ -1333,6 +1466,7 @@ export const queriesOf = (base: QtiBase) => {
    * Every query `Qti` names, under its own name.
    */
   const relations = {
+    ChoiceOrHottext,
     DeclaredPlacement,
     DeclaredReading,
     DeclaredReference,
@@ -1356,9 +1490,11 @@ export const queriesOf = (base: QtiBase) => {
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,
+    PlacedChoiceOrHottext,
     PlacedReferenceType,
     RequiredSsmlProperty,
     TypedHref,
+    UnclaimedName,
     UnreadTypeHref,
     UntargetedItemRef,
   };
@@ -1374,6 +1510,7 @@ export const queriesOf = (base: QtiBase) => {
     mappingQueryLawsByName,
     dataSsmlQueryLawsByName,
     testQueryLawsByName,
+    interactionQueryLawsByName,
   ] as const;
 
   /**
@@ -1391,7 +1528,8 @@ export const queriesOf = (base: QtiBase) => {
     | (typeof expressionQueryLaws)[number]
     | (typeof mappingQueryLaws)[number]
     | (typeof dataSsmlQueryLaws)[number]
-    | (typeof testQueryLaws)[number];
+    | (typeof testQueryLaws)[number]
+    | (typeof interactionQueryLaws)[number];
 
   /**
    * Every rule over a query, each domain's list spread in `lawsByName`'s order.
@@ -1404,6 +1542,7 @@ export const queriesOf = (base: QtiBase) => {
     ...mappingQueryLaws,
     ...dataSsmlQueryLaws,
     ...testQueryLaws,
+    ...interactionQueryLaws,
   ];
 
   return { laws, lawsByName, relations };

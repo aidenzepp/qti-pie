@@ -10,7 +10,7 @@
  * none speaks first, and the outcome is `invariant-rejected` with the expected law among its `laws`
  * (membership, since a merged native names several, C22). A row that is a member of an immutable
  * owner's family is inserted with its owner in the same change, a `Choice` or a `Hottext` with its
- * identifier's `ChoiceVariableName` and a `SectionFeedbackRef` with its placement's `SectionScope`
+ * identifier's rules over queries and a `SectionFeedbackRef` with its placement's `SectionScope`
  * (grizzle's README, "Families": "An immutable owner's family is fixed when the owner is
  * inserted"), so the write compiles and the law under test is the verdict. A row whose acceptance
  * by its own laws is the contract, and a law that is a foreign key between two stray rows, is
@@ -33,15 +33,14 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import type { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
-import type { Document } from "#pantry/qti/chardata.ts";
+import { Flag } from "#pantry/grammar/install.ts";
+import { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import type {
   AriaRange,
-  Choice,
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
-  Hottext,
   TemplateRef,
   TemplateRefCardinality,
   TemplateRefDeclaration,
@@ -51,10 +50,11 @@ import {
   BindingDeclaration,
   boundKinds,
   BoundVariable,
-  ChoiceVariableName,
+  Choice,
   CountBound,
   CountRange,
   Hotspot,
+  Hottext,
   LeastCount,
   MostCount,
   Slider,
@@ -62,12 +62,15 @@ import {
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 
+import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
   foreignKeysBetween,
   judged,
   loginSession,
+  rowsOf,
   statedInserts,
+  tableOf,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
@@ -444,21 +447,6 @@ const choiceOf = (
 });
 
 /**
- * The projection row of an identifier the stray rows use, the owner of its choices', hottexts' and
- * declarations' families, which a change inserts beside its members; its counts are the families'
- * to draw.
- *
- * @param identifier - The identifier.
- * @returns The row.
- */
-const nameOf = (identifier: string) =>
-  ({
-    document: stray,
-    identifier,
-    rootKind: "qti-assessment-item",
-  }) satisfies Addition<typeof ChoiceVariableName>;
-
-/**
  * The stray document as the owner of its choices' and hottexts' families (`Document.choices`,
  * `Document.hottexts`), which a change inserts beside its members, since an immutable owner's
  * family takes an append only beside an insert of its owner: the manifest's row, lawful on its own
@@ -514,36 +502,104 @@ const indexReference = (identifier: string): Stated => ({
 });
 
 /**
- * A used identifier's projection fact, its counts as the case states them, none of whose members
- * it writes: unless the case states them, no assembly places it, so its placed counts are 0.
+ * The one constraint trigger of one of `Qti`'s tables whose comment matches a `LIKE` pattern: a
+ * rule over a query is a deferred constraint trigger on each table its query reads, all under one
+ * name, which grizzle mints from a digest and describes by its comment (`trigger of rule ...`).
  *
- * @param identifier - The identifier.
- * @param rootKind - Its document's root kind.
- * @param counts - Its counts of choices, declarations and hottexts, and of the choices and hottexts
- *   its assembly places.
+ * @param client - The session.
+ * @param table - A table the rule's query reads, by its relation's name.
+ * @param pattern - The comment's pattern.
+ * @returns The trigger's name, the constraint `SET CONSTRAINTS` sets immediate; none or several
+ *   fail the case.
+ */
+const ruleDescribed = (client: Parameters<typeof rowsOf>[0], table: string, pattern: string) =>
+  rowsOf<{ readonly tgname: string }>(
+    client,
+    `SELECT t.tgname FROM pg_catalog.pg_trigger t
+      WHERE t.tgrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
+    [`qti.${tableOf(table)}`, pattern],
+  ).pipe(
+    Effect.map((rows) => {
+      assert.lengthOf(rows, 1, pattern);
+
+      return rows[0]?.tgname ?? "";
+    }),
+  );
+
+/**
+ * The stray document's row as a direct writer states it, every column, the accumulated `context`
+ * among them, under a root kind the case sets.
+ *
+ * @param rootKind - The document's root kind.
  * @returns The fact.
  */
-const choiceName = (
-  identifier: string,
-  rootKind: Fact<typeof ChoiceVariableName>["rootKind"],
-  counts: {
-    readonly choices: bigint;
-    readonly declarations: bigint;
-    readonly hottexts: bigint;
-    readonly placedChoices?: bigint;
-    readonly placedHottexts?: bigint;
-  },
-): Stated => ({
-  fact: {
-    placedChoices: 0n,
-    placedHottexts: 0n,
-    ...counts,
-    document: stray,
-    identifier,
-    rootKind,
-  },
-  relation: ChoiceVariableName,
+const documentStated = (rootKind: Addition<typeof Document>["rootKind"]): Stated => ({
+  fact: { ...strayDocument, context: bitsText(Flag, []), rootKind },
+  relation: Document,
 });
+
+/**
+ * A stray choice as a direct writer states it ({@link choiceOf}).
+ *
+ * @param at - The choice's number.
+ * @param identifier - Its identifier.
+ * @param kind - Its kind, a simple choice by default.
+ * @returns The statement.
+ */
+const choiceStated = (
+  at: number,
+  identifier: string,
+  kind?: Fact<typeof Choice>["kind"],
+): Stated => ({ fact: choiceOf(at, identifier, kind), relation: Choice });
+
+/**
+ * A stray hottext of a hottext interaction as a direct writer states it ({@link hottextOf}).
+ *
+ * @param at - The hottext's number.
+ * @param identifier - Its identifier.
+ * @returns The statement.
+ */
+const hottextStated = (at: number, identifier: string): Stated => ({
+  fact: hottextOf(at, { identifier }),
+  relation: Hottext,
+});
+
+/**
+ * An outcome declaration of the stray document named `A`, its `Declaration` and its
+ * `DeclarationIdentifier`, with no cardinality (spec reading 159).
+ */
+const declaredA: readonly Stated[] = [
+  {
+    fact: {
+      declarationKind: "qti-outcome-declaration",
+      document: stray,
+      kind: "qti-outcome-declaration",
+      nearest: stray,
+      node: strayNode(50),
+      parent: stray,
+      parentKind: "qti-assessment-item",
+      start: 2n,
+      version: "3.0.1",
+    },
+    relation: Declaration,
+  },
+  {
+    fact: {
+      baseTypes: 0n,
+      cardinalities: 0n,
+      declarationKind: "qti-outcome-declaration",
+      document: stray,
+      identifier: "A",
+      identifierLead: "",
+      identifierLexical: "A",
+      identifierTrail: "",
+      node: strayNode(50),
+      parentKind: "qti-assessment-item",
+    },
+    relation: DeclarationIdentifier,
+  },
+];
 
 describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer)("the interaction overlays' laws, judged by PostgreSQL", (it) => {
@@ -1312,8 +1368,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         // "identifier")): the choice classes' "This identifier must not be used by any other
         // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
         // its scope (reading 104).
-        // Across classes the nine share one space (reading 104 as amended); that half is the
-        // `Choice_identifier_key` check on `ChoiceVariableName`, held by the name-rows test below.
+        // Across classes the nine share one space (reading 104 as amended); that half is the key
+        // over the query `ChoiceOrHottext`, held by the name rules' test below.
         // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
         // one in a hottext interaction and one outside any; a gap and a gap text named A of one
         // interaction, which these per-class keys let be (the rows are stray, so the deferred
@@ -1328,7 +1384,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const choices = yield* db.workload.importWrite.apply(
               importFacts({
                 Choice: pair,
-                ChoiceVariableName: [nameOf("A")],
                 Document: [strayDocument],
               }),
               {},
@@ -1341,7 +1396,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
           const hottexts = yield* db.workload.importWrite.apply(
             importFacts({
-              ChoiceVariableName: [nameOf("H")],
               Document: [strayDocument],
               Hottext: [hottextOf(0), hottextOf(1, { nearest: stray, nearestKind: "document" })],
             }),
@@ -1353,7 +1407,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           const classes = yield* db.workload.importWrite.apply(
             importFacts({
               Choice: gaps,
-              ChoiceVariableName: [nameOf("A")],
               Document: [strayDocument],
             }),
             {},
@@ -1365,231 +1418,83 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
     );
 
     it.effect(
-      "refuses a choice or a hottext named as a declaration of its document, or in an item as a built-in variable, by Choice not variable",
+      "accepts one choice or hottext of a name, a declaration alone and a stimulus's choice named as a built-in, and refuses two choices or hottexts of one name, of one class or two, by Choice identifier key, and a choice or a hottext named as a declaration of its document or, in an item, as a built-in variable, by Choice not variable",
       () =>
-        // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 104:
-        // "This identifier must not be used by any other choice or item variable"), over the
-        // counts its three families draw from the rows the ChangeSet writes, a declaration's by its
-        // `DeclarationIdentifier`, whatever its cardinality spells (spec reading 159).
-        // Bound: a simple choice and an outcome declaration named A with no cardinality; a hottext
-        // and that declaration; a simple choice named numAttempts in an item.
-        Effect.gen(function* choiceNotVariable() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
-          const declared = {
-            declarationKind: "qti-outcome-declaration",
-            document: stray,
-            kind: "qti-outcome-declaration",
-            nearest: stray,
-            node: strayNode(50),
-            parent: stray,
-            parentKind: "qti-assessment-item",
-            start: 2n,
-            version: "3.0.1",
-          } satisfies Addition<typeof Declaration>;
-          const name = {
-            baseTypes: 0n,
-            cardinalities: 0n,
-            declarationKind: "qti-outcome-declaration",
-            document: stray,
-            identifier: "A",
-            identifierLead: "",
-            identifierLexical: "A",
-            identifierTrail: "",
-            node: strayNode(50),
-            parentKind: "qti-assessment-item",
-          } satisfies Addition<typeof DeclarationIdentifier>;
-
-          const choice = yield* db.workload.importWrite.apply(
-            importFacts({
-              Choice: [choiceOf(0, "A")],
-              ChoiceVariableName: [nameOf("A")],
-              Declaration: [declared],
-              DeclarationIdentifier: [name],
-              Document: [strayDocument],
-            }),
-            {},
-          );
-          assert.isTrue(
-            rejectedBy(choice, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-            "choice",
-          );
-
-          const hottext = yield* db.workload.importWrite.apply(
-            importFacts({
-              ChoiceVariableName: [nameOf("A")],
-              Declaration: [declared],
-              DeclarationIdentifier: [name],
-              Document: [strayDocument],
-              Hottext: [hottextOf(0, { identifier: "A" })],
-            }),
-            {},
-          );
-          assert.isTrue(
-            rejectedBy(hottext, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-            "hottext",
-          );
-
-          const builtIn = yield* db.workload.importWrite.apply(
-            importFacts({
-              Choice: [choiceOf(0, "numAttempts")],
-              ChoiceVariableName: [nameOf("numAttempts")],
-              Document: [strayDocument],
-            }),
-            {},
-          );
-          assert.isTrue(
-            rejectedBy(builtIn, checkNamed("ChoiceVariableName", "Choice_not_variable")),
-            "numAttempts",
-          );
-        }),
-    );
-
-    it.effect(
-      "accepts a name of one choice, of a declaration alone and a stimulus choice named as a built-in, and refuses a name of two choices, a choice and a hottext, two hottexts, in the document or placed, a name counted by both and one counted by none, by the row's own checks",
-      () =>
-        // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
-        // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
-        // `Choice_identifier_key` (reading 104 as amended: the nine classes share one space, so
-        // at most one choice or hottext bears a name in the document and one over its assembly)
-        // and `E1_derived` (some count above 0), 23514 on the check refused.
-        // Bound: one choice; one declaration; a stimulus's choice named numAttempts, accepted;
-        // two choices, a choice and a hottext, two hottexts, each in the document and placed, a
-        // hottext and a declaration of one name, and a name of no choice, hottext or declaration,
-        // refused; one placed choice, accepted.
-        Effect.gen(function* nameRows() {
+        // Oracle: PostgreSQL, reading 104's two rules over queries (`src/qti/queries.ts`; README,
+        // "Rules over queries"), each a deferred constraint trigger on `Choice` and `Hottext`,
+        // both set immediate, every other deferrable constraint deferred and rolled back
+        // unchecked: the key over `ChoiceOrHottext` (reading 104 as amended: the nine classes and
+        // the hottexts share one space of identifiers), 23505; and `ChoiceOrHottext` in
+        // `UnclaimedName` ("This identifier must not be used by any other choice or item
+        // variable"), 23503, a declaration read by its `DeclarationIdentifier` whatever its
+        // cardinality spells (spec reading 159), and in an item the built-ins (§2.2.2).
+        // Bound: one choice; one hottext; a declaration named A alone; a stimulus's choice named
+        // numAttempts, accepted; two simple choices, a gap and a gap text, a choice and a hottext
+        // and two hottexts of one name, by the key; a choice and a hottext named as an outcome
+        // declaration with no cardinality, and an item's choice named numAttempts, by the
+        // containment.
+        Effect.gen(function* nameRules() {
           const client = yield* loginSession;
+          const key = yield* ruleDescribed(
+            client,
+            Choice.name,
+            `trigger of rule key ${Qti.relations.ChoiceOrHottext.name}(document, identifier)`,
+          );
+          const unclaimed = yield* ruleDescribed(
+            client,
+            Choice.name,
+            `trigger of rule ${Qti.relations.ChoiceOrHottext.name}(document, identifier) in ${Qti.relations.UnclaimedName.name}(document, identifier)`,
+          );
+          const item = "qti-assessment-item";
 
-          for (const [label, row, refusedBy] of [
+          for (const [label, rootKind, rows, refusedBy] of [
+            ["one choice", item, [choiceStated(0, "A")], undefined],
+            ["one hottext", item, [hottextStated(0, "H")], undefined],
+            ["a declaration alone", item, declaredA, undefined],
             [
-              "one choice",
-              choiceName("A", "qti-assessment-item", {
-                choices: 1n,
-                declarations: 0n,
-                hottexts: 0n,
-              }),
+              "a stimulus's choice named numAttempts",
+              "qti-assessment-stimulus",
+              [choiceStated(0, "numAttempts")],
               undefined,
             ],
+            ["two simple choices", item, [choiceStated(0, "A"), choiceStated(1, "A")], key],
             [
-              "one placed choice",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 0n,
-                placedChoices: 1n,
-              }),
-              undefined,
+              "a gap and a gap text",
+              item,
+              [choiceStated(0, "A", "qti-gap"), choiceStated(1, "A", "qti-gap-text")],
+              key,
+            ],
+            ["a choice and a hottext", item, [choiceStated(0, "A"), hottextStated(1, "A")], key],
+            ["two hottexts", item, [hottextStated(0, "H"), hottextStated(1, "H")], key],
+            [
+              "a choice named as a declaration",
+              item,
+              [...declaredA, choiceStated(0, "A")],
+              unclaimed,
             ],
             [
-              "two choices",
-              choiceName("A", "qti-assessment-item", {
-                choices: 2n,
-                declarations: 0n,
-                hottexts: 0n,
-              }),
-              "Choice_identifier_key",
+              "a hottext named as a declaration",
+              item,
+              [...declaredA, hottextStated(0, "A")],
+              unclaimed,
             ],
             [
-              "a choice and a hottext",
-              choiceName("A", "qti-assessment-item", {
-                choices: 1n,
-                declarations: 0n,
-                hottexts: 1n,
-              }),
-              "Choice_identifier_key",
-            ],
-            [
-              "two hottexts",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 2n,
-              }),
-              "Choice_identifier_key",
-            ],
-            [
-              "two placed choices",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 0n,
-                placedChoices: 2n,
-              }),
-              "Choice_identifier_key",
-            ],
-            [
-              "a placed choice and a placed hottext",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 0n,
-                placedChoices: 1n,
-                placedHottexts: 1n,
-              }),
-              "Choice_identifier_key",
-            ],
-            [
-              "two placed hottexts",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 0n,
-                placedHottexts: 2n,
-              }),
-              "Choice_identifier_key",
-            ],
-            [
-              "a declaration alone",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 1n,
-                hottexts: 0n,
-              }),
-              undefined,
-            ],
-            [
-              "a stimulus choice named numAttempts",
-              choiceName("numAttempts", "qti-assessment-stimulus", {
-                choices: 1n,
-                declarations: 0n,
-                hottexts: 0n,
-              }),
-              undefined,
-            ],
-            [
-              "a hottext and a declaration",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 1n,
-                hottexts: 1n,
-              }),
-              "Choice_not_variable",
-            ],
-            [
-              "no use",
-              choiceName("A", "qti-assessment-item", {
-                choices: 0n,
-                declarations: 0n,
-                hottexts: 0n,
-              }),
-              "E1_derived",
+              "an item's choice named numAttempts",
+              item,
+              [choiceStated(0, "numAttempts")],
+              unclaimed,
             ],
           ] as const) {
-            const refused = Option.getOrUndefined(yield* judged(client, statedInserts([row]), []));
-
-            if (refusedBy === undefined) {
-              assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
-            } else {
-              assert.strictEqual(
-                refused?.code,
-                "23514",
-                `${label}: ${refused?.message ?? "accepted"}`,
-              );
-              assert.strictEqual(
-                refused?.constraint,
-                checkConstraintOf(Qti, row.relation.name, refusedBy),
-                label,
-              );
-            }
+            assertVerdict(
+              yield* judged(client, statedInserts([documentStated(rootKind), ...rows]), [
+                key,
+                unclaimed,
+              ]),
+              refusedBy ?? "",
+              refusedBy !== undefined,
+              label,
+              refusedBy === key ? "23505" : "23503",
+            );
           }
         }).pipe(Effect.scoped),
     );
@@ -1604,7 +1509,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
           const hottext = yield* db.workload.importWrite.apply(
             importFacts({
-              ChoiceVariableName: [nameOf("H")],
               Document: [strayDocument],
               Hottext: [hottextOf(0, { nearest: stray })],
             }),

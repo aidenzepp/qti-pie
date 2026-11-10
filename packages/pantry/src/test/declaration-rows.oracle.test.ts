@@ -21,9 +21,8 @@
  *   cardinality of it, for a cardinality, while a binding or a reference still resolves to it by
  *   name (spec reading 159); no `DeclarationBaseType`, nor any row that reads a base type of it,
  *   for a base type;
- * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`),
- *   and every `ChoiceVariableName` row counts at least one choice, hottext or declaration, as its
- *   `E1_derived` requires, so no row of a relation grizzle writes before `Node` breaks a CHECK.
+ * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`), so
+ *   no row of a relation grizzle writes before `Node` breaks a CHECK.
  *
  * The database's own verdict over the same scope is `src/import/declaration-rows.db.test.ts`'s.
  */
@@ -201,37 +200,6 @@ const holds = (at: number) =>
       [],
       `${label}: family members with no owner row: ${orphans.map(({ key, member, owner }) => `${member} ${key} into ${owner}`).join("; ")}`,
     );
-
-    const counted = new Set(
-      [
-        ...[...inputs.Choice.values()].map(({ document: holder, identifier }) => [
-          holder,
-          identifier,
-        ]),
-        ...[...inputs.Hottext.values()].map(({ document: holder, identifier }) => [
-          holder,
-          identifier,
-        ]),
-        ...[...inputs.DeclarationIdentifier.values()].map(({ document: holder, identifier }) => [
-          holder,
-          identifier,
-        ]),
-        ...[...inputs.PlacedChoice.values()].map(({ assembly, identifier }) => [
-          assembly,
-          identifier,
-        ]),
-        ...[...inputs.PlacedHottext.values()].map(({ assembly, identifier }) => [
-          assembly,
-          identifier,
-        ]),
-      ].map((key) => JSON.stringify(key)),
-    );
-    for (const name of inputs.ChoiceVariableName.values()) {
-      assert.isTrue(
-        counted.has(JSON.stringify([name.document, name.identifier])),
-        `${label}: ChoiceVariableName ${name.identifier} counts nothing`,
-      );
-    }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
 describe("declarations whose cardinality or base type spells nothing (spec reading 158)", () => {

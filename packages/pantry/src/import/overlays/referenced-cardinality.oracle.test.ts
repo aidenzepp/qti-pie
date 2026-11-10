@@ -16,9 +16,9 @@
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`): no
  * case shows a disagreement but a class a lane's open fix owns (`known`). "Choice not variable", a
- * check over counts the database draws, which the host does not judge, is held apart: the law
- * oracle's verdict against the schema's statement restated over the import's rows, its
- * declarations counted from the relation `declarationNameFamily` counts.
+ * rule over the query `UnclaimedName` (`#pantry/qti/queries.ts`), which the host does not judge,
+ * is held apart: the law oracle's verdict against the rule restated over the import's rows, its
+ * declarations read from `DeclarationIdentifier`, the relation the query negates.
  *
  * Bound: a declaration `V` referred to each of {@link references}' sixteen ways, its cardinality
  * each of {@link cardinalities}, of the kind the reference may name or another, its base type the
@@ -36,7 +36,6 @@ import { Duration, Effect, Formatter } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { declarationNameFamily } from "#pantry/qti/interactions.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
@@ -513,18 +512,17 @@ const choicePackageOf = (held: (typeof choiceCases)[number]): PackageEntries =>
   ]);
 
 /**
- * The relation whose rows `ChoiceVariableName.declarations` counts, and the fields that group them
- * under their `ChoiceVariableName` row, its owner's `document` and `identifier`, as the schema
- * states `declarationNameFamily`.
+ * The relation whose rows the query `UnclaimedName` negates (`#pantry/qti/queries.ts`), and the
+ * fields it negates them by, a document's name: its `document` and `identifier`.
  */
 const declarationCount = {
-  fields: declarationNameFamily.family.terms,
-  relation: declarationNameFamily.family.source.name,
-};
+  fields: ["document", "identifier"],
+  relation: "DeclarationIdentifier",
+} as const;
 
 /**
- * A row of a document's name: its document and the name, which a choice's, a declaration's and a
- * `ChoiceVariableName` row's fields hold alike.
+ * A row of a document's name: its document and the name, which a choice's and a declaration's
+ * fields hold alike.
  */
 interface NameRow {
   readonly document: string;
@@ -600,11 +598,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "holds a choice named as a declaration to Choice not variable whatever the declaration's cardinality spells, as the law oracle does",
       () =>
         // Oracle: the law oracle's "Choice not variable" (reading 104), against the schema's
-        // statement restated over the import's rows: a name a choice bears breaks it where the
-        // relation `declarationNameFamily` counts holds a row of the name in the choice's
-        // document, the count `ChoiceVariableName.declarations` draws; and every such row has its
-        // owner, the `ChoiceVariableName` row of its name, which the family's owner axis asks of
-        // the import's rows and the host does not judge.
+        // rule restated over the import's rows: a name a choice bears breaks it where the relation
+        // the query `UnclaimedName` negates holds a row of the name in the choice's document.
         // Bound: V, an outcome or a template, its cardinality unwritten, many, single, multiple
         // or record, beside a choice named V or W: 20 packages.
         Effect.gen(function* choiceNames() {
@@ -626,13 +621,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const counted = named.get(declarationCount.relation);
             assert.isDefined(
               counted,
-              `declarationNameFamily counts ${declarationCount.relation}, which holds no declared name`,
+              `UnclaimedName negates ${declarationCount.relation}, which holds no declared name`,
             );
 
             const keyOf = (row: NameRow) =>
               Formatter.format(declarationCount.fields.map((field) => row[field]));
             const declared = new Set([...(counted ?? [])].map(keyOf));
-            const owners = new Set([...inputs.ChoiceVariableName.values()].map(keyOf));
             const restated = [...inputs.Choice.values()].some(({ document, identifier }) =>
               declared.has(keyOf({ document, identifier })),
             );
@@ -645,12 +639,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             assert.strictEqual(
               restated,
               oracle,
-              `${label}: the schema's statement over the import's rows, counting ${declarationCount.relation}`,
-            );
-            assert.deepStrictEqual(
-              [...declared].filter((name) => !owners.has(name)),
-              [],
-              `${label}: each counted ${declarationCount.relation} row's ChoiceVariableName owner`,
+              `${label}: the schema's rule over the import's rows, negating ${declarationCount.relation}`,
             );
           }
         }).pipe(Effect.scoped),

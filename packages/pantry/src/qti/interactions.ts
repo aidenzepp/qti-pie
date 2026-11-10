@@ -41,17 +41,18 @@
  *   kind, and its {@link ChoiceInteraction}, its nearest interaction (N8) (§5.132.1 and the other
  *   choice classes': "This identifier must not be used by any other choice or item variable"; spec
  *   reading 104: the item is the scope, as §7.16 reads an identifier, "a logical reference to
- *   another object in the item, such as an itemVariable or choice"). Across the classes,
- *   {@link ChoiceVariableName} holds it distinct among every choice and hottext of its document.
+ *   another object in the item, such as an itemVariable or choice"). Across the classes, a key over
+ *   the query `ChoiceOrHottext` (`#pantry/qti/queries.ts`) holds it distinct among every choice and
+ *   hottext of its document.
  * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
  *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
  *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104), and among its
- *   document's choices by {@link ChoiceVariableName}.
- * - {@link ChoiceVariableName}: each identifier a document's choices, hottexts or declarations use,
- *   counting each, so the nine choice classes share one space of identifiers, a name borne by one
- *   choice or hottext of a document or its assembly and by no other ("Choice identifier key"), and
- *   a choice's identifier is no item variable's: no declaration's of its document, and in an item
- *   no built-in variable's (reading 104, "Choice not variable").
+ *   document's choices by that key.
+ * - **choice names**, rules over queries (`#pantry/qti/queries.ts`): the nine choice classes share
+ *   one space of identifiers, a name borne by one choice or hottext of a document or its assembly
+ *   and by no other ("Choice identifier key"), and a choice's identifier is no item variable's: no
+ *   declaration's of its document, and in an item no built-in variable's (reading 104, "Choice not
+ *   variable").
  * - {@link Hotspot}: the hotspot choices and associable hotspots, their shape, and their element
  *   ranks beside their parent's element count, through `nodeCounts` (reading 80).
  * - {@link CountBound}: every element whose counts `ChoiceBound` pairs, and whether it writes each;
@@ -141,7 +142,6 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
   DeclarationCardinality,
-  DeclarationIdentifier,
   declarationIdentifierRef,
   doublesInOrder,
 } from "#pantry/qti/declarations.ts";
@@ -580,9 +580,9 @@ export const PlacedBindingBaseType = relation(
  * instance and the choice's node: a {@link Choice} of the instance's document, under the
  * assembly, so an included fragment's choices count among its item's ("Choice identifier key" over
  * the assembly: "This identifier must not be used by any other choice", information model
- * §5.132.1, read across the nine choice classes by spec reading 104, so `placedChoices` and
- * `placedHottexts` of {@link ChoiceVariableName} hold a name to one of them), and a fragment placed
- * twice in one item holds its choices twice.
+ * §5.132.1, read across the nine choice classes by spec reading 104, so a key over the query
+ * `PlacedChoiceOrHottext`, `#pantry/qti/queries.ts`, holds a name to one of them), and a fragment
+ * placed twice in one item holds its choices twice.
  */
 export const PlacedChoice = relation(
   "PlacedChoice",
@@ -781,88 +781,6 @@ export const placedChoiceFamily = counted(on(PlacedChoice, "instance"), fin(Inst
 export const placedHottextFamily = counted(
   on(PlacedHottext, "instance"),
   fin(Instance, "hottexts"),
-);
-
-/**
- * An identifier a document's choices, hottexts or variable declarations use, or that an assembly
- * rooted at the document places, a projection keyed by the document and the identifier: the
- * document's root kind, how many {@link Choice}, {@link Hottext} and `DeclarationIdentifier` rows
- * of the document bear it, and how many {@link PlacedChoice} and {@link PlacedHottext} rows of its
- * assembly do, which the five families draw. A declaration bears its name whatever its cardinality
- * spells (spec reading 159): the law reads the name alone.
- *
- * Every choice class says of its identifier "This identifier must not be used by any other choice
- * or item variable" (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and
- * §5.131.1 alike), and the item variables are its declarations and its built-in variables (§2.2.2),
- * so "Choice not variable" holds a used identifier to its choices and hottexts or to its variables,
- * never both (spec reading 104). The four classes whose sentence says "any other choice" read
- * across classes, and the nine share one space of identifiers (spec reading 104 as amended, the
- * stricter normative reading), so "Choice identifier key" holds a used identifier to one choice or
- * hottext, of whichever class, in the document and over its assembly. The comparison spans two
- * relations, so it is a count of each under one key: a containment cannot say that a name is
- * absent. An included fragment's choices are its item's (spec reading 117), and a fragment declares
- * nothing, so an item's assembly's placed choices and hottexts are held to the item's own
- * variables.
- */
-export const ChoiceVariableName = relation(
-  "ChoiceVariableName",
-  {
-    choices: drawn(natural),
-    declarations: drawn(natural),
-    document: uuid,
-    hottexts: drawn(natural),
-    identifier: keyText,
-    placedChoices: drawn(natural),
-    placedHottexts: drawn(natural),
-    rootKind: closedId(NodeKind),
-  },
-  ["document", "identifier"],
-);
-
-/**
- * Each used identifier's choices, counted by `ChoiceVariableName.choices`: a choice's group, its
- * document and identifier, names its projection row.
- */
-export const choiceNameFamily = counted(
-  on(Choice, "document", "identifier"),
-  fin(ChoiceVariableName, "choices"),
-);
-
-/**
- * Each used identifier's hottexts, counted by `ChoiceVariableName.hottexts`.
- */
-export const hottextNameFamily = counted(
-  on(Hottext, "document", "identifier"),
-  fin(ChoiceVariableName, "hottexts"),
-);
-
-/**
- * Each used identifier's declarations, counted by `ChoiceVariableName.declarations`: Q5.08's
- * `DeclarationIdentifier`, every declaration whose identifier names something, whatever its
- * cardinality spells (spec reading 159), whose `key(document, identifier)` makes the count 0 or 1
- * on an accepted state.
- */
-export const declarationNameFamily = counted(
-  on(DeclarationIdentifier, "document", "identifier"),
-  fin(ChoiceVariableName, "declarations"),
-);
-
-/**
- * Each identifier an assembly places on a choice, counted by `ChoiceVariableName.placedChoices`
- * under the assembly's root document (spec reading 117).
- */
-export const placedChoiceNameFamily = counted(
-  on(PlacedChoice, "assembly", "identifier"),
-  fin(ChoiceVariableName, "placedChoices"),
-);
-
-/**
- * Each identifier an assembly places on a hottext, counted by
- * `ChoiceVariableName.placedHottexts`.
- */
-export const placedHottextNameFamily = counted(
-  on(PlacedHottext, "assembly", "identifier"),
-  fin(ChoiceVariableName, "placedHottexts"),
 );
 
 /**
@@ -1515,7 +1433,6 @@ export const interactionRelations = {
   BoundVariable,
   Choice,
   ChoiceInteraction,
-  ChoiceVariableName,
   ContextRef,
   ContextRefDeclaration,
   CountBound,
@@ -1588,64 +1505,15 @@ type RangeRow = RowScalars<typeof CountRange>;
 type HotspotRow = RowScalars<typeof Hotspot>;
 
 /**
- * A `ChoiceVariableName` row as a row check reads it.
- */
-type NameRow = RowScalars<typeof ChoiceVariableName>;
-
-/**
  * The names of an item's built-in variables, `BuiltInVariable`'s rows under the item root:
- * `numAttempts`, `duration`, `completionStatus` and `QTI_CONTEXT` (§2.2.2, §2.2.2.1).
+ * `numAttempts`, `duration`, `completionStatus` and `QTI_CONTEXT` (§2.2.2, §2.2.2.1), which "Choice
+ * not variable" holds an item's choices and hottexts apart from (`#pantry/qti/queries.ts`).
  */
-const itemBuiltInNames: readonly string[] = [
+export const itemBuiltInNames: readonly string[] = [
   ...new Set(
     BuiltInVariable.rows.filter(({ root }) => root === itemKind).map(({ variable }) => variable),
   ),
 ];
-
-/**
- * State the cross-class half of "Choice identifier key" over one used identifier (spec reading 104
- * as amended): the nine choice classes share one space of identifiers, so at most one choice or
- * hottext of the document bears it, and at most one its assembly places (spec reading 117). The
- * per-class keys find two of one class; this finds a choice of one class beside one of another, a
- * gap beside a gap text among them. It compares counts only, so every term is a plain comparison.
- *
- * @param n - The row.
- * @returns The predicate.
- */
-const choiceIdentifierUnique = (n: NameRow) =>
-  n.and(
-    n.or(
-      n.and(n.eq(n.choices, 0n), n.le(n.hottexts, 1n)),
-      n.and(n.le(n.choices, 1n), n.eq(n.hottexts, 0n)),
-    ),
-    n.or(
-      n.and(n.eq(n.placedChoices, 0n), n.le(n.placedHottexts, 1n)),
-      n.and(n.le(n.placedChoices, 1n), n.eq(n.placedHottexts, 0n)),
-    ),
-  );
-
-/**
- * State "Choice not variable" over one used identifier (spec reading 104): no choice or hottext
- * bears it, its document's own or one its assembly places (spec reading 117), or no declaration of
- * its document does and, in an item, it names none of the item's built-in variables, which "are
- * declared implicitly" (§2.2.2) and so are item variables too.
- *
- * @param n - The row.
- * @returns The predicate.
- */
-const choiceNotVariable = (n: NameRow) =>
-  n.or(
-    n.and(
-      n.eq(n.choices, 0n),
-      n.eq(n.hottexts, 0n),
-      n.eq(n.placedChoices, 0n),
-      n.eq(n.placedHottexts, 0n),
-    ),
-    n.and(
-      n.eq(n.declarations, 0n),
-      n.or(n.ne(n.rootKind, itemKind), n.not(n.in(n.identifier, itemBuiltInNames))),
-    ),
-  );
 
 /**
  * Select the attributes O3 reads: each name of {@link readAttributes} on its kinds, and the ARIA
@@ -2314,13 +2182,10 @@ const identifierTyped = on(
  *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
  *   117), under each instance of each assembly, as many {@link PlacedChoice} and
  *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
- *   identifiers distinct over the assembly. Across the classes, `Choice_identifier_key` holds each
- *   name to one choice or hottext, in the document and over its assembly.
- * - **choice names** (reading 104): each identifier a choice, a hottext or a declaration uses, or
- *   that an assembly places on a choice or a hottext (reading 117), has its
- *   {@link ChoiceVariableName} under its document or its assembly's root document, of that
- *   document's root kind, counting each of the five; no row counts none (`E1_derived`); and "Choice
- *   not variable".
+ *   identifiers distinct over the assembly. Across the classes, "Choice identifier key" holds each
+ *   name to one choice or hottext, in the document and over its assembly, and "Choice not variable"
+ *   each to no variable of its document, both rules over queries (`#pantry/qti/queries.ts`, reading
+ *   104).
  * - **the default hotspot** (reading 80): `default_hotspot_last_slot` and
  *   `Graphic_gap_match_default_hotspot` over each hotspot's shape, its rank and its parent's
  *   count.
@@ -2640,9 +2505,7 @@ export const interactionLawsByName = {
     key(on(Hottext, "document", "identifier")),
     key(on(PlacedChoice, "assembly", "kind", "identifier")),
     key(on(PlacedHottext, "assembly", "identifier")),
-    check("Choice_identifier_key", ChoiceVariableName, choiceIdentifierUnique),
   ],
-  "Choice not variable": [check("Choice_not_variable", ChoiceVariableName, choiceNotVariable)],
   "Custom interaction version": [
     check("Custom_interaction_version", Interaction, (i) =>
       i.or(i.ne(i.kind, customKind), i.ne(i.version, "3.0.0")),
@@ -2766,21 +2629,6 @@ export const interactionLawsByName = {
     contained(
       on(PlacedHottext, "node", "document", "identifier"),
       on(Hottext, "node", "document", "identifier"),
-    ),
-    contained(on(ChoiceVariableName, "document", "rootKind"), on(Document, "node", "rootKind")),
-    choiceNameFamily,
-    hottextNameFamily,
-    declarationNameFamily,
-    placedChoiceNameFamily,
-    placedHottextNameFamily,
-    check("E1_derived", ChoiceVariableName, (n) =>
-      n.or(
-        n.gt(n.choices, 0n),
-        n.gt(n.hottexts, 0n),
-        n.gt(n.declarations, 0n),
-        n.gt(n.placedChoices, 0n),
-        n.gt(n.placedHottexts, 0n),
-      ),
     ),
     contained(
       on(Hotspot, "node", "document", "kind", "start", "nearest", "version", "parent"),
