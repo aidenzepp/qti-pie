@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="ei-media-video" title="Lighthouse beam" adaptive="false" time-dependent="false"
+  xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <qti-media-interaction response-identifier="RESPONSE" autostart="true" loop="true">
+      <qti-prompt>Watch the lighthouse lamp turn, and count how many seconds one full turn takes.</qti-prompt>
+      <video controls="false" width="320" height="180" poster="media/lighthouse.png">
+        <source src="media/lighthouse.mp4" type="video/mp4"/>
+        <track kind="descriptions" src="media/lighthouse.en.vtt" srclang="en"/>
+      </video>
+    </qti-media-interaction>
+  </qti-item-body>
+</qti-assessment-item>
