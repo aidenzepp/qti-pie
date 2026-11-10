@@ -21,8 +21,7 @@ import { describe } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import type { LawName, Rule } from "#pantry/import/refusal.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { MathRank } from "#pantry/qti/mathml-share.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
@@ -32,7 +31,9 @@ import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { materializeMathml, mathmlNegatives, mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
 import type { MathmlFixtureName } from "#pantry/test/fixtures.mathml.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import type { Rule } from "#pantry/import/rules.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The spec of a formula item: the MathML base item the free fixtures are cut from, with the
@@ -182,7 +183,6 @@ describe.skipIf(!hasLease)(
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: authorLayerHookTimeoutMs,
     })("the share laws, judged by PostgreSQL", (it) => {
       for (const { alone, dir, law, name, rule } of refusals) {
         it.effect(`refuses ${name} under ${law}, as the law oracle predicts`, () =>
@@ -203,7 +203,7 @@ describe.skipIf(!hasLease)(
             assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
 
             if (refused instanceof ImportRefused) {
-              assert.strictEqual(refused.rule, rule, name);
+              assert.strictEqual(refused.rules[0], rule, name);
               assert.strictEqual(refused.origin._tag, "Database", name);
               assert.isTrue(
                 refused.origin._tag === "Database" &&

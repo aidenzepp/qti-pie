@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Assemble: the rows one document is stored as, back to the tree they were written from (fin.md
  * §4.6, trees.md §6), the inverse of `flatten` in `#pantry/model/xdm.ts`.
@@ -912,18 +911,17 @@ const readOf = <V extends XdmVocabulary>(
       prolog: [],
       root: Option.none(),
     };
-    const root: Open<V> = {
-      place: (child) => placeInDocument(parsed, child),
-      row: sentinel,
-    };
-    const stack: Open<V>[] = [];
-    const innermost = (): Open<V> => stack.at(-1) ?? root;
+    // The nodes the read holds open, innermost last: the document node at the bottom, never closed,
+    // since every row is placed under it.
+    const stack: Arr.NonEmptyArray<Open<V>> = [
+      { place: (child) => placeInDocument(parsed, child), row: sentinel },
+    ];
     for (const row of order.slice(1)) {
-      while (stack.length > 0 && innermost().row.end <= row.start) {
+      while (stack.length > 1 && Arr.lastNonEmpty(stack).row.end <= row.start) {
         stack.pop();
       }
 
-      const open = innermost();
+      const open = Arr.lastNonEmpty(stack);
       const child = yield* builtOf(index, attributeIds, row);
       if (!open.place(child)) {
         return yield* Result.fail(unplaced(row, open.row));
