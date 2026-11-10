@@ -1,14 +1,15 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
-import { attr, doc, el, text } from "#plate/document/source.ts";
+import { Effect, Option, Result } from "effect";
+import { attr, doc, el, qtiNamespace, text } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { elementsOf } from "#plate/model/attributes.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { Rule } from "#plate/model/expression.ts";
+import type { Expression, Rule } from "#plate/model/expression.ts";
 import type { UnsupportedFeature } from "#plate/model/item.ts";
 import { absentControl, buildTest, withLtiLinks } from "#plate/model/test.ts";
 import type {
@@ -18,8 +19,11 @@ import type {
   TemplateDefault,
   Test,
 } from "#plate/model/test.ts";
-import type { TestFeatureKey } from "#plate/test-features/contract.ts";
+import { stub } from "#plate/test-features/contract.ts";
+import type { TestFeatureKey, TestFeatureModule } from "#plate/test-features/contract.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
+import type { TestFeatureTable } from "#plate/test-features/table.ts";
+import type { Refusal } from "#plate/validate/refusal.ts";
 import { checkStructure } from "#plate/validate/structure.ts";
 import { tables } from "#plate/validate/tables.ts";
 
@@ -1701,6 +1705,95 @@ describe("withLtiLinks", () => {
 
         assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
         assert.deepStrictEqual(linked.unsupported, [mark("lti-link", ref)]);
+      }),
+  );
+});
+
+/**
+ * The table of stubs with a pre-condition module, landed for this test alone, whose `parse` reads
+ * its element's one child through the context's `expression` and records what it gave.
+ *
+ * @param into Where each read is recorded.
+ * @returns The table.
+ */
+const readingPreConditions = (
+  into: Result.Result<Option.Option<Expression>, Refusal>[],
+): TestFeatureTable => {
+  const node = { read: true };
+  const reading: TestFeatureModule<"qti-pre-condition", typeof node> = {
+    ...stub({
+      element: "qti-pre-condition",
+      feature: [],
+      issue: "m5-05",
+      key: "qti-pre-condition",
+      namespace: qtiNamespace,
+    }),
+    implemented: true,
+    parse: (element, context) => {
+      const [child] = elementsOf(element);
+      const read: Result.Result<Option.Option<Expression>, Refusal> = child === undefined
+        ? context.mark("qti-pre-condition")
+        : context.expression(child);
+      into.push(read);
+
+      return read.pipe(Result.map((expression) => expression.pipe(Option.map(() => node))));
+    },
+  };
+
+  return testFeatures.map((module) => (module.key === "qti-pre-condition" ? reading : module));
+};
+
+describe("a test-feature module that reads an expression", () => {
+  it.effect(
+    "[W0-BE] a pre-condition's expression reaches a module's parse as an expression: a qti-base-value of boolean true reads as the base-value kind",
+    () =>
+      Effect.gen(function* readsExpression() {
+        const reads: Result.Result<Option.Option<Expression>, Refusal>[] = [];
+        const document = test([
+          part("P1", "linear", "individual", [
+            el(
+              "qti-pre-condition",
+              [],
+              [el("qti-base-value", [attr("base-type", "boolean")], [text("true")])],
+            ),
+            section("S1", [itemRef("I1", "items/one.xml")]),
+          ]),
+        ]);
+        const built = yield* Effect.fromResult(buildTest(document, readingPreConditions(reads)));
+        const [read] = reads;
+
+        assert.strictEqual(reads.length, 1);
+        assert.isTrue(read !== undefined && Result.isSuccess(read));
+        if (read !== undefined && Result.isSuccess(read)) {
+          assert.isTrue(Option.isSome(read.success));
+          assert.strictEqual(Option.getOrUndefined(read.success)?.kind, "base-value");
+        }
+
+        const nodes: readonly unknown[] | undefined = built.features?.["qti-pre-condition"];
+
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(nodes, [{ read: true }]);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] an element the engine does not run under a pre-condition is marked where the walk's marks go",
+    () =>
+      Effect.gen(function* marksUnread() {
+        const reads: Result.Result<Option.Option<Expression>, Refusal>[] = [];
+        const document = test([
+          part("P1", "linear", "individual", [
+            el("qti-pre-condition", [], [el("qti-custom-thing")]),
+            section("S1", [itemRef("I1", "items/one.xml")]),
+          ]),
+        ]);
+        const built = yield* Effect.fromResult(buildTest(document, readingPreConditions(reads)));
+
+        assert.deepStrictEqual(reads, [Result.succeed(Option.none())]);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-custom-thing", `${firstPart}/qti-pre-condition/qti-custom-thing`),
+        ]);
+        assert.isUndefined(built.features);
       }),
   );
 });

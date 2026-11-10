@@ -672,3 +672,144 @@ describe("a part's and the test's expiry", () => {
       }),
   );
 });
+
+/**
+ * The table with a time-limits module that has landed for this test alone, in the stub's place:
+ * its `gate` answers `exit` from one scope to one kind of intent, and lets every other intent
+ * through.
+ *
+ * @param scope The scope the session leaves.
+ * @param on The kind of intent it answers.
+ * @returns The table.
+ */
+const exiting = (scope: TimedScope, on: Intent["kind"]): TestFeatureTable =>
+  testFeatures.map((module) =>
+    module.key === "qti-time-limits"
+      ? {
+          ...stub({
+            element: module.element,
+            feature: module.feature,
+            issue: module.issue,
+            key: module.key,
+            namespace: module.namespace,
+          }),
+          gate: (context) =>
+            context.intent.kind === on ? Option.some({ kind: "exit", scope }) : Option.none(),
+          implemented: true,
+        }
+      : module,
+  );
+
+describe("an exit verdict", () => {
+  it.effect(
+    "[W0-BE] on a submission in a nonlinear part submits the item, then leaves the section without submitting or locking its other item, and enters the first item after it, recording no expiry",
+    () =>
+      Effect.gen(function* sectionExit() {
+        const configuration = yield* configure({});
+        const given = yield* delivery("nonlinear");
+        const features = exiting({ identifier: "S1", kind: "section" }, "submit-item");
+        const atStart = started(given, configuration);
+        const exited = advanced(
+          given,
+          features,
+          configuration,
+          atStart,
+          { kind: "submit-item" },
+          earlier,
+          10,
+        );
+
+        assert.deepStrictEqual(stateOf(itemOf(exited, "S1a")), {
+          attempt: "submitted",
+          locked: false,
+          presented: true,
+          response: chosen("A"),
+          saved: Option.none(),
+        });
+        assert.deepStrictEqual(stateOf(itemOf(exited, "S1b")), stateOf(itemOf(atStart, "S1b")));
+        assert.strictEqual(shownRef(exited), "S2a");
+        assert.isTrue(itemOf(exited, "S2a").presented);
+        assert.deepStrictEqual(exited.expired, []);
+        assert.deepStrictEqual(
+          exited.parts.map((part) => part.status),
+          ["current", "pending"],
+        );
+        assert.deepStrictEqual(throughHost(given, exited), exited);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] on a move saves the step and leaves the part without submitting its items, which stay open with what they hold, so the next part starts",
+    () =>
+      Effect.gen(function* partExit() {
+        const configuration = yield* configure({});
+        const given = yield* delivery("nonlinear");
+        const features = exiting({ identifier: "P1", kind: "part" }, "next");
+        const exited = advanced(
+          given,
+          features,
+          configuration,
+          started(given, configuration),
+          { kind: "next" },
+          earlier,
+          10,
+        );
+
+        assert.deepStrictEqual(stateOf(itemOf(exited, "S1a")), {
+          attempt: "none",
+          locked: false,
+          presented: true,
+          response: itemOf(exited, "S1b").record.responses["RESPONSE"],
+          saved: Option.some(earlier),
+        });
+        assert.deepStrictEqual(
+          ["S1b", "S2a"].map((ref) => itemOf(exited, ref).record.attempt),
+          ["none", "none"],
+        );
+        assert.deepStrictEqual(
+          exited.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.strictEqual(shownRef(exited), "S3a");
+        assert.deepStrictEqual(exited.expired, []);
+        assert.strictEqual(itemOf(exited, "S1a").duration, 10);
+      }),
+  );
+
+  it.effect(
+    "[W0-BE] from the test ends every part and closes it, with no item submitted or locked",
+    () =>
+      Effect.gen(function* testExit() {
+        const configuration = yield* configure({});
+        const given = yield* delivery("nonlinear");
+        const features = exiting({ identifier: "T", kind: "test" }, "end-part");
+        const exited = advanced(
+          given,
+          features,
+          configuration,
+          started(given, configuration),
+          { kind: "end-part" },
+          earlier,
+          10,
+        );
+
+        assert.strictEqual(exited.status, "closed");
+        assert.deepStrictEqual(
+          exited.parts.map((part) => part.status),
+          ["ended", "ended"],
+        );
+        assert.deepStrictEqual(
+          exited.items.map((item) => [item.locked, item.record.attempt]),
+          [
+            [false, "none"],
+            [false, "none"],
+            [false, "none"],
+            [false, "none"],
+            [false, "none"],
+          ],
+        );
+        assert.deepStrictEqual(exited.expired, []);
+        assert.deepStrictEqual(allowedNow(given, exited), []);
+      }),
+  );
+});
