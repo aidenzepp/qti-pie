@@ -21,7 +21,9 @@
  * `TimeState`, the time in force a navigation carries as `time` and a host's timer reads;
  * `QtiContext`, the values a host supplies for the built-in `QTI_CONTEXT`; `ResourceMetadata`,
  * a package resource's `metadata`; and `FeatureRefusal`, what an `IntentRefused` or a
- * `MoveRefused` carries under the rule `feature`.
+ * `MoveRefused` carries under the rule `feature`. `HostFacts`, with `PciHostFacts` and
+ * `PciModuleRoute`, is what a host passes `render` as `host`: what it knows and plate does not,
+ * read by the interaction module it is for.
  *
  * `open`, `openPackage`, `configure` and `readPnp` return Effects. Every other function is plain,
  * callable with no Effect runtime: it returns its value, or a `Result` when a caller can make it
@@ -89,6 +91,8 @@ export {
 
 export { PartSwapRefused } from "#plate/emit/swap.ts";
 
+export type { AdaptivePolicy } from "#plate/engine/adaptive.ts";
+
 export type { EngineFailure } from "#plate/engine/evaluate.ts";
 
 export {
@@ -117,6 +121,7 @@ export {
   isPosted,
   Malformed,
   partition,
+  postedStrings,
 } from "#plate/form/encoding.ts";
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
@@ -146,6 +151,8 @@ export { itemRefs, openPackage } from "#plate/package/open.ts";
 export type { Posting, Redacted, RenderMode, ValidationMessage } from "#plate/payload.ts";
 
 export { postings } from "#plate/payload.ts";
+
+export type { HostFacts, PciHostFacts, PciModuleRoute } from "#plate/pci/host.ts";
 
 export type { PnpSelector } from "#plate/pnp/read.ts";
 

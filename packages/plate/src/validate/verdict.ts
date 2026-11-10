@@ -5,15 +5,15 @@
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
  * item prose rules, the test prose rules, a stimulus's rules, the catalog rules and the refusals
- * its QTI version decides together, then leaves unchecked what it cannot judge.
- * Every verdict carries the kind of its document's root. On an item it accepts it secures the
- * source before it builds the item: it removes every attribute only a wildcard admits (E3) and
- * passes every URL attribute through `url.ts`, keeping each value in its parsed form or dropping it
- * with a notice beside its element. Its {@link Accepted} is the only input `redact` and `score`
- * take. On a test it builds the test model, the {@link AcceptedTest} a session starts from; a
- * section or a stimulus is accepted and marked, delivered by neither M2 nor M1. A refusal is a
- * verdict, never a failure, so `check` is a plain function; each builder returns a `Result`, which
- * it reads with no Effect runtime.
+ * its QTI version decides together, then leaves unchecked what it cannot judge. Every verdict
+ * carries the kind of its document's root. On an item it accepts it secures the source before it
+ * builds the item: it removes every attribute only a wildcard admits (E3), except an author
+ * `data-*` that is not plate's own (decision D24), and passes every URL attribute through `url.ts`,
+ * keeping each value in its parsed form or dropping it with a notice beside its element. Its
+ * {@link Accepted} is the only input `redact` and `score` take. On a test it builds the test model,
+ * the {@link AcceptedTest} a session starts from; a section or a stimulus is accepted and marked,
+ * delivered by neither M2 nor M1. A refusal is a verdict, never a failure, so `check` is a plain
+ * function; each builder returns a `Result`, which it reads with no Effect runtime.
  *
  * @module
  */
@@ -72,7 +72,7 @@ import {
 import { checkTestRules } from "#plate/validate/test-rules.ts";
 import { checkVersion } from "#plate/validate/versions.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
-import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
+import { cpVersions, isAuthorData, manifestNamespace } from "#plate/vocabulary.ts";
 import type { CpVersion, TestMark } from "#plate/vocabulary.ts";
 
 /**
@@ -388,8 +388,8 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
  * attributes: a `qti-portable-custom-interaction`'s `data-*` attributes are the `properties` a
  * host passes the interaction's module, named as HTML's `dataset` names them (the QTI 3
  * information model's PortableCustomInteraction, and the PCI specification's configuration). E3
- * keeps them there and nowhere else: on every other element a `data-*` attribute is admitted only
- * by the wildcard and is marked and dropped as any such attribute is.
+ * keeps them there whatever their names; on every other element only an author `data-*` plate
+ * does not reserve stays (decision D24, {@link isKept}).
  */
 const propertiesElement = "qti-portable-custom-interaction";
 
@@ -414,11 +414,19 @@ const isProperty = (local: string, attribute: SourceAttribute): boolean =>
 /**
  * Report whether E3 keeps an attribute of a QTI-namespace element.
  *
- * It keeps an allowance and an attribute the table that governs the element declares by name.
- * Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the table declares
- * `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too. Names compare
- * exactly, as XML's do. It keeps a `data-*` attribute on the one element whose specification
- * carries its properties in them ({@link isProperty}), which the wildcard alone admits.
+ * It keeps an allowance, an attribute the table that governs the element declares by name, and an
+ * author `data-*` (decision D24, {@link isAuthorData}): a name in the reading's form that plate
+ * does not reserve, on any element a wildcard lets carry one. A reserved name the XSD does not
+ * declare (`data-slot`, `data-mode`, anything under `data-qti-`) is removed and marked as before,
+ * so an author's attribute never reaches plate's own marker; `data-ssml`,
+ * `data-qti-suppress-tts` and `data-catalog-idref` are the XSD's own (decision D22) and the table
+ * keeps them first. Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the
+ * table declares `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too.
+ * Names compare exactly, as XML's do.
+ *
+ * A `data-*` on the one element whose specification carries its properties in them
+ * ({@link isProperty}) stays whatever its name: a PCI's properties go to its module, never to
+ * the HTML, so a reserved name there is the author's, not plate's.
  *
  * @param local The element's local name.
  * @param table The table that governs the element, none when the XSD declares no element of its
@@ -433,6 +441,7 @@ const isKept = (
 ): boolean =>
   isKeptEverywhere(attribute) ||
   isProperty(local, attribute) ||
+  (attribute.namespace === "" && isAuthorData(attribute.local)) ||
   Option.exists(
     table,
     (declared) =>
@@ -1073,12 +1082,15 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
  *    whatever its form), or a root other than an item, a test, a section or a stimulus, is
  *    `unchecked`, with every reason. It is never rendered.
  * 4. An item: each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
- *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
- *    a dropped one goes, with its notice beside its element. The item is built from the secured
- *    source, and in a QTI 3.0.1 document each outcome that writes no `normal-minimum` has 0.0
- *    (reading 149). A refusal of the builder, such as `value-type` or `count-range`, makes the
- *    document `refused`. Otherwise it is `accepted-with-unsupported` when anything is unsupported,
- *    the builder's `variable:<identifier>` marks included, and `accepted` when nothing is.
+ *    except an author `data-*` in the reading's form whose name plate does not reserve (decision
+ *    D24, `reservedDataNames`), which stays; a reserved name the XSD does not declare is still
+ *    removed and marked, never refused. Each URL attribute goes through `url.ts`: a kept value is
+ *    written in its parsed form, and a dropped one goes, with its notice beside its element. The
+ *    item is built from the secured source, and in a QTI 3.0.1 document each outcome that writes no
+ *    `normal-minimum` has 0.0 (reading 149). A refusal of the builder, such as `value-type` or
+ *    `count-range`, makes the document `refused`. Otherwise it is `accepted-with-unsupported` when
+ *    anything is unsupported, the builder's `variable:<identifier>` marks included, and `accepted`
+ *    when nothing is.
  * 5. A test: the test model is built, its own outcomes defaulted as an item's are. A refusal of the
  *    builder makes the document `refused`; otherwise it is `accepted-with-unsupported` when the
  *    test holds a feature M2 marks and `accepted` when it holds none.

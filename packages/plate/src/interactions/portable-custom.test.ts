@@ -703,8 +703,8 @@ describe("the Portable Custom Interaction module", () => {
       );
 
       assert.include(json, '"module":"counter"');
-      assert.include(json, '"primaryPath":"../modules/counter"');
-      assert.include(json, '"primaryConfiguration":"../modules/module_resolution.js"');
+      assert.include(json, '"primaryPath":"modules/counter"');
+      assert.include(json, '"primaryConfiguration":"modules/module_resolution.js"');
     }),
   );
 

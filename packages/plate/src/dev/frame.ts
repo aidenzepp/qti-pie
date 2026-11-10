@@ -51,6 +51,33 @@ export const pageHeaders = {
 } as const satisfies Readonly<Record<string, string>>;
 
 /**
+ * The directive of {@link pageHeaders}' policy that refuses every script.
+ */
+const scriptRefused = "script-src 'none'";
+
+/**
+ * The headers of every HTML page while the playground's runtime is on (issue m3d-13): the
+ * {@link pageHeaders} with `script-src 'self'` in place of `script-src 'none'`, and every other
+ * directive as it is.
+ *
+ * `'self'` admits the page's own origin's scripts and nothing more: no `'unsafe-inline'`, no
+ * `'unsafe-eval'`, no host, no hash. The playground serves the runtime from its own origin, so the
+ * policy admits that and still refuses an inline script, an event-handler attribute and a script
+ * from any other origin. It is derived from {@link pageHeaders} so the two cannot drift, and the
+ * stylesheets, redirects and package documents keep `script-src 'none'`, since none of them is a
+ * page that loads the runtime.
+ *
+ * @see https://w3c.github.io/webappsec-csp/#grammardef-scheme-source (`'self'`, a source expression)
+ */
+export const runtimePageHeaders = {
+  ...pageHeaders,
+  "content-security-policy": pageHeaders["content-security-policy"].replace(
+    scriptRefused,
+    "script-src 'self'",
+  ),
+} as const satisfies Readonly<Record<string, string>>;
+
+/**
  * The headers of every served asset besides its type: a package document is a live document, so
  * it runs in a sandbox with no script, plugins, base or form target.
  */
@@ -151,12 +178,16 @@ export interface Page {
 }
 
 /**
- * What every page carries besides its content: the theme box's stored appearance, and the path and
- * query the box returns to.
+ * What every page carries besides its content: the theme box's stored appearance, the path and
+ * query the box returns to, and, while the playground's runtime is on, the URL of the module the
+ * head loads (issue m3d-13).
+ *
+ * A page with no `runtime` has no `script` element, as every page had before the runtime existed.
  */
 export interface Chrome {
   readonly appearance: Appearance;
   readonly back: string;
+  readonly runtime?: string;
 }
 
 /**
@@ -261,7 +292,9 @@ const written = (node: Node): string =>
 /**
  * Write a whole HTML page: the doctype, `html` in the locale and with the `dark` class while the
  * flag is on, a head with the title and the three stylesheets, and `main` holding the page's nodes
- * and then the theme box, with each marker replaced by its part's HTML.
+ * and then the theme box, with each marker replaced by its part's HTML. While the chrome names a
+ * runtime module, the head also holds one `script type="module"` that loads it, which a browser
+ * defers until the document is parsed.
  *
  * @param shown The page.
  * @param chrome The stored appearance and the theme box's return path.
@@ -279,6 +312,9 @@ export const pageHtml = (shown: Page, chrome: Chrome): string => {
         h("meta", { content: "width=device-width, initial-scale=1", name: "viewport" }),
         h("title", {}, [text(shown.title)]),
         ...sheetLinks,
+        ...(chrome.runtime === undefined
+          ? []
+          : [h("script", { src: chrome.runtime, type: "module" })]),
       ]),
       h("body", {}, [h("main", {}, [...shown.main, themeBox(chrome)])]),
     ],

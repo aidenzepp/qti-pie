@@ -72,8 +72,10 @@ const booleanAttributes = {
 /**
  * The `max-attempts` of an item none of its enclosing elements limits: one attempt.
  *
- * QTI gives an unspecified `max-attempts` as 1 for a non-adaptive item (`info.txt:68764`). An
- * adaptive item is a mark the session does not deliver, so every delivered item is non-adaptive.
+ * QTI gives an unspecified `max-attempts` as 1 for a non-adaptive item (`info.txt:68764`). The
+ * session control knows no item, so it resolves the attribute for every item ref alike; whether
+ * an adaptive item is limited by it at all is the adaptive policy's answer (`adaptivePolicy.limit`
+ * in `#plate/engine/adaptive.ts`), which the submission takes with the item in hand.
  */
 const unsetAttempts = 1;
 

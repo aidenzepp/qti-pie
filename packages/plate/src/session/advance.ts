@@ -1,16 +1,18 @@
 /**
  * One entry point over a test session's intents: {@link advance} carries out what a request asks,
  * through the moves of `#plate/session/navigate.ts` and the submissions of
- * `#plate/session/submit.ts`, and refuses what the test's rules forbid now with an
- * {@link IntentRefused}.
+ * `#plate/session/submit.ts`, carries out the expiry of a timed scope a test-feature module answers
+ * with (its scope read by `#plate/session/expire.ts`), the exit from a scope and the skip of a
+ * place a module answers with, enters the place each step lands on through the modules' `enter`,
+ * and refuses what the test's rules forbid now with an {@link IntentRefused}.
  *
  * `allowedIntents` of `#plate/session/intents.ts` lists exactly the intents this accepts now, given
  * responses that pass the item's checks, so a host can offer those and post any of them. Every
  * function is pure: time is the `now` the host passes, and nothing is kept between calls.
  *
  * This is a boundary module, not a browser module: it checks a step's responses with the value
- * Schema, and it calls the submissions, which call `score`, and `score` reads and writes the stored
- * record through its Schema codec.
+ * Schema, and it calls the submissions, and an expiry processes attempts as a submission does,
+ * which call `score`, and `score` reads and writes the stored record through its Schema codec.
  *
  * @module
  */
@@ -20,6 +22,8 @@ import type { InvalidRecord } from "#plate/codec/record.ts";
 import { ResponseValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { fitting, score, splitResponses } from "#plate/score.ts";
@@ -29,18 +33,37 @@ import type {
   RecordRequired,
   ResponsesRefused,
 } from "#plate/score.ts";
-import type { UnknownItemRef } from "#plate/session/control.ts";
+import { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
-import { alreadyExpired, expireScope } from "#plate/session/expire.ts";
-import type { UnknownTimedScope } from "#plate/session/expire.ts";
+import { alreadyExpired, expiringOf } from "#plate/session/expire.ts";
+import type { Expiring, UnknownTimedScope } from "#plate/session/expire.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { ItemNotInSession, current, valuesOf } from "#plate/session/start.ts";
+import {
+  ItemNotInSession,
+  current,
+  partHoldingScope,
+  present,
+  recordStep,
+  valuesOf,
+} from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
-import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
-import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
+import {
+  deliveredItem,
+  endPart,
+  outcomesProcessed,
+  partEnded,
+  processed,
+  submitItem,
+  submitPart,
+} from "#plate/session/submit.ts";
+import type {
+  PartEndFailure,
+  SubmissionFailure,
+  SubmissionRefused,
+} from "#plate/session/submit.ts";
 import type { FeatureRefusal, TimedScope } from "#plate/test-features/contract.ts";
-import { gatedBy } from "#plate/test-features/dispatch.ts";
+import { enteredBy, gatedBy } from "#plate/test-features/dispatch.ts";
 import { testFeatures } from "#plate/test-features/table.ts";
 import type { TestFeatureTable } from "#plate/test-features/table.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -308,6 +331,356 @@ const asIntent = (
   );
 
 /**
+ * Why {@link expireScope} may fail: the scope is not the test's ({@link UnknownTimedScope}), or an
+ * attempt it processes, the outcome run that follows, or the part's end fails as a submission's
+ * does. No rule refuses an expiry: `SubmissionRefused` is in the type only through the part's end,
+ * which never fails with it, and `score`'s `ResponsesRefused`, for saved responses that break a
+ * limit the item sets whatever the configuration, passes through as `submitItem` passes it.
+ */
+export type ExpiryFailure = SubmissionFailure | UnknownTimedScope;
+
+/**
+ * List the item refs of the session's ended parts, whose items an expiry never processes: an
+ * individual part's end left them as they were, on purpose.
+ *
+ * @param test The test.
+ * @param session The session.
+ * @returns The refs' identifiers.
+ */
+const endedRefs = (test: Test, session: TestSession): ReadonlySet<string> =>
+  new Set(
+    test.parts.flatMap((part, index) =>
+      session.parts[index]?.status === "ended" ? refIdentifiersIn(part.children) : [],
+    ),
+  );
+
+/**
+ * Lock every item of the scope, and process each presented one whose attempt is open or which
+ * holds saved responses not yet processed, with the values it holds, when the expiry processes
+ * items. An item of an ended part is locked only.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its step saved.
+ * @param expiring What the expiry works with.
+ * @param now The time of the transition.
+ * @returns The session with its items locked and processed, and the test's outcome processing run
+ *   once when any was processed; or the failure of an attempt or of the run.
+ */
+const itemsExpired = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  now: Date,
+): Result.Result<TestSession, SubmissionFailure> => {
+  const ended = endedRefs(test, session);
+  const pending = (item: SessionItem): boolean =>
+    expiring.processes &&
+    expiring.members.has(item.ref) &&
+    item.presented &&
+    !ended.has(item.ref) &&
+    (item.record.attempt === "none" || Option.isSome(item.saved));
+
+  return Result.flatMap(
+    Result.all(
+      session.items.map((item): Result.Result<SessionItem, SubmissionFailure> => {
+        if (!expiring.members.has(item.ref)) {
+          return Result.succeed(item);
+        }
+
+        const locked: SessionItem = { ...item, locked: true };
+
+        return pending(item)
+          ? Result.flatMap(deliveredItem(items, session, item), (accepted) =>
+              processed(accepted, locked, valuesOf(item), session.updated),
+            )
+          : Result.succeed(locked);
+      }),
+    ),
+    (expired) =>
+      session.items.some(pending)
+        ? outcomesProcessed(test, items, { ...session, items: expired }, now)
+        : Result.succeed({ ...session, items: expired }),
+  );
+};
+
+/**
+ * Move to the first item after the scope in its part and present it, or, when no item of the part
+ * follows, end an individual part and stay in a simultaneous one, which only `submit-part` ends.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its items locked.
+ * @param expiring What the expiry works with, its part present.
+ * @param index The index of the part that holds the scope.
+ * @param part That part.
+ * @param now The time of the transition.
+ * @returns The session after the move or the part's end, or their failure.
+ */
+const movedOn = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  index: number,
+  part: TestPart,
+  now: Date,
+): Result.Result<TestSession, PartEndFailure> => {
+  const last = session.items.findLastIndex((item) => expiring.members.has(item.ref));
+  const next = last === -1 ? session.items.length : last + 1;
+  const target = session.items[next];
+  if (target !== undefined && refIdentifiersIn(part.children).includes(target.ref)) {
+    return present(test, items, { ...session, position: next }, target.sequenceIndex, now);
+  }
+
+  return part.submission === "individual"
+    ? partEnded(test, items, session, index, now)
+    : Result.succeed(session);
+};
+
+/**
+ * Leave the scope as its kind asks: close the test, end the part, move on, or stay.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its items locked and processed.
+ * @param expiring What the expiry works with.
+ * @param now The time of the transition.
+ * @returns The session after leaving the scope, or the failure of the part's end, the move or the
+ *   closing outcome run.
+ */
+const scopeLeft = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  expiring: Expiring,
+  now: Date,
+): Result.Result<TestSession, PartEndFailure> =>
+  Option.match(expiring.part, {
+    onNone: () =>
+      outcomesProcessed(
+        test,
+        items,
+        {
+          ...session,
+          parts: session.parts.map(({ identifier }) => ({ identifier, status: "ended" as const })),
+          status: "closed",
+        },
+        now,
+      ),
+    onSome: ({ index, part }) => {
+      switch (expiring.leaving) {
+        case "end-part": {
+          return partEnded(test, items, session, index, now);
+        }
+        case "move-on": {
+          return movedOn(test, items, session, expiring, index, part, now);
+        }
+        case "close":
+        case "stay": {
+          return Result.succeed(session);
+        }
+        default: {
+          return expiring.leaving satisfies never;
+        }
+      }
+    },
+  });
+
+/**
+ * Carry out the expiry of a timed scope, in place of the intent a test-feature module answered
+ * with it. {@link expired} calls this once per scope: {@link advance} checks {@link alreadyExpired}
+ * first.
+ *
+ * The step is saved without its responses: the time the current item was shown is added to its
+ * duration and `now` becomes its datestamp and the session's `updated`, through `recordStep`, and
+ * the item keeps the responses it held. Every item of the scope is then locked. When the expiry
+ * processes items, each presented item of the scope whose attempt is open, or which holds saved
+ * responses not yet processed, is processed once with the values it holds, as a submission
+ * processes it, and the test's outcome processing then runs once; an item never presented, and an
+ * item of an ended part, is locked without an attempt. An item ref's or a section's expiry in a
+ * simultaneous part processes nothing, since `submit-part` processes each item of the part once,
+ * and that submission still processes the locked items. The scope is then left: an item ref's
+ * expiry moves on in a linear part, as `next` does there, and stays in a nonlinear one; a section's
+ * moves to the first item after the section when the current item is in it, else stays; moving on
+ * from the last item of an individual part ends the part, and of a simultaneous part stays; a
+ * part's expiry ends the part, so the next part that holds an item becomes current or the test
+ * closes; the test's ends every part and closes the test, running its outcome processing once more.
+ * Last, the scope is appended to the session's `expired`.
+ *
+ * @example
+ *   expireScope(test, items, session, { kind: "submit-item" }, { identifier: "S1", kind: "section" }, new Date());
+ *
+ * @param test The test the session was started from.
+ * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
+ * @param session The session.
+ * @param intent The intent the expiry answers, which is not carried out.
+ * @param scope The scope whose time has run out.
+ * @param now The time of the transition.
+ * @returns The session after the expiry, or an {@link ExpiryFailure}.
+ */
+const expireScope = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  intent: Intent,
+  scope: TimedScope,
+  now: Date,
+): Result.Result<TestSession, ExpiryFailure> =>
+  Result.gen(function* expireOne() {
+    const saved = yield* recordStep(session, { intent }, now);
+    const expiring = yield* expiringOf(test.test, saved, scope);
+    const locked = yield* itemsExpired(test.test, items, saved, expiring, now);
+    const after = yield* scopeLeft(test.test, items, locked, expiring, now);
+
+    return { ...after, expired: [...after.expired, scope] };
+  });
+
+/**
+ * Why {@link exitScope} may fail: the scope is not the test's ({@link UnknownTimedScope}), or the
+ * part's end, the move or the closing outcome run fails as a part's end does.
+ */
+export type ExitFailure = PartEndFailure | UnknownTimedScope;
+
+/**
+ * Carry out the exit from a scope a test-feature module answered with, leaving the scope as its
+ * expiry leaves it ({@link expireScope}) and nothing else: no step is saved here, no item is
+ * processed or locked, every item keeps what it holds, and `expired` is not written. The caller
+ * has saved the step or carried the submission out; {@link exited} calls this for an `exit`
+ * `GateVerdict` and {@link entered} for an `exit` `EnterVerdict`, and then enters the place landed
+ * on.
+ *
+ * The scope is left as its kind asks: an item ref's exit moves on in a linear part and stays in a
+ * nonlinear one; a section's moves to the first item after the section when the current item is
+ * in it, else stays; moving on from the last item of an individual part ends the part, and of a
+ * simultaneous part stays; a part's exit ends the part, so the next part that holds an item
+ * becomes current or the test closes; the test's ends every part and closes the test, running its
+ * outcome processing once. A part already ended is left as it is: the exit changes nothing.
+ *
+ * @example
+ *   exitScope(test, items, session, { identifier: "S1", kind: "section" }, new Date());
+ *
+ * @param test The test the session was started from.
+ * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
+ * @param session The session, its step saved.
+ * @param scope The scope the session leaves.
+ * @param now The time of the transition.
+ * @returns The session after the exit, or an {@link ExitFailure}.
+ */
+const exitScope = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  scope: TimedScope,
+  now: Date,
+): Result.Result<TestSession, ExitFailure> =>
+  Result.flatMap(expiringOf(test.test, session, scope), (expiring) =>
+    Option.exists(expiring.part, ({ index }) => session.parts[index]?.status === "ended")
+      ? Result.succeed(session)
+      : scopeLeft(test.test, items, session, expiring, now),
+  );
+
+/**
+ * Process every presented item of a simultaneous part once, with the values it holds, and run the
+ * test's outcome processing once, as `submit-part` does before the part ends; an item never
+ * presented is left as it is.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session.
+ * @param refs The identifiers of the part's item refs.
+ * @param now The time of the transition.
+ * @returns The session with the part's attempts processed, or the failure of an attempt or of the
+ *   run.
+ */
+const partProcessed = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  refs: ReadonlySet<string>,
+  now: Date,
+): Result.Result<TestSession, SubmissionFailure> =>
+  Result.flatMap(
+    Result.all(
+      session.items.map((item): Result.Result<SessionItem, SubmissionFailure> =>
+        refs.has(item.ref) && item.presented
+          ? Result.flatMap(deliveredItem(items, session, item), (accepted) =>
+              processed(accepted, item, valuesOf(item), session.updated),
+            )
+          : Result.succeed(item),
+      ),
+    ),
+    (after) => outcomesProcessed(test, items, { ...session, items: after }, now),
+  );
+
+/**
+ * Why {@link skipPlace} may fail: the session's position is past its items
+ * ({@link ItemNotInSession}), the test holds no item ref the current item names
+ * ({@link UnknownItemRef}), or an attempt a simultaneous part's end processes, the outcome run that
+ * follows, or the part's end fails as a submission's does.
+ */
+export type SkipFailure = ItemNotInSession | SubmissionFailure | UnknownItemRef;
+
+/**
+ * Pass over the place at the session's position, which a test-feature module's `enter` skipped and
+ * which is not presented: move to the next item of its part and present it; where none follows,
+ * end the part. An individual part ends as `end-part` ends it, its items left as they are. A
+ * simultaneous part ends as `submit-part` ends it: each presented item of the part is processed
+ * once with the values it holds, the test's outcome processing runs once, and the part ends; the
+ * skipped item, never presented, closes as it is. {@link entered} calls this for a `skip`
+ * `EnterVerdict` and then enters the place landed on.
+ *
+ * @example
+ *   skipPlace(test, items, session, new Date());
+ *
+ * @param test The test the session was started from.
+ * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
+ * @param session The session, positioned on the skipped place, its item not presented.
+ * @param now The time of the transition.
+ * @returns The session on the next place or after the part's end, or a {@link SkipFailure}.
+ */
+const skipPlace = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  now: Date,
+): Result.Result<TestSession, SkipFailure> =>
+  Result.gen(function* skipOne() {
+    const skipped = yield* Result.fromOption(
+      Option.fromUndefinedOr(session.items[session.position]),
+      () =>
+        new ItemNotInSession({ count: session.items.length, sequenceIndex: session.position + 1 }),
+    );
+    const { index, part } = yield* Result.fromOption(
+      partHoldingScope(test.test, { identifier: skipped.ref, kind: "item-ref" }),
+      () => new UnknownItemRef({ ref: skipped.ref, test: test.test.identifier }),
+    );
+    const refs = new Set(refIdentifiersIn(part.children));
+    const following = Option.fromUndefinedOr(
+      session.items.find((item, at) => at > session.position && refs.has(item.ref)),
+    );
+    if (Option.isSome(following)) {
+      const position = session.items.indexOf(following.value);
+
+      return yield* present(
+        test.test,
+        items,
+        { ...session, position },
+        following.value.sequenceIndex,
+        now,
+      );
+    }
+
+    const processedPart =
+      part.submission === "simultaneous"
+        ? yield* partProcessed(test.test, items, session, refs, now)
+        : session;
+
+    return yield* partEnded(test.test, items, processedPart, index, now);
+  });
+
+/**
  * Carry out the expiry of a timed scope a module answered the intent with, in the intent's place.
  *
  * @param advancing What the call works with.
@@ -421,7 +794,7 @@ const moved = (
 ): Result.Result<TestSession, AdvanceFailure> =>
   Result.orElse(
     Result.flatMap(
-      move(advancing.test, advancing.items, session, step, advancing.now),
+      move(advancing.test, advancing.items, session, step, advancing.now, advancing.features),
       (after): Result.Result<TestSession, AdvanceFailure> =>
         step.intent.kind === "next" && advancing.linearSimultaneous
           ? leftScoreable(advancing, session, after, step.intent)
@@ -540,26 +913,41 @@ const fittingStep = (
   });
 
 /**
- * What the gate decides before a step's transition runs: the step is refused, or a timed scope
- * expires in its place.
+ * What the gate decides before a step's transition runs: the step is refused, a timed scope
+ * expires in its place, the session exits a scope with it, or a submission goes on to a target.
  */
 type Gating =
+  | { readonly kind: "exit"; readonly scope: TimedScope }
   | { readonly kind: "expire"; readonly scope: TimedScope }
-  | { readonly kind: "refuse"; readonly refused: IntentRefused };
+  | { readonly kind: "refuse"; readonly refused: IntentRefused }
+  | { readonly kind: "target"; readonly sequenceIndex: number };
+
+/**
+ * Tell whether an intent is a move.
+ *
+ * @param intent The intent.
+ * @returns Whether it is `go`, `next` or `previous`.
+ */
+const isMove = (intent: Intent): boolean =>
+  intent.kind === "go" || intent.kind === "next" || intent.kind === "previous";
 
 /**
  * Ask the test-feature modules what they do with an intent, before the transition that owns it
- * runs: a module's refusal of a submission or an end of part is the rule `feature`, and a module's
+ * runs: a module's refusal of a submission or an end of part is the rule `feature`; a module's
  * `expire` of any intent, a move included, is the scope to expire in the intent's place, unless the
- * session already records that scope as expired, when the intent goes through to its own rules. A
- * move's refusal and a move's target are not taken here, since `moveTargets` takes them as the
- * move is made, and a submission's target is dropped; every stub lets every intent through.
+ * session already records that scope as expired, when the intent goes through to its own rules; a
+ * module's `exit` of any intent is the scope to leave with it; and a module's `target` of a
+ * `submit-item` is where the session goes once the item is submitted. A move's refusal and a
+ * move's target are not taken here, since `moveTargets` takes them as the move is made, and a
+ * target on `submit-part` or `end-part`, which leave the part, is dropped; every stub lets every
+ * intent through.
  *
  * @param advancing What the call works with.
  * @param session The session.
  * @param intent The intent.
  * @param sequenceIndex The current item's sequence index, which a refusal names.
- * @returns The refusal or the expiry, none when no module answers the intent with either.
+ * @returns The refusal, the expiry, the exit or the target, none when no module answers the
+ *   intent with one the hub takes here.
  */
 const gatedIntent = (
   advancing: Advancing,
@@ -567,11 +955,12 @@ const gatedIntent = (
   intent: Intent,
   sequenceIndex: number,
 ): Option.Option<Gating> => {
-  const moving = intent.kind === "go" || intent.kind === "next" || intent.kind === "previous";
+  const moving = isMove(intent);
 
   return Option.flatMap(
     gatedBy(advancing.features, {
       intent,
+      items: Option.some(advancing.items),
       now: Option.some(advancing.now),
       session,
       test: advancing.test.test,
@@ -579,6 +968,14 @@ const gatedIntent = (
     (gated): Option.Option<Gating> => {
       if (gated.kind === "expire") {
         return alreadyExpired(session, gated.scope) ? Option.none() : Option.some(gated);
+      }
+
+      if (gated.kind === "exit") {
+        return Option.some(gated);
+      }
+
+      if (gated.kind === "target") {
+        return intent.kind === "submit-item" ? Option.some(gated) : Option.none();
       }
 
       if (gated.kind === "refused" && !moving) {
@@ -650,6 +1047,236 @@ const carriedOut = (
 };
 
 /**
+ * Read the failure of an exit or a skip as the intent's: a `SubmissionRefused`, which a part's end
+ * carries in its type and never gives, becomes the intent's refusal, as a submission's would.
+ *
+ * @param intent The intent posted.
+ * @param result What the exit or the skip returned.
+ * @returns The same result, under {@link AdvanceFailure}.
+ */
+const leftAs = (
+  intent: Intent,
+  result: Result.Result<TestSession, ExitFailure | SkipFailure>,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Result.mapError(result, (failure) =>
+    failure._tag === "SubmissionRefused" ? refusedSubmission(intent, failure) : failure,
+  );
+
+/**
+ * Carry out the exit from a scope a module answered the intent with: a move is replaced, its step
+ * saved first, as the move would save it; a submission or an end of part is carried out first,
+ * then the scope is left, unless the test has closed. `exitScope` submits and locks nothing.
+ *
+ * @param advancing What the call works with.
+ * @param session The session, its step not yet saved.
+ * @param step The step the exit answers.
+ * @param scope The scope the session leaves.
+ * @param sequenceIndex The current item's sequence index.
+ * @returns The session after the exit, or an {@link AdvanceFailure}.
+ */
+const exited = (
+  advancing: Advancing,
+  session: TestSession,
+  step: Step,
+  scope: TimedScope,
+  sequenceIndex: number,
+): Result.Result<TestSession, AdvanceFailure> =>
+  (isMove(step.intent)
+    ? recordStep(session, step, advancing.now)
+    : carriedOut(advancing, session, step, sequenceIndex)
+  ).pipe(
+    Result.flatMap((before): Result.Result<TestSession, AdvanceFailure> =>
+      before.status === "closed"
+        ? Result.succeed(before)
+        : leftAs(
+            step.intent,
+            exitScope(advancing.test, advancing.items, before, scope, advancing.now),
+          ),
+    ),
+  );
+
+/**
+ * Carry out a `submit-item` a module answered with a target: the item is submitted, then the
+ * session moves to the target and presents it, as a move presents the item it reaches.
+ *
+ * @param advancing What the call works with.
+ * @param session The session.
+ * @param step The `submit-item`.
+ * @param sequenceIndex The target's sequence index.
+ * @returns The session on the target, or an {@link AdvanceFailure}: {@link ItemNotInSession} for a
+ *   target the session lacks.
+ */
+const targeted = (
+  advancing: Advancing,
+  session: TestSession,
+  step: Step,
+  sequenceIndex: number,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Result.flatMap(submitted(advancing, session, step), (after) => {
+    if (after.status === "closed") {
+      return Result.succeed(after);
+    }
+
+    const position = after.items.findIndex((item) => item.sequenceIndex === sequenceIndex);
+
+    return position === -1
+      ? Result.fail(new ItemNotInSession({ count: after.items.length, sequenceIndex }))
+      : present(
+          advancing.test.test,
+          advancing.items,
+          { ...after, position },
+          sequenceIndex,
+          advancing.now,
+        );
+  });
+
+/**
+ * Find the place a transition landed on: the session's position when it changed, or when the item
+ * there was first presented by the transition; none when the test closed or the session stayed on
+ * a place it already showed.
+ *
+ * @param before The session before the transition.
+ * @param after The session after it.
+ * @returns The index in `after.items` of the place landed on.
+ */
+const landedOn = (before: TestSession, after: TestSession): Option.Option<number> => {
+  if (after.status === "closed") {
+    return Option.none();
+  }
+
+  const was = before.items[after.position];
+  const now = after.items[after.position];
+  if (now === undefined) {
+    return Option.none();
+  }
+
+  return after.position !== before.position ||
+    (was !== undefined && !was.presented && now.presented)
+    ? Option.some(after.position)
+    : Option.none();
+};
+
+/**
+ * Give a session as a transition left it, except that the place it landed on is as it was before
+ * the transition presented it: `present` touches only the item's `datestamp`, `presented` and
+ * `record`, so those are restored and the rest of the transition stands.
+ *
+ * @param before The session before the transition.
+ * @param after The session after it.
+ * @param index The index of the place landed on.
+ * @returns The session with that item not yet presented.
+ */
+const unpresented = (before: TestSession, after: TestSession, index: number): TestSession => {
+  const was = before.items[index];
+  const now = after.items[index];
+  if (was === undefined || now === undefined) {
+    return after;
+  }
+
+  return {
+    ...after,
+    items: after.items.map((item, at) =>
+      at === index
+        ? { ...now, datestamp: was.datestamp, presented: was.presented, record: was.record }
+        : item,
+    ),
+  };
+};
+
+/**
+ * Enter the place a transition landed on: ask the test-feature modules, with the place's item not
+ * yet presented, and carry out a `skip` or an `exit` from there, asking again for the place that
+ * lands on, until a place is entered or the test closes. A place every module lets through is
+ * entered as the transition presented it. An exit that leaves the position where it is enters the
+ * place without asking again.
+ *
+ * @param advancing What the call works with.
+ * @param intent The intent posted, which a failure names.
+ * @param before The session before the transition.
+ * @param after The session after it.
+ * @returns The session on the place entered, or closed; an {@link AdvanceFailure}.
+ */
+const entered = (
+  advancing: Advancing,
+  intent: Intent,
+  before: TestSession,
+  after: TestSession,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Option.match(landedOn(before, after), {
+    onNone: () => Result.succeed(after),
+    onSome: (index) => {
+      const asked = unpresented(before, after, index);
+      const item = asked.items[index];
+      const verdict = enteredBy(advancing.features, {
+        items: Option.some(advancing.items),
+        now: Option.some(advancing.now),
+        sequenceIndex: item?.sequenceIndex ?? index + 1,
+        session: asked,
+        test: advancing.test.test,
+      });
+
+      return Option.match(verdict, {
+        onNone: () => Result.succeed(after),
+        onSome: (answer): Result.Result<TestSession, AdvanceFailure> =>
+          answer.kind === "skip"
+            ? Result.flatMap(
+                leftAs(intent, skipPlace(advancing.test, advancing.items, asked, advancing.now)),
+                (next) => entered(advancing, intent, asked, next),
+              )
+            : Result.flatMap(
+                leftAs(
+                  intent,
+                  exitScope(advancing.test, advancing.items, asked, answer.scope, advancing.now),
+                ),
+                (next) =>
+                  next.status !== "closed" && Option.isNone(landedOn(asked, next))
+                    ? Result.succeed(after)
+                    : entered(advancing, intent, asked, next),
+              ),
+      });
+    },
+  });
+
+/**
+ * Carry out a step as the gate decides: the transition the intent owns, or, in its place or after
+ * it, the expiry, the exit or the target a module answered.
+ *
+ * @param advancing What the call works with.
+ * @param session The session.
+ * @param step The step, its responses checked.
+ * @param sequenceIndex The current item's sequence index.
+ * @returns The session after the step, or an {@link AdvanceFailure}.
+ */
+const stepTaken = (
+  advancing: Advancing,
+  session: TestSession,
+  step: Step,
+  sequenceIndex: number,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Option.match(gatedIntent(advancing, session, step.intent, sequenceIndex), {
+    onNone: () => carriedOut(advancing, session, step, sequenceIndex),
+    onSome: (gating): Result.Result<TestSession, AdvanceFailure> => {
+      switch (gating.kind) {
+        case "refuse": {
+          return Result.fail(gating.refused);
+        }
+        case "expire": {
+          return expired(advancing, session, step.intent, gating.scope);
+        }
+        case "exit": {
+          return exited(advancing, session, step, gating.scope, sequenceIndex);
+        }
+        case "target": {
+          return targeted(advancing, session, step, gating.sequenceIndex);
+        }
+        default: {
+          return gating satisfies never;
+        }
+      }
+    },
+  });
+
+/**
  * Carry out what one request asks of a test session: move, submit the current item or part, or end
  * the current part, after saving the responses it posts on the current item while that item is
  * open.
@@ -677,7 +1304,18 @@ const carriedOut = (
  * presented item of the scope is processed with the responses it holds, every item of the scope is
  * locked, the scope is left as its kind asks, and it is appended to the session's `expired`. The
  * returned session is the one after the expiry; a host that compares `expired` across the call
- * learns of it.
+ * learns of it. A module that answers `exit` names a scope the session leaves (`exitScope`): a
+ * move is replaced, its step saved; a submission or an end of part is carried out first; then the
+ * scope is left with nothing submitted or locked and `expired` unchanged. A module that answers a
+ * `submit-item` with `target` names where the session goes once the item is submitted.
+ *
+ * Once the step has run, the place it landed on, a position changed or an item first presented, is
+ * entered: the modules are asked (`enter`, through `enteredBy`) with the session as it stands
+ * except that the place's item is not yet presented, and a `skip` passes the place over
+ * (`skipPlace`), an `exit` leaves a scope from there, and the place that lands on is asked for in
+ * turn, until a place is entered or the test closes. A skipped item is never presented and its
+ * record stays fresh. The hub asks the same way in every part and whatever brought the session to
+ * the place; what a pre-condition means in each navigation mode is the module's to decide.
  *
  * @example
  *   advance(test, items, session, { intent: { kind: "next" }, responses }, configuration, {
@@ -731,13 +1369,9 @@ export const advance = (
       };
 
       return Result.flatMap(fittingStep(items, session, carried), (checked) =>
-        Option.match(gatedIntent(advancing, session, checked.intent, shown.sequenceIndex), {
-          onNone: () => carriedOut(advancing, session, checked, shown.sequenceIndex),
-          onSome: (gating) =>
-            gating.kind === "refuse"
-              ? Result.fail(gating.refused)
-              : expired(advancing, session, checked.intent, gating.scope),
-        }),
+        Result.flatMap(stepTaken(advancing, session, checked, shown.sequenceIndex), (after) =>
+          entered(advancing, checked.intent, session, after),
+        ),
       );
     },
   );
