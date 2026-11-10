@@ -373,6 +373,23 @@ export interface InteractionModule<
   J = never,
 > {
   /**
+   * The value a response the interaction binds takes when the form posted no entry for it, in
+   * place of NULL. `absentValueOf` in `#plate/model/interactions.ts` reads it, `postings`
+   * (`#plate/payload.ts`) carries it in the response's posting as `decode`'s `absent` option, and
+   * `decode` (`#plate/form/encoding.ts`) gives it for no entry, so a host that decodes through the
+   * postings gets it without naming the kind. Absent, or `undefined` returned, means NULL, which
+   * every shipped kind and every stub leaves in place: a Control that posts nothing has no
+   * response. End Attempt (issue ei-02) is the first module to set it: its button posts `true`
+   * when the candidate ends the attempt through it, and a submission without the button sets the
+   * response to `false`, not NULL, since the information model sets an End Attempt's response to
+   * false whenever the attempt ends another way.
+   *
+   * @param interaction The model node.
+   * @returns The value no entry decodes to, or `undefined` for NULL.
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_EndAttemptInteraction
+   */
+  readonly absentValue?: (interaction: I) => Value | undefined;
+  /**
    * The responses the interaction binds, each with its number base, as `postings` reads them.
    */
   readonly bindings: (interaction: I) => readonly BoundResponse[];
@@ -391,6 +408,23 @@ export interface InteractionModule<
    * How many Controls the interaction renders, which numbers the Controls the renderer names.
    */
   readonly controls: (interaction: I) => number;
+  /**
+   * Whether a submission through the item counts an attempt, read once per processed attempt with
+   * the responses the submission set. `countsAttempt` in `#plate/model/interactions.ts` folds every
+   * interaction's answer, and `runAttempt` (`#plate/engine/attempt.ts`) raises `numAttempts` by
+   * one only when every answer is true; otherwise the record keeps its count while the responses
+   * are still set and the rules still run. Absent means true, the answer of every shipped kind and
+   * every stub: every submission counts. End Attempt (issue ei-02) is the first module to set it:
+   * with `count-attempt` false, the attempt the candidate ends through its button is not counted.
+   *
+   * @param interaction The model node.
+   * @param posted The submission's responses, by identifier, as `runAttempt` is given them: the
+   *   module reads the value of the response its node binds from them, absent when the submission
+   *   did not set it.
+   * @returns Whether the attempt is counted.
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_EndAttemptInteraction
+   */
+  readonly countsAttempt?: (interaction: I, posted: Readonly<Record<string, Value>>) => boolean;
   /**
    * The interaction's QTI element name, which the body walk dispatches on.
    */
