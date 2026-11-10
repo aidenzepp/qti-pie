@@ -144,6 +144,14 @@ export const namedBy = (
  *   text, never NULL.
  * - An entry's `digest` is the SHA-256 of its `content`, `Compute.sha256`, defined on every bytes
  *   value: never NULL, so it is named by the law of its relation's rows, "Entry family".
+ * - A key text's compared form is its lexical form collapsed (a manifest's and a resource's
+ *   `identifier`, a dependency's `ref`, a card's `support`, a default entry's `value`), with each
+ *   whitespace character replaced (an object's `titleValue`, a LOM title string's `textValue`),
+ *   ASCII case-folded (a LOM string's `languageTag`) or collapsed and case-folded (an object's
+ *   `langTag`), cast into the form's own key text, a cast the schema proves total: a written text,
+ *   never NULL.
+ * - An maction's `selection` is 1 where it writes none, its collapsed form read as an integer where
+ *   that is one and not negative, and 0 otherwise: every arm a value, never NULL.
  */
 export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy(
@@ -164,6 +172,16 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "AssembledLang.value",
     "MapKeyItems.ordered",
     "MapKeyItems.unordered",
+    "ManifestId.identifier",
+    "ResourceId.identifier",
+    "Dependency.ref",
+    "CardSupport.support",
+    "DefaultEntry.value",
+    "ObjectTitle.titleValue",
+    "LomTitleString.textValue",
+    "LomStringLanguage.languageTag",
+    "ObjectLang.langTag",
+    "MathAction.selection",
   ),
   ...namedBy("Entry family", "Entry.digest"),
 ];
