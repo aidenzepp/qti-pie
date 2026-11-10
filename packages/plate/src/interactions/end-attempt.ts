@@ -12,6 +12,10 @@
  * information model sets the response to `false` whenever the attempt ends another way, and
  * ignores its default value. The module renders no `form`; the host composes one around the item.
  *
+ * That response, set by how the attempt ended, is not a candidate response for the skip judgement
+ * under `allow-skipping="false"`: `skipped` in `#plate/session/submit.ts` leaves out a response
+ * whose posting carries an `absent` value (issue ei-02b).
+ *
  * - **Binding.** A response of cardinality `single` and base type `boolean`; any other binding is the
  *   notice naming the one it breaks, as for the four shipped kinds.
  * - **Name.** The button's own text, `title`, names it, so the renderer numbers no name for it among

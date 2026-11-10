@@ -314,16 +314,22 @@ export const deliveredItem = (
  * fields of its declared one, in any order (`sameRecord`), since template processing never sets a
  * record, and a NULL record, one with no field, is NULL.
  *
- * Only the responses a rendered page can post count: those `postings` lists for the item redacted
- * under its record (ruling R2 of phase 4's repair, 2026-11-06), read through `redactStructure`,
- * which decides what `redactItem` decides and prints no text, so the template values the page was
- * shown with decide which interactions count, as they decide what `checkResponses` judges. A
- * response no interaction binds, one bound only to an interaction shown as a notice or held by a
- * template block the record hides, or one of a base type no interaction posts never takes another
- * value from the candidate, so counting it would leave an item under `allow-skipping` false that
- * can never be submitted and, in a linear part, never left. An item with no response a page can
- * post is treated as an item with no response variable: never skipped. A value a step carries for
- * a response that is not counted does not answer the item either.
+ * Only the responses a rendered page can post and the candidate can give count: those `postings`
+ * lists for the item redacted under its record (ruling R2 of phase 4's repair, 2026-11-06), read
+ * through `redactStructure`, which decides what `redactItem` decides and prints no text, so the
+ * template values the page was shown with decide which interactions count, as they decide what
+ * `checkResponses` judges. A response no interaction binds, one bound only to an interaction shown
+ * as a notice or held by a template block the record hides, or one of a base type no interaction
+ * posts never takes another value from the candidate, so counting it would leave an item under
+ * `allow-skipping` false that can never be submitted and, in a linear part, never left. An item
+ * with no response a page can post and the candidate can give is treated as an item with no
+ * response variable: never skipped. A value a step carries for a response that is not counted does
+ * not answer the item either.
+ *
+ * A posting whose decode options carry an `absent` value is left out. The form fills that value in
+ * whenever the candidate posts nothing, so the response is set by how the attempt ended and not by
+ * an answer the candidate provided, and neither of its values tells a skip from an answer. The
+ * judgement reads only that option, so it names no interaction kind.
  *
  * @param item The item.
  * @param record The item's record: the template values its page was shown with, the outcomes its
@@ -339,7 +345,9 @@ const skipped = (
   values: Responses,
 ): boolean => {
   const posted = new Set(
-    postingsIn(redactStructure(item, record), instance).map(({ identifier }) => identifier),
+    postingsIn(redactStructure(item, record), instance)
+      .filter(({ options }) => options.absent === undefined)
+      .map(({ identifier }) => identifier),
   );
   const counted: readonly {
     readonly fallback: Option.Option<ResponseValue>;
@@ -544,16 +552,17 @@ export const partEnded = (
  * item whose processed attempts, the record's `numAttempts`, have reached the attempt limit the
  * policy's `limit` gives for its effective one, above 0, is `attempts-exhausted`, and an item
  * closed otherwise, its view `disabled`, which consults the policy's `closed`, is `item-closed`;
- * under `allow-skipping` false an item whose every response a page can post is NULL
- * or its default, the one its record's template processing set or else its declared one, is
- * `skipping-not-allowed`, a record response counted beside the others; under `validate-responses`
- * true, responses `checkResponses` gives messages for, a record response's typed text among them,
- * are `responses-invalid`. `checkResponses` judges them under the item's record, the template
- * values its page was shown with, so a choice its template hides is refused and one it shows is
- * judged as the page showed it, and an interaction a hidden template block holds is not judged.
- * Otherwise `score` runs over the item's record with its saved responses, and its failures,
- * `ResponsesRefused` among them, pass through. The test's outcome processing then runs over the
- * session, and its `EngineFailure` passes through. The item stays current: moving on is a move's.
+ * under `allow-skipping` false an item whose every response a page can post and the candidate can
+ * give is NULL or its default, the one its record's template processing set or else its declared
+ * one, is `skipping-not-allowed`, a record response counted beside the others; under
+ * `validate-responses` true, responses `checkResponses` gives messages for, a record response's
+ * typed text among them, are `responses-invalid`. `checkResponses` judges them under the item's
+ * record, the template values its page was shown with, so a choice its template hides is refused
+ * and one it shows is judged as the page showed it, and an interaction a hidden template block
+ * holds is not judged. Otherwise `score` runs over the item's record with its saved responses, and
+ * its failures, `ResponsesRefused` among them, pass through. The test's outcome processing then
+ * runs over the session, and its `EngineFailure` passes through. The item stays current: moving on
+ * is a move's.
  *
  * @example
  *   submitItem(test, items, session, { intent: { kind: "submit-item" }, responses }, configuration, {
