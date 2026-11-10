@@ -48,9 +48,12 @@ const itemXml = (identifier: string, declaration: string, body: string): string 
   ].join("");
 
 /**
- * The kind of {@link stubItem}'s one interaction: one whose module is a stub, the last planned to
- * land, so a module that lands never meets it. The item's element is read from that module in the
- * table of modules, so the fixture changes with this one line when the kind lands.
+ * The kind of {@link stubItem}'s one interaction: one whose module is a stub. The item's element
+ * is read from that module in the table of modules, so the fixture changes with this one line.
+ * Retirement: when this kind lands while the table still holds a stub, this line moves to a kind
+ * that is still one, and {@link stubDeclaration} to its base type; when the last stub lands, this
+ * constant, {@link stubDeclaration}, {@link stubItem} and the [T-4] stub-notice test are deleted,
+ * since no item can then hold an interaction plate shows as a notice.
  */
 const stubKind = "select-point" as const;
 
@@ -229,6 +232,8 @@ const proceeds = (given: Delivery, configuration: Configuration): void => {
 };
 
 describe("the skip test under allow-skipping false", () => {
+  // Deleted with `stubKind` when the last stub lands: its premise, an item whose only response a
+  // notice binds, is gone then.
   it.effect(
     "[T-4] lets next and submit-item pass an item whose only response a stub interaction, shown as a notice, binds",
     () =>
