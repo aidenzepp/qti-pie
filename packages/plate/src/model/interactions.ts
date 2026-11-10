@@ -58,7 +58,7 @@ import type {
   PartSpec,
   RedactKit,
 } from "#plate/interactions/contract.ts";
-import type { BodyNode, Interaction, SimpleChoice } from "#plate/model/item.ts";
+import type { BodyNode, Interaction, Item, SimpleChoice } from "#plate/model/item.ts";
 import type { ResponseValue, Value } from "#plate/model/values.ts";
 import type {
   EmitState,
@@ -198,9 +198,11 @@ export type ModuleModel = ModuleModelIn<Modules>;
  */
 type SteppedOf<T extends ModuleTable, K extends ModuleKind> = Pick<
   InteractionModule<K, ModelOfIn<T, K>, PayloadOfIn<T, K>>,
+  | "absentValue"
   | "bindings"
   | "content"
   | "controls"
+  | "countsAttempt"
   | "nullValue"
   | "redact"
   | "regions"
@@ -271,6 +273,34 @@ const replaceModuleRegions = <K extends ModuleKind>(
   interaction: ModelOf<K>,
   contents: readonly (readonly BodyNode[])[],
 ): ModelOf<K> => stepped[kind].replaceRegions(interaction, contents);
+
+/**
+ * Tell whether a module kind's model node counts a submission as an attempt, by its kind's
+ * module: true when the module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @param posted The submission's responses, by identifier.
+ * @returns The module's `countsAttempt` answer, true when it has none.
+ */
+const moduleCountsAttempt = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+  posted: Readonly<Record<string, Value>>,
+): boolean => stepped[kind].countsAttempt?.(interaction, posted) ?? true;
+
+/**
+ * Give the value a module kind's model node takes for its response when the form posted no entry,
+ * by its kind's module: none when the module does not say.
+ *
+ * @param kind The kind.
+ * @param interaction The node.
+ * @returns The module's `absentValue`, `undefined` when it has none.
+ */
+const moduleAbsentValue = <K extends ModuleKind>(
+  kind: K,
+  interaction: ModelOf<K>,
+): Value | undefined => stepped[kind].absentValue?.(interaction);
 
 /**
  * Tell whether a node is one of an interaction plate parses through a module: a model node
@@ -472,6 +502,43 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       }
     }
   });
+
+/**
+ * Tell whether a submission of an item counts an attempt: the one place the engine asks the item's
+ * interactions, so `runAttempt` (`#plate/engine/attempt.ts`) raises `numAttempts` without naming a
+ * kind. Every interaction the body holds ({@link interactionsIn}) answers through its module's
+ * `countsAttempt` (`InteractionModule` in `#plate/interactions/contract.ts`), and the attempt
+ * counts when every answer is true: a shipped kind, a stub and a module that leaves the member
+ * unset answer true, so an item of those alone counts every submission, and one module that
+ * answers false, as an End Attempt with `count-attempt` false does for the attempt ended through
+ * its button, is enough to leave the count where it was.
+ *
+ * @param item The item, by its body.
+ * @param posted The submission's responses, by identifier, as `runAttempt` is given them.
+ * @returns Whether the attempt is counted.
+ */
+export const countsAttempt = (
+  item: Pick<Item, "body">,
+  posted: Readonly<Record<string, Value>>,
+): boolean =>
+  interactionsIn(item.body).every(
+    (interaction) =>
+      !isStubbed(interaction) || moduleCountsAttempt(interaction.kind, interaction, posted),
+  );
+
+/**
+ * Give the value an interaction's response takes when the form posted no entry for it, in place
+ * of NULL: a module kind's node answers through its module's `absentValue` (`InteractionModule` in
+ * `#plate/interactions/contract.ts`), and every other interaction, a shipped kind, a stub or a
+ * module that leaves the member unset, answers none, so no entry stays NULL for it. `postings`
+ * (`#plate/payload.ts`) reads it into the response's posting, so a host that decodes through the
+ * postings gets the module's value without naming the kind.
+ *
+ * @param interaction The interaction.
+ * @returns The value no entry decodes to, or `undefined` for NULL.
+ */
+export const absentValueOf = (interaction: Interaction): Value | undefined =>
+  isStubbed(interaction) ? moduleAbsentValue(interaction.kind, interaction) : undefined;
 
 /**
  * The steps of one module kind's model node, each bound to it: the members of its module the hubs
