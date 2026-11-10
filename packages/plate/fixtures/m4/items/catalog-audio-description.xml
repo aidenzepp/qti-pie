@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m4-catalog-audio-description" title="Audio description of a lesson video" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>LEAF</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p>Watch the lesson, then answer the question below it.</p>
+    <video controls="controls" src="media/lesson.mp4" data-catalog-idref="lesson-video">The lesson video does not play in this browser.</video>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Which part of the plant did the teacher draw first?</qti-prompt>
+      <qti-simple-choice identifier="ROOT">The root</qti-simple-choice>
+      <qti-simple-choice identifier="LEAF">The leaf</qti-simple-choice>
+      <qti-simple-choice identifier="STEM">The stem</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+  <qti-catalog-info>
+    <qti-catalog id="lesson-video">
+      <qti-card support="audio-description">
+        <qti-html-content>
+          <p>A narrator names each shape the teacher draws on the board and says where it sits.</p>
+        </qti-html-content>
+        <qti-file-href mime-type="video/mp4">media/lesson-described.mp4</qti-file-href>
+      </qti-card>
+      <qti-card support="transcript">
+        <qti-html-content>
+          <p>Teacher: Today we label the parts of a plant, starting with the leaf.</p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>

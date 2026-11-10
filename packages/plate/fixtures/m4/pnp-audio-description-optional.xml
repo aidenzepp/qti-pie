@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The profile of pnp-audio-description.xml with audio description named only in activate-as-option-set: off at the start of the delivery, offered to the candidate as an option. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <audio-description/>
+  <activate-as-option-set>
+    <audio-description/>
+  </activate-as-option-set>
+</access-for-all-pnp>
