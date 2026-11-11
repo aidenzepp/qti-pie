@@ -27,8 +27,14 @@
  *   back.
  * - **J2** `intOrIdentifier` is not a QTI 3 base type, so a declaration of it cannot occur, and JSON
  *   that carries it is refused as `base-type-mismatch`.
- * - **J3** `file` is not a base type the value model holds: JSON that carries it, and a declaration
- *   of it, are refused as `file-unmodelled`, and no value is written as one.
+ * - **J3** Appendix C writes a `file` as `{ "data", "mime", "name" }`, the bytes in base64. Plate
+ *   holds a file as its name, size and type, never its bytes (`FileValue` in
+ *   `#plate/model/values.ts`), so a file reads as `name` (the empty string when absent, as a bare
+ *   `Blob` has none), the byte count `data` names, and `mime`, under the checks the session codec
+ *   puts on a stored file: a name XML can carry and a type that is a MIME type or empty. The bytes
+ *   are not decoded or kept. A nameless empty file is NULL, as the form reads one. A file is
+ *   written as its name and type with an empty `data`, since plate has no bytes to write, so a file
+ *   of some size reads back as one of size 0.
  * - **J4** `undefined` and every NULL form read as NULL: a `base` of `null`, a `list` of `null` or of
  *   an empty array, and a `record` of `null` or of an empty array. A NULL value is written as its
  *   cardinality's NULL form: `base`, `list` or `record`, each `null`.
@@ -71,15 +77,26 @@ import type {
 import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
 /**
+ * Appendix C's `file`: its bytes in base64 (RFC 4648 section 4) as `data`, its MIME type as `mime`,
+ * and its name, which the guide's example carries and a PCI may leave out (J3).
+ */
+export interface PciJsonFile {
+  readonly data: string;
+  readonly mime: string;
+  readonly name?: string;
+}
+
+/**
  * What Appendix C's `base` and `list` carry under a base type's name: a boolean, a number, a
- * string, or a pair of numbers (a `point`) or of strings (`pair`, `directedPair`).
+ * string, a pair of numbers (a `point`) or of strings (`pair`, `directedPair`), or a `file`.
  */
 export type PciJsonPayload =
   | boolean
   | number
   | string
   | readonly [number, number]
-  | readonly [string, string];
+  | readonly [string, string]
+  | PciJsonFile;
 
 /**
  * A JSON value of the Appendix C binding: a `base`, a `list` or a `record` object.
@@ -113,11 +130,10 @@ export type PciJson =
  *   declaration (J6); use the object the declared cardinality takes.
  * - `duration-calendar`: a duration with years or months (J1); write it in days, hours, minutes and
  *   seconds, or in weeks.
- * - `file-unmodelled`: the JSON or the declaration is of base type `file` (J3), which plate does not
- *   hold.
  * - `malformed`: the JSON is not Appendix C's form, or a value is outside its base type's lexical
  *   space: a missing or extra key, text XML cannot carry, an identifier that is no NCName, a NULL
- *   inside a list, a field named twice.
+ *   inside a list, a field named twice, a file whose `data` is no base64 or whose `mime` is no MIME
+ *   type (J3).
  * - `number-unsafe`: an integer or a point coordinate is not a safe integer (J6); write a whole
  *   number from -(2^53 - 1) to 2^53 - 1.
  */
@@ -125,7 +141,6 @@ export type PciJsonRefusalReason =
   | "base-type-mismatch"
   | "cardinality-mismatch"
   | "duration-calendar"
-  | "file-unmodelled"
   | "malformed"
   | "number-unsafe";
 
@@ -145,8 +160,7 @@ export interface PciJsonRefused {
  *
  * A record has no base type of its own, so `baseType` is ignored for `record`. For any other
  * cardinality an absent, `undefined` or none `baseType` means the declaration names no base type,
- * and nothing the JSON holds can fit it. `file` is a declarable base type that plate does not hold
- * (J3).
+ * and nothing the JSON holds can fit it.
  */
 export interface PciJsonDeclared {
   readonly baseType?: Option.Option<BaseType> | undefined;
@@ -162,13 +176,19 @@ type Read<A> = Result.Result<A, PciJsonRefused>;
  * Write a single value as the payload Appendix C gives its base type.
  *
  * @param single The value.
- * @returns A boolean, a number, a string, `[x, y]`, `["a", "b"]` or a `PT<seconds>S` duration. An
- *   integer past the safe range is written as its nearest double, since a JSON number is a double
- *   and the value model has no other spelling; {@link fromPciJson} refuses it as `number-unsafe`.
+ * @returns A boolean, a number, a string, `[x, y]`, `["a", "b"]`, a `PT<seconds>S` duration or a
+ *   file object. An integer past the safe range is written as its nearest double, since a JSON
+ *   number is a double and the value model has no other spelling; {@link fromPciJson} refuses it
+ *   as `number-unsafe`. A file is written as its name and type with an empty `data`, since plate
+ *   holds no bytes (J3); {@link fromPciJson} reads it back as a file of size 0.
  */
 const written = (single: Single): PciJsonPayload => {
   if (single.baseType === "integer") {
     return Number(single.value);
+  }
+
+  if (single.baseType === "file") {
+    return { data: "", mime: single.value.type, name: single.value.name };
   }
 
   if (single.baseType === "point") {
@@ -359,8 +379,8 @@ const own = (object: JsonObject, key: string) =>
  * Resolve a declaration to one the value model holds.
  *
  * @param declared The response declaration.
- * @returns The declaration, or `file-unmodelled` for base type `file` (J3), or `base-type-mismatch`
- *   for a declaration with no base type, both at the root.
+ * @returns The declaration, or `base-type-mismatch` at the root for a declaration with no base
+ *   type.
  */
 const resolve = (declared: PciJsonDeclared): Read<Resolved> => {
   if (declared.cardinality === "record") {
@@ -369,12 +389,8 @@ const resolve = (declared: PciJsonDeclared): Read<Resolved> => {
 
   const baseType = Option.getOrUndefined(declared.baseType ?? Option.none());
 
-  if (baseType === undefined) {
-    return refuse("base-type-mismatch", "$");
-  }
-
-  return baseType === "file"
-    ? refuse("file-unmodelled", "$")
+  return baseType === undefined
+    ? refuse("base-type-mismatch", "$")
     : Result.succeed({ baseType, cardinality: declared.cardinality });
 };
 
@@ -384,8 +400,8 @@ const resolve = (declared: PciJsonDeclared): Read<Resolved> => {
  * @param container The `base` or `list` object, or a record field's `base`.
  * @param path The container's path.
  * @returns The base type, its payload and the payload's path. `malformed` when the container is not
- *   an object with exactly one key, `file-unmodelled` for the key `file` (J3), and
- *   `base-type-mismatch` for any key that is no base type, `intOrIdentifier` included (J2).
+ *   an object with exactly one key, and `base-type-mismatch` for any key that is no base type,
+ *   `intOrIdentifier` included (J2).
  */
 const readTyped = (container: unknown, path: string): Read<Typed> => {
   if (!isObject(container)) {
@@ -400,10 +416,6 @@ const readTyped = (container: unknown, path: string): Read<Typed> => {
   }
 
   const at = member(path, key);
-
-  if (key === "file") {
-    return refuse("file-unmodelled", at);
-  }
 
   return isModelled(key)
     ? Result.succeed({ baseType: key, path: at, payload: container[key] })
@@ -592,9 +604,94 @@ const readDuration = (payload: unknown, path: string): Read<Option.Option<Single
 };
 
 /**
+ * A MIME type as a posted file reports it, the check `FileValueSchema` in `#plate/codec/values.ts`
+ * puts on a stored file's `type`: `type/subtype`, each a token of RFC 2045's `token` production,
+ * with no parameters, in any case; or the empty string, which a browser reports for a file whose
+ * type it does not know. Spelled here again, since a browser module may not import the codec.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc2045#section-5.1
+ */
+const mimeType = /^(?:[!#$%&'*+\-.^_`|~0-9A-Za-z]+\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+)?$/u;
+
+/**
+ * Base64 (RFC 4648 section 4): the alphabet in groups of four, the last group of two or three
+ * characters padded with `=` to four or left unpadded. A lone character ends no group, since it
+ * names fewer than eight bits.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc4648#section-4
+ */
+const base64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/u;
+
+/**
+ * Count the bytes a base64 text names without decoding it: three for each full group of four
+ * characters, and one or two for a final group of two or three, padding set aside.
+ *
+ * @param data Base64 text {@link base64} admits.
+ * @returns The byte count.
+ */
+const base64Bytes = (data: string): number => {
+  const unpadded = data.replace(/[=]+$/u, "").length;
+
+  return Math.floor((unpadded * 3) / 4);
+};
+
+/**
+ * Read Appendix C's `file` object as a file value (J3): `name`, the byte count `data` names, and
+ * `mime`, with the checks the session codec puts on a stored file, so a value read is one it
+ * accepts. The bytes are counted, never decoded or kept.
+ *
+ * @param payload The node.
+ * @param path Its path.
+ * @returns The file; none for a nameless empty file, which the form reads as NULL too (`decode` in
+ *   `#plate/form/encoding.ts`). `malformed` at the object for a node that is no object, at `data`
+ *   when it is missing or no base64 string, at `mime` when it is missing, no string or no MIME type
+ *   (an empty string is one the browser reports no type for), at `name` when it is no string or
+ *   holds a character XML cannot carry, and at any other key.
+ */
+const readFile = (payload: unknown, path: string): Read<Option.Option<Single>> => {
+  if (!isObject(payload)) {
+    return refuse("malformed", path);
+  }
+
+  const extra = Object.keys(payload).find(
+    (key) => key !== "data" && key !== "mime" && key !== "name",
+  );
+
+  if (extra !== undefined) {
+    return refuse("malformed", member(path, extra));
+  }
+
+  const data = own(payload, "data");
+
+  if (!isString(data) || !base64.test(data)) {
+    return refuse("malformed", member(path, "data"));
+  }
+
+  const mime = own(payload, "mime");
+
+  if (!isString(mime) || !mimeType.test(mime)) {
+    return refuse("malformed", member(path, "mime"));
+  }
+
+  const named = own(payload, "name");
+  const name = named === undefined ? "" : named;
+
+  if (!isString(name) || !isXmlText(name)) {
+    return refuse("malformed", member(path, "name"));
+  }
+
+  const size = base64Bytes(data);
+
+  return name === "" && size === 0
+    ? Result.succeedNone
+    : found({ baseType: "file", value: { name, size, type: mime } });
+};
+
+/**
  * Read a node as a value of each modelled base type: the value, or none for NULL, which only an
- * empty `string` is. Each is JSON's own type for it, Appendix C's table: a boolean, an integer, a
- * number, a string, `[x, y]`, `["a", "b"]` and an ISO 8601 duration string.
+ * empty `string` and a nameless empty `file` are. Each is JSON's own type for it, Appendix C's
+ * table: a boolean, an integer, a number, a string, `[x, y]`, `["a", "b"]`, an ISO 8601 duration
+ * string and a `file` object ({@link readFile}).
  */
 const readers = {
   boolean: (payload: unknown, path: string): Read<Option.Option<Single>> =>
@@ -602,6 +699,7 @@ const readers = {
   directedPair: (payload: unknown, path: string): Read<Option.Option<Single>> =>
     readPair("directedPair", payload, path),
   duration: readDuration,
+  file: readFile,
   float: (payload: unknown, path: string): Read<Option.Option<Single>> =>
     isNumber(payload) ? found({ baseType: "float", value: payload }) : refuse("malformed", path),
   identifier: (payload: unknown, path: string): Read<Option.Option<Single>> =>

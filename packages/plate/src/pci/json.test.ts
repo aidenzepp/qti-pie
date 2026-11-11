@@ -88,6 +88,17 @@ const identifiers = (...names: readonly string[]): readonly Single[] =>
   names.map((name) => ({ baseType: "identifier", value: name }));
 
 /**
+ * Construct a single file value for a test.
+ *
+ * @param name The file's name.
+ * @param size Its size in bytes.
+ * @param type Its MIME type, or the empty string.
+ * @returns The value of cardinality `single`.
+ */
+const fileOf = (name: string, size: number, type: string): Value =>
+  valueOf("file", "single", [{ baseType: "file", value: { name, size, type } }]);
+
+/**
  * One value of each modelled base type, with the Appendix C JSON that carries it.
  */
 const samples: readonly { readonly json: PciJson; readonly single: Single }[] = [
@@ -112,6 +123,10 @@ const samples: readonly { readonly json: PciJson; readonly single: Single }[] = 
   {
     json: { base: { uri: "https://example.org/a?b=c" } },
     single: { baseType: "uri", value: "https://example.org/a?b=c" },
+  },
+  {
+    json: { base: { file: { data: "", mime: "text/plain", name: "notes.txt" } } },
+    single: { baseType: "file", value: { name: "notes.txt", size: 0, type: "text/plain" } },
   },
 ];
 
@@ -161,6 +176,7 @@ describe("[pci-02] the Appendix C JSON binding", () => {
         "directedPair",
         "duration",
         "uri",
+        "file",
       ],
     );
 
@@ -252,7 +268,7 @@ describe("[pci-02] the Appendix C JSON binding", () => {
       fields: samples.map(({ single }) => ({ identifier: `f-${single.baseType}`, value: single })),
     };
 
-    assert.strictEqual(everyType.fields.length, 10);
+    assert.strictEqual(everyType.fields.length, 11);
     assert.deepStrictEqual(
       readOk(
         // oxlint-disable-next-line unicorn/prefer-structured-clone -- the JSON goes through text, as the hidden input carries it, which a clone would not exercise.
@@ -336,9 +352,12 @@ describe("[pci-02] the Appendix C JSON binding", () => {
       const written = toPciJson(
         valueOf("duration", "single", [{ baseType: "duration", value: seconds }]),
       );
-      const text = "base" in written ? written.base?.["duration"] : undefined;
+      const payload = "base" in written ? written.base?.["duration"] : undefined;
+      const text = Schema.is(Schema.String)(payload)
+        ? payload
+        : assert.fail(`${String(seconds)} did not write a string`);
 
-      assert.match(String(text), /^PT.+S$/u, `${String(seconds)} writes PT<seconds>S`);
+      assert.match(text, /^PT.+S$/u, `${String(seconds)} writes PT<seconds>S`);
       assert.isTrue(
         sameDouble(durationOf(text), seconds),
         `${String(seconds)} reads back from ${JSON.stringify(text)}`,
@@ -489,9 +508,7 @@ describe("[pci-02] the Appendix C JSON binding", () => {
     );
   });
 
-  it("[pci-02] intOrIdentifier and file are refused (J2, J3)", () => {
-    const file = { data: "AAEC", mime: "application/octet-stream", name: "a.bin" };
-
+  it("[pci-02] intOrIdentifier is refused (J2)", () => {
     for (const payload of [3, "x"]) {
       assert.deepStrictEqual(
         refusal({ base: { intOrIdentifier: payload } }, declare("single", "integer")),
@@ -507,33 +524,141 @@ describe("[pci-02] the Appendix C JSON binding", () => {
       refusal({ record: [{ base: { intOrIdentifier: 3 }, name: "a" }] }, declare("record")),
       { path: "$.record[0].base.intOrIdentifier", reason: "base-type-mismatch" },
     );
+  });
 
-    assert.deepStrictEqual(refusal({ base: { file } }, declare("single", "identifier")), {
-      path: "$.base.file",
-      reason: "file-unmodelled",
-    });
-    assert.deepStrictEqual(refusal({ list: { file: [file] } }, declare("multiple", "identifier")), {
-      path: "$.list.file",
-      reason: "file-unmodelled",
-    });
+  it("[pci-02] a file reads as its name, size and type, never its bytes (J3)", () => {
+    const declared = declare("single", "file");
+
+    // Appendix C's own example: "cGxlYXN1cmUu" is the nine bytes of "pleasure.".
     assert.deepStrictEqual(
-      refusal(
+      readOk(
+        { base: { file: { data: "cGxlYXN1cmUu", mime: "text/plain", name: "helloworld.txt" } } },
+        declared,
+      ),
+      fileOf("helloworld.txt", 9, "text/plain"),
+    );
+
+    for (const [data, size] of [
+      ["", 0],
+      ["AA==", 1],
+      ["AAE=", 2],
+      ["AAEC", 3],
+      ["AAECAw", 4],
+      ["AAECAw==", 4],
+    ] as const) {
+      assert.deepStrictEqual(
+        readOk(
+          { base: { file: { data, mime: "application/octet-stream", name: "a.bin" } } },
+          declared,
+        ),
+        fileOf("a.bin", size, "application/octet-stream"),
+        `${JSON.stringify(data)} is ${String(size)} bytes`,
+      );
+    }
+
+    assert.deepStrictEqual(
+      readOk({ base: { file: { data: "AAEC", mime: "", name: "a" } } }, declared),
+      fileOf("a", 3, ""),
+      "an empty mime is a file the browser reports no type for",
+    );
+    assert.deepStrictEqual(
+      readOk({ base: { file: { data: "AAEC", mime: "image/png" } } }, declared),
+      fileOf("", 3, "image/png"),
+      "a file with no name is a nameless file with bytes, as a bare Blob is",
+    );
+    assert.deepStrictEqual(
+      readOk({ base: { file: { data: "", mime: "" } } }, declared),
+      nullOf("file", "single"),
+      "a nameless empty file is NULL, as the form reads one",
+    );
+    assert.deepStrictEqual(readOk({ base: null }, declared), nullOf("file", "single"));
+    assert.deepStrictEqual(
+      readOk(
+        {
+          list: {
+            file: [
+              { data: "AA==", mime: "text/plain", name: "a.txt" },
+              { data: "", mime: "", name: "b" },
+            ],
+          },
+        },
+        declare("ordered", "file"),
+      ),
+      valueOf("file", "ordered", [
+        { baseType: "file", value: { name: "a.txt", size: 1, type: "text/plain" } },
+        { baseType: "file", value: { name: "b", size: 0, type: "" } },
+      ]),
+    );
+    assert.deepStrictEqual(
+      readOk(
         {
           record: [
-            { base: null, name: "a" },
-            { base: { file }, name: "b" },
+            { base: { file: { data: "AAE=", mime: "image/png", name: "p.png" } }, name: "f" },
           ],
         },
         declare("record"),
       ),
-      { path: "$.record[1].base.file", reason: "file-unmodelled" },
+      {
+        cardinality: "record",
+        fields: [
+          {
+            identifier: "f",
+            value: { baseType: "file", value: { name: "p.png", size: 2, type: "image/png" } },
+          },
+        ],
+      },
     );
 
-    for (const json of [{ base: { file } }, { base: null }, undefined]) {
-      assert.deepStrictEqual(refusal(json, declare("single", "file")), {
-        path: "$",
-        reason: "file-unmodelled",
-      });
+    assert.deepStrictEqual(
+      toPciJson(fileOf("a.txt", 9, "text/plain")),
+      { base: { file: { data: "", mime: "text/plain", name: "a.txt" } } },
+      "a file writes its name and type with no bytes, since plate holds none",
+    );
+  });
+
+  it("[pci-02] a file outside Appendix C's object or the session codec's file is refused", () => {
+    const declared = declare("single", "file");
+    const cases: readonly (readonly [unknown, string])[] = [
+      [{ base: { file: null } }, "$.base.file"],
+      [{ base: { file: "a.txt" } }, "$.base.file"],
+      [{ base: { file: ["AAEC", "text/plain", "a.txt"] } }, "$.base.file"],
+      [{ base: { file: {} } }, "$.base.file.data"],
+      [{ base: { file: { mime: "text/plain", name: "a.txt" } } }, "$.base.file.data"],
+      [{ base: { file: { data: "AAEC", name: "a.txt" } } }, "$.base.file.mime"],
+      [{ base: { file: { data: 3, mime: "text/plain", name: "a.txt" } } }, "$.base.file.data"],
+      [{ base: { file: { data: "A", mime: "text/plain", name: "a.txt" } } }, "$.base.file.data"],
+      [
+        { base: { file: { data: "AAECA", mime: "text/plain", name: "a.txt" } } },
+        "$.base.file.data",
+      ],
+      [{ base: { file: { data: "AA=C", mime: "text/plain", name: "a.txt" } } }, "$.base.file.data"],
+      [{ base: { file: { data: "AA-_", mime: "text/plain", name: "a.txt" } } }, "$.base.file.data"],
+      [{ base: { file: { data: "AAEC", mime: 3, name: "a.txt" } } }, "$.base.file.mime"],
+      [{ base: { file: { data: "AAEC", mime: "text", name: "a.txt" } } }, "$.base.file.mime"],
+      [{ base: { file: { data: "AAEC", mime: "text/", name: "a.txt" } } }, "$.base.file.mime"],
+      [
+        { base: { file: { data: "AAEC", mime: "text/plain; charset=utf-8", name: "a.txt" } } },
+        "$.base.file.mime",
+      ],
+      [{ base: { file: { data: "AAEC", mime: "text/plain", name: 3 } } }, "$.base.file.name"],
+      [{ base: { file: { data: "AAEC", mime: "text/plain", name: null } } }, "$.base.file.name"],
+      [
+        { base: { file: { data: "AAEC", mime: "text/plain", name: "a\u0000b" } } },
+        "$.base.file.name",
+      ],
+      [
+        { base: { file: { data: "AAEC", mime: "text/plain", name: "a.txt", size: 3 } } },
+        "$.base.file.size",
+      ],
+      [{ list: { file: [{ data: "", mime: "" }] } }, "$.list.file[0]"],
+    ];
+
+    for (const [json, path] of cases) {
+      assert.deepStrictEqual(
+        refusal(json, path.startsWith("$.list") ? declare("multiple", "file") : declared),
+        { path, reason: "malformed" },
+        JSON.stringify(json),
+      );
     }
   });
 
@@ -679,6 +804,10 @@ describe("[pci-02] the Appendix C JSON binding", () => {
       [{ list: { string: ["a", "b"] } }, declare("ordered", "string")],
       [{ base: { string: "" } }, declare("single", "string")],
       [{ base: { float: Number.NaN } }, declare("single", "float")],
+      [
+        { base: { file: { data: "AAEC", mime: "image/png", name: "a.png" } } },
+        declare("single", "file"),
+      ],
       [
         {
           record: [
