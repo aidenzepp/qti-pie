@@ -116,7 +116,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("an include of the mani
               caseHang: Duration.minutes(5),
               coverage: noCoverage,
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => {
                 const of = cases[at];
 

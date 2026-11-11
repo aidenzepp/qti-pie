@@ -251,7 +251,6 @@ describe("test/oracle.ts and the grammar's ancestry, an interaction inside templ
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<TemplateSituation>(situations),
             generator: templateCases,
-            limit: 80,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",

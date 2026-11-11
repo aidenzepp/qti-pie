@@ -607,7 +607,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<Reached>(["built", "malformed", "no CA"]),
               generator: settingsOf,
-              limit: 106,
               literal: Formatter.format,
               oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
               suite: "db/connection/settings",
@@ -730,7 +729,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 file: source.draw(element(["present", "absent"] as const)),
                 migration: source.draw(element(["set", "empty", "unset"] as const)),
               }),
-              limit: 6,
               literal: Formatter.format,
               oracle: { kind: "specification", name: "scripts/db.sh migrate's password files" },
               suite: "db/connection/passwords",
@@ -821,7 +819,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 ca: source.draw(element(cas)),
                 role: source.draw(element(roles)),
               }),
-              limit: 12,
               literal: Formatter.format,
               oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
               suite: "db/connection/server",
@@ -919,7 +916,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 side: source.draw(element(commandSides)),
                 variant: source.draw(element(commandVariants)),
               }),
-              limit: commandVariants.length * commandSides.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -1094,7 +1090,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 side: source.draw(element(commandSides)),
                 timeout: source.draw(element(timeouts)),
               }),
-              limit: timeouts.length * commandSides.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -1169,7 +1164,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "ignores SIGTERM",
                 ]),
                 generator: (source) => source.draw(element(lingeringCases)),
-                limit: lingeringCases.length,
                 literal: Formatter.format,
                 oracle: {
                   kind: "specification",

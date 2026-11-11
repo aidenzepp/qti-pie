@@ -219,7 +219,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   ...sites.map(({ name }): Noted => `site ${name}`),
                 ]),
                 generator: int(0, cases.length - 1),
-                limit: cases.length,
                 literal: (at) => {
                   const held = cases[at];
 

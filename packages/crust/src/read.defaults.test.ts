@@ -377,7 +377,6 @@ describe("every short attribute default", () => {
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<Situation>(SITUATIONS),
             generator: boxCase,
-            limit: BOX_CASES,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

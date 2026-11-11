@@ -471,7 +471,6 @@ describe("readXml resolves namespaces over the attributes it defaults", () => {
               ...DEFAULT_NAMES,
             ]),
             generator: defaulted,
-            limit: DEFAULTED,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

@@ -290,7 +290,6 @@ describe(
                 specifications.map((_, at) => at),
                 { max: 4, min: 0 },
               ),
-              limit: 1100,
               literal: Formatter.format,
               oracle: {
                 kind: "universal",

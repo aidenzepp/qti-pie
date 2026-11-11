@@ -212,7 +212,6 @@ describe("canonicalize gives the recursive canonicalizer's bytes", () => {
             caseHang,
             coverage: noCoverage,
             generator: planeTreeUpTo(BOX_NODES),
-            limit: PLANE_TREES_TO_7,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

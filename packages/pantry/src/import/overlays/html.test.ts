@@ -139,7 +139,6 @@ describe("import/pieces.ts, tokensOf on a headers value", () => {
               "several tokens",
             ]),
             generator: values,
-            limit: 1500,
             literal: (chars) => JSON.stringify(chars.join("")),
             oracle: {
               kind: "specification",
@@ -344,7 +343,6 @@ describe("import/overlays/html.ts, rowsOf", () => {
               after: source.draw(padding),
               before: source.draw(padding),
             }),
-            limit: 500,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",
@@ -400,7 +398,6 @@ describe("import/overlays/html.ts, rowsOf", () => {
               before: source.draw(edge),
               form: source.draw(element(idForms)),
             }),
-            limit: 200,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",

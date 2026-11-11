@@ -294,7 +294,6 @@ describe("import/overlays/expressions.ts, the types a Delete, an Index and a Ran
             caseHang,
             coverage: requiredInSpace<(typeof countNotes)[number]>(countNotes),
             generator: int(0, cases.length - 1),
-            limit: cases.length,
             literal: (at) => itemOf(Arr.getUnsafe(cases, at)),
             oracle: {
               kind: "second-implementation",

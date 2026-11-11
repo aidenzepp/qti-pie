@@ -358,7 +358,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "no tag",
                 ]),
                 generator: int(0, cases.length - 1),
-                limit: cases.length,
                 literal: (at) => nameOf(Arr.getUnsafe(cases, at)),
                 oracle: {
                   kind: "second-implementation",

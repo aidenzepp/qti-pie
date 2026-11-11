@@ -231,7 +231,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   ),
                 ),
                 generator: int(0, cases.length - 1),
-                limit: cases.length,
                 literal: (at) =>
                   Option.match(Option.fromUndefinedOr(cases[at]), {
                     onNone: () => String(at),

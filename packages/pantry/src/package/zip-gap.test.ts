@@ -159,7 +159,6 @@ describe("a zip's central directory and end record", () => {
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<Verdict>(VERDICTS),
             generator: gapCase,
-            limit: GAPS.length * ZIP64.length,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

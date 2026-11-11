@@ -386,7 +386,6 @@ describe("vocab/sequencing.ts", () => {
               "shared",
             ]),
             generator: int(0, modelled.length - 1),
-            limit: modelled.length,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

@@ -289,7 +289,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
               "part is the section's",
             ]),
             generator: (source) => source.draw(element(placements)),
-            limit: placements.length,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

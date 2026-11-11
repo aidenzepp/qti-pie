@@ -224,7 +224,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, cases.length - 1),
-                limit: cases.length,
                 literal: (at) => {
                   const of = cases[at];
 
@@ -285,7 +284,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, sectionRefCases.length - 1),
-                limit: sectionRefCases.length,
                 literal: (at) => sectionRefCases[at]?.name ?? String(at),
                 oracle: {
                   kind: "second-implementation",

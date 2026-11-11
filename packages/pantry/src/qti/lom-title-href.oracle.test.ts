@@ -177,7 +177,6 @@ const exhausting = (box: {
         caseHang: Duration.minutes(5),
         coverage: noCoverage,
         generator: int(0, box.cases.length - 1),
-        limit: box.cases.length,
         literal: (at) => box.cases[at]?.name ?? String(at),
         oracle: {
           kind: "specification",

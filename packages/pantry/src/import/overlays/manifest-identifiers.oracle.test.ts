@@ -334,7 +334,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "untyped",
               ]),
               generator: cases,
-              limit: 400,
               literal: (value) => Formatter.format(value),
               oracle: { kind: "specification", name: "the law oracle's verdict on each case" },
               suite: "import/overlays-manifest-identifiers",

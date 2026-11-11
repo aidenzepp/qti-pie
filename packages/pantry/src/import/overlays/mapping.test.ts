@@ -242,7 +242,6 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
               "distinct",
             ]),
             generator: mappingCases,
-            limit: 5000,
             literal: (input) =>
               `${input.baseType}: ${input.entries.map(({ key, value }) => `${key}=${value}`).join(" ")}`,
             oracle: { kind: "second-implementation", name: "a direct walk of the XDM tree" },
@@ -469,7 +468,6 @@ describe("import/overlays/mapping.ts, a two-item key's split", { timeout: search
             coverage: requiredInSpace<SplitSituation>(["two runs", "other"]),
             generator: (source) =>
               source.draw(array(element(keyCharacters), { max: 4, min: 1 })).join(""),
-            limit: 5000,
             literal: (key) => JSON.stringify(key),
             oracle: { kind: "specification", name: "the schema's twoItemPattern" },
             suite: "pantry/import/overlays-mapping-split",
@@ -510,7 +508,6 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<TwoItemSituation>(["split", "unsplit", "no entry"]),
             generator: twoItemCases,
-            limit: 3000,
             literal: (input) =>
               `${input.baseType}: ${input.entries.map(({ key }) => JSON.stringify(key)).join(" ")}`,
             oracle: { kind: "second-implementation", name: "a whitespace split" },
@@ -641,7 +638,6 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<"default" | "no default">(["default", "no default"]),
             generator: tableCases,
-            limit: 100,
             literal: (input) => JSON.stringify(input),
             oracle: { kind: "second-implementation", name: "a direct walk of the XDM tree" },
             suite: "pantry/import/overlays-mapping-lookup",

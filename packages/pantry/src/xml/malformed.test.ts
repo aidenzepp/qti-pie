@@ -1084,7 +1084,6 @@ describe("crust's reader on malformed documents", () => {
                 ),
               ),
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => `${cases[at]?.fault.name ?? ""} on ${cases[at]?.seed ?? ""}`,
               oracle: {
                 kind: "second-implementation",

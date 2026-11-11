@@ -307,7 +307,6 @@ describe("qti/package.ts", () => {
               "descriptor killed",
             ]),
             generator: boxPaths,
-            limit: 3000,
             literal: (candidate) => JSON.stringify(candidate),
             oracle: {
               kind: "specification",

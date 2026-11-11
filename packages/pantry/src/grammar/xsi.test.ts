@@ -94,7 +94,6 @@ describe("XsiType", () => {
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"anonymous" | "typed">(["anonymous", "typed"]),
             generator: array(element([-1, 0, 1, 2] as const), { max: 3, min: 3 }),
-            limit: 200,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -542,7 +541,6 @@ describe("the TypeName spelling", () => {
                 "unprefixed",
               ]),
               generator: int(0, names.length - 1),
-              limit: names.length,
               literal: Formatter.format,
               oracle: { kind: "universal", name: "expandedNameOf ∘ typeHandle = id" },
               suite: "grammar/xsi/type-handles",

@@ -634,7 +634,6 @@ describe("the attribute grammar's domain work on toy declarations", () => {
               "an empty definition",
             ]),
             generator: array(element(toyChoices), { max: 2, min: 1 }),
-            limit: 342,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "each declaration read alone" },
             suite: "grammar/attributes/work/exhaust",

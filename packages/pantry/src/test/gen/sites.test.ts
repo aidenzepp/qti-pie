@@ -31,7 +31,6 @@ import type { Datum } from "#pantry/test/predicates.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
 import {
-  hrefCases,
   outsideRulesOfBox,
   ruleOfCase,
   rulesOfBox,
@@ -394,7 +393,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
               "section unlisted",
             ]),
             generator: siteBox,
-            limit: hrefCases.length ** siteNames.length,
             literal: siteLiteral,
             oracle: { kind: "second-implementation", name: "the law oracle over the same entries" },
             suite: "pantry/test/gen-sites-box",

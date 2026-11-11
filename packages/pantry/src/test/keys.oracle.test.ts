@@ -1159,7 +1159,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "xml:lang past the bound",
                 ]),
                 generator: element(boxCases),
-                limit: boxCases.length,
                 literal: Formatter.format,
                 oracle: { kind: "second-implementation", name: "the import's rows under keyText" },
                 suite: "pantry/test/oracle-keys-box",

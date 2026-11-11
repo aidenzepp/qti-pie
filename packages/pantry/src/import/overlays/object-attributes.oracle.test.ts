@@ -243,7 +243,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, objectCases.length - 1),
-                limit: objectCases.length,
                 literal: (at) => {
                   const of = objectCases[at];
 
@@ -303,7 +302,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, baseTypes.length - 1),
-                limit: baseTypes.length,
                 literal: (at) => JSON.stringify(baseTypes[at] ?? "unwritten"),
                 oracle: {
                   kind: "second-implementation",

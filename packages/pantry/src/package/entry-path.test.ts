@@ -74,7 +74,6 @@ describe("an entry path", () => {
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
             generator: array(element(SEGMENTS), { max: 2, min: 1 }),
-            limit: PATHS,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "reading 138's sentence" },
             suite: "pantry/package/entry-path",

@@ -145,7 +145,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "a fragment hangs off the cycle",
                 ]),
                 generator: cycleCases,
-                limit: 30,
                 literal: (drawn) => JSON.stringify(drawn),
                 oracle: {
                   kind: "specification",

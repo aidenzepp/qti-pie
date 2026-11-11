@@ -203,7 +203,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "the year 0000",
                 ]),
                 generator: dateCases,
-                limit: 200,
                 literal: (drawn) => JSON.stringify(lexicalOf(drawn)),
                 oracle: {
                   kind: "specification",

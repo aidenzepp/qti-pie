@@ -104,7 +104,6 @@ describe("a default's reference to an entity declared before or after it", () =>
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<Situation>(SITUATIONS),
             generator: caseOf,
-            limit: 8,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

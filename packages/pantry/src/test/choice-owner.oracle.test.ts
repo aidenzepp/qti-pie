@@ -150,7 +150,6 @@ describe("choices and their interactions (lane NIL's audit, B5 and B6)", () => {
             caseHang: Duration.seconds(60),
             coverage: noCoverage,
             generator: int(0, smallScope.length - 1),
-            limit: smallScope.length,
             literal: (at) => {
               const drawnCase = smallScope[at];
 

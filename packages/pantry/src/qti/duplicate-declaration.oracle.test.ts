@@ -227,7 +227,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a second declaration o
                 "declared twice",
               ]),
               generator: element(cases),
-              limit: cases.length,
               literal: caseLiteral,
               oracle: {
                 kind: "second-implementation",

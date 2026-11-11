@@ -228,7 +228,6 @@ describe("vocab/open.ts", () => {
                 local: source.draw(localName),
                 namespace: source.draw(element(namespaces)),
               }),
-              limit: classificationBox * namespaces.length * hosts.length * 2,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -975,7 +974,6 @@ describe.skipIf(Option.isSome(absence))(
                     "ruled",
                   ]),
                   generator: int(0, byKind.length - 1),
-                  limit: byKind.length,
                   literal: Formatter.format,
                   oracle: {
                     kind: "second-implementation",
@@ -1046,7 +1044,6 @@ describe.skipIf(Option.isSome(absence))(
                     "ruled",
                   ]),
                   generator: int(0, byKind.length - 1),
-                  limit: byKind.length,
                   literal: Formatter.format,
                   oracle: {
                     kind: "second-implementation",
@@ -1255,7 +1252,6 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
               caseHang,
               coverage: requiredInSpace<(typeof classSituations)[number]>(classSituations),
               generator: int(0, classCells.length - 1),
-              limit: classCells.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",

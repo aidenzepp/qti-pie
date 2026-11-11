@@ -1301,7 +1301,6 @@ describe("import/overlays/metadata.ts, usage values", () => {
               "unwritten",
             ]),
             generator: usageCases,
-            limit: 50,
             literal: Formatter.format,
             oracle: { kind: "specification", name: "reading 105 and C17's spelled codes" },
             suite: "pantry/import/overlays-metadata-usage-values",

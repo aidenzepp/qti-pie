@@ -217,7 +217,6 @@ describe("qti/attributes.ts, AL2's distinctness", () => {
               "mutant killed",
             ]),
             generator: lists,
-            limit: 400,
             literal: (letters) => letters.map(({ name }) => name).join(" "),
             oracle: {
               kind: "specification",

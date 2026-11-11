@@ -54,7 +54,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
               "a second hottext",
             ]),
             generator: memberCounts,
-            limit: 8,
             literal: JSON.stringify,
             oracle: {
               kind: "specification",

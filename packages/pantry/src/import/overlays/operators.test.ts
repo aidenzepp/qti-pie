@@ -106,7 +106,6 @@ describe("import/pieces.ts, tokensOf on a tolerance", () => {
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<SplitSituation>(["none", "bare", "padded", "several"]),
             generator: splitValues,
-            limit: 1500,
             literal: (chars) => JSON.stringify(chars.join("")),
             oracle: {
               kind: "specification",
@@ -209,7 +208,6 @@ describe(
                 element(["0", "1", "7", "8", "9", "+", "-", " ", "\t", "F", int64Stem] as const),
                 { max: 4, min: 0 },
               ),
-              limit: 16_105,
               literal: (value) => JSON.stringify(value),
               oracle: {
                 kind: "specification",

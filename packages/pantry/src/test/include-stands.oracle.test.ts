@@ -414,7 +414,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "a self-including item's rule fragment judged in place",
               ]),
               generator: standCases,
-              limit: 40,
               literal: Formatter.format,
               oracle: {
                 kind: "second-implementation",

@@ -755,7 +755,6 @@ describe("assemble", { timeout: searchTimeout }, () => {
             ]),
             generator: (source) =>
               Arr.getUnsafe(smallCases, source.draw(int(0, smallCases.length - 1))),
-            limit: smallCases.length,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

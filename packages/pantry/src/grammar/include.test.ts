@@ -197,7 +197,6 @@ describe("IncludeRoot", () => {
               "section",
             ]),
             generator: int(0, includeFamilies.length - 1),
-            limit: includeFamilies.length,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "the installed content automaton" },
             suite: "grammar/include/positions",

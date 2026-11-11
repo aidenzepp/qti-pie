@@ -248,7 +248,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "unwritten",
                 ]),
                 generator: int(0, cases.length - 1),
-                limit: cases.length,
                 literal: (at) => {
                   const held = cases[at];
 

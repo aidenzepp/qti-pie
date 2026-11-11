@@ -104,7 +104,6 @@ describe("the law oracle's branch laws against reading 87's model", () => {
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
             generator: smallAssembly,
-            limit: 400,
             literal: assemblyLiteral,
             oracle: { kind: "second-implementation", name: "R87's model of reading 87" },
             suite: "pantry/oracle-laws-branch-box",

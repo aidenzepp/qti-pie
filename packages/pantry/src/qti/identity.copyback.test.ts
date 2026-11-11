@@ -266,7 +266,6 @@ describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes"
                   caseHang: Duration.seconds(5),
                   coverage: requiredInSpace<Situation>(copyBack.situations),
                   generator: element<AttributeCase>(rows),
-                  limit: rows.length,
                   literal: (row) => JSON.stringify(row),
                   oracle: {
                     kind: "specification",

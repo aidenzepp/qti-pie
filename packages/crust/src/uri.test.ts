@@ -143,7 +143,6 @@ describe("isNamespaceName reads Namespaces in XML's namespace-name grammars", ()
               ...PLACE_NAMES,
             ]),
             generator: edge,
-            limit: EDGE_CASES,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

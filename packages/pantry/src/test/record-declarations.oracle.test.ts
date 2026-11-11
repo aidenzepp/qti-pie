@@ -325,7 +325,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "several",
               ]),
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => Formatter.format(cases[at]),
               oracle: {
                 kind: "second-implementation",

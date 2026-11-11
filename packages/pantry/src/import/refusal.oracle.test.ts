@@ -1241,7 +1241,6 @@ describe("the rules of the laws one native object carries, in the precedence's o
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<AxisLabel>(axisLabels),
             generator: carriedOf(plannedAxes, 4),
-            limit: 20_000,
             literal: carriedText,
             oracle: {
               kind: "specification",
@@ -1273,7 +1272,6 @@ describe("the rules of the laws one native object carries, in the precedence's o
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<"cross-tier">(["cross-tier"]),
             generator: carriedOf([{ label: "cross-tier", laws: crossTier }], 3),
-            limit: 1000,
             literal: carriedText,
             oracle: {
               kind: "specification",

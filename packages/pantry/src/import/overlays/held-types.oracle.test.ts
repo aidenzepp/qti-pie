@@ -232,7 +232,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "no variable",
                 ]),
                 generator: caseGen,
-                limit: cases.length,
                 literal: (input) => JSON.stringify(input),
                 oracle: {
                   kind: "second-implementation",

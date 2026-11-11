@@ -183,7 +183,6 @@ describe("the ancestry grammar against the reference model", () => {
               "self-banned admitted",
             ]),
             generator: array(element(flagged), { max: 3, min: 0 }),
-            limit: 50_000,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

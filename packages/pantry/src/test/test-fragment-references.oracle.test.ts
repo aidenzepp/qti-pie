@@ -283,7 +283,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "item body, refused",
               ]),
               generator: fragmentCases,
-              limit: 48,
               literal: Formatter.format,
               oracle: {
                 kind: "second-implementation",

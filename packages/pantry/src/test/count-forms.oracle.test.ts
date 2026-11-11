@@ -172,7 +172,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
               "signed zero",
             ]),
             generator: formCases,
-            limit: 7,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

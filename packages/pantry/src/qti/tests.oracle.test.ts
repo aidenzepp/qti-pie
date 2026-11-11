@@ -53,7 +53,6 @@ describe("qti/tests.ts, collapsedPattern", () => {
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<CollapseSituation>(["collapsed", "padded", "empty"]),
             generator: padded,
-            limit: 800,
             literal: (characters) => JSON.stringify(characters.join("")),
             oracle: { kind: "specification", name: "XML Schema Part 2 §4.3.6, collapse" },
             suite: "qti/tests-collapsed-pattern",
@@ -387,7 +386,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "outside the package",
               ]),
               generator: element(sectionRefHrefs),
-              limit: sectionRefHrefs.length,
               literal: JSON.stringify,
               oracle: {
                 kind: "second-implementation",

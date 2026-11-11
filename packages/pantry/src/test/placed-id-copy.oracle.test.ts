@@ -122,7 +122,6 @@ describe("a placed ID's copy (lane NIL's audit, C1)", () => {
             caseHang: Duration.seconds(120),
             coverage: noCoverage,
             generator: int(0, cases.length - 1),
-            limit: cases.length,
             literal: (at) => {
               const drawnCase = cases[at];
 

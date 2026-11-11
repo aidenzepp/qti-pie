@@ -384,7 +384,6 @@ layer(TestLayer, { excludeTestServices: true })("export/compare.ts", (it) => {
                 "binary",
               ]),
               generator: element([first, ...cases.slice(1)]),
-              limit: 1000,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",

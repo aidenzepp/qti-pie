@@ -202,7 +202,6 @@ describe("the host's collapse and the QName sites that read through it", () => {
               "no QName",
             ]),
             generator: textsUpTo(4),
-            limit: 22_621,
             literal: shown,
             oracle: {
               kind: "specification",
@@ -251,7 +250,6 @@ describe("the host's collapse and the QName sites that read through it", () => {
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<TypeSituation>(["in scope", "not in scope", "trim departs"]),
             generator: textsUpTo(3),
-            limit: 1885,
             literal: shown,
             oracle: {
               kind: "specification",

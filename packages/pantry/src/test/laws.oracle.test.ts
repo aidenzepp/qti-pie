@@ -3090,7 +3090,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
               "beyond choices",
             ]),
             generator: boundCase,
-            limit: 324,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3150,7 +3149,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
                 at: source.draw(int(0, 1)),
                 site: source.draw(element(uniqueSites)),
               })),
-            limit: 1110,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3259,7 +3257,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
               cardinality: source.draw(element(["single", "multiple"] as const)),
               max: source.draw(element([undefined, 0, 1, 2] as const)),
             }),
-            limit: 8,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3313,7 +3310,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
               "response id",
             ]),
             generator: (source) => source.draw(element(["X", "intro", "RESPONSE"] as const)),
-            limit: 3,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3372,7 +3368,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             // through a section ref or an include: 3^6 = 729 graphs, each edge absent, a ref or
             // an include.
             generator: (source) => Array.from({ length: 6 }, () => source.draw(int(0, 2))),
-            limit: 729,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3497,7 +3492,6 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
                 ),
               };
             },
-            limit: 27,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3663,7 +3657,6 @@ describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, ove
               "self",
             ]),
             generator: hrefCases,
-            limit: 120,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3791,7 +3784,6 @@ describe("the references reading 103's census names, over generated packages", (
               "base",
             ]),
             generator: referenceCases,
-            limit: 40,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -3863,7 +3855,6 @@ describe("the stimulus refs the UP audit's B5 resolves, over generated packages"
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"held" | "broken">(["held", "broken"]),
             generator: (source) => source.draw(element(stimulusHrefs)),
-            limit: 10,
             literal: Formatter.format,
             oracle: { kind: "specification", name: "the information model §7.6, by hand" },
             suite: "oracle/stimulus-ref-target",
@@ -3992,7 +3983,6 @@ describe("reading 117: an included fragment judged in place", () => {
               "out of place",
             ]),
             generator: (source) => source.draw(element(inPlaceCases)),
-            limit: 20,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -4068,7 +4058,6 @@ describe("reading 117: an included fragment judged in place", () => {
                   "rule variable",
                 ] as const),
               ),
-            limit: 12,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

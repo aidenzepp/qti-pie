@@ -223,7 +223,6 @@ describe("the reader holds every name to the production Namespaces in XML asks w
               "qname",
             ]),
             generator: named,
-            limit: NAMED,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

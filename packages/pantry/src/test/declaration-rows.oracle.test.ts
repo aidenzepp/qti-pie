@@ -218,7 +218,6 @@ describe("declarations whose cardinality or base type spells nothing (spec readi
             caseHang: Duration.seconds(120),
             coverage: noCoverage,
             generator: int(0, cases.length - 1),
-            limit: cases.length,
             literal: (at) => {
               const drawn = cases[at];
 

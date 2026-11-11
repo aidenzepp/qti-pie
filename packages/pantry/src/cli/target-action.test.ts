@@ -113,7 +113,6 @@ describe("a written target's action", () => {
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<Verdict>(["create", "replace", "TargetNotEmpty"]),
             generator: targetCase,
-            limit: CONTENTS.length * 2,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

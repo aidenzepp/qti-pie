@@ -59,7 +59,6 @@ describe("the tour", () => {
             caseHang,
             coverage: noCoverage,
             generator: planeTreeUpTo(7),
-            limit: PLANE_TREES_TO_7,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "the tour by recursion" },
             suite: "crust/tour/plane-trees",

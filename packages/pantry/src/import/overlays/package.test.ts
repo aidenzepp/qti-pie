@@ -1295,7 +1295,6 @@ describe("import/overlays/package.ts, hrefs and references", () => {
               "trail",
             ]),
             generator: lexicals,
-            limit: 3000,
             literal: (lexical) => JSON.stringify(lexical),
             oracle: { kind: "second-implementation", name: "RFC 3986, Appendix B" },
             suite: "import/overlays-package-split",

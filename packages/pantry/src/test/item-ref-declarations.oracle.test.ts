@@ -857,7 +857,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "wrong kind",
               ]),
               generator: smallItemRefPackage,
-              limit: 300,
               literal: itemRefPackageLiteral,
               oracle: { kind: "second-implementation", name: "the law oracle's item ref laws" },
               suite: "pantry/test/item-ref-declarations-box",

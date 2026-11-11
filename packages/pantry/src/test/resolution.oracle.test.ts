@@ -564,7 +564,6 @@ describe("import/overlays/package.ts resolveIn against test/resolution.ts", () =
               "caught: ignores the bases",
             ]),
             generator: smallScope,
-            limit: 6000,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

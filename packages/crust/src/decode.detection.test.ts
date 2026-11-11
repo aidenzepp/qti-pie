@@ -640,7 +640,6 @@ describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a 
                 ...bodies,
               ]),
               generator: detection,
-              limit: DETECTIONS,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -723,7 +722,6 @@ describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a 
               ...appendixF.map(({ pattern }) => pattern),
             ]),
             generator: near,
-            limit: NEARS,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

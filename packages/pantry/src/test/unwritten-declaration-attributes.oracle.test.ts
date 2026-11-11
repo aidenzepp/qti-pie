@@ -445,7 +445,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               caseHang: Duration.minutes(2),
               coverage: requiredInSpace<Situation>(["accepted", "alone", "several", "pair"]),
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => Formatter.format(cases[at]),
               oracle: {
                 kind: "specification",

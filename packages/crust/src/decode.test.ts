@@ -348,7 +348,6 @@ describe("decode refuses every lone surrogate under decode", () => {
               ...lonePlaces,
             ]),
             generator: loneSurrogate,
-            limit: LONE_SURROGATES,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

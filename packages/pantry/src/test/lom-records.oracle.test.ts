@@ -91,7 +91,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   "the resource's identifier not the item's",
                 ]),
                 generator: recordCases,
-                limit: 20,
                 literal: (drawn) => JSON.stringify(drawn),
                 oracle: {
                   kind: "specification",

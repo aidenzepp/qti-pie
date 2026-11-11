@@ -466,7 +466,6 @@ describe("encode gives the recursive writer's bytes", () => {
             caseHang,
             coverage: noCoverage,
             generator: planeTreeUpTo(BOX_NODES),
-            limit: PLANE_TREES_TO_7,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -572,7 +571,6 @@ describe("writeXml writes adjacent text runs as the content they hold", () => {
             caseHang,
             coverage: requiredInSpace<"across" | "none">(["across", "none"]),
             generator: stretch,
-            limit: STRETCHES,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

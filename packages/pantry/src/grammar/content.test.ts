@@ -2230,7 +2230,6 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
                 element(["ssml:meta", "ssml:p", foreignKinds.other, "text", "ws"] as const),
                 { max: 4, min: 0 },
               ),
-              limit: 1000,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -2715,7 +2714,6 @@ describe("the document node's content model (R5)", () => {
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
             generator: array(element(documentChildren), { max: 4, min: 0 }),
-            limit: 2000,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

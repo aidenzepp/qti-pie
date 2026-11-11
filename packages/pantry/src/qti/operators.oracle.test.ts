@@ -232,7 +232,6 @@ describe("qti/operators.ts, the database's patterns", { timeout: searchTimeout }
               "string",
             ]),
             generator: string(element(valueCharacters), { max: 4, min: 0 }),
-            limit: 17_000,
             literal: (value) => JSON.stringify(value),
             oracle: {
               kind: "specification",
@@ -299,7 +298,6 @@ describe("qti/operators.ts, the database's patterns", { timeout: searchTimeout }
               max: 4,
               min: 0,
             }),
-            limit: 5000,
             literal: (value) => JSON.stringify(value),
             oracle: {
               kind: "specification",
@@ -495,7 +493,6 @@ describe("test/oracle.ts, Rounding figures", { timeout: buildTimeout }, () => {
               "no mode",
             ]),
             generator: roundingCases,
-            limit: 40,
             literal: (drawnCase) => JSON.stringify(drawnCase),
             oracle: {
               kind: "specification",
@@ -601,7 +598,6 @@ describe("test/oracle.ts, Equal tolerance", { timeout: buildTimeout }, () => {
               "accepted range",
             ]),
             generator: toleranceCases,
-            limit: 40,
             literal: (drawnCase) => JSON.stringify(drawnCase),
             oracle: {
               kind: "specification",

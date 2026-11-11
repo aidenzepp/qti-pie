@@ -405,7 +405,6 @@ describe("a declaration that writes no cardinality", () => {
             caseHang: Duration.seconds(60),
             coverage: noCoverage,
             generator: int(0, declarationSites.length - 1),
-            limit: declarationSites.length,
             literal: String,
             oracle: { kind: "specification", name: "AL3's required cardinality, alone" },
             suite: "pantry/oracle-complete/absent-cardinality",

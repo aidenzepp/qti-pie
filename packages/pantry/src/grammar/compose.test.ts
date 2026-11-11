@@ -205,7 +205,6 @@ describe("the composition", () => {
               "production twice",
             ]),
             generator: array(choice(["production", "toy"] as const), { max: 3, min: 1 }),
-            limit: 14,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -554,7 +553,6 @@ describe("spec reading 90, through the codec", () => {
                 "refused",
               ]),
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
@@ -719,7 +717,6 @@ describe("spec reading 109, wild IDs", () => {
                 "declares no ID",
               ]),
               generator: int(0, hosts.length - 1),
-              limit: hosts.length,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",

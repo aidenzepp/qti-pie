@@ -631,7 +631,6 @@ describe("import/overlays/tests.ts, pieces", () => {
           caseHang: Duration.seconds(10),
           coverage: requiredInSpace<"empty" | "padded" | "bare">(["empty", "padded", "bare"]),
           generator: piecesTexts,
-          limit: 4000,
           literal: (characters) => JSON.stringify(characters.join("")),
           oracle: { kind: "universal", name: "the split's round trip, with collapse's ends" },
           suite: "import/overlays-tests-pieces",
@@ -731,7 +730,6 @@ describe("import/overlays/tests.ts, selections", () => {
               "no integer",
             ]),
             generator: option(array(element(selectAlphabet), { max: 3, min: 0 })),
-            limit: 300,
             literal: Formatter.format,
             oracle: {
               kind: "universal",
@@ -949,7 +947,6 @@ describe("import/overlays/tests.ts, names", () => {
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<"unwritten" | "written">(["unwritten", "written"]),
             generator: array(element(identifierForms), { max: 6, min: 6 }),
-            limit: 5000,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -1041,7 +1038,6 @@ describe("import/overlays/tests.ts, hrefs", () => {
               document: source.draw(element(hrefDocuments)),
               href: source.draw(element(hrefForms)),
             }),
-            limit: 100,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -1515,7 +1511,6 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
               "identifiers distinct",
             ]),
             generator: assemblyCases,
-            limit: 9000,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -1834,7 +1829,6 @@ describe("import/overlays/tests.ts, the jumps", () => {
               "exit",
             ]),
             generator: jumpCases,
-            limit: 200,
             literal: Formatter.format,
             oracle: { kind: "specification", name: "reading 87's bullets" },
             suite: "import/overlays-tests-jumps",

@@ -192,7 +192,6 @@ describe("qti/declarations.ts, typed values", () => {
               "long integer admitted",
             ]),
             generator: element<TypedCase>(typedCases),
-            limit: 400,
             literal: ({ baseType, text }: TypedCase) => `${baseType} ${JSON.stringify(text)}`,
             oracle: {
               kind: "specification",

@@ -445,7 +445,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, knownList.length - 1),
-                limit: knownList.length,
                 literal: (at) => {
                   const held = knownList[at];
 
@@ -518,7 +517,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, filledCases.length - 1),
-                limit: filledCases.length,
                 literal: (at) => filledCases[at]?.name ?? String(at),
                 oracle: {
                   kind: "second-implementation",
@@ -653,7 +651,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, plantedCases.length - 1),
-                limit: plantedCases.length,
                 literal: (at) => plantedCases[at]?.name ?? String(at),
                 oracle: {
                   kind: "second-implementation",

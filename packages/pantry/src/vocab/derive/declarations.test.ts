@@ -479,7 +479,6 @@ describe.skipIf(Option.isSome(absence) || !settings.corpusRequested)(
                     "oracle-departure",
                   ]),
                   generator: int(0, byKind.length - 1),
-                  limit: byKind.length,
                   literal: Formatter.format,
                   oracle: {
                     kind: "second-implementation",

@@ -946,7 +946,6 @@ describe("Integer intervals", () => {
 
               return { hi: bound(), lo: bound() };
             },
-            limit: 529,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "bigint comparison against the bounds" },
             suite: "grammar/domains/integer",
@@ -1418,7 +1417,6 @@ describe("Length facets", () => {
 
               return { lengths, variety };
             },
-            limit: 250,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -1632,7 +1630,6 @@ describe("xs:boolean", () => {
               "outside",
             ]),
             generator: booleanForms,
-            limit: 10 * 10 * 12,
             literal: (form) => JSON.stringify(form),
             oracle: {
               kind: "specification",

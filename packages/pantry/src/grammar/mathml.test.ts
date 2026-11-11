@@ -409,7 +409,6 @@ describe("spec reading 2: MathML's notation types (MathML 3 §2.1.5.1)", () => {
               caseHang: Duration.minutes(2),
               coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
               generator: array(element(notationAlphabet), { max: 4, min: 0 }),
-              limit: 10_000,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",

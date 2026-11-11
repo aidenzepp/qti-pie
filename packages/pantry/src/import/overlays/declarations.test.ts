@@ -950,7 +950,6 @@ describe("import/overlays/declarations.ts", () => {
                 .draw(array(element([" ", "\t", "\n"] as const), { max: 2, min: 0 }))
                 .join(""),
             }),
-            limit: 1000,
             literal: Formatter.format,
             oracle: { kind: "universal", name: "the round trip lead ‖ name ‖ trail" },
             suite: "pantry/import/overlays-declarations-pieces",

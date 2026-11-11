@@ -148,7 +148,6 @@ describe("the sentinel scan, against the walk it replaced", () => {
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<Situation>(situations),
             generator: array(element(boxUnits), { max: 3, min: 0 }),
-            limit: BOX_STRINGS,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "the per-code-point walk it replaced" },
             suite: "crust/sentinels/box",

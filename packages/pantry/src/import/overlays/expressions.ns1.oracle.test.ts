@@ -177,7 +177,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 caseHang: Duration.minutes(2),
                 coverage: requiredInSpace<Situation>(["declared", "a built-in", "nothing"]),
                 generator: caseGen,
-                limit: cases.length,
                 literal: (input) => JSON.stringify(input),
                 oracle: {
                   kind: "second-implementation",

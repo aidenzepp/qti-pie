@@ -228,7 +228,6 @@ describe("a bounded double", () => {
             caseHang: Duration.seconds(60),
             coverage: requiredInSpace<"admitted" | "refused">(["admitted", "refused"]),
             generator: boundCase,
-            limit: ATTRIBUTES.length * FORMS.length,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

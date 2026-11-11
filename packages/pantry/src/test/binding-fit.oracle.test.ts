@@ -321,7 +321,6 @@ describe("the bindings the fit laws judge", () => {
               caseHang: Duration.seconds(60),
               coverage: noCoverage,
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => {
                 const drawn = cases[at];
 

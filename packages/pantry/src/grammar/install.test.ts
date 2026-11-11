@@ -494,7 +494,6 @@ describe("the installed relations", () => {
             caseHang,
             coverage: noCoverage,
             generator: int(0, comparisons.length - 1),
-            limit: comparisons.length,
             literal: Formatter.format,
             oracle: { kind: "second-implementation", name: "composed()'s closed.ts relations" },
             suite: "grammar/install/rows",
@@ -536,7 +535,6 @@ describe("the installed relations", () => {
             caseHang,
             coverage: noCoverage,
             generator: int(0, governors.length - 1),
-            limit: governors.length,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",

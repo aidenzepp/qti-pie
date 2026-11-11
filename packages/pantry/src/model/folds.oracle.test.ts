@@ -593,7 +593,12 @@ describe("fold's count and set folds", { timeout: searchTimeout }, () => {
                 }
               });
               const folded = fold(edited, idOf, foldGrammar);
-              yield* c.assume(Result.isSuccess(folded));
+              if (Result.isFailure(folded)) {
+                // A refused edit holds no fold to compare: it is no case of this property, and the
+                // fold's refusals are judged by their own suite below.
+                return;
+              }
+
               c.note(edit);
 
               const after = nodeAt(yield* Effect.orDie(Effect.fromResult(folded)), target);

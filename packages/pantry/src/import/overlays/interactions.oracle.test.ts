@@ -634,7 +634,6 @@ describe("import/overlays/interactions.ts, counts", () => {
               "written",
             ]),
             generator: countCases,
-            limit: 400,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
@@ -843,7 +842,6 @@ describe("import/overlays/interactions.ts, section references", () => {
               "repeated",
             ]),
             generator: placements,
-            limit: 200,
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
@@ -1290,7 +1288,6 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
               "a name no declaration holds",
             ]),
             generator: referenceCases,
-            limit: 200,
             literal: Formatter.format,
             oracle: {
               kind: "specification",

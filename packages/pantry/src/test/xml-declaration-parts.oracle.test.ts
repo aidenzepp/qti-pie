@@ -404,7 +404,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a document's XML decla
               "well-formedness",
             ]),
             generator: int(0, cases.length - 1),
-            limit: cases.length,
             literal: (at) => Formatter.format(cases[at]),
             oracle: {
               kind: "specification",

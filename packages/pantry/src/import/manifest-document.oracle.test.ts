@@ -170,7 +170,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
               caseHang: Duration.minutes(5),
               coverage: noCoverage,
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) => {
                 const of = cases[at];
 

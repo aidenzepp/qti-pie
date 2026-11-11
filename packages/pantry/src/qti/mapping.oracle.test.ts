@@ -120,7 +120,6 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<KeySituation>(["selected", "not selected"]),
             generator: textsOver(integerAlphabet),
-            limit: 5000,
             literal: (text) => JSON.stringify(text),
             oracle: { kind: "specification", name: "xs:integer's lexical space (xsInteger)" },
             suite: "qti/mapping-integer-key",
@@ -152,7 +151,6 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<KeySituation>(["selected", "not selected"]),
             generator: textsOver(floatAlphabet),
-            limit: 17_000,
             literal: (text) => JSON.stringify(text),
             oracle: {
               kind: "specification",
@@ -314,7 +312,6 @@ describe("qti/mapping.ts, the two-item keys and exact values", { timeout: search
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<ItemSituation>(["exact value", "padded value", "no value"]),
             generator: textsOver(itemAlphabet),
-            limit: 5000,
             literal: (text) => JSON.stringify(text),
             oracle: {
               kind: "specification",
@@ -628,7 +625,6 @@ describe("qti/mapping.ts, an integer key's typed value", { timeout: searchTimeou
             ]),
             generator: (source) =>
               [source.draw(element(integerKeys)), source.draw(element(integerKeys))] as const,
-            limit: 500,
             literal: (keys) => JSON.stringify(keys),
             oracle: { kind: "specification", name: "the law oracle's Map key" },
             suite: "qti/mapping-integer-repeat",
@@ -772,7 +768,6 @@ describe("qti/mapping.ts, a two-item key's typed value", { timeout: searchTimeou
                 source.draw(element(twoItemBoxKeys)),
                 source.draw(element(twoItemBoxKeys)),
               ] as const,
-            limit: 300,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: { kind: "specification", name: "the law oracle's Map key" },
             suite: "qti/mapping-two-item-repeat",

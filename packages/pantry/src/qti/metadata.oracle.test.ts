@@ -150,7 +150,6 @@ describe("qti/metadata.ts, the pieces", () => {
               "bare",
             ]),
             generator: texts,
-            limit: 800,
             literal: (text) => JSON.stringify(text),
             oracle: {
               kind: "specification",
@@ -304,7 +303,6 @@ describe("qti/metadata.ts, the calendar", { timeout: testTimeoutMs }, () => {
               "not the form",
             ]),
             generator: dateCases,
-            limit: 11_100,
             literal: (value) => JSON.stringify(value),
             oracle: {
               kind: "second-implementation",
@@ -442,7 +440,6 @@ describe("qti/metadata.ts, the usage typed value", { timeout: testTimeoutMs }, (
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<UsageTextSituation>(["admitted", "refused", "unjudged"]),
             generator: usageTextCases,
-            limit: 4600,
             literal: (value) => JSON.stringify(value),
             oracle: {
               kind: "second-implementation",
@@ -659,7 +656,6 @@ describe("qti/metadata.ts, the learning resource type", { timeout: testTimeoutMs
               "accepted, no value",
             ]),
             generator: element(resourceTypeCases),
-            limit: 200,
             literal: (value: ResourceTypeCase) => JSON.stringify(value),
             oracle: {
               kind: "specification",

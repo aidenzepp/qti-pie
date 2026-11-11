@@ -95,7 +95,6 @@ describe("qti/identity.ts, an ID's value", () => {
               "mutant killed",
             ]),
             generator: lexicals,
-            limit: 200,
             literal: (chars) => JSON.stringify(chars.join("")),
             oracle: {
               kind: "specification",
@@ -232,7 +231,6 @@ describe("test/oracle.ts, Label tools", { timeout: buildTimeout }, () => {
               "3.0.1 root label, unnamed tool",
             ]),
             generator: labelCases,
-            limit: 40,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",
@@ -368,7 +366,6 @@ describe(
                 "a reference dangling",
               ]),
               generator: typedCases,
-              limit: 200,
               literal: (drawn) => JSON.stringify(drawn),
               oracle: { kind: "specification", name: "XML Schema 1.0 Part 1 §3.15.5, cvc-id" },
               suite: "test/oracle-typed-ids",
@@ -559,7 +556,6 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
               "listed padded",
             ]),
             generator: documentLangCases,
-            limit: 300,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: { kind: "specification", name: "QTI 3.0 Metadata §2.7.1.3, Language" },
             suite: "test/oracle-document-lang",
@@ -772,7 +768,6 @@ describe(
                 "lookup across speaks",
               ]),
               generator: ssmlLawCases,
-              limit: 400,
               literal: (drawn) => JSON.stringify(drawn),
               oracle: {
                 kind: "specification",

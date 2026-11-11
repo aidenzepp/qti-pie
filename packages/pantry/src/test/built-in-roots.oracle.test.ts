@@ -345,7 +345,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "test placed, unresolved",
               ]),
               generator: rootCases,
-              limit: 96,
               literal: Formatter.format,
               oracle: {
                 kind: "second-implementation",

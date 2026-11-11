@@ -183,7 +183,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("an item ref's href", (
                 "item ref unnamed, mapped",
               ]),
               generator: int(0, cases.length - 1),
-              limit: cases.length,
               literal: (at) =>
                 Option.match(Option.fromUndefinedOr(cases[at]), {
                   onNone: () => String(at),

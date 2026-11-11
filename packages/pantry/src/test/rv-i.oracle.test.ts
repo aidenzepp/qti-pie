@@ -441,7 +441,6 @@ describe(
                 body: source.draw(declarationsOf),
                 root: source.draw(declarationsOf),
               }),
-              limit: 500,
               literal: Formatter.format,
               oracle: {
                 kind: "specification",
