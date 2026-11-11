@@ -24,7 +24,7 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { choiceOwnerPackage, shownCase, smallScope } from "#pantry/test/choice-owner-cases.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";

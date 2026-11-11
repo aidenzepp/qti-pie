@@ -37,7 +37,7 @@ import type { Addition, Fact, Law, RefusedLaw } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";

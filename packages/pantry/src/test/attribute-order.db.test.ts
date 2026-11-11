@@ -25,7 +25,7 @@ import { describe } from "vitest";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { exportEntries } from "#pantry/export/package.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { importDir } from "#pantry/test/import-dir.ts";

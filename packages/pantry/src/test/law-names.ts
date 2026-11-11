@@ -9,7 +9,7 @@
  * table gives it: the name is the schema's naming, which only the schema's law model computes, and
  * the importer names a refusal without building the schema (`#pantry/import/refusal.ts`).
  *
- * Run it with this package's own install, `GR8DES_QTI_INSTALL` unset, from the package's folder:
+ * Run it from the package's folder:
  * `node src/test/law-names.ts` writes the file.
  */
 import { writeFileSync } from "node:fs";

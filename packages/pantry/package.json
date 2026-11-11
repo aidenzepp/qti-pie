@@ -9,9 +9,7 @@
     "#migrations/*": "./migrations/*"
   },
   "exports": {
-    "./db/connection.ts": "./src/db/connection.ts",
     "./db/install.ts": "./src/db/install.ts",
-    "./db/layer.ts": "./src/db/layer.ts",
     "./db/served.ts": "./src/db/served.ts",
     "./export/pages.ts": "./src/export/pages.ts",
     "./export/render.ts": "./src/export/render.ts",

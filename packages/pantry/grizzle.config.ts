@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { defineConfig } from "@bjornpagen/grizzle";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
 import { Console, Effect, FileSystem, PlatformError } from "effect";
-import { migrationConnection } from "#pantry/db/connection.ts";
+import { migrationConnection } from "#pantry/cli/connection.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The file system the migration identity's connection reads the cluster's CA through
- * (`#pantry/db/connection.ts`): `readFileString`, read synchronously, so that building the
+ * (`#pantry/cli/connection.ts`): `readFileString`, read synchronously, so that building the
  * connection finishes under `Effect.runSync`, since grizzle calls `connection` synchronously and
  * Node's (`NodeFileSystem`) reads a file only asynchronously. Building the connection reads no
  * other file, so every other operation fails, as `FileSystem.layerNoop` leaves it.
@@ -30,7 +30,7 @@ const synchronousFiles = FileSystem.layerNoop({
 
 /**
  * Build the migration identity's connection to the cluster from its settings and CA
- * (`#pantry/db/connection.ts`), each time grizzle asks for it. Only `grizzle migrate` and `grizzle
+ * (`#pantry/cli/connection.ts`), each time grizzle asks for it. Only `grizzle migrate` and `grizzle
  * drift` ask, so `generate`, `check` and `names` read no setting of the cluster's and no CA, and
  * run where no cluster's state folder is. Only `migrate` and `drift` read the password, at each
  * connection attempt, running `GR8DES_PG_PASSWORD_COMMAND` where it is set.
@@ -52,9 +52,8 @@ const connection = (): MigrationConnectionConfig =>
 
 /**
  * The grizzle configuration every `grizzle` command of this package names: `Qti` alone, with no
- * package-media level, whatever install `GR8DES_QTI_INSTALL` names for the runtime, since an
- * install's migrations are its own config's to generate; its one login; the committed migrations;
- * and the migration identity's connection to the local cluster.
+ * package-media level, since an application's migrations are its own config's to generate; its one
+ * login; the committed migrations; and the migration identity's connection to the local cluster.
  */
 export default defineConfig({
   connection,

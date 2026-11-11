@@ -19,7 +19,7 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { cases, packageOf, shown } from "#pantry/test/placed-id-copy-cases.ts";

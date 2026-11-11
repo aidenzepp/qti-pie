@@ -6,7 +6,7 @@ import { describe } from "vitest";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
 import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";

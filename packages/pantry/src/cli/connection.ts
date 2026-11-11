@@ -2,7 +2,7 @@
  * Where this package connects: grizzle's local development cluster by default, reached as
  * scripts/db.sh reaches it, or the PostgreSQL 19 server its settings name, by the migration
  * identity (`grizzle migrate`, through grizzle.config.ts) and by a login (its `DbLayer`,
- * src/db/layer.ts).
+ * src/cli/layer.ts).
  */
 import net from "node:net";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
@@ -462,7 +462,7 @@ const primedPassword = Effect.fnUntraced(function* primedPassword(
  * and the connect timeout {@link connectTimeoutMsOf} gives the settings' password command.
  *
  * The CA is read through Effect's `FileSystem`, whichever the caller provides: Node's
- * ({@link connectionServices}) for a login's connection, and for the migration identity's a
+ * (`NodeFileSystem.layer`) for a login's connection, and for the migration identity's a
  * synchronous one of grizzle.config.ts's own, since grizzle calls the config's connection
  * synchronously (`GrizzleConfig.connection`, `() => MigrationConnectionConfig`) and its transport
  * takes the CA as text, while `NodeFileSystem` reads a file only asynchronously.
@@ -595,7 +595,7 @@ export const loginConnection = Effect.gen(function* loginConnection() {
  * command: building the connection then runs it once for the login's role, before any attempt,
  * and fails with its {@link PasswordCommandError}; the first attempt reads that run's password,
  * and each later attempt runs the command again ({@link primedPassword}). `AuthorAppLayer`
- * (src/db/layer.ts) builds the runtime's connection with it, so a failing command fails the
+ * (src/cli/layer.ts) builds the runtime's connection with it, so a failing command fails the
  * layer's build with the command's own error, whose message the command line prints.
  *
  * It fails as {@link loginConnection} does.
@@ -613,12 +613,3 @@ export const primedLoginConnection = Effect.gen(function* primedLoginConnection(
         ),
     });
 }).pipe(Effect.withSpan("db.primedLoginConnection"));
-
-/**
- * The services building either connection reads: the file system its CA and the logins' password
- * files are read from. A password command needs none of the caller's: it runs as a child of this
- * Node process. `AuthorAppLayer` (src/db/layer.ts) provides it, and so does an install outside this
- * package that builds a connection here; grizzle.config.ts provides a synchronous file system of
- * its own instead, since grizzle calls its connection synchronously.
- */
-export const connectionServices = NodeFileSystem.layer;

@@ -34,7 +34,7 @@ import {
   loginConnection,
   migrationConnection,
   passwordCommandSetting,
-} from "#pantry/db/connection.ts";
+} from "#pantry/cli/connection.ts";
 import { QtiBase } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -113,7 +113,7 @@ export const loginSession = Effect.gen(function* loginSession() {
  * A session of the migration identity on the lease, the role that owns the database and every
  * table of `Qti`, over verify-full TLS against the cluster's CA, closed with its scope: the writer
  * of a replacement ({@link judgedReplacement}). It connects as `grizzle migrate` does
- * (`#pantry/db/connection.ts` `migrationConnection`), with the password command's password where
+ * (`#pantry/cli/connection.ts` `migrationConnection`), with the password command's password where
  * `GR8DES_PG_PASSWORD_COMMAND` names one. Otherwise its password is the file `<role>.password` in
  * the cluster's state folder, where scripts/db.sh reads it: only `db.sh migrate` exports
  * `GR8DES_PG_MIGRATION_PASSWORD`, and a lease run does not.

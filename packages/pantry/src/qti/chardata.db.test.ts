@@ -24,7 +24,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { Flag, KindByNameUnder, KindNamespace, TypeAvailable } from "#pantry/grammar/install.ts";
 import {
   Comment,

@@ -1,15 +1,9 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
-import { Config, Effect, FileSystem, Layer, Option, Schema } from "effect";
-import { connectionServices, primedLoginConnection } from "#pantry/db/connection.ts";
-import { installFolder, servedPathOf } from "#pantry/db/install.ts";
-import {
-  AuthorLogin,
-  ServedLoadError,
-  ServedText,
-  servedPath as committedServed,
-} from "#pantry/db/served.ts";
+import { Effect, FileSystem, Layer, Schema } from "effect";
+import { primedLoginConnection } from "#pantry/cli/connection.ts";
+import { AuthorLogin, ServedLoadError, ServedText, servedPath } from "#pantry/db/served.ts";
 import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
 /**
@@ -31,20 +25,9 @@ import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
- * The served file the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names
- * an install's folder, the install's own (`#pantry/db/install.ts` `servedPathOf`), which the
- * install's grizzle config generated with its migrations, so the file and the database it was
- * migrated to are one installation's. It reads the setting alone: the install's policy is the
- * schema's, which the served file already holds, so the layer decodes no `policy.json`.
- */
-const servedFilePath = installFolder.pipe(
-  Config.map(Option.match({ onNone: () => committedServed, onSome: servedPathOf })),
-);
-
-/**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/db/connection.ts` `primedLoginConnection`), with the password of the role grizzle
- * installs for the login, its pool, and its install's served workload, read from disk and served as
+ * (`#pantry/cli/connection.ts` `primedLoginConnection`), with the password of the role grizzle
+ * installs for the login, its pool, and the committed served workload, read from disk and served as
  * the login's type (grizzle's `served`), with no schema module evaluated: the login's type is an
  * `import type`.
  *
@@ -53,7 +36,7 @@ const servedFilePath = installFolder.pipe(
  * served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
- * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
+ * `ClusterConfigError` (`#pantry/cli/connection.ts`) when the CA is unreadable, with a
  * {@link ServedLoadError} when the served file is, with the command's `PasswordCommandError` where
  * `GR8DES_PG_PASSWORD_COMMAND` names one, which the build runs once for the login's role before
  * any connection attempt, and with grizzle's `OpenError` at stage `config` for a file of another
@@ -64,10 +47,9 @@ export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
     const connectionOf = yield* primedLoginConnection;
-    const path = yield* servedFilePath;
-    const file = yield* fs.readFileString(path).pipe(
+    const file = yield* fs.readFileString(servedPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
-      Effect.mapError((reason) => new ServedLoadError({ path, reason })),
+      Effect.mapError((reason) => new ServedLoadError({ path: servedPath, reason })),
     );
     const login = served<AuthorAppLogin>(file, "author_app");
     const connection = yield* connectionOf(roleNameOf(login));
@@ -77,7 +59,7 @@ export const AuthorAppLayer = Layer.unwrap(
       Layer.succeed(AuthorLogin, login),
     );
   }),
-).pipe(Layer.provide(connectionServices));
+).pipe(Layer.provide(NodeFileSystem.layer));
 
 /**
  * Everything an import in this process runs on, one layer that needs nothing: Node's file system,
@@ -85,13 +67,13 @@ export const AuthorAppLayer = Layer.unwrap(
  * and {@link AuthorAppLayer}, the author login and its `DbLayer`, which its write (`importPackage`
  * of `#pantry/import/package.ts`) applies through. So
  * `readPackage(dir).pipe(Effect.flatMap(importPackage), Effect.provide(ImportLive))` imports a
- * package, here and in an install outside this package alike, and the command line runs every
- * command that reaches the database on it (`#pantry/cli/engine.ts` `withAuthorApp`).
+ * package into this package's own install, and the command line runs every command that reaches
+ * the database on it (`#pantry/cli/engine.ts` `withAuthorApp`). It is the command line's and the
+ * tests' own: an application builds its own author `DbLayer` and provides `AuthorLogin`.
  *
  * It is built from the process's settings, read through Effect `Config`: the cluster's
- * (`GR8DES_PG_HOST`, `GR8DES_PG_PORT`, `GR8DES_PG_DATABASE`, `GR8DES_PG_CA`, `GR8DES_PG_SECRETS`)
- * and the install folder `GR8DES_QTI_INSTALL` names, whose served file it opens
- * (`#pantry/db/install.ts`).
+ * (`GR8DES_PG_HOST`, `GR8DES_PG_PORT`, `GR8DES_PG_DATABASE`, `GR8DES_PG_CA`, `GR8DES_PG_SECRETS`),
+ * and it opens the committed served file.
  * The import's `RetrySchedule` and `WrapApply` are references whose defaults are the live ones, so
  * the layer provides neither. Building it fails as {@link AuthorAppLayer} fails.
  */

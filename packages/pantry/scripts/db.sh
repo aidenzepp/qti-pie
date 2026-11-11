@@ -16,7 +16,7 @@
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
-# src/db/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
+# src/cli/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
 # password, and the command stops before psql starts. It then replaces the migration identity's password file, and
 # migrate gives no login a local password, since every login's comes from the command too. This script runs it before
 # psql starts, with no bound; grizzle migrate runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
@@ -26,7 +26,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # The GR8DES_PG_* and GRIZZLE_PG_STATE defaults below are read again, with the same values, by `localCluster` in
-# src/db/connection.ts; change one, change both. They are exported, so the grizzle config connects where this script
+# src/cli/connection.ts; change one, change both. They are exported, so the grizzle config connects where this script
 # does. The CA is not: unset or empty, GR8DES_PG_CA stays so, and the config finds the same file in GRIZZLE_PG_STATE,
 # so a missing one is reported as the local cluster's.
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
@@ -114,7 +114,7 @@ create() {
 	echo "$GR8DES_PG_DATABASE: created"
 }
 
-# grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
+# grizzle reads no environment variable for where to connect: the config's connection (src/cli/connection.ts) reads
 # the settings exported above and the migration identity's password, which only this command is given, or runs
 # GR8DES_PG_PASSWORD_COMMAND for it, which also gives every login its password, so no login gets a local one.
 migrate() {

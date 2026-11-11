@@ -28,7 +28,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Option, Ref, Schedule } from "effect";
 import type { Client, QueryResultRow } from "pg";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { WrapApply } from "#pantry/import/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 

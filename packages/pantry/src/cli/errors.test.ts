@@ -22,7 +22,7 @@ import {
 } from "#pantry/cli/errors.ts";
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { refusalFieldsOf } from "#pantry/cli/refused.ts";
-import { ClusterConfigError } from "#pantry/db/connection.ts";
+import { ClusterConfigError } from "#pantry/cli/connection.ts";
 import { ServedLoadError } from "#pantry/db/served.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount } from "#pantry/export/pages.ts";

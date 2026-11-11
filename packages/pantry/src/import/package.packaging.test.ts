@@ -12,7 +12,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle, packagingFixtures } from "#pantry/test/oracle-verdict.ts";

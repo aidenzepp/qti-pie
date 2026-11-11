@@ -3,7 +3,7 @@
  * and no production module imports a migration artifact as a module.
  *
  * The layer reads the author login's served file from disk (`#pantry/db/served.ts` resolves
- * `#migrations/qti/served/author_app.json` with `import.meta.resolve`, and `#pantry/db/layer.ts`
+ * `#migrations/qti/served/author_app.json` with `import.meta.resolve`, and `#pantry/cli/layer.ts`
  * reads it with `readFileString`), so evaluating a production module parses none of its megabytes
  * and no bundle carries it. grizzle's `DbLayer.make` loads the file's workloads and compiles
  * nothing, and its pool opens no session until a `Db` asks for one. Test support may import the
@@ -21,7 +21,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**

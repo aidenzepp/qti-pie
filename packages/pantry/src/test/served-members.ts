@@ -16,7 +16,8 @@ import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { ServedLogin } from "@bjornpagen/grizzle/runtime";
 import { Context, Effect, Layer } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
-import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import { loginConnection } from "#pantry/cli/connection.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
@@ -58,7 +59,7 @@ export const servedProbe = <const L extends AnyLogin>(probe: L) => {
         Layer.succeed(ProbeLogin, served<L>(file, probe.name)),
       );
     }),
-  ).pipe(Layer.provide(connectionServices));
+  ).pipe(Layer.provide(NodeFileSystem.layer));
 
   return { ProbeLogin, layer };
 };

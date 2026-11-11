@@ -13,7 +13,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 

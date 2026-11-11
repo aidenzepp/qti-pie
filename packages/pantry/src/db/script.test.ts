@@ -1,7 +1,7 @@
 /**
  * What scripts/db.sh sends psql and what it reports, with no database: a stub psql in place of
  * `GRIZZLE_PG_BIN`'s, which records the password and the connection string each connection is
- * given and connects nowhere, and stub password commands, held to the meaning src/db/connection.ts
+ * given and connects nowhere, and stub password commands, held to the meaning src/cli/connection.ts
  * gives `GR8DES_PG_PASSWORD_COMMAND`.
  */
 import path from "node:path";
@@ -134,7 +134,7 @@ const runScript = Effect.fn("test.dbScript.run")(function* runScript(
 /**
  * The password commands whose run gives no password, by the shell text after `#!/bin/sh`, and the
  * exit code the script must report: a run that exits otherwise than 0 is refused whatever it
- * printed, as src/db/connection.ts's `PasswordCommandFailed` refuses it, and one that exits 0 with
+ * printed, as src/cli/connection.ts's `PasswordCommandFailed` refuses it, and one that exits 0 with
  * nothing but whitespace as its `PasswordCommandSilent` does. Every subcommand refuses through the
  * same `as_owner`, so each command is run through `create`, which loads no config, and the first
  * through `check-clear` too, whose refusal exits 2 after loading the config's roles.

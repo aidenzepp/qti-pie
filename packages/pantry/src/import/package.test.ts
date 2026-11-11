@@ -26,7 +26,7 @@ import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import {
   CommitUnresolved,
   RetrySchedule,

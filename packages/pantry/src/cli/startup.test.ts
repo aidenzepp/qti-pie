@@ -14,6 +14,8 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
  * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
  */
 const startupForbidden = [
+  "#pantry/cli/connection.ts",
+  "#pantry/cli/layer.ts",
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",

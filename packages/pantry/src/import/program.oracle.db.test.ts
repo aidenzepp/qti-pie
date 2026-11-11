@@ -39,7 +39,7 @@ import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import {
   applyEdited,
   checkNamed,

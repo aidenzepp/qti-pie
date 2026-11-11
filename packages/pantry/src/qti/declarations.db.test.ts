@@ -31,7 +31,7 @@ import type { Addition, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import {
   contextVariable,

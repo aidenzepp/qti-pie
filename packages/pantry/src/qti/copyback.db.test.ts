@@ -32,7 +32,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Option, Schema } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { AuthorAppLayer } from "#pantry/cli/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { ValueBase } from "#pantry/qti/expression-types.ts";
 import {
