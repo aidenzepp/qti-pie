@@ -258,6 +258,26 @@ const indicator = (props: Attributes, children: readonly Node[]) => h("span", pr
  */
 const badge = (props: Attributes) => h("span", props, [text("new")]);
 
+/**
+ * The attributes the item Root row merges beyond `lang` and `id`: `data-magnification`, the
+ * marker of issue m3e-09b, and the display markers of issue m5-12, each of which the Root hook
+ * writes only under its own preference.
+ */
+const rootHookMarkers = [
+  "data-magnification",
+  "data-polarity",
+  "data-polarity-foreground",
+  "data-polarity-background",
+  "data-layout",
+  "data-font-size",
+  "data-font-family",
+  "data-font-generic",
+  "data-line-height",
+  "data-letter-spacing",
+  "data-word-spacing",
+  "data-color-theme",
+] as const;
+
 describe("partTable", () => {
   it("holds every row of the spec's table once, with its slot and default element", () => {
     const tableRows = [
@@ -437,7 +457,7 @@ describe("the content rows", () => {
   });
 
   it("[W0-CONTENT-PARTS] the item root row merges data-magnification", () => {
-    assert.deepStrictEqual(rowFor("item", "root").merged, ["lang", "id", "data-magnification"]);
+    assert.deepStrictEqual(rowFor("item", "root").merged, ["lang", "id", ...rootHookMarkers]);
   });
 });
 
@@ -948,16 +968,16 @@ const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode
  * The names a row's `merged` column holds that its connect function never computes, by marker:
  * the Inline Choice Option's and Placeholder's `disabled` and `hidden`, which plate owns by their
  * absence alone, the item Live part's `role`, which it leaves to a host override so the live
- * region is no second Status region (D14), and the item Root's `data-magnification`, which the
- * Root hook writes only under a magnification support (issue m3e-09b), a support none of these
- * renders passes.
+ * region is no second Status region (D14), and the item Root's {@link rootHookMarkers}, which the
+ * Root hook writes only under a magnification or display support (issues m3e-09b and m5-12), a
+ * support none of these renders passes.
  */
 const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
   ...(["option", "placeholder"] as const).map(
     (part) => [rowFor("inline-choice-interaction", part).slot, ["disabled", "hidden"]] as const,
   ),
   [rowFor("item", "live").slot, ["role"]],
-  [rowFor("item", "root").slot, ["data-magnification"]],
+  [rowFor("item", "root").slot, rootHookMarkers],
 ]);
 
 /**

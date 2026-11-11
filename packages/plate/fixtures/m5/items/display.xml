@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m5-display" title="Display preferences" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <div class="qti-layout-row">
+      <div class="qti-layout-col6">
+        <p>The harbour wall takes the first of the waves and gives the bay its calm.</p>
+      </div>
+      <div class="qti-layout-col6">
+        <p>Behind it the small boats wait for the morning tide to float them out.</p>
+      </div>
+    </div>
+    <p><img src="images/harbour.png" alt="A stone harbour wall with three boats" data-catalog-idref="harbour"/></p>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>What does the wall give the bay?</qti-prompt>
+      <qti-simple-choice identifier="A">Its tide</qti-simple-choice>
+      <qti-simple-choice identifier="B">Its calm</qti-simple-choice>
+      <qti-simple-choice identifier="C">Its boats</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+  <qti-catalog-info>
+    <qti-catalog id="harbour">
+      <qti-card support="high-contrast">
+        <qti-html-content>
+          <p><img src="images/harbour-high-contrast.png" alt="The same harbour wall drawn in black and white"/></p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>

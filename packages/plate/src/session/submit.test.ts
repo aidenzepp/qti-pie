@@ -2678,9 +2678,9 @@ describe("submitItem and the adaptive policy", () => {
   );
 
   it.effect(
-    "[W0-BD] the stub policy refuses as today: the second attempt at an adaptive item of max-attempts 1 is attempts-exhausted",
+    "[W0-BD] the filled policy, unmocked: the second attempt at an adaptive item of max-attempts 1 is accepted, and one after completion is item-closed",
     () =>
-      Effect.gen(function* stubSubmission() {
+      Effect.gen(function* filledSubmission() {
         const delivery = yield* builtDelivery(
           "adaptive-stub",
           [partOf("part", ["grows"], { control: 'max-attempts="1"' })],
@@ -2704,8 +2704,14 @@ describe("submitItem and the adaptive policy", () => {
 
         assert.strictEqual(itemAt(first, 1).record.numAttempts, 1);
         assert.isFalse(completed(itemAt(first, 1).record));
-        assert.isTrue(closedAt(delivery, first, 1));
-        assert.strictEqual(refusedRule(submit(first, "A", 6)), "attempts-exhausted");
+        assert.isFalse(closedAt(delivery, first, 1));
+
+        const second = accepted(submit(first, "A", 6));
+
+        assert.strictEqual(itemAt(second, 1).record.numAttempts, 2);
+        assert.isTrue(completed(itemAt(second, 1).record));
+        assert.isTrue(closedAt(delivery, second, 1));
+        assert.strictEqual(refusedRule(submit(second, "B", 7)), "item-closed");
       }),
   );
 });

@@ -8,9 +8,9 @@
  * `completionStatus` is `completed`, and `max-attempts` does not limit it. The readings bind the
  * two facts the policy stands on: "Item session control is resolved attribute by attribute", whose
  * `max-attempts` is 1 where no element writes it "for a non-adaptive item", and "The built-in
- * outcome variable is `completionStatus`, spelled exactly" (`docs/spec-readings.md`). Today the
- * policy is a stub: {@link adaptivePolicy} answers for every item as the non-adaptive rules do,
- * its `implemented` is false, and nothing an adaptive item does changes until `m5-03` lands.
+ * outcome variable is `completionStatus`, spelled exactly" (`docs/spec-readings.md`).
+ * {@link adaptivePolicy} gives those answers for an adaptive item and the non-adaptive ones for
+ * every other, and its `implemented` is true, so the item model no longer marks `adaptive="true"`.
  *
  * Three hubs consult it as a module-level value: `runAttempt` (`#plate/engine/attempt.ts`) starts
  * an attempt's outcomes through `startingOutcomes`; `inspect` (`#plate/session/start.ts`) closes
@@ -142,13 +142,55 @@ const resetOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"] =
 };
 
 /**
- * The policy in force: the stub, which gives every item the non-adaptive answers and reports
- * `implemented` false. `m5-03` replaces it with the adaptive answers each member's contract
- * states.
+ * Give the outcomes an adaptive attempt's processing starts from: the record's outcomes as the
+ * last attempt left them, since "the outcome variables are not reset" in an adaptive item, so its
+ * rules read and build on them, and the built-in `completionStatus`, where the item holds it, as
+ * {@link startingCompletion} gives it, `unknown` at the first attempt. Before the first attempt the
+ * record holds each outcome at its default ({@link outcomeStart}), so the first attempt starts as a
+ * non-adaptive one does.
+ *
+ * @param item The item.
+ * @param record The session record before the attempt.
+ * @returns The outcomes, keyed by identifier.
+ */
+const keptOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"] =>
+  holdsCompletionStatus(item)
+    ? { ...record.outcomes, [completionStatus]: startingCompletion(record) }
+    : record.outcomes;
+
+/**
+ * Say whether a record's built-in `completionStatus` is `completed`, the value an adaptive item's
+ * processing sets when the candidate is done with it.
+ *
+ * @param record The session record.
+ * @returns Whether the item's processing completed it.
+ */
+const completed = (record: ItemRecord): boolean => {
+  const status = record.outcomes[completionStatus]?.values[0];
+
+  return status?.baseType === "identifier" && status.value === "completed";
+};
+
+/**
+ * The policy in force, the adaptive items module of issue m5-03: an adaptive item's outcomes are
+ * kept from one attempt to the next rather than reset, and its attempts are limited by the
+ * built-in `completionStatus`, not by `max-attempts`: the candidate may submit it again until its
+ * processing sets `completionStatus` to `completed`, which closes it. An adaptive item whose
+ * processing never sets `completed` stays open until its part ends or the host stops the session;
+ * no attempt cap is invented. A non-adaptive item keeps the non-adaptive answers: its declared
+ * outcomes reset before each attempt, and it closes when its effective attempt limit, above 0, is
+ * reached.
+ *
+ * An adaptive item in a simultaneous part is delivered as every item there is, neither refused nor
+ * marked: `submitPart` (`#plate/session/submit.ts`) processes it once, at the part's end, so it
+ * takes its one attempt and that attempt's outcomes, though QTI calls adaptive items "not
+ * compatible with the simultaneous mode".
  */
 export const adaptivePolicy: AdaptivePolicy = {
-  closed: (_adaptive, record, limit) => limit > 0 && record.numAttempts >= limit,
-  implemented: false,
-  limit: (_adaptive, limit) => limit,
-  startingOutcomes: resetOutcomes,
+  closed: (adaptive, record, limit) =>
+    adaptive ? completed(record) : limit > 0 && record.numAttempts >= limit,
+  implemented: true,
+  limit: (adaptive, limit) => (adaptive ? 0 : limit),
+  startingOutcomes: (item, record) =>
+    item.adaptive === true ? keptOutcomes(item, record) : resetOutcomes(item, record),
 };

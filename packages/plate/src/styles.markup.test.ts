@@ -3,7 +3,15 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { contentModules } from "#plate/content/modules.ts";
 import type { AnyContentModule } from "#plate/content/modules.ts";
-import { rootHook } from "#plate/content/root.ts";
+import {
+  colorThemes,
+  fontSizeFactors,
+  fontSizePoints,
+  letterSpacings,
+  lineHeights,
+  rootHook,
+  wordSpacings,
+} from "#plate/content/root.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { partForSlot, rowFor } from "#plate/emit/parts.ts";
@@ -47,6 +55,8 @@ import { parseHtml } from "#plate/test/round-trip.ts";
 import { hasStub, stubBaseType, stubCardinality, stubKind } from "#plate/test/stub-kind.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
+import { genericFontFaces } from "#plate/supports.ts";
+import type { FontSize, TextPreferences } from "#plate/supports.ts";
 
 /**
  * A compound of a sheet, with the selector it was read from.
@@ -1118,6 +1128,99 @@ const magnifiedTrees = Effect.fnUntraced(function* magnifiedTrees(configuration:
 });
 
 /**
+ * The text preferences with nothing set, which each display witness changes in one place.
+ */
+const noText: TextPreferences = {
+  colorTheme: Option.none(),
+  fontNames: [],
+  fontSize: Option.none(),
+  genericFontFace: Option.none(),
+  letterSpacing: Option.none(),
+  lineHeight: Option.none(),
+  lineSpacing: Option.none(),
+  uniformFontSizing: false,
+  wordSpacing: Option.none(),
+  wordWrapping: false,
+};
+
+/**
+ * Take a scale's value for a witness, the scale starting again when the witness is past its end.
+ *
+ * @param values The scale.
+ * @param index The witness's index.
+ * @returns The value at the index, wrapped.
+ */
+const cycled = <T>(values: readonly T[], index: number): Option.Option<T> =>
+  Option.fromNullishOr(values[index % values.length]);
+
+/**
+ * The supports of the display witnesses: one candidate per index, each holding the next value of
+ * every scale the Root hook writes ({@link fontSizeFactors} then {@link fontSizePoints},
+ * {@link lineHeights}, {@link letterSpacings}, {@link wordSpacings}, each generic family and each
+ * of {@link colorThemes}, a scale shorter than the longest starting again), the first with inverted
+ * polarity and a single column on. So every value the display block keys on is on some Root, in as
+ * many candidates as the longest scale has values.
+ */
+const displaySupports: readonly Supports[] = ((): readonly Supports[] => {
+  const sizes: readonly FontSize[] = [
+    ...fontSizeFactors.map((value): FontSize => ({ kind: "factor", value })),
+    ...fontSizePoints.map((value): FontSize => ({ kind: "points", value })),
+  ];
+  const count = Math.max(
+    sizes.length,
+    lineHeights.length,
+    letterSpacings.length,
+    wordSpacings.length,
+    genericFontFaces.length,
+    colorThemes.length,
+  );
+
+  return Array.from({ length: count }, (_, index) => ({
+    ...noSupports,
+    display: {
+      ...noSupports.display,
+      invertDisplayPolarity: index === 0,
+      layoutSingleColumn: index === 0,
+      text: Option.some({
+        ...noText,
+        colorTheme: cycled(colorThemes, index),
+        fontSize: cycled(sizes, index),
+        genericFontFace: cycled(genericFontFaces, index),
+        letterSpacing: cycled(letterSpacings, index),
+        lineHeight: cycled(lineHeights, index),
+        wordSpacing: cycled(wordSpacings, index),
+      }),
+    },
+  }));
+})();
+
+/**
+ * Render {@link choiceItem} once for each of {@link displaySupports}, as a host does for a
+ * candidate with display preferences: the support-driven witness of the display block (issue
+ * m5-12), whose rules key on the Root's data attributes, which the Root hook writes under
+ * `supports.display`. The redaction takes the same supports as the render, as the render contract
+ * asks.
+ *
+ * @param configuration The configuration.
+ * @returns The renders' trees.
+ */
+const displayTrees = Effect.fnUntraced(function* displayTrees(configuration: Configuration) {
+  const accepted = yield* acceptedOf(choiceItem);
+  const rendered = yield* Effect.fromResult(
+    Result.all(
+      displaySupports.map((supports) =>
+        render(redact(accepted, undefined, configuration, { supports }), configuration, {
+          instance,
+          supports,
+        }),
+      ),
+    ),
+  );
+
+  return rendered.flatMap((entry) => parseHtml(entry.html));
+});
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -1126,8 +1229,8 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * the navigation, the navigation of a timed test, a Choice with answer masking on and a Choice
- * with a magnification on.
+ * the navigation, the navigation of a timed test, a Choice with answer masking on, a Choice with a
+ * magnification on and a Choice for each of the display witnesses.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -1151,6 +1254,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...(yield* timedNavigationTrees(configuration)),
       ...(yield* maskedTrees(configuration)),
       ...(yield* magnifiedTrees(configuration)),
+      ...(yield* displayTrees(configuration)),
     ],
   };
 });

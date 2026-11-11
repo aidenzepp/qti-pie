@@ -609,8 +609,12 @@ const admits = {
  * navigation rows, then the content slots', before {@link partTable} derives each marker.
  *
  * The item Root merges `data-magnification`, the marker the Root hook writes under a magnification
- * support (issue m3e-09b), so a host's replacement cannot drop it and the stylesheet may key on it.
- * The hook is a stub, so no render writes it yet.
+ * support (issue m3e-09b), and the eleven display markers it writes under the display preferences
+ * (issue m5-12: `data-polarity` with its two colours, `data-layout`, and the text appearance's
+ * `data-font-size`, `data-font-family`, `data-font-generic`, `data-line-height`,
+ * `data-letter-spacing`, `data-word-spacing` and `data-color-theme`), so a host's replacement
+ * cannot drop one and the stylesheet may key on it. The hook writes each only under its own
+ * preference.
  *
  * Each content row names the issue whose module renders its part. None defaults or merges an
  * attribute: no content module computes one beyond the marker, so a name joins a row's `merged`
@@ -634,7 +638,22 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
-    merged: ["lang", "id", "data-magnification"],
+    merged: [
+      "lang",
+      "id",
+      "data-magnification",
+      "data-polarity",
+      "data-polarity-foreground",
+      "data-polarity-background",
+      "data-layout",
+      "data-font-size",
+      "data-font-family",
+      "data-font-generic",
+      "data-line-height",
+      "data-letter-spacing",
+      "data-word-spacing",
+      "data-color-theme",
+    ],
     part: "root",
     tagClass: "flow-container",
   },
