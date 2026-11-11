@@ -73,17 +73,13 @@ const accepted = [
 const containerPackages: ReadonlySet<string> = new Set(["simple", "svg"]);
 
 /**
- * The statements one page of `documentScan` runs in its flight: one for the `Node` rows, one for
- * each of the nine attachments on a node (comment, instruction, doctype, an element's named type,
- * a foreign element's named type, foreign element name, `Document` row, attributes, namespace
- * declarations), one for the XML declaration on the `Document` row, one for each of the two on the
- * declaration (encoding, standalone), and one for
- * each of the two on an attribute (entity references, open name). An attachment over exact parents
- * is pipelined, its own statement in the parent's flight and snapshot (the engine's
- * `lower/shapes/attach/index.ts`, `chooseAttachment`), so the count is the scan's shape and no
- * row's.
+ * The statements one page of `documentScan` runs: one. Since grizzle's ATTACH-02 (698880ac), a read
+ * with attachments is one statement, with its attachments lowered into it. The scan's fifteen
+ * pieces (the `Node` rows, the nine attachments on a node, the XML declaration with its encoding
+ * and standalone, and an attribute's entity references and open name) used to be fifteen pipelined
+ * statements in one flight. So the count is the scan's shape and no row's.
  */
-const scanStatements = 15;
+const scanStatements = 1;
 
 /**
  * The plan node types that make a statement recursive: a recursive CTE's union and its working
