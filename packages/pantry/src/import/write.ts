@@ -43,6 +43,7 @@ import { contextsOf } from "#pantry/import/context.ts";
 import { foldAt, governorOf, viewOf } from "#pantry/import/fold.ts";
 import type { DocumentView, Folded } from "#pantry/import/fold.ts";
 import type { ListedTarget } from "#pantry/import/context.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
@@ -406,79 +407,6 @@ const attributeGrammarAt: ReadonlyMap<string, AdmittedAttribute> = new Map(
 );
 
 /**
- * The whitespace an IDREFS value separates its tokens by, XML's `S`.
- */
-const idrefSpace = /[\t\n\r ]+/gu;
-
-/**
- * XML whitespace, possibly none, as an `Idref` piece holds it around its token.
- */
-type SpaceText = IdrefInsert["before"];
-
-/**
- * State that a run the split cut at whitespace is the whitespace around a token: `Space`'s
- * pattern, `^[\t\n\r ]*$`, the language the type `SpaceText` spells.
- *
- * @param text - A run of {@link idrefSpace}'s matches, or the empty text.
- * @returns Whether it is XML whitespace, possibly none.
- */
-const isSpace = (text: string): text is SpaceText => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Hold a run the split cut at whitespace to the type of the whitespace around a token.
- *
- * @param text - A run of {@link idrefSpace}'s matches, or the empty text.
- * @returns The run.
- * @throws {Error} When the run holds anything but whitespace, which the split never cuts.
- */
-const spaceOf = (text: string): SpaceText => {
-  if (isSpace(text)) {
-    return text;
-  }
-
-  throw new Error(
-    `The IDREF split cut ${JSON.stringify(text)} as whitespace, and it holds more. Correct idrefPiecesOf.`,
-  );
-};
-
-/**
- * Split an IDREF or IDREFS lexical form into its tokens, each with the whitespace written before
- * it, and the last with the whitespace after it, so the pieces concatenate to the form and every
- * token but the first follows whitespace (`E1_derived` on `Idref`).
- *
- * @param lexical - The attribute's lexical form.
- * @returns Its pieces, in order; none for a form with no token, which the attribute's laws refuse.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const idrefPiecesOf = (lexical: string): readonly IdrefInsert[] => {
-  const tokens: { readonly before: string; readonly token: string }[] = [];
-  let before = "";
-  let last = 0;
-  for (const space of lexical.matchAll(idrefSpace)) {
-    const token = lexical.slice(last, space.index);
-    if (token.length > 0) {
-      tokens.push({ before, token });
-      before = "";
-    }
-
-    before += space[0];
-    last = space.index + space[0].length;
-  }
-
-  const tail = lexical.slice(last);
-  if (tail.length > 0) {
-    tokens.push({ before, token: tail });
-    before = "";
-  }
-
-  return tokens.map(({ before: lead, token }, at) => ({
-    after: spaceOf(at === tokens.length - 1 ? before : ""),
-    before: spaceOf(lead),
-    token,
-  }));
-};
-
-/**
  * The namespace name of the one node in no namespace that is a parent, the document node, as
  * `ForeignNamespace` writes none (`#pantry/qti/chardata.ts`): the empty text, which is no namespace
  * name (Namespaces in XML 1.0, §2.2: "The empty string, though it is a legal URI reference, cannot
@@ -632,7 +560,7 @@ const attributeOf = (attribute: GatheredAttribute, element: Gathered): Attribute
   return {
     entities: attribute.entities.map(({ name, offset }) => ({ name, offset })),
     id: row.id,
-    idrefs: Option.exists(admitted, ({ idrefs }) => idrefs) ? idrefPiecesOf(row.lexical) : [],
+    idrefs: Option.exists(admitted, ({ idrefs }) => idrefs) ? tokensOf(row.lexical) : [],
     lexical: row.lexical,
     name: row.name,
     openName: openNames.has(row.name)

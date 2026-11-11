@@ -27,6 +27,8 @@ import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import { namedBy } from "#pantry/import/names.ts";
+import { hrefPiecesOf, piecesOf } from "#pantry/import/pieces.ts";
+import type { HrefPieces, Space } from "#pantry/import/pieces.ts";
 import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
@@ -125,121 +127,28 @@ const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
   Option.fromUndefinedOr(spelledTypes.get(lexical));
 
 /**
- * An href's `params` piece, as `ResourceHref` and `Reference` type it: empty, or from a `?` or `#`.
- */
-type Params = Addition<typeof Reference>["params"];
-
-/**
- * XML whitespace, as `Reference` types its `lead` and `trail`.
- */
-type Whitespace = Addition<typeof Reference>["lead"];
-
-/**
- * State that a text is an href's `params` piece.
- *
- * @param text - The text.
- * @returns Whether it is empty or starts with `?` or `#`.
- */
-const isParams = (text: string): text is Params =>
-  text === "" || text.startsWith("?") || text.startsWith("#");
-
-/**
- * State that a text is XML whitespace, possibly none.
- *
- * @param text - The text.
- * @returns Whether every character is a tab, a line feed, a carriage return or a space.
- */
-const isWhitespace = (text: string): text is Whitespace => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Hold a piece the split cut as an href's `params` to its type.
- *
- * @param text - The piece: empty, or from the href's first `?` or `#`.
- * @returns The piece.
- * @throws {Error} When it is neither, which the split never cuts.
- */
-const paramsOf = (text: string): Params => {
-  if (isParams(text)) {
-    return text;
-  }
-
-  throw new Error(
-    `The href split cut ${JSON.stringify(text)} as params, which start at a "?" or "#". Correct hrefPiecesOf.`,
-  );
-};
-
-/**
- * Hold a piece the split cut as a reference's outer whitespace to its type.
- *
- * @param text - The piece: the XML whitespace at one end of a lexical form.
- * @returns The piece.
- * @throws {Error} When it holds anything but XML whitespace, which the split never cuts.
- */
-const whitespaceOf = (text: string): Whitespace => {
-  if (isWhitespace(text)) {
-    return text;
-  }
-
-  throw new Error(
-    `The reference split cut ${JSON.stringify(text)} as whitespace, and it holds more. Correct referencePiecesOf.`,
-  );
-};
-
-/**
- * An href's two written pieces (reading 102), `href = path ‖ params`.
- */
-export interface HrefPieces {
-  readonly params: Params;
-  readonly path: string;
-}
-
-/**
  * A reference's written pieces, `lexical = lead ‖ target ‖ params ‖ trail`.
  */
 export interface ReferencePieces {
-  readonly lead: Whitespace;
-  readonly params: Params;
+  readonly lead: Space;
+  readonly params: HrefPieces["params"];
   readonly target: string;
-  readonly trail: Whitespace;
+  readonly trail: Space;
 }
 
 /**
- * Split an href into its two written pieces (reading 102): `path`, up to its first `?` or `#`, and
- * `params`, the query or fragment from there, so `href = path ‖ params`.
- *
- * @param href - The href, as written.
- * @returns Its pieces.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const hrefPiecesOf = (href: string): HrefPieces => {
-  const at = href.search(/[?#]/u);
-
-  return at === -1
-    ? { params: "", path: href }
-    : { params: paramsOf(href.slice(at)), path: href.slice(0, at) };
-};
-
-/**
  * Split a reference's lexical form into the pieces `Reference` holds: its leading and trailing XML
- * whitespace, and between them its path and its query or fragment.
+ * whitespace ({@link piecesOf}), and between them its path and its query or fragment
+ * ({@link hrefPiecesOf}).
  *
  * @param lexical - The attribute's lexical form.
  * @returns `lead ‖ target ‖ params ‖ trail`, the lexical form.
  */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
 export const referencePiecesOf = (lexical: string): ReferencePieces => {
-  // Both patterns match at some index of any text, the second at its end at the latest, so
-  // neither search gives -1.
-  const start = lexical.search(/[^\t\n\r ]|$/u);
-  const end = start + lexical.slice(start).search(/[\t\n\r ]*$/u);
-  const { params, path } = hrefPiecesOf(lexical.slice(start, end));
+  const { lead, trail, value } = piecesOf(lexical);
+  const { params, path } = hrefPiecesOf(value);
 
-  return {
-    lead: whitespaceOf(lexical.slice(0, start)),
-    params,
-    target: path,
-    trail: whitespaceOf(lexical.slice(end)),
-  };
+  return { lead, params, target: path, trail };
 };
 
 /**

@@ -43,6 +43,7 @@ const xmlSide = [
   "import/names.ts",
   "import/overlays/*.ts",
   "import/package.ts",
+  "import/pieces.ts",
   "import/preview.ts",
   "import/program.ts",
   "import/read.ts",

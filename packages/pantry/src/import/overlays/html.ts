@@ -14,6 +14,7 @@ import { Option } from "effect";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import { namedBy } from "#pantry/import/names.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
@@ -46,57 +47,6 @@ export interface HtmlRows {
  * The table cell kinds, whose `headers` reading 126 reads.
  */
 const cells: ReadonlySet<string> = new Set(cellKinds);
-
-/**
- * The text `HeaderToken.before` and `after` hold: XML whitespace, possibly none.
- */
-type Spacing = HeaderTokenInsert["before"];
-
-/**
- * Decide whether a text is XML whitespace, possibly none, the language of {@link Spacing}.
- *
- * @param text - The text, none where a regex group did not take part.
- * @returns Whether it is a text every character of which is a tab, a line feed, a carriage return
- *   or a space.
- */
-const isSpacing = (text: string | undefined): text is Spacing =>
-  text !== undefined && /^[\t\n\r ]*$/u.test(text);
-
-/**
- * A token of a `headers` value with the whitespace before it: every run the global match takes,
- * each starting where the last ended, so the runs cover the value up to its trailing whitespace.
- */
-const tokenRun = /(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu;
-
-/**
- * Split a `headers` value into its tokens, each with the whitespace written before it, and the
- * last with the whitespace after it, so the pieces concatenate to the value and every token but
- * the first follows whitespace (`E1_derived` on `HeaderToken`).
- *
- * @param lexical - The attribute's lexical form.
- * @returns Its pieces, in order; none for a value of whitespace alone, an empty list.
- * @throws {Error} When a run of {@link tokenRun} lacks its `before` or `token` group, or the text
- *   after the last run is no whitespace, which the pattern rules out: a defect of this splitter,
- *   never of the document.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const headerPiecesOf = (lexical: string): readonly HeaderTokenInsert[] => {
-  const runs = [...lexical.matchAll(tokenRun)];
-  const tail = runs.reduce((end, run) => end + run[0].length, 0);
-
-  return runs.map((run, at): HeaderTokenInsert => {
-    const before = run.groups?.["before"];
-    const token = run.groups?.["token"];
-    const after = at === runs.length - 1 ? lexical.slice(tail) : "";
-    if (!isSpacing(before) || token === undefined || !isSpacing(after)) {
-      throw new Error(
-        `The headers value ${JSON.stringify(lexical)} split into a run ${JSON.stringify(run[0])} with no whitespace before its token, no token, or no whitespace after it, which the token pattern rules out. Correct headerPiecesOf's pattern.`,
-      );
-    }
-
-    return { after, before, token };
-  });
-};
 
 /**
  * The walk from a cell up to the table it takes part in, the cell first, and the table it ends at:
@@ -209,7 +159,7 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
         lexical,
         node: cell.id,
         table: tableOf(cell),
-        tokens: headerPiecesOf(lexical),
+        tokens: tokensOf(lexical),
       });
     }
 

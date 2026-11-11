@@ -1,5 +1,5 @@
 /**
- * The HTML builder's free tests: `headerPiecesOf` splits every `headers` value into exactly its
+ * The HTML builder's free tests: `tokensOf` splits every `headers` value into exactly its
  * whitespace-separated tokens, and over documents of a known structure `rowsOf` gives each cell's
  * `headers` its nearest table, each `th`'s `id` that is an NCName its value and table, and each
  * element on the way up its scope, as the document's own construction says.
@@ -18,7 +18,8 @@ import { Duration, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { headerPiecesOf, rowsOf } from "#pantry/import/overlays/html.ts";
+import { rowsOf } from "#pantry/import/overlays/html.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
 import type { HtmlRows } from "#pantry/import/overlays/html.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -118,7 +119,7 @@ const values: Gen<readonly string[]> = array(element<string>(characters), { max:
  */
 type SplitSituation = "no token" | "bare token" | "padded token" | "several tokens";
 
-describe("import/overlays/html.ts, headerPiecesOf", () => {
+describe("import/pieces.ts, tokensOf on a headers value", () => {
   it.effect(
     "splits every value into exactly its whitespace-separated tokens, the pieces concatenating to the value, and a value of whitespace alone into none",
     (ctx) =>
@@ -164,7 +165,7 @@ describe("import/overlays/html.ts, headerPiecesOf", () => {
               };
               c.note(situation());
 
-              const pieces = headerPiecesOf(lexical);
+              const pieces = tokensOf(lexical);
               assert.deepStrictEqual(
                 pieces.map(({ token }) => token),
                 expected,
@@ -330,7 +331,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
     (ctx) =>
       // Oracle: the specification as a checker, `id` an xs:ID, whose whitespace is collapsed
       // (XML Schema Part 2, §3.3.8 and §4.3.6), so a padded id names the header its token does,
-      // the token `headerPiecesOf` splits from a headers value that names it.
+      // the token `tokensOf` splits from a headers value that names it.
       // Bound: every padding of at most two of space, tab, line feed and carriage return on each
       // side, 441.
       searched(

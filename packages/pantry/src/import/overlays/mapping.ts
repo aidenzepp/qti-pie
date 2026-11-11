@@ -18,6 +18,7 @@ import { declarationOf, typedCountOf } from "#pantry/import/overlays/declaration
 import type { TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { itemsOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
@@ -91,13 +92,6 @@ const copyOf = ({ baseType, cardinality, declarationKind }: Declared): Declarati
 });
 
 /**
- * A two-item key's split, as `twoItemPattern` (`#pantry/qti/mapping.ts`) reads the key: its first
- * run of characters holding no XML whitespace, the one whitespace character after it, and its
- * second run.
- */
-const twoItems = /^(?<first>[^\t\n\r ]+)(?<gap>[\t\n\r ])(?<second>[^\t\n\r ]+)$/u;
-
-/**
  * The base types whose keys are written as two items: each key of a mapping of one, split into
  * its two items, has its `MapKeyItems` row.
  */
@@ -113,45 +107,6 @@ const lookupAttributeOf: ReadonlyMap<string, string> = new Map([
   ["qti-match-table", "default-value"],
   ["qti-match-table-entry", "target-value"],
 ]);
-
-/**
- * The whitespace between a point's or a pair's two items, as `Gap` types it.
- */
-type GapText = Addition<typeof MapKeyItems>["gap"];
-
-/**
- * Whether a text is one XML whitespace character, the language of `Gap`.
- *
- * @param text - The text, none where the split did not match.
- * @returns Whether it is one space, tab or line end.
- */
-const isGap = (text: string | undefined): text is GapText =>
-  text === " " || text === "\t" || text === "\n" || text === "\r";
-
-/**
- * Split a two-item key around the one whitespace character between its items: the one split the
- * host makes of a map key, since no grizzle `Compute` term splits a text (no substring, split or
- * pattern group at the vendored commit; grizzle's Q7).
- * Every value read from the items is the database's (`#pantry/qti/queries.ts` `MapKeyPoint`,
- * `MapKeyPair` and `MapKeyDirectedPair`), and `E1_derived` proves the split spells the key.
- *
- * @param key - The key.
- * @returns Its first run, the whitespace and its second run, or none for a key that is not two
- *   runs around one whitespace character, the keys `twoItemPattern` leaves out.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const itemsOf = (
-  key: string,
-): { readonly first: string; readonly gap: GapText; readonly second: string } | undefined => {
-  const groups = twoItems.exec(key)?.groups;
-  const first = groups?.["first"];
-  const gap = groups?.["gap"];
-  const second = groups?.["second"];
-
-  return first === undefined || !isGap(gap) || second === undefined
-    ? undefined
-    : { first, gap, second };
-};
 
 /**
  * How a map entry's key is matched: its `case-sensitive` as written (empty where unwritten), and

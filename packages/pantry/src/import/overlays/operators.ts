@@ -15,6 +15,7 @@ import { Option } from "effect";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeRow } from "#pantry/model/xdm.ts";
 import type {
@@ -56,61 +57,6 @@ export interface OperatorRows {
  * The rounding operator kinds, each of which has its `Rounding` row.
  */
 const rounders: ReadonlySet<string> = new Set(roundingKinds);
-
-/**
- * The text `ToleranceToken.before` and `after` hold: XML whitespace, possibly none.
- */
-type Spacing = ToleranceTokenInsert["before"];
-
-/**
- * Decide whether a text is XML whitespace, possibly none, the language of {@link Spacing}.
- *
- * @param text - The text.
- * @returns Whether every character of it is a tab, a line feed, a carriage return or a space.
- */
-const isSpacing = (text: string): text is Spacing => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Read a stretch of a `tolerance` between its values, or after its last, as the whitespace it is.
- *
- * @param text - The stretch.
- * @returns It, as {@link Spacing}.
- * @throws {Error} When it holds a character that is no whitespace, which the split's runs of no
- *   whitespace leave none of between them: a defect of the split, never of the document.
- */
-const spacingOf = (text: string): Spacing =>
-  Option.getOrThrowWith(
-    Option.liftPredicate(text, isSpacing),
-    () =>
-      new Error(
-        `The tolerance split left ${JSON.stringify(text)} beside a value, which is no whitespace. Split at every maximal run of no whitespace.`,
-      ),
-  );
-
-/**
- * Split a `tolerance` value into its values, each a maximal run of no whitespace with the
- * whitespace written before it, and the last with the whitespace after it, so the pieces
- * concatenate to the value and every value but the first follows whitespace (`E1_derived` on
- * `ToleranceToken`).
- *
- * @param lexical - The attribute's lexical form.
- * @returns Its pieces, in order; none for a value of whitespace alone, an empty list.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const tolerancePiecesOf = (lexical: string): readonly ToleranceTokenInsert[] => {
-  const runs = [...lexical.matchAll(/[^\t\n\r ]+/gu)];
-  const pieces: ToleranceTokenInsert[] = [];
-  let end = 0;
-  for (const [at, run] of runs.entries()) {
-    const [token] = run;
-    const before = spacingOf(lexical.slice(end, run.index));
-    end = run.index + token.length;
-    const after = spacingOf(at === runs.length - 1 ? lexical.slice(end) : "");
-    pieces.push({ after, before, token });
-  }
-
-  return pieces;
-};
 
 /**
  * A rounding operator's mode in force: its `rounding-mode` where written, else
@@ -186,7 +132,7 @@ export const rowsOf = (view: DocumentView): OperatorRows => {
         built.Tolerance.set(node.id, {
           lexical,
           node: node.id,
-          tokens: tolerancePiecesOf(lexical),
+          tokens: tokensOf(lexical),
         });
       }
 

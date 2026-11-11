@@ -25,7 +25,8 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { lowerAscii, piecesOf, stringValuesOf } from "#pantry/import/overlays/metadata.ts";
+import { lowerAscii, stringValuesOf } from "#pantry/import/overlays/metadata.ts";
+import { piecesOf, tokensOf } from "#pantry/import/pieces.ts";
 import { foldAt, governorOf } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -260,28 +261,6 @@ const textIdentityOf = (element: NodeRow<Composed>): Option.Option<string> =>
   Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governorOfElement(element)}`));
 
 /**
- * Split an IDREF or IDREFS text into its tokens, each with the whitespace written before it, and
- * the last with the whitespace after it, so the pieces concatenate to the text and every token but
- * the first follows whitespace (`E1_derived` on `TextIdref`), as the importer splits an
- * attribute's. Each run of whitespace and the token after it splits as {@link piecesOf} splits a
- * text, and the whitespace after the last is the text's own trail.
- *
- * @param text - The element's string value.
- * @returns Its pieces, in order; none for a text with no token, which TextDomain refuses.
- */
-const idrefPiecesOf = (text: string): readonly TextIdrefInsert[] => {
-  const { trail } = piecesOf(text);
-  const runs = [...text.matchAll(/[\t\n\r ]*[^\t\n\r ]+/gu)];
-
-  return runs.map((run, at): TextIdrefInsert => {
-    const { lead: before, token } = piecesOf(run[0]);
-    const after = at === runs.length - 1 ? trail : "";
-
-    return { after, before, token };
-  });
-};
-
-/**
  * A document's tree as the builders below read it: its flat rows, its document node and root kind,
  * each node a row names, each node's string value, and each element's attributes by name.
  */
@@ -341,13 +320,13 @@ const documentIdOf = (
   owner: NodeId,
 ): Option.Option<Addition<typeof DocumentId>> =>
   Option.map(
-    Option.liftPredicate(piecesOf(lexical), ({ token }) => isNcName(token)),
-    ({ lead, token, trail }) => ({
+    Option.liftPredicate(piecesOf(lexical), ({ value }) => isNcName(value)),
+    ({ lead, trail, value }) => ({
       admitted: admitted(tree, element),
       after: trail,
       before: lead,
       document: tree.document,
-      id: token,
+      id: value,
       lexical,
       node: element.id,
       owner,
@@ -447,7 +426,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
     identityTexts.set(node.id, {
       document: tree.document,
       governor: governorOfElement(node),
-      idrefs: identity === "ID" ? [] : idrefPiecesOf(text),
+      idrefs: identity === "ID" ? [] : tokensOf(text),
       kind: node.kind,
       lexical: text,
       node: node.id,
@@ -709,7 +688,7 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): IdentityRows => {
   const targets = [
     ...rows.attributes.flatMap((attribute) =>
       holdsIdref(attribute, tree.nodeAt(attribute.node))
-        ? idrefPiecesOf(attribute.lexical).map(({ token }) => token)
+        ? tokensOf(attribute.lexical).map(({ token }) => token)
         : [],
     ),
     ...[...texts.IdentityText.values()].flatMap(({ idrefs }) => idrefs.map(({ token }) => token)),

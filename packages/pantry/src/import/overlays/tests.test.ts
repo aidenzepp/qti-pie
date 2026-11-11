@@ -30,13 +30,8 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { contextsOf } from "#pantry/import/context.ts";
 import { ownContext, ownViewOf } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
-import {
-  assembledRowsOf,
-  itemRefPathsOf,
-  keyOf,
-  piecesOf,
-  rowsOf,
-} from "#pantry/import/overlays/tests.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
+import { assembledRowsOf, itemRefPathsOf, keyOf, rowsOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
   InstanceMember,

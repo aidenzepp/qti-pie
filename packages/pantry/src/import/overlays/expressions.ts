@@ -31,12 +31,12 @@ import { builtInBaseTypes, BuiltInVariable, nonElementKinds } from "#pantry/gram
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
 import {
-  piecesOf,
   spelledBaseTypeOf,
   typedCountOf,
   typedDeclarationOf,
 } from "#pantry/import/overlays/declarations.ts";
 import { namedBy } from "#pantry/import/names.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import { charactersIn } from "#pantry/import/overlays/quotation.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
@@ -805,8 +805,8 @@ const declarationsOf = (
       identifier: lexical("identifier"),
     });
     for (const { pieces } of Option.toArray(typed.name)) {
-      if (!declarations.has(pieces.name)) {
-        declarations.set(pieces.name, {
+      if (!declarations.has(pieces.value)) {
+        declarations.set(pieces.value, {
           baseType: typed.baseType,
           cardinality: typed.cardinality,
           kind: node.kind,
@@ -1285,7 +1285,7 @@ const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof Sectio
       }
 
       const node = doc.nodeOf(attribute.node);
-      const { lead, name, trail } = piecesOf(attribute.lexical);
+      const { lead, trail, value: name } = piecesOf(attribute.lexical);
 
       return [
         [
@@ -2084,7 +2084,7 @@ const templateDefaultsOf = (
     const declared =
       itemDocument === undefined
         ? undefined
-        : lookups.declarations.get(lookupKey(itemDocument, pieces.name));
+        : lookups.declarations.get(lookupKey(itemDocument, pieces.value));
     const expression = held.get(node.id);
 
     return itemDocument === undefined || declared === undefined || expression === undefined
@@ -2102,7 +2102,7 @@ const templateDefaultsOf = (
               itemDocument,
               itemRef: node.parent,
               node: node.id,
-              template: pieces.name,
+              template: pieces.value,
             },
           ] as const,
         ];
@@ -2125,7 +2125,7 @@ const templateDefaultsOf = (
     ),
     targets,
     templateDefaults: defaults.map(
-      ({ lexical, node, pieces: { lead, name, trail } }) =>
+      ({ lexical, node, pieces: { lead, trail, value: name } }) =>
         [
           node.id,
           { itemRef: node.parent, lead, lexical, node: node.id, template: name, trail },

@@ -27,7 +27,8 @@ import {
   grammar,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
-import { piecesOf, rowsOf } from "#pantry/import/overlays/declarations.ts";
+import { rowsOf } from "#pantry/import/overlays/declarations.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -955,8 +956,8 @@ describe("import/overlays/declarations.ts", () => {
                 c.note(lead === "" && trail === "" ? "bare" : "padded");
               }
 
-              assert.strictEqual(`${pieces.lead}${pieces.name}${pieces.trail}`, lexical);
-              assert.strictEqual(pieces.name, name);
+              assert.strictEqual(`${pieces.lead}${pieces.value}${pieces.trail}`, lexical);
+              assert.strictEqual(pieces.value, name);
               assert.match(pieces.lead, /^[\t\n\r ]*$/u);
               assert.match(pieces.trail, /^[\t\n\r ]*$/u);
             }),

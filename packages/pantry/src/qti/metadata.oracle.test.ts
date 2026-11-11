@@ -21,7 +21,7 @@ import { Array as Arr, Duration, Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { attributeRows, BaseType, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
-import { piecesOf } from "#pantry/import/overlays/metadata.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -164,7 +164,7 @@ describe("qti/metadata.ts, the pieces", () => {
             Effect.sync(() => {
               c.note(pieceSituation(text));
 
-              const { lead, token, trail } = piecesOf(text);
+              const { lead, trail, value: token } = piecesOf(text);
 
               assert.strictEqual(`${lead}${token}${trail}`, text, "the pieces concatenate");
               assert.isTrue(
@@ -318,7 +318,7 @@ describe("qti/metadata.ts, the calendar", { timeout: testTimeoutMs }, () => {
             Effect.sync(() => {
               const lexical = `${pad}${year}-${month}-${day}${pad}`;
               const pieces = piecesOf(lexical);
-              const typed = dateForm.test(pieces.token);
+              const typed = dateForm.test(pieces.value);
               const domains = dateDomains.map((domain) => domain.test(lexical));
               if (year.length !== 4) {
                 c.note("not the form");

@@ -31,6 +31,7 @@ import { isSiteKind } from "#pantry/import/context.ts";
 import { foldAt, governorOf } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import { namedBy } from "#pantry/import/names.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import type { ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -140,88 +141,6 @@ export interface TestRows {
  * @returns The text.
  */
 export const keyOf = (values: readonly string[]): string => JSON.stringify(values);
-
-/**
- * XML whitespace, possibly none, as `TestToken`'s `lead` and `trail` hold it.
- */
-type Space = Addition<typeof TestToken>["lead"];
-
-/**
- * Decide whether a text is XML whitespace alone, so a piece of a lexical form may stand as a
- * token's `lead` or `trail`.
- *
- * @param text - The text.
- * @returns Whether it is a run of tabs, line feeds, carriage returns and spaces, possibly empty.
- */
-const isSpace = (text: string): text is Space => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * A lexical form split around its collapsed value.
- */
-export interface Pieces {
-  readonly lead: Space;
-  readonly trail: Space;
-  readonly value: string;
-}
-
-/**
- * The XML whitespace characters (XML 1.0, production 3, `S`), which `collapse` strips.
- */
-const spaceCharacters: ReadonlySet<string> = new Set(["\t", "\n", "\r", " "]);
-
-/**
- * Count the XML whitespace a text starts with.
- *
- * @param text - The text.
- * @returns The length of its leading run of XML whitespace.
- */
-const leadingSpace = (text: string): number => {
-  let at = 0;
-  while (at < text.length && spaceCharacters.has(text.charAt(at))) {
-    at += 1;
-  }
-
-  return at;
-};
-
-/**
- * Count the XML whitespace a text ends with.
- *
- * @param text - The text.
- * @returns The length of its trailing run of XML whitespace.
- */
-const trailingSpace = (text: string): number => {
-  let at = text.length;
-  while (at > 0 && spaceCharacters.has(text.charAt(at - 1))) {
-    at -= 1;
-  }
-
-  return text.length - at;
-};
-
-/**
- * Split a lexical form into the whitespace before it, its value and the whitespace after it, as
- * `TestToken`'s `E1_derived` proves: XML Schema's `collapse` strips the ends (Part 2, §4.3.6).
- *
- * @param lexical - The lexical form, as written.
- * @returns Its pieces; a form of whitespace alone is all lead, its value empty.
- * @throws {Error} When a piece cut at a run of whitespace is not whitespace alone: a defect of the
- *   split, never of the document.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const piecesOf = (lexical: string): Pieces => {
-  const lead = lexical.slice(0, leadingSpace(lexical));
-  const rest = lexical.slice(lead.length);
-  const value = rest.slice(0, rest.length - trailingSpace(rest));
-  const trail = rest.slice(value.length);
-  if (!isSpace(lead) || !isSpace(trail)) {
-    throw new Error(
-      `The split of ${JSON.stringify(lexical)} cut ${JSON.stringify(lead)} and ${JSON.stringify(trail)} at runs of XML whitespace, yet one holds another character. Cut each piece at the whitespace it counts.`,
-    );
-  }
-
-  return { lead, trail, value };
-};
 
 /**
  * Whether a kind is one of a list's.

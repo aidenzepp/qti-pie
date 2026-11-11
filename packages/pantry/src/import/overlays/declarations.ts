@@ -17,6 +17,8 @@ import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
 import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
+import type { Pieces } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
@@ -88,21 +90,6 @@ type CardinalityHandle = Addition<typeof DeclarationCardinality>["cardinality"];
 type DeclarationKindHandle = Addition<typeof Declaration>["declarationKind"];
 
 /**
- * The whitespace an identifier's lexical form holds around its name.
- */
-type Space = Addition<typeof DeclarationIdentifier>["identifierLead"];
-
-/**
- * An identifier's lexical form in its three pieces: the whitespace before its name, the name, and
- * the whitespace after it.
- */
-export interface Pieces {
-  readonly lead: Space;
-  readonly name: string;
-  readonly trail: Space;
-}
-
-/**
  * The declaration kinds, each a `NodeKind` handle that is its own `DeclarationKind` handle.
  */
 const declarationKinds: ReadonlyMap<string, DeclarationKindHandle> = new Map(
@@ -121,74 +108,6 @@ const outcomeKind = "qti-outcome-declaration";
 const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-correct-response"]);
 
 /**
- * Whether a character is XML whitespace, `S` (XML 1.0, §2.3): a tab, a line feed, a carriage return
- * or a space.
- *
- * @param char - The character.
- * @returns Whether it is.
- */
-const isSpaceCharacter = (char: string): boolean =>
-  char === "\t" || char === "\n" || char === "\r" || char === " ";
-
-/**
- * Whether a text is XML whitespace alone, possibly none: the language of an identifier's pieces.
- *
- * @param text - The text.
- * @returns Whether it is.
- */
-const isSpace = (text: string): text is Space => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Read a run of a lexical form that holds whitespace alone, as a piece.
- *
- * @param lexical - The lexical form.
- * @param from - The run's first unit.
- * @param to - The unit past its last.
- * @returns The run.
- * @throws {Error} When the run holds a character that is no whitespace, which {@link piecesOf}'s
- *   bounds rule out: a defect of the caller, never of the document.
- */
-const spaceRunOf = (lexical: string, from: number, to: number): Space => {
-  const run = lexical.slice(from, to);
-  if (!isSpace(run)) {
-    throw new Error(
-      `The run ${JSON.stringify(run)} of ${JSON.stringify(lexical)} holds a character that is no XML whitespace. Bound an identifier's pieces at its first and last non-whitespace characters.`,
-    );
-  }
-
-  return run;
-};
-
-/**
- * Split an identifier's lexical form into its pieces: its outer whitespace and the name between,
- * its collapsed form (XML Schema Part 2, §4.3.6), since a name holds no whitespace. A form of
- * whitespace alone is its lead, and names nothing.
- *
- * Each whitespace character is one UTF-16 unit, so the name's bounds are read by unit.
- *
- * @param lexical - The lexical form, as written.
- * @returns The pieces, which concatenate to it.
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const piecesOf = (lexical: string): Pieces => {
-  let start = 0;
-  while (start < lexical.length && isSpaceCharacter(lexical.charAt(start))) {
-    start += 1;
-  }
-
-  let end = lexical.length;
-  while (end > start && isSpaceCharacter(lexical.charAt(end - 1))) {
-    end -= 1;
-  }
-
-  return {
-    lead: spaceRunOf(lexical, 0, start),
-    name: lexical.slice(start, end),
-    trail: spaceRunOf(lexical, end, lexical.length),
-  };
-};
-
-/**
  * Split an identifier's lexical form into its pieces where it names something once collapsed, an
  * NCName ({@link isNcName}): any other form, whitespace alone or a name with whitespace or a digit
  * at its start, names nothing, and has no row that holds a name (lane NIL's audit, B10), so its
@@ -198,7 +117,7 @@ export const piecesOf = (lexical: string): Pieces => {
  * @returns Its pieces, none where it names nothing.
  */
 const namedPiecesOf = (lexical: string): Option.Option<Pieces> =>
-  Option.liftPredicate(piecesOf(lexical), ({ name }) => isNcName(name));
+  Option.liftPredicate(piecesOf(lexical), ({ value }) => isNcName(value));
 
 /**
  * Read the code a `base-type` spells (C17): its lexical form, where that is one of
@@ -552,7 +471,7 @@ const addDeclaration = (
       ...counts,
       declarationKind,
       document: reading.document,
-      identifier: pieces.name,
+      identifier: pieces.value,
       identifierLead: pieces.lead,
       identifierLexical: lexical,
       identifierTrail: pieces.trail,
@@ -565,7 +484,7 @@ const addDeclaration = (
         cardinality,
         declarationKind,
         document: reading.document,
-        identifier: pieces.name,
+        identifier: pieces.value,
         node: node.id,
         parentKind,
       });
@@ -686,7 +605,7 @@ const addValue = (
       baseTypeLexical,
       identifierLexical,
     });
-    for (const { lead, name, trail } of Option.toArray(namedPiecesOf(identifierLexical))) {
+    for (const { lead, trail, value: name } of Option.toArray(namedPiecesOf(identifierLexical))) {
       reading.rows.RecordFieldName.set(node.id, {
         identifier: name,
         identifierLead: lead,

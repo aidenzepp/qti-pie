@@ -17,6 +17,7 @@ import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type {
@@ -91,98 +92,6 @@ const objects: ReadonlySet<string> = new Set(objectKinds);
  * The usage statistics, as a set.
  */
 const statistics: ReadonlySet<string> = new Set(statisticKinds);
-
-/**
- * XML whitespace `S`, possibly none, as the overlays' `lead` and `trail` fields type it.
- */
-type Space = Addition<typeof LomEntry>["lead"];
-
-/**
- * A text split around its collapsed value: the whitespace before it, the rest with no whitespace at
- * either end, and the whitespace after it, empty when the rest is.
- */
-export interface Pieces {
-  readonly lead: Space;
-  readonly token: string;
-  readonly trail: Space;
-}
-
-/**
- * One character of XML whitespace `S`: a tab, a line feed, a carriage return or a space.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
- */
-type SpaceCharacter = "\t" | "\n" | "\r" | " ";
-
-/**
- * Decide whether a character is XML whitespace.
- *
- * @param character - The character.
- * @returns Whether it is one of {@link SpaceCharacter}'s four.
- */
-const isSpaceCharacter = (character: string): character is SpaceCharacter =>
-  character === "\t" || character === "\n" || character === "\r" || character === " ";
-
-/**
- * Read the XML whitespace a text starts with, built a character at a time so its type is
- * {@link Space} by construction.
- *
- * @param text - The text.
- * @returns The longest prefix of whitespace, the empty text where the text starts with none.
- */
-const leadOf = (text: string): Space => {
-  let lead: Space = "";
-  for (const character of text) {
-    if (!isSpaceCharacter(character)) {
-      break;
-    }
-
-    lead = `${lead}${character}`;
-  }
-
-  return lead;
-};
-
-/**
- * Read the XML whitespace a text ends with, built a character at a time from the end so its type
- * is {@link Space} by construction.
- *
- * @param text - The text.
- * @returns The longest suffix of whitespace, the empty text where the text ends with none.
- */
-const trailOf = (text: string): Space => {
-  let trail: Space = "";
-  for (let at = text.length - 1; at >= 0; at -= 1) {
-    const character = text.charAt(at);
-    if (!isSpaceCharacter(character)) {
-      break;
-    }
-
-    trail = `${character}${trail}`;
-  }
-
-  return trail;
-};
-
-/**
- * Split a text around its value, as the overlays' `lead ‖ token ‖ trail` holds it: the whitespace
- * `S` before the first character that is not whitespace, then up to and including the last one,
- * then the rest. An all-whitespace text is all lead. Every overlay that splits a text around its
- * value splits it here (`#pantry/import/overlays/identity.ts` reads an ID's form and each IDREF
- * token through it).
- *
- * @param text - The text.
- * @returns Its pieces, which concatenate to it.
- * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
- */
-// GRIZZLE-PENDING: Q7: a Compute text split generates these pieces, and the host split goes.
-export const piecesOf = (text: string): Pieces => {
-  const lead = leadOf(text);
-  const rest = text.slice(lead.length);
-  const trail = trailOf(rest);
-
-  return { lead, token: rest.slice(0, rest.length - trail.length), trail };
-};
 
 /**
  * Fold a text's ASCII capitals to small letters, as `Compute.lowerAscii` does, every other
@@ -359,17 +268,20 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
 
       const identifier = tree.parentOf(node);
       const text = tree.stringValueOf(node.id);
+      const { lead, trail, value } = piecesOf(text);
 
       return [
         [
           node.id,
           {
             ...tree.tupleOf(node),
-            ...piecesOf(text),
             holder: identifier.parent,
             identifierKind: identifier.kind,
             identifierStart: identifier.start,
+            lead,
             text,
+            token: value,
+            trail,
           },
         ] as const,
       ];
@@ -534,9 +446,9 @@ const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
           return [];
         }
 
-        const { lead, token, trail } = piecesOf(lexical);
+        const { lead, trail, value } = piecesOf(lexical);
 
-        return [[node.id, { document, identifier: token, lead, lexical, node: node.id, trail }]];
+        return [[node.id, { document, identifier: value, lead, lexical, node: node.id, trail }]];
       }),
     ),
     ObjectLang: new Map(
@@ -571,9 +483,9 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
         return [];
       }
 
-      const { lead, token, trail } = piecesOf(lexical);
+      const { lead, trail, value } = piecesOf(lexical);
 
-      return [[node.id, { day: token, lead, lexical, node: node.id, trail }] as const];
+      return [[node.id, { day: value, lead, lexical, node: node.id, trail }] as const];
     }),
   );
 

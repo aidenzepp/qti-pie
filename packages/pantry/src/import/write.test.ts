@@ -29,7 +29,8 @@ import { ownViewOf } from "#pantry/import/fold.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
-import { documentRowsOf, idrefPiecesOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
+import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   AttributeInsert,
   DocumentLayerRows,
@@ -1042,7 +1043,7 @@ const idrefCharacters = ["a", "b", " ", "\t"] as const;
 const idrefTexts: Gen<string> = (source) =>
   source.draw(array(element(idrefCharacters), { max: 5, min: 0 })).join("");
 
-describe("idrefPiecesOf", () => {
+describe("tokensOf, on an IDREFS form", () => {
   it.effect(
     "splits a form into its whitespace-separated tokens, whose pieces concatenate to it",
     (ctx) =>
@@ -1066,7 +1067,7 @@ describe("idrefPiecesOf", () => {
           },
           (lexical) =>
             Effect.sync(() => {
-              const pieces = idrefPiecesOf(lexical);
+              const pieces = tokensOf(lexical);
               const tokens = lexical.split(/[\t\n\r ]+/u).filter((token) => token.length > 0);
 
               assert.deepStrictEqual(

@@ -1,5 +1,5 @@
 /**
- * The operator builder's free tests: `tolerancePiecesOf` splits every `tolerance` into exactly its
+ * The operator builder's free tests: `tokensOf` splits every `tolerance` into exactly its
  * whitespace-separated values, the database's `integerForm` reads every collapsed `figures` as
  * reading 119 does, and over documents `rowsOf` gives each rounding operator its rows and each
  * written `tolerance` its values,
@@ -25,7 +25,8 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { ownContext, ownViewOf, viewOf } from "#pantry/import/fold.ts";
-import { rowsOf, tolerancePiecesOf } from "#pantry/import/overlays/operators.ts";
+import { rowsOf } from "#pantry/import/overlays/operators.ts";
+import { tokensOf } from "#pantry/import/pieces.ts";
 import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -92,7 +93,7 @@ const splitValues: Gen<readonly string[]> = array(element<string>(characters), {
  */
 type SplitSituation = "none" | "bare" | "padded" | "several";
 
-describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
+describe("import/pieces.ts, tokensOf on a tolerance", () => {
   it.effect(
     "splits every tolerance into exactly its whitespace-separated values, the pieces concatenating to it, and one of whitespace alone into none",
     (ctx) =>
@@ -132,7 +133,7 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
               };
               c.note(situation());
 
-              const pieces = tolerancePiecesOf(lexical);
+              const pieces = tokensOf(lexical);
               assert.deepStrictEqual(
                 pieces.map(({ token }) => token),
                 expected,

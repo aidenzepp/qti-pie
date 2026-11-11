@@ -356,7 +356,7 @@ const namedOf = (context: Omit<Context, "itemMode" | "named">): Pick<Context, "n
           baseType: declaration.baseType,
           cardinality: declaration.cardinality,
           declarationKind: declaration.declarationKind,
-          identifier: pieces.name,
+          identifier: pieces.value,
           node: node.id,
         })),
     ),

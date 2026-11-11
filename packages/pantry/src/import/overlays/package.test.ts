@@ -27,7 +27,6 @@ import {
   ResourceTypeLexical,
 } from "#pantry/grammar/install.ts";
 import {
-  hrefPiecesOf,
   namedDocuments,
   referenceCensus,
   referencePiecesOf,
@@ -43,6 +42,7 @@ import type {
   ReferenceRows,
   WhiteSpace,
 } from "#pantry/import/overlays/package.ts";
+import { hrefPiecesOf } from "#pantry/import/pieces.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";

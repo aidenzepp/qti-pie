@@ -26,7 +26,8 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import { piecesOf, rowsOf } from "#pantry/import/overlays/metadata.ts";
+import { rowsOf } from "#pantry/import/overlays/metadata.ts";
+import { piecesOf } from "#pantry/import/pieces.ts";
 import type { MetadataIds, MetadataRows } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -1042,7 +1043,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               );
               for (const entry of manifest.LomEntry.values()) {
                 assert.strictEqual(`${entry.lead}${entry.token}${entry.trail}`, entry.text);
-                assert.deepStrictEqual(piecesOf(entry.text).token, entry.token);
+                assert.deepStrictEqual(piecesOf(entry.text).value, entry.token);
               }
             }),
         ),
