@@ -174,8 +174,9 @@ export const known: readonly Known[] = [
   // and 467, issues #65 and #68) are no entries here: each is of a law Qti states only as a rule
   // over a query, which the host never judges (host-laws.ts: a statement over a derived relation is
   // unknown, never broken and never held), or of a relation Qti does not have, so the search never
-  // shows one. Their packages, upstream's file for file, are #pantry/test/record-naming.ts's, and
-  // the database judges each in #pantry/import/record-naming.db.test.ts:
+  // shows one. Their packages, upstream's file for file, were #pantry/test/record-naming.ts's, which
+  // #pantry/import/record-naming.db.test.ts judged on the database until the test cut of 2026-11-10
+  // deleted both (they stand at 022b92f9):
   // - "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record,
   //   document)", under a record file whose root is a cp:manifest and under xml:base on a
   //   cp:resource;

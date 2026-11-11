@@ -188,7 +188,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     18,
     {
       owner:
-        "AL1 (`min-choices` at least 1); Choice bounds over ChoiceBound's `counted` zero and ChoiceCount (references.ts), pinned by `references.order-zero.test.ts` (p15-3: a `max-choices` of 0 stays refused)",
+        "AL1 (`min-choices` at least 1); Choice bounds over ChoiceBound's `counted` zero and ChoiceCount (references.ts), pinned by `src/grammar/references.test.ts`, which holds each order interaction's `ChoiceBound` zero to `counted` (p15-3: a `max-choices` of 0 stays refused)",
       status: "G",
     },
   ],

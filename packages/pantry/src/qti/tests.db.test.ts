@@ -15,8 +15,9 @@
  * `package.db.test.ts`.
  *
  * The cases over whole packages, the inclusion cycle, the section document placed twice, the
- * branch rules, the missing and misplaced refs and the selection of required parts, are witnessed
- * through the importer's ChangeSet in `#pantry/import/tests.assembly.db.test.ts`.
+ * branch rules, the missing and misplaced refs and the selection of required parts, were witnessed
+ * through the importer's ChangeSet in `#pantry/import/tests.assembly.db.test.ts`, which the test
+ * cut of 2026-11-10 deleted; `#pantry/import/inclusion-cycles.db.test.ts` still holds the cycle.
  *
  * A branch rule's target is judged here row by row: a `BranchTarget` the family's owner (its
  * `shuffles` its own column, which the case states), whose `Branch_target` and `Branch_forward`

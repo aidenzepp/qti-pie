@@ -1,7 +1,6 @@
 /**
  * The law oracle's prediction for each of phase 5's 60 test-layer negatives ({@link
- * negativeNames}), held to the table `#pantry/test/negatives.ts` pins ({@link expectations}), which
- * the leased import of them (`import/tests.negatives.db.test.ts`) reads too.
+ * negativeNames}), held to the table `#pantry/test/negatives.ts` pins ({@link expectations}).
  *
  * Each negative is materialized and read as `importAgreesWithOracle` reads a package
  * (`#pantry/test/oracle-verdict.ts` `oracleVerdict`), and its verdict is held to

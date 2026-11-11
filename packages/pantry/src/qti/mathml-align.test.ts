@@ -1,7 +1,8 @@
 /**
  * The MathML align module's direction spellings (spec reading 2, MathML 3 validity): each
  * direction handle is spelled by its own name in XML whitespace, the lexical form its attribute
- * takes. The database tests (`mathml-align.oracle.db.test.ts`) judge the laws through PostgreSQL.
+ * takes. PostgreSQL judges the module's laws on every import, and on the free tier the law oracle
+ * raises each (`#pantry/test/complete.oracle.test.ts`).
  */
 import { assert, describe, it } from "@effect/vitest";
 import { directionSpellings } from "#pantry/qti/mathml-align.ts";

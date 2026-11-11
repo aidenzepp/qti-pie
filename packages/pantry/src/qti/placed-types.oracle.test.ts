@@ -11,7 +11,7 @@
  * O18 and O38) found the import accepting both where the oracle, which types the fragment in its
  * assembly, raises the law. A rule over a query is the database's alone (the host leaves it
  * unknown, `#pantry/test/gen/genetic/host-laws.ts`), so the included condition breaks "Condition
- * type" in the oracle and on PostgreSQL (`#pantry/import/placed-types.db.test.ts`), and the
+ * type" in the oracle and on PostgreSQL, and the
  * import's rows on the host name no law of it.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the

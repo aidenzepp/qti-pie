@@ -1284,9 +1284,10 @@ interface UnadmittedText {
 }
 
 /**
- * The cases, each in both versions: `math-text-in-mfrac` (`fixtures.mathml.ts`), text before an
- * `m:mfrac`'s two arguments, whose model is element-only (MathML 3, §3.2.1: character data only in
- * token elements); and `pci-markup-text` (`fixtures.ts`), text in a PCI's `qti-interaction-markup`.
+ * The cases, each in both versions: `math-text-in-mfrac` (a fixture of the deleted
+ * `fixtures.mathml.ts`), text before an `m:mfrac`'s two arguments, whose model is element-only
+ * (MathML 3, §3.2.1: character data only in token elements); and `pci-markup-text` (`fixtures.ts`),
+ * text in a PCI's `qti-interaction-markup`.
  */
 const unadmittedTexts: readonly UnadmittedText[] = (["3.0.0", "3.0.1"] as const).flatMap(
   (version) => [

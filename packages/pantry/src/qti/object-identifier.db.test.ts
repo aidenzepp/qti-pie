@@ -2,8 +2,7 @@
  * A test keyed by its package and its root's identifier, imported on the lease, PostgreSQL the
  * judge (spec readings 94, 133 and 148): the root's `identifier` is held, collapsed, in
  * `ObjectIdentifier.identifier` (`#pantry/qti/metadata.ts`), a `keyText` held to the attribute
- * both ways by containment, whose index PostgreSQL must take at the bound; the free side is
- * `object-identifier.test.ts`.
+ * both ways by containment, whose index PostgreSQL must take at the bound.
  *
  * - An identifier of exactly `keyTextBytes` UTF-8 bytes is accepted and stored.
  * - One byte past is refused under `key-text-bound` alone: the import writes the copy whatever its

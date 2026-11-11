@@ -4,7 +4,7 @@
  * and accepted where a curly apostrophe stands beside it. What
  * the lease holds is that PostgreSQL reads the check's non-ASCII marks as the host does; the
  * check's predicate over every mark at every end, the builder's rows and the oracle's verdict are
- * held on the free tier (`quotation.oracle.test.ts`, `src/test/rv-q.oracle.test.ts`).
+ * held on the free tier (`src/test/rv-q.oracle.test.ts`).
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

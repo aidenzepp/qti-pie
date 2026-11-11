@@ -4,8 +4,7 @@
  *
  * Only what the database alone holds stays here: the tree's natives across rows, the catalog's
  * foreign keys into `Node` (C12), and the planner's index scans. Node's row CHECKs and content laws
- * are held on the free tier, by the law oracle, `#pantry/qti/node.oracle.test.ts` and
- * `#pantry/test/label-tools.oracle.test.ts`.
+ * are held on the free tier, by the law oracle and `#pantry/qti/node.oracle.test.ts`.
  *
  * Every case states a document's `Node` rows as facts, and the one direct writer
  * (`#pantry/test/direct-sql.ts`, README, "Direct SQL access") writes them as one INSERT: the author

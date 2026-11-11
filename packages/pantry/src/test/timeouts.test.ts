@@ -43,8 +43,8 @@
  * The floor is measured, not chosen: every suite was run once on 2026-11-07, pantry's free project
  * and crust's, each under `nice -n 15` with 3 workers at a load average of 63 to 73 (lane TD-B).
  * The slowest test that took a project's timeout, re-run under it, ran 12.2 s at a load average of
- * 83 (`fixtures.foreign.test.ts`), so the floor, 60 s, is over 4× that, and every test that ran
- * past half of it states its own timeout, at least 2× its time there.
+ * 83 (`fixtures.foreign.test.ts`, since deleted), so the floor, 60 s, is over 4× that, and every
+ * test that ran past half of it states its own timeout, at least 2× its time there.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";

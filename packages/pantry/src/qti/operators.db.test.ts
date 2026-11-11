@@ -9,10 +9,8 @@
  * boolean `FLAG` and an integer `COUNT` declared.
  *
  * The rest of both readings is the host's: the law oracle against the readings' own restatement
- * over each reading's small box and a swarm past it (`operators.oracle.test.ts`), the import's
- * rows against the oracle over every rounding operator's attributes
- * (`import/overlays/operators.holds.oracle.test.ts`), and the builder's rows
- * (`import/overlays/operators.test.ts`).
+ * over each reading's small box and a swarm past it (`operators.oracle.test.ts`), and the builder's
+ * rows (`import/overlays/operators.test.ts`).
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

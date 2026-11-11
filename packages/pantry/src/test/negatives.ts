@@ -1,8 +1,7 @@
 /**
  * What the law oracle predicts for each of phase 5's 60 test-layer negatives ({@link
- * negativeNames}), pinned in one table: the free oracle test (`negatives.oracle.test.ts`) holds the
- * oracle to it, and the leased import of the negatives (`import/tests.negatives.db.test.ts`) reads
- * the rule to expect where the oracle finds one.
+ * negativeNames}), pinned in one table, which the free oracle test (`negatives.oracle.test.ts`)
+ * holds the oracle to.
  *
  * The table also records `main`'s rule for each negative
  * (`main:packages/pantry/src/import/tests.db.test.ts:190-325`, at `2b276d76`), the name the

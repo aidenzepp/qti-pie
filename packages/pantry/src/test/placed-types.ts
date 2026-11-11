@@ -1,11 +1,10 @@
 /**
  * The packages of an item whose response processing includes a response rules fragment, for the
- * oracle's box (`#pantry/qti/placed-types.oracle.test.ts`) and the database's
- * (`#pantry/import/placed-types.db.test.ts`): a fragment's references are typed in the item that
- * includes it (spec reading 117), a map response by its declaration's mapping ("Mapped response",
- * reading 166) and a variable reference that is a whole condition by its declaration's type
- * ("Condition type", P21). Genetic repair round 4's inventory (research aeced65a, classes O18 and
- * O38) found the import accepting both.
+ * oracle's box (`#pantry/qti/placed-types.oracle.test.ts`): a fragment's references are typed in
+ * the item that includes it (spec reading 117), a map response by its declaration's mapping
+ * ("Mapped response", reading 166) and a variable reference that is a whole condition by its
+ * declaration's type ("Condition type", P21). Genetic repair round 4's inventory (research
+ * aeced65a, classes O18 and O38) found the import accepting both.
  */
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 

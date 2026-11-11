@@ -1,7 +1,8 @@
 /**
  * The MathML cn module's spellings and forms (spec reading 2, MathML 3 validity): each type and
  * base handle is spelled as its attribute's lexical form, and every part of every type has its
- * form. The database tests (`mathml-cn.oracle.db.test.ts`) judge the law through PostgreSQL.
+ * form. PostgreSQL judges the module's law on every import, and on the free tier the law oracle
+ * raises it (`#pantry/test/complete.oracle.test.ts`).
  */
 import { assert, describe, it } from "@effect/vitest";
 import { CnBase, CnForm, CnPart, CnParts, CnType } from "#pantry/grammar/install.ts";

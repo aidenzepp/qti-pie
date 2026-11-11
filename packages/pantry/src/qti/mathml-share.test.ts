@@ -1,8 +1,9 @@
 /**
  * The MathML share module's rank chain (spec reading 2, MathML 3 validity), read over the
  * descriptions of its statements' predicates: a chain ends at the document node, its own parent,
- * and the share cycle's check refuses a share whose rank is not above its target's. The database
- * tests (`mathml-share.oracle.db.test.ts`) judge the law through PostgreSQL.
+ * and the share cycle's check refuses a share whose rank is not above its target's. PostgreSQL
+ * judges the law on every import, and on the free tier the law oracle raises it
+ * (`#pantry/test/complete.oracle.test.ts`).
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
