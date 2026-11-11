@@ -60,7 +60,6 @@ const rootCopy =
  */
 const unjudged = {
   "AssembledReference: a base term": unreadTerm("base"),
-  "ElementType: a cond term": unreadTerm("cond"),
   "Expression: a between term": unreadTerm("between"),
   "LeastCount: a base term": unreadTerm("base"),
   "MathAction.selection":
@@ -80,7 +79,6 @@ const unjudged = {
   "OpenAttributeName: a literal term":
     "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
-  "OpenElementType: a cond term": unreadTerm("cond"),
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
   "SectionSelection: a base term": unreadTerm("base"),
