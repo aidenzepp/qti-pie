@@ -36,7 +36,7 @@ import {
   shownSignature,
 } from "#pantry/test/gen/genetic/judge.ts";
 import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
-import { fixed, known } from "#pantry/test/gen/genetic/known.ts";
+import { closedName, fixed, known } from "#pantry/test/gen/genetic/known.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
@@ -86,6 +86,7 @@ const closed: readonly Signature[] = [
         relation: "Attribute",
         selection: {
           conjuncts: [
+            closedName,
             {
               kind: "compare",
               left: { field: "kind", kind: "field" },

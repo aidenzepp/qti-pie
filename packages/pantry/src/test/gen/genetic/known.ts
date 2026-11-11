@@ -51,6 +51,22 @@ export interface Known extends Owned {
 }
 
 /**
+ * The conjunct that leads every selection of closed attribute names, `closedName` of
+ * `#pantry/qti/attributes.ts` as grizzle states it: the name in none of the open classes. A
+ * containment into or out of such a selection is keyed by it first, since the closed attributes'
+ * one key (AL2 distinct) is stated over it; every class keyed by such a selection, here or in a
+ * test's list of the classes a reading closed, leads with it.
+ */
+export const closedName = {
+  arg: {
+    arg: { field: "name", kind: "field" },
+    kind: "in",
+    values: ["data-*", "foreign", "no-namespace", "own-namespace"],
+  },
+  kind: "not",
+} as const;
+
+/**
  * A known entry's package, as the reader takes it.
  *
  * @param known - The entry.
@@ -2172,6 +2188,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2225,6 +2242,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2560,6 +2578,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2614,6 +2633,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2862,6 +2882,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 kind: "compare",
                 left: { field: "documentType", kind: "field" },
@@ -2923,6 +2944,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 kind: "compare",
                 left: { field: "kind", kind: "field" },
@@ -3556,6 +3578,7 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
+              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
