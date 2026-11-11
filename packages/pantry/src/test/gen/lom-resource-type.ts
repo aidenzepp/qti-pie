@@ -486,15 +486,6 @@ export const typeRefused = (type: TypeSketch): boolean => {
 };
 
 /**
- * Count the learning resource types the specification refuses in a sketch.
- *
- * @param sketch - The package.
- * @returns The count.
- */
-export const sketchRefusals = (sketch: PackageSketch): number =>
-  sketch.records.flatMap(({ educational }) => educational.flat()).filter(typeRefused).length;
-
-/**
  * Whether a sketch writes a term past the binding's cap, which N7 refuses before this law.
  *
  * @param sketch - The package.

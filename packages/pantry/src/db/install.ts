@@ -64,8 +64,3 @@ export const MediaPolicySchema = Schema.Struct({
     Schema.makeFilter(typesSpelledTwice),
   ),
 });
-
-/**
- * A package-media install's policy.
- */
-export type MediaPolicy = typeof MediaPolicySchema.Type;

@@ -170,37 +170,6 @@ export const replaceDrawn =
   };
 
 /**
- * Draw two distinct matches of a pattern in a text and give the first the second's value: the first
- * capture group of the first match is replaced by the second's, every other match left as it is.
- * The site of a duplicate a key law refuses.
- *
- * @param text - The text.
- * @param pattern - The pattern, whose first capture group is the value; matched globally.
- * @returns A generator of the edited text. Throws when the text holds fewer than two matches with
- *   distinct values.
- */
-export const renameDrawn =
-  (text: string, pattern: RegExp): Gen<string> =>
-  (source) => {
-    const global = new RegExp(
-      pattern.source,
-      pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
-    );
-    const matches = [...text.matchAll(global)];
-    const renamed = matches[source.draw(int(0, matches.length - 1))];
-    const others = matches.filter((match) => match[1] !== renamed?.[1]);
-    if (renamed === undefined || others.length === 0) {
-      throw new Error(`the base holds no two sites ${String(pattern)} of distinct values`);
-    }
-
-    const taken = others[source.draw(int(0, others.length - 1))]?.[1] ?? "";
-    const value = renamed[1] ?? "";
-    const at = renamed.index + renamed[0].indexOf(value);
-
-    return `${text.slice(0, at)}${taken}${text.slice(at + value.length)}`;
-  };
-
-/**
  * Draw one match of a pattern in a text and write a copy of it right after it, on a line of its own
  * at the match's indentation: a second element of one name, the site of a duplicate a key law
  * refuses.

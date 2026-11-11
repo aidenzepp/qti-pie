@@ -398,16 +398,10 @@ export interface Bounds {
 }
 
 /**
- * The bounds the sampled search draws within: past the exhausted box's, to a chain of four
- * placements.
+ * The bounds the sampled search draws within: up to three children per section, three levels of
+ * nesting, a chain of four placements and three branch rules.
  */
 export const sampledBounds: Bounds = { children: 3, depth: 3, documents: 4, rules: 3 };
-
-/**
- * The bounds the exhausted box enumerates: one test part's shapes up to two children, one level of
- * nesting, one placed document and one rule.
- */
-export const smallBounds: Bounds = { children: 2, depth: 1, documents: 1, rules: 1 };
 
 /**
  * Every identifier a package writes, the test's and each document's, whether or not it is placed.

@@ -299,9 +299,8 @@ describe.skipIf(!hasLease)(
       for (const { files, laws, name, rule } of refusals) {
         it.effect(`refuses ${name} under ${rule}, as the law oracle predicts`, () =>
           // Oracle: the specification as a checker (spec reading R9-a; reading 117 for the
-          // fragment; QTI 3.0 Metadata §2.7.1.3 and decision 85 for the body language), the rule the
-          // free fixture table gives the same law (`catalogVerdicts`), and the law oracle's verdict
-          // on the same package.
+          // fragment; QTI 3.0 Metadata §2.7.1.3 and decision 85 for the body language), and the law
+          // oracle's verdict on the same package.
           Effect.scoped(
             Effect.gen(function* refusedCatalog() {
               const dir = yield* scopedPackage(files);
