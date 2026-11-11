@@ -87,10 +87,16 @@ import type { Accepted, AcceptedStimulus } from "#plate/validate/verdict.ts";
  * member through its `redact` kit and writes what its controller needs onto its own Root, and the
  * shipped kinds read none, so for an item of those alone the HTML is the same with or without it.
  * It is a render input, never item data: nothing of it reaches the redacted item or its JSON.
+ * `files` is the host's reader of package-relative paths, none when the host holds no such file:
+ * plate reads no file itself (`openPackage` gives the host the package's paths, and the host holds
+ * the texts), so a content module's render reads one through the kit's `files`, as the two
+ * stylesheet modules of issue `m5-06` will, together with the kit's `instance` that scopes the
+ * Root's id. With no `files`, every path reads as none.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
+  readonly files?: (path: string) => Option.Option<string>;
   readonly host?: HostFacts;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
@@ -478,23 +484,35 @@ const shippedRenderer =
 
 /**
  * Give the kit each content module's render reads: the emission of its content through the render
- * function, with the body's id scoping, heading shift, URLs and Notice part, and the supports and
- * the view the emit state holds.
+ * function, with the body's id scoping, heading shift, URLs and Notice part, the supports and the
+ * view the emit state holds, the host's reader of package files, and the render's instance.
  *
- * @param built The render's payload.
+ * @param built The render's payload, which gives the instance.
  * @param state The render's emit state.
  * @param renderInteraction The render function an interaction among the content is handed to.
+ * @param files The host's reader of package-relative paths, or {@link noFiles}.
  * @returns The kit.
  */
 const contentKitOf = (
   built: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
+  files: ContentRenderKit["files"],
 ): ContentRenderKit => ({
+  files,
+  instance: built.instance,
   nodes: (nodes) => emitNodes(nodes, built, state, renderInteraction),
   supports: state.supports ?? noSupports,
   view: state.view ?? defaultView,
 });
+
+/**
+ * The reader of package files a render uses when the host passed none: it holds no file, so every
+ * path reads as none.
+ *
+ * @returns None.
+ */
+const noFiles: ContentRenderKit["files"] = () => Option.none();
 
 /**
  * Answer `RenderInteraction.dock` over the payload's content: the first node of a module whose
@@ -508,6 +526,7 @@ const contentKitOf = (
  * @param state The render's emit state.
  * @param renderer The render function the docked node's content is emitted through.
  * @param docked The nodes docked so far, which this adds to.
+ * @param files The host's reader of package-relative paths, which the docked node's kit carries.
  * @returns The docked node's element, none when no module's node answers, or the refusal of a part
  *   swap.
  */
@@ -517,14 +536,16 @@ const dockOver = (
   state: EmitState,
   renderer: RenderInteraction,
   docked: Set<unknown>,
+  files: ContentRenderKit["files"],
 ): ReturnType<DockStimulus> =>
   Option.match(dockedBy(built.content, reference.idref), {
     onNone: () => Result.succeed(Option.none()),
     onSome: (found) => {
       docked.add(found.node);
 
-      return Result.map(found.render(state, contentKitOf(built, state, renderer)), (element) =>
-        Option.some([element]),
+      return Result.map(
+        found.render(state, contentKitOf(built, state, renderer, files)),
+        (element) => Option.some([element]),
       );
     },
   });
@@ -544,22 +565,25 @@ const dockOver = (
  * @param built The render's payload.
  * @param state The render's emit state.
  * @param docked The nodes body elements dock as the body is emitted, which the render then skips.
+ * @param files The host's reader of package-relative paths, which a content module's kit carries.
  * @returns The function that renders one interaction, container or content node through its module.
  */
 const interactionRenderer = (
   built: Payload,
   state: EmitState,
   docked: Set<unknown>,
+  files: ContentRenderKit["files"],
 ): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
     attach: (reference: ReferencingElement) =>
-      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer)),
+      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer, files)),
     containers: (node: ContainerPayload, children: readonly Node[]) =>
       renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>
-      renderContent(node, state, contentKitOf(built, state, renderer)),
+      renderContent(node, state, contentKitOf(built, state, renderer, files)),
     contentNodes,
-    dock: (reference: ReferencingElement) => dockOver(reference, built, state, renderer, docked),
+    dock: (reference: ReferencingElement) =>
+      dockOver(reference, built, state, renderer, docked, files),
     moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
   });
@@ -658,9 +682,10 @@ export const render = (
     const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
     const built = payload(item, viewOf(instance, configuration, options));
     const docked = new Set<unknown>();
-    const renderer = interactionRenderer(built, state, docked);
+    const files = options.files ?? noFiles;
+    const renderer = interactionRenderer(built, state, docked, files);
     const body = yield* emitBody(built, state, renderer);
-    const kit = contentKitOf(built, state, renderer);
+    const kit = contentKitOf(built, state, renderer, files);
     const before = yield* renderItemContent(built.content, state, kit, docked, "before-body");
     const after = yield* renderItemContent(built.content, state, kit, docked, "after-body");
     const live = yield* itemPart(state.parts, "live", liveRegion, []);

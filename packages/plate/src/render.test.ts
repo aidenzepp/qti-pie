@@ -2742,3 +2742,164 @@ describe("redact, the stimulus documents", () => {
       ),
   );
 });
+
+/**
+ * The model node of {@link landedStylesheet}: the package path its element names.
+ */
+interface LandedStylesheet {
+  readonly href: string;
+}
+
+/**
+ * An item-placed Stylesheet module as `m5-06` will land it, reduced to what the host's reader and
+ * the instance reach: it renders the rule the host's text for its path makes under the Root's id,
+ * `#<scopedId(instance, "item")> <text>`, carried as the `data-rule` of a childless `style`
+ * element, since the serialiser refuses any child of one (`RawTextChildren`).
+ */
+const landedStylesheet: ItemContentModule<
+  "qti-stylesheet",
+  LandedStylesheet,
+  LandedStylesheet,
+  LandedStylesheet
+> = {
+  content: () => [],
+  copy: (node) => node,
+  element: "qti-stylesheet",
+  feature: ["I-6"],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: (element, context) =>
+    Result.succeed(Option.map(context.read.valueOf(element, "href"), (href) => ({ href }))),
+  payloadSchema: ({ Schema }) => Schema.Struct({ href: Schema.String }),
+  placement: "item",
+  redact: (node) => Option.some(node),
+  render: (payload, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files(payload.href), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
+};
+
+/**
+ * The item {@link landedStylesheet} reads: a stylesheet naming `style/item.css`, and a paragraph.
+ */
+const styledDocument: SourceDocument = doc(
+  "items/styled.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "styled"), attr("time-dependent", "false"), attr("title", "Styled")],
+    [
+      el("qti-stylesheet", [attr("href", "style/item.css"), attr("type", "text/css")]),
+      el("qti-item-body", [], [el("p", [], [sourceText("Styled.")])]),
+    ],
+  ),
+);
+
+/**
+ * Render {@link styledDocument} with {@link landedStylesheet} in the Stylesheet stub's place, every
+ * module that imports the stub loaded afresh, and the stub restored after.
+ *
+ * @param options The host's options.
+ * @returns The rendered item.
+ */
+const renderStyled = (options: Options) =>
+  Effect.gen(function* styledRender() {
+    vi.resetModules();
+    vi.doMock("#plate/content/stylesheet.ts", () => ({ stylesheetModule: landedStylesheet }));
+
+    const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+    const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+    const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+    const configuration = yield* configure({});
+    const built = yield* Effect.fromResult(model.buildItem(styledDocument));
+
+    return yield* Effect.fromResult(
+      plate.render(payload.redactItem(built), configuration, options),
+    );
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock("#plate/content/stylesheet.ts");
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * Read the rules the `style` elements of a render carry, in document order.
+ *
+ * @param html The rendered HTML.
+ * @returns Each `style` element's `data-rule`.
+ */
+const rulesIn = (html: string): readonly string[] =>
+  [...html.matchAll(/<style data-rule="(?<rule>[^"]*)"><\/style>/gu)].map(
+    ({ groups }) => groups?.["rule"] ?? "",
+  );
+
+/**
+ * An item whose element list holds a `qti-stylesheet`, which the stub marks and the model holds no
+ * node of.
+ */
+const stylesheetStubbed = Result.getOrThrow(
+  Result.fromOption(
+    acceptedItem(check(styledDocument, tables, Option.none())),
+    () => new Error("the styled item is not accepted"),
+  ),
+);
+
+/**
+ * The host's reader of package files here: it holds the one file {@link styledDocument} names.
+ *
+ * @param path A package-relative path.
+ * @returns The file's text, none for any other path.
+ */
+const holdsStyle = (path: string): Option.Option<string> =>
+  path === "style/item.css" ? Option.some("p { color: red }") : Option.none();
+
+describe("render, the host's files", () => {
+  it.effect("[W0-BH] two instances give two ids", () =>
+    Effect.gen(function* twoInstances() {
+      const first = yield* renderStyled({ files: holdsStyle, instance: "a" });
+      const second = yield* renderStyled({ files: holdsStyle, instance: "b" });
+
+      assert.strictEqual(first.instance, "a");
+      assert.strictEqual(second.instance, "b");
+      assert.deepStrictEqual(rulesIn(first.html), [
+        `#${scopedId(first.instance, "item")} p { color: red }`,
+      ]);
+      assert.deepStrictEqual(rulesIn(second.html), [
+        `#${scopedId(second.instance, "item")} p { color: red }`,
+      ]);
+      assert.notStrictEqual(rulesIn(first.html)[0], rulesIn(second.html)[0]);
+    }),
+  );
+
+  it.effect("[W0-BH] no module reads files: every fixture item renders as before", () =>
+    Effect.gen(function* pinned() {
+      const configuration = yield* defaults;
+      const reads: string[] = [];
+      const holdsEverything = (path: string): Option.Option<string> => {
+        reads.push(path);
+
+        return Option.some("p { color: red }");
+      };
+
+      for (const fixture of [redacted, shuffled, redact(stylesheetStubbed)]) {
+        const unhosted = yield* Effect.fromResult(render(fixture, configuration, { instance }));
+        const none = yield* Effect.fromResult(
+          render(fixture, configuration, { files: () => Option.none(), instance }),
+        );
+        const held = yield* Effect.fromResult(
+          render(fixture, configuration, { files: holdsEverything, instance }),
+        );
+
+        assert.deepStrictEqual(none, unhosted);
+        assert.deepStrictEqual(held, unhosted);
+      }
+
+      assert.deepStrictEqual(reads, []);
+    }),
+  );
+});

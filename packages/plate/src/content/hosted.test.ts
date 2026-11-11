@@ -34,8 +34,10 @@ import {
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { ReferencingElement } from "#plate/emit/body.ts";
 import { h, text as outputText } from "#plate/emit/node.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import type { PayloadNode } from "#plate/payload.ts";
+import type { Options } from "#plate/render.ts";
 import { catalogSupports, noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -873,6 +875,159 @@ describe("a module whose node a body element docks", () => {
 });
 
 /**
+ * The model node of {@link landedStylesheet}: the package path its element names, which its render
+ * asks the host's reader for.
+ */
+interface LandedStylesheet {
+  readonly href: string;
+}
+
+/**
+ * An item-placed Stylesheet module as `m5-06` will land it, reduced to what the host's reader and
+ * the instance reach: it reads `href`, and renders the rule the host's text for that path makes
+ * under the Root's id, `#<scopedId(instance, "item")> <text>`, or a marker when the host holds no
+ * such file.
+ *
+ * The serialiser refuses any child of a `style` element (`RawTextChildren`), so this test-only
+ * module carries the rule it would write as the childless `style` element's `data-rule` rather than
+ * as its text.
+ */
+const landedStylesheet: ItemContentModule<
+  "qti-stylesheet",
+  LandedStylesheet,
+  LandedStylesheet,
+  LandedStylesheet
+> = {
+  content: () => [],
+  copy: (node) => node,
+  element: "qti-stylesheet",
+  feature: ["I-6"],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: (element, context) =>
+    Result.succeed(Option.map(context.read.valueOf(element, "href"), (href) => ({ href }))),
+  payloadSchema: ({ Schema }) => Schema.Struct({ href: Schema.String }),
+  placement: "item",
+  redact: (node) => Option.some(node),
+  render: (payload, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files(payload.href), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
+};
+
+/**
+ * What a test registers in place of the Stylesheet stub: {@link landedStylesheet}.
+ */
+const landedStyle: readonly Mock[] = [
+  { exports: { stylesheetModule: landedStylesheet }, specifier: "#plate/content/stylesheet.ts" },
+];
+
+/**
+ * The item {@link landedStylesheet} reads: a stylesheet naming `style/item.css`, and a paragraph.
+ */
+const styledDocument: SourceDocument = doc(
+  "items/styled.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "styled"), attr("title", "Styled")],
+    [
+      el("qti-stylesheet", [attr("href", "style/item.css"), attr("type", "text/css")]),
+      el("qti-item-body", [], [el("p", [], [text("Styled.")])]),
+    ],
+  ),
+);
+
+/**
+ * Render {@link styledDocument} under the landed module, with the options the host passes.
+ *
+ * @param options The host's options.
+ * @returns The rendered item.
+ */
+const renderStyled = (options: Options) =>
+  Effect.gen(function* styledRender() {
+    const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+    const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+    const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+    const configuration = yield* configure({});
+    const built = yield* Effect.fromResult(model.buildItem(styledDocument));
+
+    return yield* Effect.fromResult(
+      plate.render(payload.redactItem(built), configuration, options),
+    );
+  });
+
+/**
+ * Read the rules the `style` elements of a render carry, in document order.
+ *
+ * @param html The rendered HTML.
+ * @returns Each `style` element's `data-rule`.
+ */
+const rulesIn = (html: string): readonly string[] =>
+  [...html.matchAll(/<style data-rule="(?<rule>[^"]*)"><\/style>/gu)].map(
+    ({ groups }) => groups?.["rule"] ?? "",
+  );
+
+/**
+ * Read the id of the item Root in a render.
+ *
+ * @param html The rendered HTML.
+ * @returns The Root's `id`, none when the HTML does not open with the Root.
+ */
+const rootIdIn = (html: string): string | undefined =>
+  /^<qti-assessment-item [^>]*\bid="(?<id>[^"]*)"/u.exec(html)?.groups?.["id"];
+
+describe("a content module that reads the host's files", () => {
+  it.effect(
+    "[W0-BH] an item-placed module renders the file the host hands, confined to the Root's id",
+    () =>
+      withLanded(
+        Effect.gen(function* handed() {
+          const withFile = yield* renderStyled({
+            files: (path) =>
+              path === "style/item.css" ? Option.some("p { color: red }") : Option.none(),
+            instance: "q1",
+          });
+          const without = yield* renderStyled({ instance: "q1" });
+          const rootId = rootIdIn(withFile.html);
+
+          assert.strictEqual(rootId, scopedId("q1", "item"));
+          assert.deepStrictEqual(rulesIn(withFile.html), [`#${rootId} p { color: red }`]);
+          assert.isBelow(
+            withFile.html.indexOf("<style"),
+            withFile.html.lastIndexOf("</qti-assessment-item>"),
+          );
+          assert.deepStrictEqual(rulesIn(without.html), []);
+          assert.notInclude(without.html, "<style");
+        }),
+        landedStyle,
+      ),
+  );
+
+  it.effect("[W0-BH] a path the host does not hold reads as none", () =>
+    withLanded(
+      Effect.gen(function* absent() {
+        const holdsNothing = yield* renderStyled({ files: () => Option.none(), instance: "q1" });
+        const holdsAnother = yield* renderStyled({
+          files: (path) =>
+            path === "style/other.css" ? Option.some("p { color: blue }") : Option.none(),
+          instance: "q1",
+        });
+
+        for (const rendered of [holdsNothing, holdsAnother]) {
+          assert.deepStrictEqual(rulesIn(rendered.html), []);
+          assert.notInclude(rendered.html, "<style");
+          assert.include(rendered.html, '<span data-stylesheet="none"></span>');
+        }
+      }),
+      landedStyle,
+    ),
+  );
+});
+
+/**
  * An item whose body holds one island of a namespace outside QTI's.
  *
  * @param island The island's outermost element.
@@ -1261,7 +1416,13 @@ describe("the catalog presenters", () => {
               locale: "en",
               parts: { replacementFor: () => Option.none() },
             },
-            { nodes: () => Result.succeed([]), supports: noSupports, view: defaultView },
+            {
+              files: () => Option.none(),
+              instance: "q1",
+              nodes: () => Result.succeed([]),
+              supports: noSupports,
+              view: defaultView,
+            },
           ),
       });
 

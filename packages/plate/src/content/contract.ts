@@ -178,10 +178,35 @@ export interface ContentCopyKit {
 
 /**
  * What the emitter hands a module's `render`, beside the emit state: the emission of payload nodes
- * with the body's id scoping, heading shift, URLs and Notice part, and the supports and the view
- * the redaction decided by, which decide what the render shows of what the redaction kept.
+ * with the body's id scoping, heading shift, URLs and Notice part, the supports and the view the
+ * redaction decided by, which decide what the render shows of what the redaction kept, and the two
+ * facts of this render that only the host and the render know: the host's reader of package files
+ * and the instance the item Root is scoped by.
+ *
+ * Issue `m5-06` fills both stylesheet modules, the item-placed `qti-stylesheet` and the test-level
+ * one, from `files` and `instance`: plate reads no file itself (`openPackage` hands the host
+ * `PackageContents.files`, paths only, and the host holds the texts), so a module renders the text
+ * the host hands, confined to the Root `instance` names.
  */
 export interface ContentRenderKit {
+  /**
+   * Read the text of one package file from the host: the host's `Options.files`, or
+   * `() => Option.none()` when the host passed none. The kit resolves nothing: a module resolves
+   * the path it asks for against the document it reads it from (`Item.document`), as the stimulus
+   * module resolves a stimulus `href`. A module that finds no file renders nothing for it and says
+   * so through the Notice part, since the host decides at render time what it holds, which no
+   * verdict can know at open time.
+   *
+   * @param path A package-relative path, as the module resolved it.
+   * @returns The file's text, none when the host holds no such file.
+   */
+  readonly files: (path: string) => Option.Option<string>;
+  /**
+   * The render's instance, `Options.instance` or the one `render` drew: the item Root's id is
+   * `scopedId(instance, "item")`, so a module that confines a rule to the Root writes the selector
+   * `#<id>`. Two renderings of one item differ by it, so the selector does too.
+   */
+  readonly instance: string;
   /**
    * Emit payload nodes as the body is emitted, at a phrasing position, each interaction among
    * them through the render's render function.
