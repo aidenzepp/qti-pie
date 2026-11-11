@@ -290,7 +290,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
 });
 
 describe("import/overlays/mapping.ts, how a map key is matched", () => {
-  it("writes a string key folded unless its entry's case-sensitive is true, so `matched` is the key a response meets", () => {
+  it("writes a string key folded unless its entry's case-sensitive is true", () => {
     // Oracle: reading 98 (decision 321 (6)): a string key is case-folded where its entry's
     // `case-sensitive` is false, the default, and compared by code points where it is true;
     // `xs:boolean`'s whiteSpace is collapse, so a padded true is true. An entry matched
@@ -311,27 +311,22 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
         idOf,
       ),
     );
-    const matches = [...rows.MapKey.values()].map((row) => [
-      row.key,
-      row.caseText,
-      row.folded,
-      row.matched,
-    ]);
+    const matches = [...rows.MapKey.values()].map((row) => [row.key, row.caseText, row.folded]);
 
     assert.deepStrictEqual(matches, [
-      ["York", "true", false, "York"],
-      ["york", "", true, "york"],
-      ["YORK", "", true, "york"],
-      ["York", " 1 ", false, "York"],
-      ["Leeds", "false", true, "leeds"],
+      ["York", "true", false],
+      ["york", "", true],
+      ["YORK", "", true],
+      ["York", " 1 ", false],
+      ["Leeds", "false", true],
     ]);
 
     const identifiers = rowsOf(
       ownViewOf(treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] }), idOf),
     );
     assert.deepStrictEqual(
-      [...identifiers.MapKey.values()].map((row) => [row.folded, row.matched]),
-      [[false, "A B"]],
+      [...identifiers.MapKey.values()].map((row) => row.folded),
+      [false],
     );
   });
 });

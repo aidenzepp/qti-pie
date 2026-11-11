@@ -510,7 +510,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key (readings 160 and 165 narrow it: a key's identity is the key as written, whatever its matching), and a key over each typed key's query (`src/qti/queries.ts`), `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, the last three over the two-item keys' split, `MapKeyItems`; for matching, `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written; the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`)",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key (readings 160 and 165 narrow it: a key's identity is the key as written, whatever its matching), and a key over each typed key's query (`src/qti/queries.ts`), `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, the last three over the two-item keys' split, `MapKeyItems`; for matching, `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"`, and the database generates `matched`, its ASCII lowercase where folded (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise the key as written; the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`)",
       status: "G",
     },
   ],

@@ -166,9 +166,10 @@ export const MappingBaseType = relation(
  * `case-sensitive` as written, empty where it is unwritten; `folded`, whether a response is matched
  * to the key without regard to case, which is where the mapping's base type, its
  * {@link MapKeyType}'s, is `string` and the entry's `case-sensitive` is not true; and `matched`, the
- * key a response meets, the key's ASCII lowercase where `folded` and the key as written otherwise.
+ * key a response meets, the key's ASCII lowercase where `folded` and the key as written otherwise,
+ * which the database derives.
  */
-export const MapKey = relation(
+export const MapKey = relation.generated(
   "MapKey",
   {
     baseTypes: natural,
@@ -178,13 +179,18 @@ export const MapKey = relation(
     key: keyText,
     kind: closedId(NodeKind),
     mapping: uuid,
-    matched: keyText,
     nearest: uuid,
     node: uuid,
     start: natural,
     version: closedId(SchemaVersion),
   },
   ["node"],
+  (k) => ({
+    matched: generated(
+      keyText,
+      Compute.cond(k.folded, Compute.cast(Compute.lowerAscii(k.key), keyText), k.key),
+    ),
+  }),
 );
 
 /**
@@ -514,14 +520,7 @@ export const mappingLawsByName = {
   ],
   "E1 derived": [
     check("E1_derived", MapKey, (k) =>
-      k.or(
-        k.and(
-          k.eq(k.folded, true),
-          k.not(k.in(Compute.collapse(k.caseText), booleanTrue)),
-          k.eq(k.matched, Compute.lowerAscii(k.key)),
-        ),
-        k.and(k.eq(k.folded, false), k.eq(k.matched, k.key)),
-      ),
+      k.or(k.eq(k.folded, false), k.not(k.in(Compute.collapse(k.caseText), booleanTrue))),
     ),
     contained(on(foldedKeys, "node"), on(stringKeys, "node")),
     contained(on(stringKeys, "node"), on(foldedOrCaseKeys, "node")),
