@@ -883,23 +883,20 @@ export const partTable: readonly PartRow[] = rows.map((row) => ({
 }));
 
 /**
- * Give the key of a part in the lookups: the interaction and the part, which neither key's spelling
- * can make ambiguous because neither holds a space.
- *
- * @param interaction The interaction key.
- * @param part The part key.
- * @returns The two keys joined by a space.
+ * The part table's rows by interaction, then by part, so a lookup builds no key.
  */
-const rowKey = (interaction: string, part: string): string => `${interaction} ${part}`;
-
-/**
- * The part table's rows by interaction and part.
- */
-const rowIndex: ReadonlyMap<string, PartRow> = new Map(
-  partTable.map((row) => [rowKey(row.interaction, row.part), row]),
+const rowIndex: ReadonlyMap<string, ReadonlyMap<string, PartRow>> = new Map(
+  Array.from(new Set(partTable.map((row) => row.interaction)), (interaction) => [
+    interaction,
+    new Map(
+      partTable
+        .filter((row) => row.interaction === interaction)
+        .map((row) => [row.part, row] as const),
+    ),
+  ]),
 );
 
-if (rowIndex.size !== partTable.length) {
+if ([...rowIndex.values()].reduce((count, parts) => count + parts.size, 0) !== partTable.length) {
   throw new PartTableDefect({ detail: "it holds two rows for the same interaction and part" });
 }
 
@@ -956,7 +953,7 @@ export const rowFor = <I extends InteractionKey>(
   part: PartOf<I>,
   context: RowContext = {},
 ): PartRow => {
-  const row = rowIndex.get(rowKey(interaction, part));
+  const row = rowIndex.get(interaction)?.get(part);
   if (row === undefined) {
     throw new PartTableDefect({ detail: `it has no row for ${interaction} ${part}` });
   }
@@ -1130,7 +1127,7 @@ export class UnknownPart extends Data.TaggedError("UnknownPart")<{
 export const resolveOverrides = (
   overrides: PartOverrides = {},
 ): Result.Result<Resolved, UnknownPart> => {
-  const replacements = new Map<string, PartFunction<Attributes>>();
+  const replacements = new Map<string, Map<string, PartFunction<Attributes>>>();
   for (const [interaction, parts] of Object.entries(overrides)) {
     const known = knownParts.get(interaction);
     if (known === undefined) {
@@ -1142,12 +1139,13 @@ export const resolveOverrides = (
         return Result.fail(new UnknownPart({ interaction, part: Option.some(part) }));
       }
 
-      replacements.set(rowKey(interaction, part), replacement);
+      const byPart = replacements.get(interaction) ?? new Map<string, PartFunction<Attributes>>();
+      replacements.set(interaction, byPart.set(part, replacement));
     }
   }
 
   return Result.succeed({
     replacementFor: (interaction, part) =>
-      Option.fromUndefinedOr(replacements.get(rowKey(interaction, part))),
+      Option.fromUndefinedOr(replacements.get(interaction)?.get(part)),
   });
 };
