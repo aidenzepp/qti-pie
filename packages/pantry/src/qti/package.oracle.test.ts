@@ -598,7 +598,7 @@ describe("qti/package.ts", () => {
     // Oracle: grizzle's own insert type, `AdditionIn` of the record's schema: the record is a
     // member fact of `Package` exactly, its entries nested at `entries`.
     const record = packageRecordOf({
-      files: [{ bytes: new Uint8Array([1, 2]), kind: "manifest", path: "imsmanifest.xml" }],
+      files: [{ bytes: new Uint8Array([1, 2]), path: "imsmanifest.xml" }],
       id: packageId,
       name: "pkg",
     });

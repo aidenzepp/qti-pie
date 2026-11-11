@@ -32,16 +32,17 @@ export const packageNameOf = (source: string): string =>
   source.split("/").findLast((segment) => segment.length > 0) ?? source;
 
 /**
- * Build a package's record from what `readPackage` read.
+ * Build a package's record from its entries, as `readPackage` read them or a parsed package holds
+ * them.
  *
  * @param input - The package's identity and its entries.
  * @param input.id - The package's id, the one its overlays name it by.
  * @param input.name - Its name, {@link packageNameOf} of where it was read from.
- * @param input.files - Its entries with their bytes, in listing order.
+ * @param input.files - Its entries' paths with their bytes, in listing order.
  * @returns The `Package` insert, its entries in the listing's order, each content its bytes.
  */
 export const packageRecordOf = (input: {
-  readonly files: readonly PackageFile[];
+  readonly files: readonly Pick<PackageFile, "bytes" | "path">[];
   readonly id: Uuid;
   readonly name: string;
 }): PackageRecord => ({ entries: recordOf(input.files), id: input.id, name: input.name });

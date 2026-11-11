@@ -16,13 +16,14 @@ const MANIFEST = "imsmanifest.xml";
 const INSPECT_CONCURRENCY = 16;
 
 /**
- * Where a package is read from: a directory or a `.zip` file by its path, or a zip archive's bytes
- * under the archive's name.
+ * Where a package's entries are read from: a directory or a `.zip` file by its path, or a zip
+ * archive's bytes under the archive's name. The import's `PackageSource`
+ * (`#pantry/import/parsed.ts`) is one of these, or a package already parsed from one.
  *
  * Bytes are always read as a zip, whatever their name; the name stands where a path would, in a
  * refusal and in the package's stored name.
  */
-export type PackageSource = string | { readonly name: string; readonly bytes: Uint8Array };
+export type EntrySource = string | { readonly name: string; readonly bytes: Uint8Array };
 
 /**
  * Whether a package source is a path, a directory or a `.zip` file, rather than a zip archive's
@@ -31,7 +32,7 @@ export type PackageSource = string | { readonly name: string; readonly bytes: Ui
  * @param source - The package source.
  * @returns True for a path, false for bytes.
  */
-const isPathSource = (source: PackageSource): source is string => typeof source === "string";
+const isPathSource = (source: EntrySource): source is string => typeof source === "string";
 
 /**
  * Name a package source as a refusal and a record name it.
@@ -39,7 +40,7 @@ const isPathSource = (source: PackageSource): source is string => typeof source 
  * @param source - The package source.
  * @returns The path of a path source, the archive's name of a bytes source.
  */
-export const sourceNameOf = (source: PackageSource): string =>
+export const sourceNameOf = (source: EntrySource): string =>
   isPathSource(source) ? source : source.name;
 
 /**
@@ -119,7 +120,7 @@ const isZipFile = Effect.fn("package.isZipFile")(function* isZipFile(
  *   `PlatformError`.
  */
 const readZipSource = (
-  source: PackageSource,
+  source: EntrySource,
 ): Effect.Effect<
   readonly ZipEntry[],
   ZipRefusal | PlatformError.PlatformError,
@@ -137,7 +138,7 @@ const readZipSource = (
  *   `manifest-root`. Any other {@link ZipRefusal} flows out as itself.
  */
 const readZipPackage = Effect.fn("package.readZipPackage")(function* readZipPackage(
-  source: PackageSource,
+  source: EntrySource,
 ): Effect.fn.Return<
   readonly ZipEntry[],
   PackageReadError | ZipRefusal | PlatformError.PlatformError,
@@ -241,7 +242,7 @@ const readDirectoryEntry = Effect.fn("package.readDirectoryEntry")(function* rea
  *   `manifest-root` refusal). Any other {@link ZipRefusal} flows out as itself.
  */
 export const listPackage = Effect.fn("package.listPackage")(function* listPackage(
-  source: PackageSource,
+  source: EntrySource,
 ): Effect.fn.Return<
   readonly Entry[],
   PackageReadError | ZipRefusal | PlatformError.PlatformError,
@@ -270,7 +271,7 @@ export const listPackage = Effect.fn("package.listPackage")(function* listPackag
  *   flow out as {@link ZipRefusal}.
  */
 export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
-  source: PackageSource,
+  source: EntrySource,
   path: string,
 ): Effect.fn.Return<
   Uint8Array,
@@ -302,7 +303,7 @@ export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
  *   flows out as itself.
  */
 export const readPackage = Effect.fn("package.readPackage")(function* readPackage(
-  source: PackageSource,
+  source: EntrySource,
 ): Effect.fn.Return<
   readonly PackageFile[],
   PackageReadError | ZipRefusal | PlatformError.PlatformError,

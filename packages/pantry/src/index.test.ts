@@ -43,6 +43,7 @@ const runtimeNames: readonly string[] = [
   "importPackage",
   "listDocuments",
   "listPackages",
+  "parsePackage",
   "previewPackage",
   "publishedRelations",
   "qti",

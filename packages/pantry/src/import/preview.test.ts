@@ -82,7 +82,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
               flats.reduce((sum, rows) => sum + rows.attributeEntities.length, 0),
             ],
             ["CellLeaf", sumOf(flat.MathCell, ({ leaves }) => leaves.length)],
-            ["Entry", program.files.length],
+            ["Entry", program.files.size],
             ["HeaderToken", sumOf(flat.CellHeaders, ({ tokens }) => tokens.length)],
             ["Idref", members.Idref],
             ["Instance", instanceRows],

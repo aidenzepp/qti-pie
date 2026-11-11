@@ -1,17 +1,17 @@
 /**
- * What an import would write, without the database: the package read, shredded and built into its
- * rows as `importPackage` builds them, and nothing written (plan W5, Q5.15).
+ * What an import would write, without the database: the package parsed and built into its rows as
+ * `importPackage` builds them, and nothing written (plan W5, Q5.15).
  *
- * The dry run is the import's own read ({@link readProgram} of `#pantry/import/program.ts`): the
- * read, the shred and the overlay builders. The database's laws do not run, so a package this
- * accepts can still be refused by an import, and the preview says so (`databaseChecked`). Nothing
- * here reaches the author login (`#pantry/qti/logins.ts` `authorLogin`), whose workload grizzle
- * builds on its first call, so a dry run never pays for it; `src/cli/startup.test.ts` holds this
- * module to that.
+ * The dry run is the import's own build ({@link readProgram} of `#pantry/import/program.ts`): the
+ * parse, unless the package comes parsed, and the overlay builders. The database's laws do not
+ * run, so a package this accepts can still be refused by an import, and the preview says so
+ * (`databaseChecked`). Nothing here reaches the author login (`#pantry/qti/logins.ts`
+ * `authorLogin`), whose workload grizzle builds on its first call, so a dry run never pays for it;
+ * `src/cli/startup.test.ts` holds this module to that.
  */
 import { Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import type { PackageSource } from "#pantry/package/read.ts";
+import type { PackageSource } from "#pantry/import/parsed.ts";
 
 /**
  * How much a package holds: the rows it would write and the relations they fall in, and that no
@@ -36,7 +36,8 @@ export interface Preview {
  * Read the package at `source` as `importPackage` does and count what it would write, without
  * opening the database.
  *
- * @param source - The package directory, `.zip` file or zip archive's bytes.
+ * @param source - The package directory, `.zip` file or zip archive's bytes, or a parsed package,
+ *   which is not read again.
  * @returns The counts. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be
  *   read.

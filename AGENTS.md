@@ -131,8 +131,8 @@ TypeScript source (no build step), consumers depend with `"workspace:*"`, and it
 `#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
 for committed snapshots), never relative paths. pantry's `"exports"` has one entry, `"."` (`src/index.ts`), and apps use
 pantry only through it: the `Qti` schema (`qti`), the author role and login over it (`authorRole`, `authorLogin`), the
-single-CDN level (`singleCdn`, `CdnOptions`), the programs that import, preview, export and read packages and list
-packages and their documents, the export's document scan and the rows-to-XML step it ends with (`documentScanOf`,
+single-CDN level (`singleCdn`, `CdnOptions`), the programs that parse, import, preview, export and read packages and
+list packages and their documents, the export's document scan and the rows-to-XML step it ends with (`documentScanOf`,
 `documentXml`), their verdicts, types and errors, and the thirteen published relations an app's own level may reference
 (`Package`, `Entry`, `Document`, `TestDocument`, `Named`, `Section`, `TestFlag`, `SectionSelection`, `SectionMember`,
 `ItemRefDocument`, `DeclarationIdentifier`, `ReferencePath` and `BaseType`, recorded in `publishedRelations`). An app

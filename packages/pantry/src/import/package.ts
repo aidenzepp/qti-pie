@@ -1,10 +1,10 @@
 /**
- * The importer's front door: a package in (a directory, a `.zip` file or a zip archive's bytes),
- * one committed package out or one named refusal (plan W5, Q5.15; the W5 amendment's A, C19 and
- * C22).
+ * The importer's front door: a package in (a directory, a `.zip` file, a zip archive's bytes or a
+ * parsed package), one committed package out or one named refusal (plan W5, Q5.15; the W5
+ * amendment's A, C19 and C22).
  *
- * The package is read, shredded and built into its rows once (`readProgram` of
- * `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
+ * The package is parsed once, unless it comes parsed, and built into its rows once (`readProgram`
+ * of `#pantry/import/program.ts`), and written by the author login's `importWrite` member, the one
  * ChangeSet step over the author role (`changeSetOf` of `#pantry/import/write.ts`) that `grizzle
  * generate` compiled into the login's served file, applied once to the package's facts
  * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
@@ -31,7 +31,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
-import type { PackageSource } from "#pantry/package/read.ts";
+import type { PackageSource } from "#pantry/import/parsed.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 
 /**
@@ -189,20 +189,21 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 /**
  * Import the package at `source`.
  *
- * Reads the package once, shreds the documents its manifest names, mints every id afresh and builds
- * every row, then applies them as one ChangeSet through the author role. The `importWrite` apply is
- * retried on a transient refusal and on nothing else; `Db.open` is not, since it contacts nothing
- * of the database and refuses only what the host decides (grizzle `d994809c`), never a transient
- * failure. When the commit's outcome is unknown the package row is read back by its id
- * ({@link settleCommitUnknown}): present, the import was accepted; absent, the error is the answer;
- * a read-back that fails is `CommitUnresolved`. The same package imported twice is two packages,
- * each with its own ids. The retries run on {@link RetrySchedule}, and each attempt of the apply
- * through {@link WrapApply}.
+ * Parses the package once, unless it comes parsed (`#pantry/import/parsed.ts`), mints every id
+ * afresh and builds every row, then applies them as one ChangeSet through the author role. The
+ * `importWrite` apply is retried on a transient refusal and on nothing else; `Db.open` is not,
+ * since it contacts nothing of the database and refuses only what the host decides (grizzle
+ * `d994809c`), never a transient failure. When the commit's outcome is unknown the package row is
+ * read back by its id ({@link settleCommitUnknown}): present, the import was accepted; absent, the
+ * error is the answer; a read-back that fails is `CommitUnresolved`. The same package imported
+ * twice, one parsed package included, is two packages, each with its own ids. The retries run on
+ * {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
  *
  * Requires the served author login ({@link ServedAuthorLogin}), whose author role `Db.open` takes,
  * beside that login's `DbLayer`.
  *
- * @param source - The package: a directory, a `.zip` file, or a zip archive's bytes.
+ * @param source - The package: a directory, a `.zip` file, a zip archive's bytes, or a parsed
+ *   package, which is not read again.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
  *   was refused under, whether the reader, the codec or the database refused it; with
  *   `RefusedAbove` when every law the database names is one level above `Qti`'s; with the

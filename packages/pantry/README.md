@@ -52,6 +52,7 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `singleCdn` | function | The refuse-only `Cdn` level over a base level, for one CDN origin |
 | `CdnOptions` | schema | Decodes `singleCdn`'s options, `{ origin }`. Its type is `typeof CdnOptions.Type` |
 | `CdnLevel` | type | The `Cdn` level's type, which an app's own level extends |
+| `parsePackage` | program | Reads and parses a package once, without a database, and succeeds with a `ParseVerdict` |
 | `importPackage` | program | Stores a package, and succeeds with an `ImportVerdict` |
 | `previewPackage` | program | Reads and checks a package without a database, and succeeds with a `PreviewVerdict` |
 | `exportPackage` | program | A stored package's entries as QTI 3.0 writes them |
@@ -61,7 +62,9 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `documentScanOf` | function | The document scan over a `Qti` value, a grizzle query an app runs in its own role and transaction |
 | `documentXml` | function | Writes a document's XML from the scan's rows, with no database |
 | `DocumentRows` | type | The scan's rows. Their shape is internal and changes with pantry; pass them through unread |
-| `PackageSource` | type | A package to read: a directory or `.zip` path, or `{ name, bytes }` holding a zip archive |
+| `PackageSource` | type | A package to read: a directory or `.zip` path, `{ name, bytes }` holding a zip archive, or a `ParsedPackage`, which is not read again |
+| `ParsedPackage` | type | A package parsed once: its `name`, its `files` as `File`s by path, its `documents`, and the paths its references resolve to (`referenced`). Only `parsePackage` makes one |
+| `ParseVerdict` | type | `parsed` with the `ParsedPackage` as `package`, or `refused` with a `Refusal` |
 | `ImportVerdict` | type | `accepted` with the stored `packageId`, or `refused` with a `Refusal` |
 | `PreviewVerdict` | type | `previewed` with relation and row counts and `databaseChecked: false`, or `refused` with a `Refusal` |
 | `Refusal` | type | The level and rules a package broke: `kind: "qti"` at level `Qti`, or `kind: "above"` at a level above it. `rules` lists every rule the refusal names, and `rule` is the first of them |

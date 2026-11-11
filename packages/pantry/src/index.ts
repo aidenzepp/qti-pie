@@ -20,11 +20,14 @@
  * committed served file (grizzle's `served`), which that layer is built over and whose author role
  * each program opens its `Db` on. It is the one thing an app provides beside its layer.
  *
- * Programs: `importPackage` stores a package and `previewPackage` reads it without a database, each
- * succeeding with a verdict (`ImportVerdict`, `PreviewVerdict`) that carries a `Refusal` when the
- * package is refused, so a refusal is a value and never an error. `exportPackage` gives a stored
- * package's entries, `readDocument` one document's bytes, and `listPackages` and `listDocuments`
- * page what is stored. `documentScanOf` is the document scan an app may run in its own role, and
+ * Programs: `parsePackage` reads and parses a package once, `importPackage` stores a package and
+ * `previewPackage` reads it without a database, each succeeding with a verdict (`ParseVerdict`,
+ * `ImportVerdict`, `PreviewVerdict`) that carries a `Refusal` when the package is refused, so a
+ * refusal is a value and never an error. Each takes a `PackageSource`: a path, a zip archive's
+ * bytes, or the `ParsedPackage` a parse gave, whose files and referenced paths an app reads, and
+ * of which the import and the preview read nothing again. `exportPackage` gives a stored package's
+ * entries, `readDocument` one document's bytes, and `listPackages` and `listDocuments` page what
+ * is stored. `documentScanOf` is the document scan an app may run in its own role, and
  * `documentXml` writes the scan's rows as XML with no database. The programs fail only with what is
  * not about the package: the platform's or grizzle's own error, or pantry's `PackageNotFound`,
  * `DocumentNotFound`, `CommitUnresolved`, and the write errors a document's rows can raise
@@ -42,7 +45,7 @@ export type { PackageEntry } from "#pantry/api/export.ts";
 
 export { DocumentNotFound, exportPackage, readDocument } from "#pantry/api/export.ts";
 
-export { importPackage, previewPackage } from "#pantry/api/import.ts";
+export { importPackage, parsePackage, previewPackage } from "#pantry/api/import.ts";
 
 export type { DocumentListing, PackageListing } from "#pantry/api/list.ts";
 
@@ -67,7 +70,7 @@ export {
   TestFlag,
 } from "#pantry/api/published.ts";
 
-export type { ImportVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";
+export type { ImportVerdict, ParseVerdict, PreviewVerdict, Refusal } from "#pantry/api/verdict.ts";
 
 export { ServedAuthorLogin } from "#pantry/db/served.ts";
 
@@ -83,13 +86,13 @@ export { documentScanOf } from "#pantry/export/scan.ts";
 
 export { CommitUnresolved } from "#pantry/import/package.ts";
 
+export type { PackageSource, ParsedPackage } from "#pantry/import/parsed.ts";
+
 export type { CdnLevel } from "#pantry/levels/cdn.ts";
 
 export { CdnOptions, singleCdn } from "#pantry/levels/cdn.ts";
 
 export type { AssembleError } from "#pantry/model/assemble.ts";
-
-export type { PackageSource } from "#pantry/package/read.ts";
 
 export type { AuthorLogin } from "#pantry/qti/logins.ts";
 

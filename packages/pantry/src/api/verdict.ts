@@ -1,6 +1,7 @@
 /**
- * The verdicts an app reads from pantry's import and preview programs (`#pantry/api/import.ts`):
- * a package accepted or previewed, or refused with one {@link Refusal}.
+ * The verdicts an app reads from pantry's parse, import and preview programs
+ * (`#pantry/api/import.ts`): a package parsed, accepted or previewed, or refused with one
+ * {@link Refusal}.
  *
  * A refusal is a verdict on the package, never an error: the programs return it as a value, so an
  * app switches on `verdict` and keeps its error channel for failures that are not about the
@@ -8,6 +9,7 @@
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { RefusedAbove } from "#pantry/import/above.ts";
+import type { ParsedPackage } from "#pantry/import/parsed.ts";
 import type { ImportRefused, Rule } from "#pantry/import/rules.ts";
 import type { RefusalOrigin } from "#pantry/package/refusal-origin.ts";
 
@@ -46,6 +48,15 @@ export type Refusal =
       readonly detail: string;
       readonly origin: typeof RefusalOrigin.Type;
     };
+
+/**
+ * The verdict of a parse: the package read and parsed once, as the {@link ParsedPackage} an app
+ * reads its files from and passes on to the import or the preview, or refused by the reader, the
+ * container or the codec.
+ */
+export type ParseVerdict =
+  | { readonly verdict: "parsed"; readonly package: ParsedPackage }
+  | { readonly verdict: "refused"; readonly refusal: Refusal };
 
 /**
  * The verdict of an import: the package stored, under the id `packageId` its `Package` row holds,

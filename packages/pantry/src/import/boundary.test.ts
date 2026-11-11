@@ -26,10 +26,13 @@ type ByStep = readonly (readonly [step: Step, entries: readonly string[]])[];
  * package's rows and gets the scan's rows back.
  *
  * `import/package.ts`, `import/write.ts` and `export/package.ts` stay here, the XML program, the
- * row builders and the export's unshred and zip, once S10 takes out the parts §2.3 keeps:
- * `ingest`, `changeSetOf` with the row type, and the reads. `model/folds.ts`, which §2.1 does not
- * list, is here with the rest of the XDM model: the import's builders and the law oracle both
- * fold with it. The public import and export programs (`api/import.ts`, with its verdict, and
+ * row builders and the export's unshred and zip, once S10 takes out the parts §2.3 keeps: `ingest`,
+ * `changeSetOf` with the row type, and the reads. `import/parsed.ts`, the parse every package
+ * source goes through (the read, the shred and the reference resolution into a `ParsedPackage`), is
+ * here with the program that builds rows from it (`import/program.ts`): it reads ZIP and XML and
+ * reaches the PostgreSQL side only through the handoff. `model/folds.ts`, which §2.1 does not list,
+ * is here with the rest of the XDM model: the import's builders and the law oracle both fold with
+ * it. The public import and export programs (`api/import.ts`, with its verdict, and
  * `api/export.ts`) are here with the XML programs they wrap, and so is `index.ts`, the single entry
  * that re-exports them, as `cli.ts` is the command line's.
  */
@@ -46,6 +49,7 @@ const xmlSide = [
   "import/fold.ts",
   "import/overlays/*.ts",
   "import/package.ts",
+  "import/parsed.ts",
   "import/preview.ts",
   "import/program.ts",
   "import/record.ts",

@@ -32,10 +32,13 @@ const contentOf = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
     : new Uint8Array(bytes);
 
 /**
- * Turn a package's entries, as `readPackage` reads them, into the rows of its record.
+ * Turn a package's entries, as `readPackage` reads them or a parsed package holds them, into the
+ * rows of its record.
  *
- * @param files - The entries with their bytes, in listing order.
+ * @param files - The entries' paths with their bytes, in listing order.
  * @returns One {@link EntryRow} per entry, in the same order.
  */
-export const recordOf = (files: readonly PackageFile[]): readonly EntryRow[] =>
+export const recordOf = (
+  files: readonly Pick<PackageFile, "bytes" | "path">[],
+): readonly EntryRow[] =>
   files.map(({ bytes, path }): EntryRow => ({ content: contentOf(bytes), path }));
