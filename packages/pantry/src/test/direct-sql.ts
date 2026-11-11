@@ -8,15 +8,33 @@
  * keys, domains and non-deferrable foreign keys: a family's owner axis among them where grizzle
  * does not defer it, judged at the end of the member's INSERT, so the writer sends the owner first.
  * An owner axis grizzle defers is judged only where a case sets it immediate.
+ *
+ * The author role holds SELECT and INSERT alone (`#pantry/qti/roles.ts`), so a case that removes a
+ * stored row before it writes, a replacement, is the database owner's: the migration identity's
+ * session, which owns every table and deletes there ({@link judgedReplacement}).
  */
 import { roleNameOf, schemaNameOf } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert } from "@effect/vitest";
-import { Array as Arr, Effect, Match, Option, Predicate, Redacted, Schema } from "effect";
+import {
+  Array as Arr,
+  Effect,
+  FileSystem,
+  Match,
+  Option,
+  Predicate,
+  Redacted,
+  Schema,
+} from "effect";
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
-import { loginConnection } from "#pantry/db/connection.ts";
+import {
+  clusterState,
+  loginConnection,
+  migrationConnection,
+  passwordCommandSetting,
+} from "#pantry/db/connection.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 
@@ -26,9 +44,9 @@ import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 const authorAppRole = roleNameOf(AuthorApp);
 
 /**
- * The author role's PostgreSQL role, the one a direct writer's `SET ROLE` names, which holds
- * SELECT, INSERT and DELETE on every table of `Qti` it writes whole, every stored relation's
- * (grizzle's README, "Exactly what a role holds").
+ * The author role's PostgreSQL role, the one a direct writer's `SET ROLE` names, which holds SELECT
+ * and INSERT on every table of `Qti` it writes whole, every stored relation's, and no UPDATE or
+ * DELETE, since it writes by its insert list (grizzle's README, "Exactly what a role holds").
  */
 export const authorRole = roleNameOf(Author);
 
@@ -55,25 +73,62 @@ const passwordText = (password: DbConnection["password"]) =>
   );
 
 /**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct SQL writer.
+ * A session of one PostgreSQL role on the lease, over verify-full TLS against the cluster's CA,
+ * closed with its scope.
+ *
+ * @param connection - The cluster's connection.
+ * @param user - The role the session logs in as.
+ * @param password - Its password.
+ * @returns The session.
  */
-export const loginSession = Effect.gen(function* loginSession() {
-  const connection = (yield* loginConnection)(authorAppRole);
-  const password = yield* passwordText(connection.password);
+const sessionOf = (connection: DbConnection, user: string, password: string) => {
   const client = new Client({
     database: connection.database,
     host: connection.transport.host,
     password,
     port: connection.transport.port,
     ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
+    user,
   });
 
-  return yield* Effect.acquireRelease(
+  return Effect.acquireRelease(
     Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
     () => Effect.promise(() => client.end()),
   );
+};
+
+/**
+ * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
+ * with its scope: a direct SQL writer.
+ */
+export const loginSession = Effect.gen(function* loginSession() {
+  const connection = (yield* loginConnection)(authorAppRole);
+
+  return yield* sessionOf(connection, authorAppRole, yield* passwordText(connection.password));
+}).pipe(Effect.provide(NodeFileSystem.layer));
+
+/**
+ * A session of the migration identity on the lease, the role that owns the database and every
+ * table of `Qti`, over verify-full TLS against the cluster's CA, closed with its scope: the writer
+ * of a replacement ({@link judgedReplacement}). It connects as `grizzle migrate` does
+ * (`#pantry/db/connection.ts` `migrationConnection`), with the password command's password where
+ * `GR8DES_PG_PASSWORD_COMMAND` names one. Otherwise its password is the file `<role>.password` in
+ * the cluster's state folder, where scripts/db.sh reads it: only `db.sh migrate` exports
+ * `GR8DES_PG_MIGRATION_PASSWORD`, and a lease run does not.
+ */
+export const ownerSession = Effect.gen(function* ownerSession() {
+  const fs = yield* FileSystem.FileSystem;
+  const connection = yield* migrationConnection;
+  const password = yield* Option.match(yield* passwordCommandSetting, {
+    onNone: () =>
+      clusterState.pipe(
+        Effect.flatMap((state) => fs.readFileString(`${state}/${connection.role}.password`)),
+        Effect.map((text) => text.trim()),
+      ),
+    onSome: () => passwordText(connection.password),
+  });
+
+  return yield* sessionOf(connection, connection.role, password);
 }).pipe(Effect.provide(NodeFileSystem.layer));
 
 /**
@@ -318,17 +373,22 @@ const statementOf = (client: Client, run: Arr.NonEmptyReadonlyArray<Insert>) =>
   });
 
 /**
- * A statement a case reads its rows back by, through the author role's views, once they are in and
- * before the rollback: a generated column's value, say.
+ * One statement and its parameters.
  */
-export interface Read {
+interface Statement {
   readonly text: string;
   readonly values: readonly unknown[];
 }
 
 /**
- * A stored row a case removes before it writes, by its key's columns: the row a variant of it
- * replaces.
+ * A statement a case reads its rows back by, through the author role's views, once they are in and
+ * before the rollback: a generated column's value, say.
+ */
+export type Read = Statement;
+
+/**
+ * A stored row a replacement removes before it writes, by its key's columns: the row a variant of
+ * it replaces.
  */
 export interface Removal {
   readonly key: Readonly<Record<string, string | number | boolean>>;
@@ -336,34 +396,38 @@ export interface Removal {
 }
 
 /**
- * One case of a direct writer: the stored rows it removes, the rows it writes, the deferrable
- * foreign keys it sets immediate once they are in, by name, and the statements it reads back. A
- * case that removes, sets or reads nothing states none.
+ * One case of a direct writer: the rows it writes, the deferrable foreign keys it sets immediate
+ * once they are in, by name, and the statements it reads back. A case that sets or reads nothing
+ * states none.
  */
 export interface Case {
   readonly immediate?: readonly string[];
   readonly inserts: readonly Insert[];
   readonly reads?: readonly Read[];
-  readonly removed?: readonly Removal[];
 }
 
 /**
- * Judge a case as the author role, every deferrable foreign key deferred: remove its stored rows,
- * insert its rows in order, set its foreign keys immediate, read what it reads, and roll back. The
- * verdict is the server's on the rows by their own CHECKs, keys, domains and non-deferrable foreign
- * keys, and by those foreign keys, with the rows each read returns. Each run of one table's rows is
- * one statement, whose non-deferrable foreign keys PostgreSQL judges at its end, so the rows of a
- * run may come in any order among themselves (a tree's successor before its predecessor among
- * them).
+ * A case that first removes stored rows, which the rows it writes replace: the owner's
+ * ({@link judgedReplacement}), since the author role deletes nothing.
+ */
+export interface Replacement extends Case {
+  readonly removed: Arr.NonEmptyReadonlyArray<Removal>;
+}
+
+/**
+ * Judge a case on a session at SERIALIZABLE, every deferrable foreign key deferred: send the
+ * session's opening statements, insert the case's rows in order, set its foreign keys immediate,
+ * read what it reads, and roll back.
  *
  * @param client - The session.
+ * @param opening - What the session sends first, once every key is deferred.
  * @param of - The case.
- * @returns The server's error, or none when the rows' own laws and those keys accept them, and each
- *   read's rows, none where the server refused; fails with any other failure.
+ * @returns The server's error and each read's rows, as {@link judgedCase} gives them.
  */
-export const judgedCase = (
+const judgedAfter = (
   client: Client,
-  { immediate = [], inserts, reads = [], removed = [] }: Case,
+  opening: readonly Statement[],
+  { immediate = [], inserts, reads = [] }: Case,
 ) =>
   Effect.gen(function* insertDeferred() {
     const runs = Arr.isReadonlyArrayNonEmpty(inserts)
@@ -373,18 +437,8 @@ export const judgedCase = (
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statementsInOrder() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { key, table } of removed) {
-        const columns = Object.keys(key);
-        yield* rowsOf(
-          client,
-          `DELETE FROM ${qtiSchema}.${table} WHERE ${columns.map((name, at) => `"${name}" = $${String(at + 1)}`).join(" AND ")}`,
-          Object.values(key),
-        );
-      }
-
-      for (const { text, values } of statements) {
+      for (const { text, values } of [...opening, ...statements]) {
         yield* rowsOf(client, text, values);
       }
 
@@ -407,7 +461,52 @@ export const judgedCase = (
   });
 
 /**
- * The verdict of a case that removes and reads nothing ({@link judgedCase}).
+ * Judge a case as the author role: on the author login's session ({@link loginSession}), the
+ * session sets its role to the author role, and the case runs ({@link judgedAfter}). The verdict is
+ * the server's on the rows by their own CHECKs, keys, domains and non-deferrable foreign keys, and
+ * by the foreign keys the case sets immediate, with the rows each read returns. Each run of one
+ * table's rows is one statement, whose non-deferrable foreign keys PostgreSQL judges at its end, so
+ * the rows of a run may come in any order among themselves (a tree's successor before its
+ * predecessor among them).
+ *
+ * @param client - The author login's session.
+ * @param of - The case.
+ * @returns The server's error, or none when the rows' own laws and those keys accept them, and each
+ *   read's rows, none where the server refused; fails with any other failure.
+ */
+export const judgedCase = (client: Client, of: Case) =>
+  judgedAfter(client, [{ text: `SET ROLE ${authorRole}`, values: [] }], of);
+
+/**
+ * Judge a replacement as the database owner, on the migration identity's session
+ * ({@link ownerSession}): the session deletes each stored row the replacement removes, by its
+ * key's columns, then the case runs ({@link judgedAfter}), its rows inserted as the owner, and the
+ * rollback restores every removed row. The author role holds no DELETE, and the owner may not set
+ * its role to the author role: grizzle grants that to the login alone, and the membership that
+ * creating the role gave the owner carries ADMIN alone, as PostgreSQL's default
+ * `createrole_self_grant` leaves it. The verdict is the one {@link judgedCase} would give: the
+ * author role writes every table whole, so no row-level security applies to it, and holds INSERT on
+ * every table, so the server judges the owner's rows by the same CHECKs, keys, domains, triggers
+ * and foreign keys.
+ *
+ * @param owner - The migration identity's session.
+ * @param replacement - The replacement.
+ * @returns The server's error and each read's rows, as {@link judgedCase} gives them.
+ */
+export const judgedReplacement = (owner: Client, { removed, ...of }: Replacement) =>
+  judgedAfter(
+    owner,
+    removed.map(({ key, table }) => ({
+      text: `DELETE FROM ${qtiSchema}.${table} WHERE ${Object.keys(key)
+        .map((name, at) => `"${name}" = $${String(at + 1)}`)
+        .join(" AND ")}`,
+      values: Object.values(key),
+    })),
+    of,
+  );
+
+/**
+ * The verdict of a case that reads nothing ({@link judgedCase}).
  *
  * @param client - The session.
  * @param inserts - The rows, each with its table.

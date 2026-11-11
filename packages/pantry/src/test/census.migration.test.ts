@@ -1,7 +1,7 @@
 /**
- * The census of the committed migration (plan-qti-pie Q6.02): the one `_init` folder the Qti
- * schema's migrations hold, beside the snapshot's two files and `served/`, which holds the one file
- * `grizzle generate` writes for the author login (`#pantry/db/served.ts`), taken by
+ * The census of the committed migration (plan-qti-pie Q6.02): the one `_sterling-standard` folder
+ * the Qti schema's migrations hold, beside the snapshot's two files and `served/`, which holds the
+ * one file `grizzle generate` writes for the author login (`#pantry/db/served.ts`), taken by
  * `#pantry/test/census.ts`, meets fin.md §13's zero targets, except its validate files and
  * constraint triggers, which the measured counts hold instead, and holds those counts. It lands
  * with the migration it reads, so it is a file of its own: the census's parser and its targets are
@@ -58,7 +58,7 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration", () => {
   it.effect(
-    "is one _init folder, its snapshot's two files and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
+    "is one _sterling-standard folder, its snapshot's two files and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
@@ -74,7 +74,7 @@ describe("the committed migration", () => {
         const held = yield* censusOf(qtiMigrations);
 
         assert.lengthOf(entries, 4, entries.join(", "));
-        assert.match(entries[0] ?? "", /^\d{14}_init$/u);
+        assert.match(entries[0] ?? "", /^\d{14}_sterling-standard$/u);
         assert.strictEqual(entries[1], "manifest.json");
         assert.strictEqual(entries[2], "served");
         assert.strictEqual(entries[3], "snapshot.json");
