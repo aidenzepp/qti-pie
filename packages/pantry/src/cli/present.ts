@@ -197,6 +197,12 @@ const factsOf = (
  * several rules never reads as several breaches the database did not report.
  */
 const refusedKindText = {
+  "above every":
+    "the database named the first law, a law of a level above the importer's, and every law after it is one of the importer's own the first stated row breaks",
+  "above none":
+    "the database named the law, a law of a level above the importer's, and the rows written hold every law of the importer's own",
+  "above unjudged":
+    "the database named the law, a law of a level above the importer's, and nothing is said of the importer's own laws",
   every: "every law named is broken",
   first: "the laws of the first check the database tried, and the package may break others too",
   some: "at least one law named is broken, and the database does not say which",

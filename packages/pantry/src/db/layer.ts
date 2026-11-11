@@ -66,11 +66,11 @@ export const AuthorAppLayer = Layer.unwrap(
  * which the package's read (`readPackage` of `#pantry/import/read.ts`) reads the package through,
  * and {@link AuthorAppLayer}, the author login and its `DbLayer`, which its write (`importPackage`
  * of `#pantry/import/package.ts`) applies through. So
- * `readPackage(dir).pipe(Effect.flatMap(importPackage), Effect.provide(ImportLive))` imports a
+ * `importDir(dir).pipe(Effect.provide(ImportLive))` (`#pantry/test/import-dir.ts`) imports a
  * package into this package's own install, and the command line runs every command that reaches
  * the database on it (`#pantry/cli/engine.ts` `withAuthorApp`). It is the command line's and the
  * tests' own, since `package.json`'s `"exports"` map does not list this module: an application
- * builds its own author `DbLayer` and provides `AuthorLogin`.
+ * builds its own author `DbLayer`, opens its `Db` and passes `db.workload` to `importPackage`.
  *
  * It is built from the process's settings, read through Effect `Config`: the cluster's
  * (`GR8DES_PG_HOST`, `GR8DES_PG_PORT`, `GR8DES_PG_DATABASE`, `GR8DES_PG_CA`, `GR8DES_PG_SECRETS`),

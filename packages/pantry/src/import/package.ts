@@ -6,29 +6,29 @@
  * rows an application writes itself with its own grizzle `Db` where it needs the package in a
  * transaction of its own), its directory never read again, and written by the author login's
  * `importWrite` member, the one ChangeSet step (`#pantry/qti/logins.ts`) that `grizzle generate`
- * compiled into the login's served file, applied once to those rows. This module is a convenience
- * over that one apply: it retries a transient refusal, settles a commit with no answer by reading
- * the package back, and names a refusal's QTI rules. The apply is one transaction, so the database
- * holds the whole package or nothing of it: there is no split and no completion marker. grizzle
- * writes each relation's rows in one statement, its nested rows past one Bind message through a
- * carrier, a temporary table of the write's own (README, "Sizes"; grizzle `164aeb06`), so no
- * transport bound splits the write.
+ * compiled into the login's served file, applied once to those rows. The caller passes its own
+ * `Db`'s workload, of any login whose workload serves `importWrite` and `packageOf` (grizzle's
+ * `MemberHandle`): `AuthorApp`'s over `Qti` and `MediaAuthorApp`'s over `QtiMedia` alike. This
+ * module is a convenience over that one apply: it retries a transient refusal, settles a commit
+ * with no answer by reading the package back, and names a refusal's QTI rules. The apply is one
+ * transaction, so the database holds the whole package or nothing of it: there is no split and no
+ * completion marker. grizzle writes each relation's rows in one statement, its nested rows past one
+ * Bind message through a carrier, a temporary table of the write's own (README, "Sizes"; grizzle
+ * `164aeb06`), so no transport bound splits the write.
  */
 import {
   CommitUnknown,
-  Db,
   ReadFailure,
   StaleSnapshot,
   TransientFailure,
 } from "@bjornpagen/grizzle/runtime";
-import type { Uuid } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
+import type { MemberHandle, Uuid } from "@bjornpagen/grizzle";
+import type { ApplyError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
 import { importRowsOf } from "#pantry/import/program.ts";
 import type { QtiPackage } from "#pantry/import/read.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
-import type { AuthorRole } from "#pantry/qti/roles.ts";
+import type { authorReads, importWrite } from "#pantry/qti/logins.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
@@ -184,19 +184,22 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
 });
 
 /**
- * Import a package `readPackage` read.
+ * Import a package `readPackage` read, through a `Db`'s workload, `db.workload` of any author
+ * login.
  *
  * Mints every id afresh and builds every row from the package's documents and files, reading
- * nothing of its directory, then applies them as one ChangeSet through the author role. The
- * `importWrite` apply is retried on a transient refusal and on nothing else; `Db.open` is not,
- * since it contacts nothing of the database and refuses only what the host decides (grizzle
- * `d994809c`), never a transient failure. When the commit's outcome is unknown the package row is
- * read back by its id ({@link settleCommitUnknown}): present, the import was accepted; absent, the
- * error is the answer; a read-back that fails is `CommitUnresolved`. The same package imported
+ * nothing of its directory, then applies them as one ChangeSet through the workload's
+ * `importWrite`. The apply is retried on a transient refusal and on nothing else. When the
+ * commit's outcome is unknown the package row is read back by its id through the workload's
+ * `packageOf` ({@link settleCommitUnknown}): present, the import was accepted; absent, the error is
+ * the answer; a read-back that fails is `CommitUnresolved`. Both members are grizzle's
+ * `MemberHandle` of the program the login serves, so the handle of either author login is one,
+ * `AuthorApp`'s over `Qti` and `MediaAuthorApp`'s over `QtiMedia`. The same package imported
  * twice, or one package value imported twice, is two packages, each with its own ids. The retries
  * run on {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}; both are
  * references whose defaults are the live ones, so a caller provides neither.
  *
+ * @param workload - The author `Db`'s workload: its `importWrite` and `packageOf` members.
  * @param pkg - The package, as `readPackage` read it.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the
  *   database refused the package under; with `CommitUnresolved` when the commit's outcome is
@@ -204,24 +207,22 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  *   own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
+  workload: {
+    readonly importWrite: MemberHandle<typeof importWrite>;
+    readonly packageOf: MemberHandle<typeof authorReads.packageOf>;
+  },
   pkg: QtiPackage,
-): Effect.fn.Return<
-  Uuid,
-  ImportRefused | ApplyError | OpenError | CommitUnresolved,
-  AuthorLogin | DbLayer<AuthorRole>
-> {
+): Effect.fn.Return<Uuid, ImportRefused | ApplyError | CommitUnresolved> {
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
-  const login = yield* AuthorLogin;
   const { insert, packageId } = yield* importRowsOf(pkg);
-  const db = yield* Db.open(login.roles.author, {});
   const [elapsed, outcome] = yield* retried(
     "importWrite",
-    wrap(db.workload.importWrite.apply({ insert }, {})),
+    wrap(workload.importWrite.apply({ insert }, {})),
     schedule,
   ).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
-      settleCommitUnknown(commit, packageId, db.workload.packageOf.get({ id: packageId })),
+      settleCommitUnknown(commit, packageId, workload.packageOf.get({ id: packageId })),
     ),
     Effect.timed,
   );

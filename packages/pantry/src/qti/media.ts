@@ -8,11 +8,18 @@
  * entry's digest (`Entry.digest`), with the media type the policy gives its extension, and holds no
  * file nothing names.
  *
- * A level reaches the relations below it only through a query (README, "Levels"), so each law is a
- * rule over a derived relation of `QtiMedia` that reads `Qti`'s tables, which deferred triggers
- * judge at commit (README, "Rules over queries"), and every writer meets it. A refusal by one is
- * grizzle's `{ kind: "above", level: "QtiMedia", law }` to a login over `Qti`, and the law's own to
- * a login over `QtiMedia`; it names its law and rule as any other refusal does.
+ * A level reaches the relations below it through a query or a row check (README, "Levels"). A law
+ * of one attribute alone (Media data, Media style and Media foreign on `Attribute`) is a row check
+ * over `Qti`'s `Attribute`, reading its lexical form with `Compute.matches` as `Attribute`'s own
+ * checks do, and installs as a CHECK on Attribute's table, named by the check, in an installation
+ * that holds this level and in no other. Every other law is a rule over a derived relation of
+ * `QtiMedia` that reads `Qti`'s tables, which deferred triggers judge at commit (README, "Rules
+ * over queries"). Every writer meets them all. A refusal by one is the law's own to a login over
+ * `QtiMedia`, and to a login over `Qti` the first law of an `above` refusal, grizzle's
+ * `{ kind: "above", level: "QtiMedia", law }`, with no witness, since that login's host holds none
+ * of the level's predicates; a row check's comes beside every law of `Qti`'s own the first stated
+ * row breaks, each with that row's key as `every` names them (grizzle's `refused.own`). It names
+ * its law and rule either way (`lawNameOf` of `#pantry/import/refusal.ts`).
  *
  * - **Media path** (rule `media-path`): every address a player fetches, each field
  *   `#pantry/vocab/fetched.ts` declares, names a file of the package, which `file-exists` holds to
@@ -86,12 +93,17 @@ import {
   derived,
   generated,
   key,
+  login,
   on,
   query,
   relation,
+  role,
   schema,
   str,
   v,
+  wholeEntriesOf,
+  workload,
+  writableNamesOf,
 } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import {
@@ -102,8 +114,9 @@ import {
 } from "#pantry/grammar/install.ts";
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { Attribute, dataScheme, leadingStripped, tabOrNewline } from "#pantry/qti/attributes.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
+import { authorReads, importWrite } from "#pantry/qti/logins.ts";
 import { Node } from "#pantry/qti/node.ts";
 import {
   Entry,
@@ -115,6 +128,58 @@ import {
 import { Qti } from "#pantry/qti/schema.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+
+/**
+ * The characters the URL Standard strips before a URL, the C0 controls and the space, as the body
+ * of a character class. NUL is left out: no XML document holds it, and grizzle admits no pattern
+ * that does.
+ *
+ * @see {@link https://url.spec.whatwg.org/#c0-control | URL Standard, C0 control}
+ */
+const leadingStripped = String.raw`\u{1}-\u{20}`;
+
+/**
+ * The ASCII tab and newline the URL Standard removes from anywhere in a URL, as the body of a
+ * character class.
+ *
+ * @see {@link https://url.spec.whatwg.org/#ascii-tab-or-newline | URL Standard, ASCII tab or newline}
+ */
+const tabOrNewline = String.raw`\t\n\r`;
+
+/**
+ * An address that uses the `data:` scheme, as the URL Standard reads a scheme: past the leading C0
+ * controls and spaces it strips, the letters `data` in any case, any tab or newline among them
+ * removed, and the colon that ends a scheme.
+ *
+ * @see {@link https://url.spec.whatwg.org/#scheme-state | URL Standard, scheme state}
+ */
+const dataScheme = Compute.pattern<string>(
+  `^[${leadingStripped}]*[dD][${tabOrNewline}]*[aA][${tabOrNewline}]*[tT][${tabOrNewline}]*[aA][${tabOrNewline}]*:`,
+);
+
+/**
+ * A token of an address list that uses the `data:` scheme: at the list's start or after the
+ * whitespace that separates its tokens, which a token never holds.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#atomic-vs-list | XML Schema 1.0 Part 2, §2.5.1.2 List datatypes}
+ */
+const dataToken = Compute.pattern<string>(
+  `(?:^|[${tabOrNewline} ])[${leadingStripped}]*[dD][aA][tT][aA]:`,
+);
+
+/**
+ * A style that makes the player fetch, or could spell a fetch past this pattern, in any case: CSS's
+ * `url(`, an `@import`, `image-set(` (`-webkit-image-set(` among them) and `src(`, each of which
+ * takes an address as a plain string, and any backslash, which begins a CSS escape, so no escaped
+ * spelling such as `\75 rl(` names a function the pattern does not read.
+ *
+ * @see {@link https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point | CSS Syntax 3, consume an escaped code point}
+ * @see {@link https://www.w3.org/TR/css-images-4/#image-set-notation | CSS Images 4, image-set()}
+ * @see {@link https://www.w3.org/TR/css-values-4/#urls | CSS Values 4, src()}
+ */
+const styleFetch = Compute.pattern(
+  String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`,
+);
 
 /**
  * An address that is no path relative to its document, as the URL Standard reads one against the
@@ -251,52 +316,6 @@ export const MediaType = relation.generated(
 export const QtiMediaPolicy = schema.extend(Qti, "QtiMediaPolicy", { MediaType }, [
   key(on(MediaType, "type")),
 ]);
-
-/**
- * Every attribute, by its key, with what the policy's laws read of it: its name, its element's
- * kind, governor and version, and the address facts PostgreSQL generates from its lexical form
- * (`Attribute.dataScheme`, `dataToken` and `styleFetch`).
- */
-const MediaAttribute = derived(
-  "MediaAttribute",
-  query(Qti).rule((r) => {
-    const {
-      dataScheme: usesData,
-      dataToken,
-      governor,
-      id,
-      kind,
-      name,
-      node,
-      styleFetch,
-      version,
-    } = v(Attribute, "attribute");
-
-    return r
-      .match(Attribute, {
-        dataScheme: usesData,
-        dataToken,
-        governor,
-        id,
-        kind,
-        name,
-        node,
-        styleFetch,
-        version,
-      })
-      .find({
-        dataScheme: usesData,
-        dataToken,
-        governor,
-        id,
-        kind,
-        name,
-        node,
-        styleFetch,
-        version,
-      });
-  }),
-);
 
 /**
  * Every attribute no {@link Reference} is of, by its element and name, with its governor: Media
@@ -450,7 +469,7 @@ const UnusedEntry = derived(
 export const mediaLawsByName = {
   "Entry used": [check("Entry_used", UnusedEntry, (u) => u.eq(u.path, manifestPath))],
   "Media data": [
-    check("Media_data", MediaAttribute, (a) =>
+    check("Media_data", Attribute, (a) =>
       a.and(
         a.or(
           a.not(
@@ -472,9 +491,9 @@ export const mediaLawsByName = {
               uriDomains,
             ),
           ),
-          a.eq(a.dataScheme, false),
+          a.not(Compute.matches(a.lexical, dataScheme)),
         ),
-        a.or(a.not(a.in(a.name, addressLists)), a.eq(a.dataToken, false)),
+        a.or(a.not(a.in(a.name, addressLists)), a.not(Compute.matches(a.lexical, dataToken))),
       ),
     ),
     check("Media_data", MediaNode, (n) =>
@@ -490,7 +509,7 @@ export const mediaLawsByName = {
     ),
   ],
   "Media foreign": [
-    check("Media_foreign", MediaAttribute, (a) => a.not(a.in(a.name, uninterpretedClasses))),
+    check("Media_foreign", Attribute, (a) => a.not(a.in(a.name, uninterpretedClasses))),
     check("Media_foreign", MediaNode, (n) => n.not(n.in(n.kind, Object.values(foreignKinds)))),
   ],
   "Media path": [
@@ -526,8 +545,8 @@ export const mediaLawsByName = {
     ),
   ],
   "Media style": [
-    check("Media_style", MediaAttribute, (a) =>
-      a.or(a.not(a.eq(a.name, "style")), a.eq(a.styleFetch, false)),
+    check("Media_style", Attribute, (a) =>
+      a.or(a.not(a.eq(a.name, "style")), a.not(Compute.matches(a.lexical, styleFetch))),
     ),
   ],
   "Media type": [
@@ -545,16 +564,15 @@ export const mediaLawsByName = {
 } as const;
 
 /**
- * The package-media level over {@link QtiMediaPolicy}: every derived relation its laws read, and the
- * laws. An application lists it, or a level of its own over it, in its grizzle config's `schemas`,
- * so the installation holds `Qti`, the policy and these laws, and writes its policy as
- * {@link MediaType} rows.
+ * The package-media level over {@link QtiMediaPolicy}: every derived relation its rules read, and
+ * the laws, the row checks over `Attribute` among them. An application lists it, or a level of its
+ * own over it, in its grizzle config's `schemas`, so the installation holds `Qti`, the policy and
+ * these laws, and writes its policy as {@link MediaType} rows.
  */
 export const QtiMedia = schema.extend(
   QtiMediaPolicy,
   "QtiMedia",
   {
-    MediaAttribute,
     MediaNode,
     MediaReference,
     MediaTextReference,
@@ -565,3 +583,44 @@ export const QtiMedia = schema.extend(
   },
   Object.values(mediaLawsByName).flat(),
 );
+
+/**
+ * The author role over {@link QtiMedia}, for an application whose author login is over the media
+ * level: it holds every stored relation and roster of the installation whole, the policy's and the
+ * level's derived relations among them (grizzle's `wholeEntriesOf`), and inserts into `Qti`'s
+ * stored relations (`writableNamesOf(Qti)`), as `Author` of `#pantry/qti/roles.ts` does, and into
+ * no relation of the policy: {@link MediaType} is written through a role of its own, one that writes
+ * nothing a READ COMMITTED reader reads ({@link QtiMediaPolicy}). It holds SELECT and INSERT only,
+ * no UPDATE and no DELETE.
+ *
+ * Over `QtiMedia`, a refusal by a media law is the law's own, `every` with the row's key as its
+ * witness where the host judges the row; over `Qti`, it is `{ kind: "above", level: "QtiMedia",
+ * law }`, and a row check's comes `first` with no witness. pantry names both alike
+ * (`lawNameOf` of `#pantry/import/refusal.ts`).
+ */
+export const MediaAuthor = role(QtiMedia, "author", wholeEntriesOf(QtiMedia), {
+  insert: writableNamesOf(Qti),
+});
+
+/**
+ * The author role over the media level, the type of {@link MediaAuthor}.
+ */
+export type MediaAuthorRole = typeof MediaAuthor;
+
+/**
+ * The author application's login over {@link QtiMedia}, over {@link MediaAuthor}, with the two
+ * workloads `AuthorApp` of `#pantry/qti/logins.ts` holds, `authorReads` and `importWrite`, in its
+ * order: every program is over `Qti`,
+ * so its served file holds the same members, `importWrite` among them. It bears `AuthorApp`'s name,
+ * so grizzle writes it as `migrations/<root>/served/author_app.json`. An application's grizzle
+ * config lists this or `AuthorApp`, never both, since their names convert alike.
+ */
+export const MediaAuthorApp = login(QtiMedia, "author_app", [MediaAuthor], {
+  workload: [workload(MediaAuthor, authorReads), workload(MediaAuthor, { importWrite })],
+});
+
+/**
+ * The author application's login over the media level, the type of {@link MediaAuthorApp}: the type
+ * an application serves its committed workload as, read by `import type` alone.
+ */
+export type MediaAuthorAppLogin = typeof MediaAuthorApp;

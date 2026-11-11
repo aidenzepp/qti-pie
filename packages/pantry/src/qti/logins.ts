@@ -46,24 +46,30 @@ export const importWrite = ChangeSet.empty(Qti).insertAll(
 );
 
 /**
- * Build the author application's two workloads over an author role: the export's reads with
- * `packageOf`, and {@link importWrite}. {@link AuthorApp} holds them over {@link Author}; a database
- * test compiles them with members of its own beside them over a role of its own
- * (`#pantry/test/served-members.ts`), since grizzle puts a role in one login only.
+ * The export's reads, as the author login's first workload holds them: one document's ordered scan
+ * and a package's record with each entry's document (`#pantry/export/scan.ts`), and `packageOf`,
+ * the `Package` row by its key. Each is over `Qti`, so a workload of any author role holds them.
+ */
+export const authorReads = {
+  documentScan: paged(documentScan),
+  entriesOf,
+  packageOf: Qti.relations.Package,
+} as const;
+
+/**
+ * Build the author application's two workloads over an author role: {@link authorReads}, and
+ * {@link importWrite}. {@link AuthorApp} holds them over {@link Author}, and `MediaAuthorApp` of
+ * `#pantry/qti/media.ts` the same two over its role over `QtiMedia`; a database test
+ * compiles them with members of its own beside them over a role of its own
+ * (`#pantry/test/served-members.ts`), since grizzle puts a role in one login only. Every program is
+ * over `Qti`, so each login serves the same members.
  *
  * @param _qti - `Qti`, which every program is over.
  * @param author - The author role, {@link Author} or a role of the same entries over `Qti`.
  * @returns The workloads, in the login's order.
  */
 export const authorWorkloadsOf = (_qti: QtiSchema, author: AuthorRole) =>
-  [
-    workload(author, {
-      documentScan: paged(documentScan),
-      entriesOf,
-      packageOf: Qti.relations.Package,
-    }),
-    workload(author, { importWrite }),
-  ] as const;
+  [workload(author, authorReads), workload(author, { importWrite })] as const;
 
 /**
  * The author application's login over `Qti`, over its author role (`#pantry/qti/roles.ts`

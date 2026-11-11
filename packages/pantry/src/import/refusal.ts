@@ -25,11 +25,11 @@
  *   its rule, and the witness grizzle gives, its key or none. There is no catalog of messages.
  */
 
-import type { Law, Refused, Witness } from "@bjornpagen/grizzle";
+import type { Law, OwnLaw, Refused, Witness } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import type { Types } from "effect";
 
-import type { RefusedLaw } from "#pantry/package/refusal-origin.ts";
+import type { RefusedLaw, RefusalDecision } from "#pantry/package/refusal-origin.ts";
 
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { ruleOrder, ImportRefused } from "#pantry/import/rules.ts";
@@ -79,10 +79,11 @@ export type RefusingBy =
   | { readonly kind: "notNull" | "statement" };
 
 /**
- * One law of a refusal, as the importer names it: the law as the schema states it, its id, and the
- * object that refused it. The id is a LawId for a law of the theory or a text pattern, and a
- * GeneratedLawId for a generated field's law. grizzle's `RefusedLaw` is one, its id and installed
- * name branded texts; a test plants one with texts of its own.
+ * One law of a refusal, as the importer names it: the law as the schema states it, the login's own
+ * law or a law of a level above the login's, its id, and the object that refused it. The id is a
+ * LawId for a law of the theory or a text pattern, and a GeneratedLawId for a generated field's
+ * law. grizzle's `RefusedLaw` is one, its id and installed name branded texts; a test plants one
+ * with texts of its own.
  */
 export interface RefusalLaw {
   readonly by: RefusingBy;
@@ -91,13 +92,36 @@ export interface RefusalLaw {
 }
 
 /**
- * A refusal of laws, as the importer reads one: how grizzle decided them, and the laws, at least
- * one (grizzle's `Refused`).
+ * The laws of a refusal in their positions, each grizzle's `RefusedLaw` read as a
+ * {@link RefusalLaw}.
  */
-export interface RefusalOf {
-  readonly kind: Refused["kind"];
-  readonly laws: Arr.NonEmptyReadonlyArray<RefusalLaw>;
-}
+type RefusalLawsOf<Laws> = { readonly [At in keyof Laws]: RefusalLaw };
+
+/**
+ * A refusal of laws, as the importer reads one: each shape of grizzle's `Refused`, its kind, its
+ * `own` where it is `above`, and its laws in their positions, read as {@link RefusalLaw}s, so every
+ * shape grizzle states is one here and no other is, each with as many laws: `every` and `first`
+ * one or more, `some` two or more, `above` with `own` `every` two or more and with `none` or
+ * `unjudged` one. `every`, `first` and `some` hold the login's own laws; `above` holds first the
+ * law of a level above the login's that PostgreSQL named, then, where its `own` is `every`, each
+ * own law the first stated row breaks.
+ */
+export type RefusalOf = Refused extends infer Decided
+  ? Decided extends { readonly laws: infer Laws }
+    ? Omit<Decided, "laws"> & { readonly laws: RefusalLawsOf<Laws> }
+    : never
+  : never;
+
+/**
+ * Name a refusal's shape, as its origin records it (`RefusedKind` of
+ * `#pantry/package/refusal-origin.ts`): its kind, and for `above` what grizzle found of the
+ * login's own laws.
+ *
+ * @param refused - The refusal.
+ * @returns Its shape's name.
+ */
+const decisionOf = (refused: RefusalOf): RefusalDecision<RefusalOf> =>
+  refused.kind === "above" ? `above ${refused.own}` : refused.kind;
 
 /**
  * What the dictionary tells of one installed law: its name in {@link lawTable}.
@@ -144,23 +168,23 @@ export interface LawNamer {
 }
 
 /**
- * Build the namer of a law-name dictionary. A check is named by its own name ({@link lawOfCheck}),
- * since grizzle names a check by the name its statement declares; every other law by the
- * dictionary's entry of its id, which the outcome carries; and a law of a level above the login's,
- * such as a package-media law (`QtiMedia` of `#pantry/qti/media.ts`) refusing a write of a login
- * over `Qti`, as the law it wraps. Nothing reads the schema.
+ * Build the namer of a law-name dictionary. A law is named as the level that states it states it:
+ * the login's own law as it is, and the law of a level above the login's, the first law of an
+ * `above` refusal, such as a package-media check (`QtiMedia` of `#pantry/qti/media.ts`) refusing a
+ * write of a login over `Qti`, as that level's own law (grizzle's `AboveLaw.law`). A check is then
+ * named by its own name ({@link lawOfCheck}), since grizzle names a check by the name its statement
+ * declares, and every other law by the dictionary's entry of its id, which the outcome carries.
+ * Nothing reads the schema.
  *
  * @param file - The dictionary.
  * @returns Its namer.
  */
 export const namerFrom = (file: LawNamesFile): LawNamer => {
   const nameOf = ({ id, law }: Pick<RefusalLaw, "id" | "law">): Option.Option<LawName> => {
-    if (law.kind === "above") {
-      return nameOf({ id, law: law.law });
-    }
+    const stated: OwnLaw = law.kind === "above" ? law.law : law;
 
-    return law.kind === "check"
-      ? lawOfCheck(law.name)
+    return stated.kind === "check"
+      ? lawOfCheck(stated.name)
       : Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name));
   };
 
@@ -339,7 +363,7 @@ export const refusalOf = (refused: RefusalOf, witness: Witness): ImportRefused =
     detail,
     origin: {
       _tag: "Database",
-      kind: refused.kind,
+      kind: decisionOf(refused),
       laws: pipe(refused.laws, Arr.map(lawFactOf)),
       sources,
       witness: witness.kind,

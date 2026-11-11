@@ -16,7 +16,7 @@ import {
 } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
-import type { RefusalLaw } from "#pantry/import/refusal.ts";
+import type { RefusalLaw, RefusalOf } from "#pantry/import/refusal.ts";
 import { readerOrigin, RefusedKind, WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
@@ -231,13 +231,13 @@ const refusedByStatement = (law: CheckLaw): RefusalLaw => ({
 });
 
 /**
- * A check as PostgreSQL's refusal of it carries it: refused by its table's constraint, under the
- * {@link plantedConstraint} name.
+ * A check as PostgreSQL's refusal of it carries it, as the login's own law or as a level above
+ * states it: refused by its table's constraint, under the {@link plantedConstraint} name.
  *
- * @param law - The check.
+ * @param law - The check, or a level above's law of it.
  * @returns The refused law.
  */
-const refusedByConstraint = (law: CheckLaw): RefusalLaw => ({
+const refusedByConstraint = (law: Law): RefusalLaw => ({
   by: { kind: "constraint", name: plantedConstraint },
   id: "",
   law,
@@ -291,7 +291,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
       // decided its laws, its laws with the table's name and rule and, for the check `Qti` states,
       // the installed name its refusing constraint carried, the table's source once, and the kind
       // of the witness it was built under. A `some` outcome names two laws, AL1's check and a check of no law, which `Qti` does
-      // not state and which has its text alone, as grizzle's `Refused` requires. The help is
+      // not state and which has its text alone, as grizzle's `Refused` requires. An `above`
+      // outcome names AL1's check first as a level above states it, by the name of the law it
+      // wraps, and `above every` the login's own AL1 check after it. The help is
       // the origin's, by its own words. Bound: the reader's origin and the database's under each
       // kind of `RefusedKind` and of `WitnessKind`, exhausted, each in text and JSON; residual
       // none.
@@ -313,6 +315,35 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           text: Formatter.format(law),
         };
         const unownedFact = { text: Formatter.format(unownedLaw) };
+        const aboveLaw = { kind: "above", law, level: "QtiMedia" } as const;
+        const aboveFact = { ...lawFact, text: Formatter.format(aboveLaw) };
+        const refusedAbove = refusedByConstraint(aboveLaw);
+        const own = refusedByConstraint(law);
+        const refusalsByDecision = {
+          "above every": {
+            facts: [aboveFact, lawFact],
+            refused: { kind: "above", laws: [refusedAbove, own], own: "every" },
+          },
+          "above none": {
+            facts: [aboveFact],
+            refused: { kind: "above", laws: [refusedAbove], own: "none" },
+          },
+          "above unjudged": {
+            facts: [aboveFact],
+            refused: { kind: "above", laws: [refusedAbove], own: "unjudged" },
+          },
+          every: { facts: [lawFact], refused: { kind: "every", laws: [own] } },
+          first: { facts: [lawFact], refused: { kind: "first", laws: [own] } },
+          some: {
+            facts: [lawFact, unownedFact],
+            refused: { kind: "some", laws: [own, refusedByStatement(unownedLaw)] },
+          },
+        } as const satisfies {
+          readonly [Decision in typeof RefusedKind.Type]: {
+            readonly facts: readonly unknown[];
+            readonly refused: RefusalOf;
+          };
+        };
         const reader = new ImportRefused({
           detail: "The zip entry a.xml was refused",
           origin: readerOrigin,
@@ -324,19 +355,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
             RefusedKind.literals.map((kind) => ({
               decided: [kind],
               expected: {
-                laws: kind === "some" ? [lawFact, unownedFact] : [lawFact],
+                laws: refusalsByDecision[kind].facts,
                 refused_kind: kind,
                 sources: [source],
                 witness,
               },
               help: helpByOrigin[witness],
               printed: [source],
-              refusal: refusalOf(
-                kind === "some"
-                  ? { kind, laws: [refusedByConstraint(law), refusedByStatement(unownedLaw)] }
-                  : { kind, laws: [refusedByConstraint(law)] },
-                witnessesByKind[witness],
-              ),
+              refusal: refusalOf(refusalsByDecision[kind].refused, witnessesByKind[witness]),
             })),
           ),
         ];

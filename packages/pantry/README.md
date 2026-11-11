@@ -22,7 +22,7 @@ around them. There is no pantry runtime: the application opens its own connectio
 | `qti/roles.ts`, `qti/logins.ts` | `Author`, `AuthorApp`, and `importWrite`, the import's write program |
 | `import/read.ts` | `readPackage`: one read, bytes to documents, files by path and referenced paths |
 | `import/program.ts` | `importRowsOf`: the rows a read package is written as, for `importWrite` |
-| `import/package.ts` | `importPackage`: `importRowsOf` applied through `AuthorLogin` (`db/served.ts`), with retries |
+| `import/package.ts` | `importPackage(db.workload, pkg)`: `importRowsOf` applied through an author `Db`'s `importWrite`, with retries |
 | `import/refusal.ts`, `vocab/laws.ts` | `lawNameOf`, `rulesOf` and `lawTable`: a refused law's QTI rule |
 | `export/scan.ts`, `export/render.ts` | `documentScan` and `entriesOf` (grizzle queries), `documentScanOf(document)`, and `documentXml(rows)` |
 | `db/install.ts` | `MediaPolicySchema`, which parses `policy.json`, `{ "media": { "<extension>": "<type>" } }` |
@@ -37,6 +37,13 @@ const outcome = yield* db.workload.importWrite.apply({ insert }, {})
 ```
 
 A refusal is grizzle's `invariant-rejected` outcome; `rulesOf(outcome.refused.laws)` names its QTI rules.
+
+Or it imports one with its retries, its read-back of an unanswered commit and its named refusal, through its author
+`Db`'s workload, over `AuthorApp` or `MediaAuthorApp` (`qti/media.ts`) alike:
+
+```ts
+const packageId = yield* importPackage(db.workload, pkg)
+```
 
 An application reads a document inside its own read with `documentScanOf`, the scan `documentScan` pages, unpaged,
 over a document term its attachment mints. Each row is a `ScanRow` (`export/pages.ts`):

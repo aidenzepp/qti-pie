@@ -3,6 +3,8 @@
  * read imported, as the command line's `import` runs them (`#pantry/cli/import.ts`).
  */
 import { Effect } from "effect";
+import { Db } from "@bjornpagen/grizzle/runtime";
+import { AuthorLogin } from "#pantry/db/served.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/import/read.ts";
 
@@ -12,4 +14,9 @@ import { readPackage } from "#pantry/import/read.ts";
  * @param dir - The package directory or `.zip` file.
  * @returns The id of the committed package. Fails as the read fails, then as the import fails.
  */
-export const importDir = (dir: string) => Effect.flatMap(readPackage(dir), importPackage);
+export const importDir = (dir: string) =>
+  Effect.gen(function* importDirectory() {
+    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+
+    return yield* importPackage(db.workload, yield* readPackage(dir));
+  });

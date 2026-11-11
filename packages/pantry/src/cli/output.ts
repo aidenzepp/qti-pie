@@ -177,10 +177,12 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
  *   each as the refusal's origin holds it (`#pantry/package/refusal-origin.ts`): how grizzle
  *   decided the laws its refusal names (`RefusedKind`: `every`, each law is broken; `first`, the
  *   laws of the CHECK PostgreSQL tried first, and the row may break others too; `some`, at least
- *   one law is broken, and nothing says which), the laws (`RefusedLaw`), where each is stated, and
- *   whether the message names the row that broke them (`WitnessKind`: `key`, grizzle's key witness)
- *   or the database named none (`unreported`, for a foreign key or a law no row the ChangeSet
- *   states breaks as grizzle judges it).
+ *   one law is broken, and nothing says which; `above every`, `above none` and `above unjudged`,
+ *   the database named first a law of a level above the importer's login, and then, each own law
+ *   the first stated row breaks, that every row written holds them, or nothing of them), the laws
+ *   (`RefusedLaw`), where each is stated, and whether the message names the row that broke them
+ *   (`WitnessKind`: `key`, grizzle's key witness) or the database named none (`unreported`, for a
+ *   foreign key or a law no row the ChangeSet states breaks as grizzle judges it).
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
  *   rebuild a stored package: the failure's tag.
  */

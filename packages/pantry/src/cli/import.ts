@@ -69,8 +69,19 @@ export const importCommand = Command.make(
     }
 
     const packageId = yield* withAuthorApp(
-      () => Promise.all([import("#pantry/import/read.ts"), import("#pantry/import/package.ts")]),
-      ([{ readPackage }, { importPackage }]) => Effect.flatMap(readPackage(dir), importPackage),
+      () =>
+        Promise.all([
+          import("@bjornpagen/grizzle/runtime"),
+          import("#pantry/db/served.ts"),
+          import("#pantry/import/read.ts"),
+          import("#pantry/import/package.ts"),
+        ]),
+      ([{ Db }, { AuthorLogin }, { readPackage }, { importPackage }]) =>
+        Effect.gen(function* importOnPool() {
+          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+
+          return yield* importPackage(db.workload, yield* readPackage(dir));
+        }),
     );
 
     yield* emitSuccess(mode, {
