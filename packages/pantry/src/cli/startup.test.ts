@@ -14,8 +14,6 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
  * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
  */
 const startupForbidden = [
-  "#pantry/cli/connection.ts",
-  "#pantry/cli/layer.ts",
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",
@@ -32,10 +30,9 @@ const loginForbidden = ["#pantry/qti/logins.ts", "#pantry/qti/schema.ts"];
 
 /**
  * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648
- * among them: `cli/layer.ts` (then `db/layer.ts`) loaded 1,605 modules through it and loads 772
- * with its module imported by path (measured on 2026-11-06). Production imports each module it
- * needs by its own path, such as `@effect/platform-node/NodeFileSystem`, which the package's `./*`
- * export allows.
+ * among them: `db/layer.ts` loaded 1,605 modules through it and loads 772 with its module imported
+ * by path (measured on 2026-11-06). Production imports each module it needs by its own path, such
+ * as `@effect/platform-node/NodeFileSystem`, which the package's `./*` export allows.
  */
 const nodePlatformBarrel = "@effect/platform-node";
 
@@ -200,7 +197,7 @@ describe("the author login's place in the graph", () => {
 
   it("is not reached statically from the database layer, which serves the login's committed file", () => {
     const offences = forbiddenImports(
-      path.join(sourceRoot, "cli", "layer.ts"),
+      path.join(sourceRoot, "db", "layer.ts"),
       loginForbidden,
       readSource,
     );
@@ -239,7 +236,7 @@ describe("the production graph", () => {
 
     // The walk reaches each module that uses the platform; the database layer only through the
     // command handlers' dynamic imports.
-    for (const file of ["cli/run.ts", "cli/layer.ts", "../grizzle.config.ts"]) {
+    for (const file of ["cli/run.ts", "db/layer.ts", "../grizzle.config.ts"]) {
       assert.isTrue(modules.has(path.resolve(sourceRoot, file)), file);
     }
 

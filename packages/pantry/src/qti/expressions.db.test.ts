@@ -35,7 +35,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Layer, Option } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { expressionTypings } from "#pantry/grammar/expression.ts";
 import { readProgram } from "#pantry/import/program.ts";

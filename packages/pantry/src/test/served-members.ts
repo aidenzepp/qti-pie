@@ -17,7 +17,7 @@ import type { ServedLogin } from "@bjornpagen/grizzle/runtime";
 import { Context, Effect, Layer } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { loginConnection } from "#pantry/cli/connection.ts";
+import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 

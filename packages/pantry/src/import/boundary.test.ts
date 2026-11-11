@@ -81,13 +81,13 @@ const databaseSide = [
 
 /**
  * Where the sides meet: the PostgreSQL side's modules the XML side may import, pantry's `exports`
- * of §2.1 at today's paths. They are the schema's builders and this package's own install's schema
- * (`qti/own.ts`, which holds what `qti/schema.ts` held before it built nothing at load), which will
- * hold `PackageRows`, the installed constants and rosters, the inventory data, the scan, and the
- * database layer the command line provides. S10 adds `ingest` when it splits it out of
- * `import/package.ts`. The terms the schema and the row builders both read (`vocab/terms/`) and the
- * representation's stated limits (`qti/limits.ts`) are here too: each builds no relation, so the
- * row builders read them without evaluating the schema.
+ * of §2.1 at today's paths. They are the schema, `Qti` (`qti/schema.ts`), which will hold
+ * `PackageRows`, the installed constants and rosters, the inventory data, the scan, and the
+ * database layer the command line provides (`db/layer.ts`), which `package.json`'s `"exports"` map
+ * does not list: a module is private by that map, not by its folder. S10 adds `ingest` when it
+ * splits it out of `import/package.ts`. The terms the schema and the row builders both read
+ * (`vocab/terms/`) and the representation's stated limits (`qti/limits.ts`) are here too: each
+ * builds no relation, so the row builders read them without evaluating the schema.
  *
  * `vocab/open.ts` is not here: S10 splits it into its generator and the reader that shred runs.
  * Nor is `vocab/derive/`, which runs offline.
@@ -97,7 +97,6 @@ const handoff = [
   "export/scan.ts",
   "grammar/install.ts",
   "qti/limits.ts",
-  "qti/own.ts",
   "qti/schema.ts",
   "vocab/inventory/*.ts",
   "vocab/laws.ts",

@@ -7,7 +7,7 @@ import { TargetNotEmpty } from "#pantry/cli/args.ts";
 import { describeFailure } from "#pantry/cli/errors.ts";
 import { ExportData } from "#pantry/cli/export.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";

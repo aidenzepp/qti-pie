@@ -1,7 +1,7 @@
 /**
  * Witnesses that each committed served file, `migrations/<schema>/served/<login>.json`, is the file
  * `grizzle generate` writes for its login from the schema and the workloads in source, with no
- * database and no cluster. The author login's `DbLayer` (`#pantry/cli/layer.ts`) and every database
+ * database and no cluster. The author login's `DbLayer` (`#pantry/db/layer.ts`) and every database
  * test serve the committed file and compile nothing, so a schema or workload change committed
  * without `grizzle generate` fails here, in the free suite, instead of running stale SQL there.
  *
@@ -18,7 +18,7 @@
  * check` refuses it as an ungenerated change in the integration checks (AGENTS.md, Workflow).
  *
  * It compiles in process rather than spawning `grizzle check`: loading `grizzle.config.ts` reads
- * the cluster's CA (`#pantry/cli/connection.ts`), and this witness needs neither the cluster nor
+ * the cluster's CA (`#pantry/db/connection.ts`), and this witness needs neither the cluster nor
  * its state folder.
  *
  * @see https://github.com/bjornpagen/grizzle/blob/b927d9995ecf254230da725c65357a420b392b91/packages/grizzle/src/adapter/public/compile.ts#L30-L61

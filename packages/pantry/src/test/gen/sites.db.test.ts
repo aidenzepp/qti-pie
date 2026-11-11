@@ -16,7 +16,7 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";

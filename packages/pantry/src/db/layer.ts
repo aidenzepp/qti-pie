@@ -2,7 +2,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Schema } from "effect";
-import { primedLoginConnection } from "#pantry/cli/connection.ts";
+import { primedLoginConnection } from "#pantry/db/connection.ts";
 import { AuthorLogin, ServedLoadError, ServedText, servedPath } from "#pantry/db/served.ts";
 import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 
@@ -26,7 +26,7 @@ const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/cli/connection.ts` `primedLoginConnection`), with the password of the role grizzle
+ * (`#pantry/db/connection.ts` `primedLoginConnection`), with the password of the role grizzle
  * installs for the login, its pool, and the committed served workload, read from disk and served as
  * the login's type (grizzle's `served`), with no schema module evaluated: the login's type is an
  * `import type`.
@@ -36,7 +36,7 @@ const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
  * served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
- * `ClusterConfigError` (`#pantry/cli/connection.ts`) when the CA is unreadable, with a
+ * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
  * {@link ServedLoadError} when the served file is, with the command's `PasswordCommandError` where
  * `GR8DES_PG_PASSWORD_COMMAND` names one, which the build runs once for the login's role before
  * any connection attempt, and with grizzle's `OpenError` at stage `config` for a file of another
@@ -69,7 +69,8 @@ export const AuthorAppLayer = Layer.unwrap(
  * `readPackage(dir).pipe(Effect.flatMap(importPackage), Effect.provide(ImportLive))` imports a
  * package into this package's own install, and the command line runs every command that reaches
  * the database on it (`#pantry/cli/engine.ts` `withAuthorApp`). It is the command line's and the
- * tests' own: an application builds its own author `DbLayer` and provides `AuthorLogin`.
+ * tests' own, since `package.json`'s `"exports"` map does not list this module: an application
+ * builds its own author `DbLayer` and provides `AuthorLogin`.
  *
  * It is built from the process's settings, read through Effect `Config`: the cluster's
  * (`GR8DES_PG_HOST`, `GR8DES_PG_PORT`, `GR8DES_PG_DATABASE`, `GR8DES_PG_CA`, `GR8DES_PG_SECRETS`),

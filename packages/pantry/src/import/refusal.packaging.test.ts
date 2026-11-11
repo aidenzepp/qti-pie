@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";

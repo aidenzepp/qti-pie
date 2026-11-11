@@ -69,7 +69,7 @@ export const matchesCommitted = (name: string): ((line: string) => boolean) => {
  */
 export const preloadEngine = Effect.promise(() =>
   Promise.all([
-    import("#pantry/cli/layer.ts"),
+    import("#pantry/db/layer.ts"),
     import("#pantry/export/compare.ts"),
     import("#pantry/import/preview.ts"),
     import("#pantry/import/refusal.ts"),

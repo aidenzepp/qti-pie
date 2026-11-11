@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 /**
- * Run `use` on the engine module `load` imports, on `ImportLive` (`#pantry/cli/layer.ts`), the
+ * Run `use` on the engine module `load` imports, on `ImportLive` (`#pantry/db/layer.ts`), the
  * author application's pool and login and the file system, the one layer an import runs on, and
  * load that module only once the pool's settings resolve.
  *
@@ -22,7 +22,7 @@ export const withAuthorApp = Effect.fn("cli.withAuthorApp")(function* withAuthor
   load: () => Promise<M>,
   use: (engine: M) => Effect.Effect<A, E, R>,
 ) {
-  const { ImportLive } = yield* Effect.promise(() => import("#pantry/cli/layer.ts"));
+  const { ImportLive } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
 
   return yield* Effect.promise(load).pipe(Effect.flatMap(use), Effect.provide(ImportLive));
 });

@@ -44,8 +44,8 @@ import {
   PasswordCommandSilent,
   PasswordCommandTimedOut,
   primedLoginConnection,
-} from "#pantry/cli/connection.ts";
-import type { PasswordCommandError } from "#pantry/cli/connection.ts";
+} from "#pantry/db/connection.ts";
+import type { PasswordCommandError } from "#pantry/db/connection.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

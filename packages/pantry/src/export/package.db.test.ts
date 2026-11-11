@@ -35,7 +35,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Option } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/package.ts";

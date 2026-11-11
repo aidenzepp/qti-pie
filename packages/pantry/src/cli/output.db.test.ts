@@ -6,7 +6,7 @@ import { describe, inject } from "vitest";
 import { ImportData } from "#pantry/cli/import.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { successEnvelope } from "#pantry/cli/output.ts";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
 import { captureCli, packageCopy } from "#pantry/test/cli.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";

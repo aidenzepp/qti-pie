@@ -2,7 +2,7 @@
  * Where this package connects: grizzle's local development cluster by default, reached as
  * scripts/db.sh reaches it, or the PostgreSQL 19 server its settings name, by the migration
  * identity (`grizzle migrate`, through grizzle.config.ts) and by a login (its `DbLayer`,
- * src/cli/layer.ts).
+ * src/db/layer.ts).
  */
 import net from "node:net";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
@@ -595,7 +595,7 @@ export const loginConnection = Effect.gen(function* loginConnection() {
  * command: building the connection then runs it once for the login's role, before any attempt,
  * and fails with its {@link PasswordCommandError}; the first attempt reads that run's password,
  * and each later attempt runs the command again ({@link primedPassword}). `AuthorAppLayer`
- * (src/cli/layer.ts) builds the runtime's connection with it, so a failing command fails the
+ * (src/db/layer.ts) builds the runtime's connection with it, so a failing command fails the
  * layer's build with the command's own error, whose message the command line prints.
  *
  * It fails as {@link loginConnection} does.

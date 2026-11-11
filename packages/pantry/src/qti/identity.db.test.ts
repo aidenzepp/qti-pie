@@ -33,7 +33,7 @@ import { assert, it, layer } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import type { Client } from "pg";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#pantry/cli/layer.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 import { governorOf } from "#pantry/import/fold.ts";
