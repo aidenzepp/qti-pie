@@ -43,7 +43,7 @@ import {
   isServerError,
   judged,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
@@ -52,7 +52,7 @@ import { hasLease } from "#pantry/test/settings.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
@@ -69,7 +69,7 @@ const domainOf = (client: Client, table: string, column: string) =>
     client,
     `SELECT a.atttypid::pg_catalog.regtype::text AS domain FROM pg_catalog.pg_attribute a
       WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND NOT a.attisdropped`,
-    [`${qtiSchema}.${table}`, column],
+    [`${qtiSchemaName}.${table}`, column],
   ).pipe(
     Effect.map(
       (rows) =>
@@ -398,7 +398,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         // §2.8, `XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'`).
         // Bound: each part's row alone, on a node with no XmlDecl row.
         Effect.gen(function* partWithoutDeclaration() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const parts = [
             {
               facts: importFacts({ EncodingDecl: [{ encoding: "UTF-8", node: strayNode }] }),
@@ -439,7 +439,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         // Bound: each class with a wrong namespace under a foreign parent, and a parent of a kind
         // stored with another namespace than `KindNamespace` gives it.
         Effect.gen(function* foreignClass() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const elsewhere = "urn:example:elsewhere";
           for (const row of [
             foreignName({
@@ -512,7 +512,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         // slot (upstream's spec reading 61) reads it as `div`; and a foreign element under a
         // QTI kind whose content admits none.
         Effect.gen(function* canonical() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const row of [
             foreignName({
               kind: "own-namespace-element",
@@ -559,7 +559,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         // Bound: one row, a foreign element under `qti-selection`'s lax slot, governed by the
         // first type outside QTI's set; every other law of the row kept.
         Effect.gen(function* available() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const outcome = yield* db.workload.importWrite.apply(
             importFacts({
               OpenElementType: [
@@ -754,7 +754,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         // Bound: one row, a foreign-element under a parent of a kind, every other law of the row
         // kept.
         Effect.gen(function* foreignChecks() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const cases = [
             {
               name: "MathML_foreign_element",

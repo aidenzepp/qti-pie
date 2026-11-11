@@ -113,8 +113,8 @@ export const namedBy = (
  * - An IDREF token's piece, a header's and a tolerance value's, and a reference segment's token, is
  *   its own whitespace or separator and its token concatenated, its concat fold's step: written
  *   texts, none NULL, so the term is never NULL. A piece or a token past its keyText bound is
- *   refused by its own pattern law, named by keyText's row of `textLaws` (`src/test/law-namer.ts`),
- *   "Key text bound".
+ *   refused by its own pattern law, named by keyText's row of `textLaws`
+ *   (`#pantry/test/law-namer.ts`), "Key text bound".
  * - An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of a
  *   set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds no
  *   row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads

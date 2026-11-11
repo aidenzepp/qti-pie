@@ -14,7 +14,7 @@ import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { applyLaws, applyRelations } from "#pantry/qti/mathml-apply.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
 import { identityOf } from "#pantry/test/key-copies.ts";
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 

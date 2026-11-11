@@ -6,10 +6,12 @@ import { Effect } from "effect";
  *
  * `Effect.provide` builds `AuthorAppLayer` before the effect it wraps runs, so the cluster's
  * settings and its CA are read first, then the author login's committed served workload
- * (`#pantry/db/served.ts`), and a run whose settings, CA or served file cannot be read fails there,
- * with kind `config`, before `load` runs. The importer and the exporter take the author login from
- * that layer (`AuthorLogin`), which grizzle serves from the file as the login's type, with no
- * schema module evaluated and no workload built, so no command pays for one.
+ * (`#pantry/db/served.ts` `servedPath`), and a run whose settings, CA or served file cannot be read
+ * fails there, with kind `config`, before `load` runs. The importer and the exporter take the
+ * served login from that layer (`#pantry/db/served.ts` `ServedAuthorLogin`), which grizzle serves
+ * from the file as the login's type, with no schema module evaluated and no workload built, and
+ * the importer composes the grammar when its module is evaluated (`#pantry/grammar/install.ts`), so
+ * a command whose set-up cannot be read never loads either engine.
  *
  * @param load - Imports the engine module: a dynamic `import()` of it, so the command line's
  *   static graph never reaches it.

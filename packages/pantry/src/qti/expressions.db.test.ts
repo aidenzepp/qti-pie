@@ -66,13 +66,13 @@ import {
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
 
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   assertVerdict,
   constraintDescribed,
   judged,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   statedInserts,
   tableOf,
@@ -85,7 +85,7 @@ import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts
 import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
 import { schemaRuleOfLaw } from "#pantry/test/law-namer.ts";
@@ -614,7 +614,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         // and max + 1 where bounded; each operand of no known type, which every other row law
         // keeps.
         Effect.gen(function* arity() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const [index, { kind, max, min }] of OperatorArity.rows.entries()) {
             const top = max === int8Max ? min + 3n : max;
             const counts = [
@@ -651,7 +651,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       // P21, P25) and the result typing `E1_derived` derives.
       // Bound: one breach of each law, beside the same rows with the breach repaired.
       Effect.gen(function* expressionLaws() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
         const operator = nodeOf(1);
         const cases = [
           {
@@ -761,7 +761,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       // 23503 and its name, found by grizzle's comment on it.
       // Bound: one breach of each law, beside the same rows with the breach repaired.
       Effect.gen(function* referenceLaws() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
         const client = yield* loginSession;
         const declared = { resolution: "declared" } as const;
         const lookup = referenceRow({
@@ -983,7 +983,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         // `E1_derived` over `ProcessingTemplate` (template-derivation).
         // Bound: one breach of each, beside its repair.
         Effect.gen(function* attributeLaws() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const node = nodeOf(1);
           const weighted: Addition<typeof ExpressionAttribute> = {
             attribute: "weight-identifier",
@@ -1163,7 +1163,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         // variable any item variable (§7.47.1), and `numAttempts` stands as a response.
         // Bound: three references, each beside its kept twin.
         Effect.gen(function* variableKind() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const declared = { resolution: "declared", rootKind: "qti-assessment-item" } as const;
           const cases: readonly {
             readonly broken: Addition<typeof VariableRef>;
@@ -1229,7 +1229,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           const keys = yield* rowsOf<{ readonly name: string }>(
             client,
             `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
-                WHERE c.conrelid = '${qtiSchema}.reading'::regclass AND c.contype = 'u'
+                WHERE c.conrelid = '${qtiSchemaName}.reading'::regclass AND c.contype = 'u'
                   AND pg_catalog.cardinality(c.conkey) = 3
                   AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE 'key Reading(assembly where %'`,
           );
@@ -1284,7 +1284,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         // breaking that law alone, since PostgreSQL names the first CHECK a row breaks by name,
         // beside its repair, which keeps all four.
         Effect.gen(function* itemRefLaws() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const client = yield* loginSession;
           const templateDefault: Addition<typeof TemplateDefaultTarget> = {
             declBaseTypes: 1n,
@@ -1546,7 +1546,7 @@ describe.skipIf(!hasLease)(
           // the wrong kind, its type, and its target, and a template default under an LTI link; a
           // mapping under an LTI link is accepted unchecked (reading 110).
           Effect.gen(function* itemRefPackages() {
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             for (const [name, input, rule] of itemRefCases) {
               const dir = yield* scopedPackage(itemRefPackageEntries(input));
               const program = yield* readProgram(dir);
@@ -1594,7 +1594,7 @@ describe.skipIf(!hasLease)(
           // or unlisted file breaks, and under no law of a sentinel's. Bound: one bare item ref for
           // each target, the LTI link the control.
           Effect.gen(function* itemRefTargets() {
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             for (const [target, rules] of itemRefTargetCases) {
               const input: ItemRefPackage = { defaults: [], mappings: [], target };
               const dir = yield* scopedPackage(itemRefPackageEntries(input));

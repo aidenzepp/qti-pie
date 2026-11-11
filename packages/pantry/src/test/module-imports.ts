@@ -1,12 +1,18 @@
 /**
- * The one reader of a TypeScript module's imports, for the tests that hold pantry's module graph to
- * a rule: the command line's startup graph (`src/cli/startup.test.ts`), the boundary between the
- * XML side and the PostgreSQL side (`src/import/boundary.test.ts`), the pure layers
- * (`src/grammar/purity.test.ts`), the import's read, which evaluates no schema module
- * (`src/import/schema-free.test.ts`), and the modules an install outside this package loads
- * (`src/qti/schema.test.ts`).
+ * The one reader of a TypeScript module's imports, and the one walk of the graph they make, for the
+ * tests that hold pantry's module graph to a rule: the command line's and the entry's startup
+ * graphs (`src/cli/startup.test.ts`, `src/index.startup.test.ts`), the boundary between the XML
+ * side and the PostgreSQL side (`src/import/boundary.test.ts`), the pure layers
+ * (`src/grammar/purity.test.ts`), and the import's read, which evaluates no schema module
+ * (`src/import/schema-free.test.ts`).
  */
+import path from "node:path";
 import { Predicate } from "effect";
+
+/**
+ * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
+ */
+const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * How a module names another. `value` is a static `import … from`, `export … from` or bare
@@ -69,4 +75,55 @@ export const moduleImports = (source: string): readonly ModuleImport[] => {
       Predicate.isString(specifier) ? [{ form: formOf(group, text), specifier, text }] : [],
     );
   });
+};
+
+/**
+ * Read the imports of a module that bring a value in when it loads: its static imports and
+ * re-exports, a mixed `import { type A, b }` included, but not a statement that is wholly `import
+ * type` or `export type`, nor an `import(…)`.
+ *
+ * @param source - The text of a TypeScript module.
+ * @returns The imports, in source order.
+ */
+export const valueImports = (source: string): readonly ModuleImport[] =>
+  moduleImports(source).filter(({ form }) => form === "value");
+
+/**
+ * Walk the modules a module reaches through the `#pantry/` imports that bring a value in
+ * ({@link valueImports}), and find each import among them that names a forbidden module. A
+ * forbidden import is reported and not followed.
+ *
+ * @param entry - The absolute path of the module to start from.
+ * @param forbidden - The specifier prefixes no module of the graph may import.
+ * @param read - Reads a module's text.
+ * @returns Each offending module and import, as `module: import`, the module relative to `src`.
+ */
+export const forbiddenImports = (
+  entry: string,
+  forbidden: readonly string[],
+  read: (file: string) => string,
+): readonly string[] => {
+  const seen = new Set<string>();
+  const offences: string[] = [];
+  const pending = [entry];
+
+  while (pending.length > 0) {
+    const file = pending.pop() ?? entry;
+
+    if (seen.has(file)) {
+      continue;
+    }
+
+    seen.add(file);
+
+    for (const { specifier, text } of valueImports(read(file))) {
+      if (forbidden.some((prefix) => specifier.startsWith(prefix))) {
+        offences.push(`${path.relative(sourceRoot, file)}: ${text}`);
+      } else if (specifier.startsWith("#pantry/")) {
+        pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
+      }
+    }
+  }
+
+  return offences;
 };

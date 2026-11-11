@@ -2,17 +2,19 @@
  * What the command line prints of a refused import, read from the refusal's own fields and never
  * from its message: the rules it was refused under, and, when the database refused it, how grizzle
  * decided the laws its outcome names, the laws, where each is stated and how the refusal names the
- * row that broke them (plan W5, Q5.18; the W5 amendment's C22).
+ * row that broke them (plan W5, Q5.18; the W5 amendment's C22). A refusal of a level above `Qti`
+ * adds that level's name.
  *
- * A refusal is matched by its tag and its fields, so this module imports neither the importer nor
- * the law table: the refusal carries its origin (`#pantry/package/refusal-origin.ts`), and a
- * database refusal's laws already parsed into the facts the command line prints.
+ * A refusal is matched by its tag and its fields, so this module imports neither the importer, the
+ * law table nor `#pantry/cli/verdict.ts`: the refusal carries its origin
+ * (`#pantry/package/refusal-origin.ts`), and a database refusal's laws already parsed into the
+ * facts the command line prints.
  */
 import { Option, Schema } from "effect";
 import { RefusalOrigin } from "#pantry/package/refusal-origin.ts";
 
 /**
- * The fields of an `ImportRefused` (`#pantry/import/refusal.ts`) the command line reads: its rules
+ * The fields of an `ImportRefused` (`#pantry/import/rules.ts`) the command line reads: its rules
  * and its origin, the reader's, the container's or the codec's, or the database's with how grizzle
  * decided the laws its `invariant-rejected` outcome named, the laws, where each law is stated, and
  * the kind of witness that names the row that broke them.
@@ -54,3 +56,31 @@ export type DatabaseRefusal = Extract<RefusalFields["origin"], { readonly _tag: 
  */
 export const databaseRefusalOf = (fields: RefusalFields): Option.Option<DatabaseRefusal> =>
   fields.origin._tag === "Database" ? Option.some(fields.origin) : Option.none();
+
+/**
+ * The fields of a `RefusedByLevel` (`#pantry/cli/verdict.ts`) the command line reads: the level
+ * above `Qti` that refused the package, that level's own rules, and the first of them.
+ */
+const RefusedByLevelFields = Schema.Struct({
+  _tag: Schema.Literal("RefusedByLevel"),
+  level: Schema.String,
+  rule: Schema.String,
+  rules: Schema.NonEmptyArray(Schema.String),
+});
+
+/**
+ * The fields of a failure that is a level's refusal, as {@link RefusedByLevelFields} reads them.
+ */
+export type LevelRefusalFields = typeof RefusedByLevelFields.Type;
+
+/**
+ * Read the fields of a level's refusal, as {@link RefusedByLevelFields} reads them, or none when
+ * the failure is anything else.
+ *
+ * @param failure - What a run failed with.
+ * @returns The refusal's level, rule and rules.
+ */
+export const levelRefusalFieldsOf: (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value, and this is the decode that parses it.
+  failure: unknown,
+) => Option.Option<LevelRefusalFields> = Schema.decodeUnknownOption(RefusedByLevelFields);

@@ -403,7 +403,7 @@ export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyTe
 
 /**
  * The text type of a usage statistic's day, `lexical(date)`: the language `DateDType` states,
- * which {@link StatisticDate} casts total. Exported for `src/import/refusal.ts`, which names its
+ * which {@link StatisticDate} casts total. Exported for `src/test/law-namer.ts`, which names its
  * pattern law.
  */
 export const DayForm = lexical(date);

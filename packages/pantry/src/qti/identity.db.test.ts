@@ -51,7 +51,7 @@ import {
   SsmlAttribute,
   SsmlScope,
 } from "#pantry/qti/identity.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -60,7 +60,7 @@ import {
   judged,
   judgedCase,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
@@ -92,7 +92,7 @@ const foreignKeyOf = (client: Client, name: string) =>
        JOIN pg_catalog.pg_attribute b ON b.attrelid = c.confrelid AND b.attnum = k.dst
       WHERE s.nspname = $1 AND c.conname = $2 AND c.contype = 'f'
       GROUP BY t.relname`,
-    [qtiSchema, name],
+    [qtiSchemaName, name],
   ).pipe(Effect.map((rows) => rows[0]));
 
 /**

@@ -22,7 +22,7 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";

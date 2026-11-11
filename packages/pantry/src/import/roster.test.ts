@@ -12,8 +12,8 @@ import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
-import { Author } from "#pantry/qti/own-login.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Author } from "#pantry/test/author.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 /**

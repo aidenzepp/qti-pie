@@ -39,7 +39,7 @@ import {
   twoItemPattern,
 } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
 import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import { numericNamed } from "#pantry/test/predicates.ts";

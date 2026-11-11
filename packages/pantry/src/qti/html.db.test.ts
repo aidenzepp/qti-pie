@@ -36,11 +36,11 @@ import { Package } from "#pantry/qti/package.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
 import { probeLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
+import { Qti } from "#pantry/test/qti.ts";
+import { authorRole } from "#pantry/qti/roles.ts";
+import { authorWorkloads } from "#pantry/qti/logins.ts";
 import { servedProbe } from "#pantry/test/served-members.ts";
 
 /**
@@ -128,20 +128,20 @@ const rejectedBy = (
   outcome.refused.laws.map(({ law }) => law).some((law) => picks.some((pick) => pick(law)));
 
 /**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
+ * The author role of this file's probe login, the one author role over `Qti`: grizzle puts a role
+ * in one login only, so this file never builds the author login nor loads `#pantry/test/author.ts`.
  */
-const probeAuthor = authorRoleOf(Qti);
+const probeAuthor = authorRole(Qti);
 
 /**
- * The author login with this file's count of the packages stored beside its own members, over an
- * author role of its own (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
- * role that reads it, and `probeLayer` serves every test of the file, `AuthorLogin` included.
+ * The author login with this file's count of the packages stored beside its own members, over the
+ * author role (`#pantry/test/served-members.ts` `servedProbe`): `ProbeLogin` opens the
+ * role that reads it, and `probeLayer` serves every test of the file, `ServedAuthorLogin` included.
  */
 const { layer: probeLayer, ProbeLogin } = servedProbe(
   login(Qti, "author_app", [probeAuthor], {
     workload: [
-      ...authorWorkloadsOf(Qti, probeAuthor),
+      ...authorWorkloads(Qti),
       workload(probeAuthor, {
         packagesCounted: query(probeAuthor).rule((r) => {
           const { id } = v(Package, "package");
@@ -176,7 +176,7 @@ const applyEdited = (
 ) =>
   Effect.gen(function* appliesEdited() {
     const program = yield* readProgram(dir);
-    const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+    const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
     return yield* db.workload.importWrite.apply(
       { insert: packageFactsOf(edit(program.inputs)) },

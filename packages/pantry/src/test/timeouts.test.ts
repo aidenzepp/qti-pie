@@ -136,6 +136,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: FIX-REFCARD's 480-case exhaust ran 13.4 s at a load average of 7 in its run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/levels/cdn-style.test.ts",
+    "measurement owed: its lawsOf case ran 65.3 s and 257.4 s, and its installation compile 43.7 s and 112.7 s, in pa1-17's runs of 2026-11-10, the first at a load average near 13 to 21 and the second at 33 to 84; the load average stood at 14 to 17 when the wait for 60 ended (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/import/overlays/id-names.oracle.test.ts",
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
@@ -154,6 +158,18 @@ const exempt: ReadonlyMap<string, string> = new Map([
   [
     "pantry/src/test/fixtures.test.ts",
     "measurement owed: its two literals of 120_000 went unread until the guard's reader took a regular expression literal as one (2026-11-10), and no lane edits this file; they stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/levels/cdn-origin.test.ts",
+    "measurement owed: its laws case ran 113.6 s, 83.7 s and 117.1 s at load averages of 22.5 to 66.2 and 259.1 s at 32 to 84, and its compile case 67.6 s, 158.9 s and 57.2 s at 22.5 to 66.2 and 118.5 s at 43 to 84, in pa1-15's and pa1-15.2's runs of 2026-11-10, never at 60 or more throughout; the load average stood at 12.85 12.06 12.44 when the wait stopped (decision 490); its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/levels/cdn-data.test.ts",
+    "measurement owed: its lawsOf case ran 79.6 s, 102.8 s, 115.8 s and 265.7 s, the slowest at a load average of 31 to 63, and its installation compile ran 53.7 s to 136.6 s, the slowest at a load average of 24 to 59, in pa1-16's runs of 2026-11-10, after which the load average fell to 12 to 13 and stayed there; its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/index.startup.test.ts",
+    "measurement owed: its fresh-process case ran past cliProcessTestTimeoutMs's 10 s at a load average of 40 to 58, and ran 2.1 s alone, in the pa1-tidy merge's runs of 2026-11-10 (decision 497), then 1.3 s, 2.7 s and 1.5 s alone at 42 to 54 and 8.9 s in the free suite at 57.0 to 58.9 in pa1-r12's runs of 2026-11-10, never at 60 or more throughout (decision 490); its 30_000 stays in place until it is remeasured at a load average of at least 60",
   ],
 ]);
 

@@ -1144,6 +1144,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    178,
+    {
+      owner:
+        "`Lexical`'s bound (`src/qti/attributes.ts`: grizzle's `str.bytes(regexTextBytes, str.regex(charsPattern))`, `regexTextBytes` 268,435,454 in `src/qti/limits.ts`, pinned to grizzle's refusal of `Compute.matches` in a query one byte past it by `limits.test.ts`), the law \"Regex text bound\" (rule `regex-text-bound`, a stated limit among `limitRules` in `src/import/rules.ts` and the catalog's limit block in `src/vocab/laws.ts`, the name of `Lexical`'s pattern law in `textLaws`, `src/test/law-namer.ts`); the oracle's Regex text bound over every attribute's lexical form, measured in UTF-8 bytes (`src/test/oracle.ts`); held by `src/test/regex-text-bound.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

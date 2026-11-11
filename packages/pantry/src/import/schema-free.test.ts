@@ -109,7 +109,7 @@ describe("the import's read", () => {
         [
           'import { integerForm } from "#pantry/qti/limits.ts";',
           'import { testKind } from "#pantry/qti/tests.ts";',
-          'const load = () => import("#pantry/qti/own.ts");',
+          'const load = () => import("#pantry/qti/schema.ts");',
         ].join("\n"),
       ],
       ["qti/tests.ts", 'import { Node } from "#pantry/qti/node.ts";'],
@@ -117,7 +117,7 @@ describe("the import's read", () => {
 
     assert.deepStrictEqual(
       schemaReads("import/preview.ts", (file) => planted.get(file) ?? ""),
-      ["import/program.ts: #pantry/qti/own.ts", "import/program.ts: #pantry/qti/tests.ts"],
+      ["import/program.ts: #pantry/qti/schema.ts", "import/program.ts: #pantry/qti/tests.ts"],
     );
   });
 });

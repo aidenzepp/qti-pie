@@ -41,7 +41,7 @@ import {
 import type { CaseEntry } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { domainValues } from "#pantry/qti/expression-types.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { judgedLaws } from "#pantry/test/host-judge.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";

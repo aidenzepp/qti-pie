@@ -20,13 +20,13 @@ import { NodeKind } from "#pantry/grammar/install.ts";
 
 import { authorRole, authorViews, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { hasLease } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer)("the installed Qti, read as the author login", (it) => {
     it.effect("opens the author role through the login's layer", () =>
       Effect.gen(function* opensTheAuthorRole() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
         assert.isDefined(db);
       }),

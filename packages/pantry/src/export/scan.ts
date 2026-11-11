@@ -1,21 +1,29 @@
 /**
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
- * scan per document, and the documents and entries of a package. The author login's workload
- * (`#pantry/qti/logins.ts` `authorAppOf`) holds all three, so each is compiled once per pool and
- * its indexes are planned by `grizzle generate`.
+ * scan per document, and the documents and entries of a package, each built over the `Qti` schema
+ * value it is handed. The author login's export workload (`#pantry/qti/logins.ts` `authorLogin`)
+ * holds all three, with the `Package` row by its key and the listing queries
+ * (`#pantry/export/listing.ts`), so each is compiled once per pool and its indexes are planned by
+ * `grizzle generate`.
  *
- * `documentScan` reads one document's `Node` rows by T1's key, `(document, start)`: filtered by
+ * Each query is written over the schema, never over a role: a role that holds every table of `Qti`
+ * whole runs every query over `Qti`, so the author role runs them, and so does a role over an
+ * app's level above `Qti` that holds `Qti`'s tables whole. A query written over a role runs on that
+ * role only.
+ *
+ * The scan reads one document's `Node` rows by T1's key, `(document, start)`: filtered by
  * `document` and ordered by `start`, it is one index range in document order, with no sort and no
  * recursion, and `db.page` pages it by that key. Each row carries its own characters (`Node.chars`:
  * a text or whitespace run's, an entity reference's `&name;`) and what its node owns, each as its
  * own attachment: its comment, instruction, doctype, `Document` row, foreign element's name and
- * governing type (an `ElementType` or an `OpenElementType`) at most once (each keyed by its
- * node), the `Document` row with its XML declaration at most once
- * and the declaration with its encoding and standalone at most once each, and its attribute and
- * namespace families as lists in `at` order. The arms stay apart, never a union, because an
- * attachment over a union is never paged.
+ * governing type (an `ElementType` or an `OpenElementType`) at most once (each keyed by its node),
+ * the `Document` row with its XML declaration at most once and the declaration with its encoding
+ * and standalone at most once each, and its attribute and namespace families as lists in `at`
+ * order. The arms stay apart, never a union, because an attachment over a union is never paged.
  */
-import { query, uuid, v } from "@bjornpagen/grizzle";
+import { paged, query, uuid, v } from "@bjornpagen/grizzle";
+import { Function as Fn } from "effect";
+import { listingQueriesOf } from "#pantry/export/listing.ts";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -34,37 +42,32 @@ import { Entry } from "#pantry/qti/package.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * Build the export's reads over a `Qti` schema, each a query over the schema itself: a role that
- * holds every relation of `Qti` whole runs them, so a workload of such a role holds them, the
- * author role's (`#pantry/qti/logins.ts`) or an install's own app role, over a schema that extends
- * `Qti`.
+ * Build the scan of one document over a `Qti` schema: its `Node` rows where
+ * `document = $document`, ordered by `start`, each with what its node owns attached
+ * (`#pantry/export/pages.ts` `ScanRow`).
  *
- * Each call builds queries of its own: the author login builds them for its workload
- * (`#pantry/qti/logins.ts` `authorAppOf`), and every reader takes them from there.
+ * An attribute is correlated to its element by `node` and keeps it in its head, so its own
+ * families, its entity references and its open name, correlate to it by `(node, id)`, the
+ * attribute's key: a nested attachment reads its own parent's head, never an enclosing one's (the
+ * vendored engine's `query/build/attach.ts`, `runAttach`). Every list is ordered by its family's
+ * `at`, which with its owner fixed is the family's key, so the list's order is the one the
+ * attachment delivers (grizzle's `adapter/reader/execution.ts`: a child's rows stitch in its
+ * completed order).
  *
- * @param qti - The `Qti` schema, built for an install's policy or none
- *   (`#pantry/qti/schema.ts` `qtiSchema`).
- * @returns The scan of one document, the documents of a package and a package's record.
+ * `document` is in the head so that the order completes to T1's key: fixed by its parameter, it
+ * leaves `start` alone as the order, a total one, which `WHERE document = $1 ORDER BY start` reads
+ * off T1's index (the engine's `logical/order.ts`, `completeOrder`: a key's class fixed by a
+ * parameter needs no column of its own).
+ *
+ * Built once per schema value, so the export workload and a caller that explains or runs the scan
+ * hold the one query.
+ *
+ * @param qti - The `Qti` schema the scan reads (`#pantry/qti/schema.ts` `qti`).
+ * @returns The scan, with its `document` parameter.
+ * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/README.md#L2097-L2105
  */
-export const exportQueriesOf = (qti: QtiSchema) => {
-  /**
-   * The scan of one document: its `Node` rows where `document = $document`, ordered by `start`,
-   * each with what its node owns attached (`#pantry/export/pages.ts` `ScanRow`).
-   *
-   * An attribute is correlated to its element by `node` and keeps it in its head, so its own
-   * families, its entity references and its open name, correlate to it by `(node, id)`, the
-   * attribute's key: a nested attachment reads its own parent's head, never an enclosing one's (the
-   * vendored engine's `query/build/attach.ts`, `runAttach`). Every list is ordered by its family's
-   * `at`, which with its owner fixed is the family's key, so the list's order is the one the
-   * attachment delivers (grizzle's `adapter/reader/execution.ts`: a child's rows stitch in its
-   * completed order).
-   *
-   * `document` is in the head so that the order completes to T1's key: fixed by its parameter, it
-   * leaves `start` alone as the order, a total one, which `WHERE document = $1 ORDER BY start`
-   * reads off T1's index (the engine's `logical/order.ts`, `completeOrder`: a key's class fixed by
-   * a parameter needs no column of its own).
-   */
-  const documentScan = query(qti)
+export const documentScanOf = Fn.memoize((qti: QtiSchema) =>
+  query(qti)
     .rule((r) => {
       const { at, chars, document, end, id, kind, parent, prefix, start, version } = v(
         Node,
@@ -254,13 +257,18 @@ export const exportQueriesOf = (qti: QtiSchema) => {
           .orderBy(["at", "asc"]),
       "array",
     )
-    .orderBy(["start", "asc"]);
+    .orderBy(["start", "asc"]),
+);
 
-  /**
-   * The documents of a package: each `Document` row's node, which is the document's id and the
-   * parameter of its {@link documentScan}, and its entry path.
-   */
-  const documentsOf = query(qti).rule((r) => {
+/**
+ * Build the documents of a package over a `Qti` schema: each `Document` row's node, which is the
+ * document's id and the parameter of its scan ({@link documentScanOf}), and its entry path.
+ *
+ * @param qti - The `Qti` schema the query reads.
+ * @returns The query, with its `package` parameter.
+ */
+const documentsQuery = (qti: QtiSchema) =>
+  query(qti).rule((r) => {
     const { node, path } = v(Document, "document");
 
     return r
@@ -268,11 +276,15 @@ export const exportQueriesOf = (qti: QtiSchema) => {
       .find({ node, path });
   });
 
-  /**
-   * The record of a package: every entry's path and its bytes, in listing order, the `Entry`
-   * family's `at`.
-   */
-  const entriesOf = query(qti)
+/**
+ * Build the record of a package over a `Qti` schema: every entry's path and its bytes, in listing
+ * order, the `Entry` family's `at`.
+ *
+ * @param qti - The `Qti` schema the query reads.
+ * @returns The query, with its `package` parameter.
+ */
+const entriesQuery = (qti: QtiSchema) =>
+  query(qti)
     .rule((r) => {
       const { at, content, path } = v(Entry, "entry");
 
@@ -282,5 +294,31 @@ export const exportQueriesOf = (qti: QtiSchema) => {
     })
     .orderBy(["at", "asc"]);
 
-  return { documentScan, documentsOf, entriesOf };
-};
+/**
+ * Build the author workload's reads over a `Qti` schema: one document's ordered scan,
+ * `documentScan`, which the export pages; the documents of a package, `documentsOf`; a package's
+ * record, `entriesOf`; `packageOf`, the `Package` row by its key, a key member whose handle's `get`
+ * the export reads to refuse an id no package has and the import reads back after a commit with no
+ * answer; and the listing queries an app pages, `packages` and `documents`
+ * (`#pantry/export/listing.ts`). A `Db` opened on the author login runs them as
+ * `db.workload.<name>`, and pages the paged members with `db.workload.<name>.page`, so every read
+ * pantry runs is a member of the workload.
+ *
+ * Built once per schema value, so the login's workload holds the queries {@link documentScanOf}
+ * and `listingQueriesOf` give.
+ *
+ * @param qti - The `Qti` schema the queries read.
+ * @returns The workload's record of named queries.
+ */
+export const authorReadsOf = Fn.memoize((qti: QtiSchema) => {
+  const listing = listingQueriesOf(qti);
+
+  return {
+    documentScan: paged(documentScanOf(qti)),
+    documents: paged(listing.documents),
+    documentsOf: documentsQuery(qti),
+    entriesOf: entriesQuery(qti),
+    packageOf: qti.relations.Package,
+    packages: paged(listing.packages),
+  };
+});

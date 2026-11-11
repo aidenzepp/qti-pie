@@ -10,7 +10,7 @@
 import { Option } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
-import type { Qti } from "#pantry/qti/own.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 import { installedNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
@@ -23,7 +23,7 @@ import { installedNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
  * @param from - The source relation.
  * @returns The containments, in statement order.
  */
-export const containmentsOf = (schema: typeof Qti, from: string): readonly Containment[] =>
+export const containmentsOf = (schema: QtiSchema, from: string): readonly Containment[] =>
   statementLawsOf(schema).flatMap(({ laws, statement }) =>
     containmentsIn(statement, from).map((containment) => statedAs(containment, laws)),
   );
@@ -45,7 +45,7 @@ export const containmentsOf = (schema: typeof Qti, from: string): readonly Conta
  * @throws {Error} When the schema states no check of that name on that relation: a defect of the
  *   test that asks, never of a document.
  */
-export const checkConstraintOf = (schema: typeof Qti, relation: string, name: string): string =>
+export const checkConstraintOf = (schema: QtiSchema, relation: string, name: string): string =>
   Option.getOrThrowWith(
     installedNameOf(schema, { kind: "check", name, relation }),
     () =>

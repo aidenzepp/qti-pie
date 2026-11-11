@@ -23,7 +23,7 @@ import {
 } from "#pantry/qti/mathml-cn.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { identityOf } from "#pantry/test/key-copies.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**

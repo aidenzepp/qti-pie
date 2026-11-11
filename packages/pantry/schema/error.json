@@ -22,9 +22,11 @@
         "additionalProperties": true
       }
     },
+    "level": { "type": "string" },
     "message": { "type": "string" },
     "ok": { "type": "boolean", "enum": [false] },
     "refused_kind": { "type": "string", "enum": ["every", "first", "some"] },
+    "rule": { "type": "string" },
     "rules": { "type": "array", "items": { "type": "string" } },
     "schema_version": { "type": "number", "enum": [1] },
     "sources": { "type": "array", "items": { "type": "string" } },

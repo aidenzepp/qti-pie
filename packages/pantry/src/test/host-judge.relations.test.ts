@@ -46,7 +46,7 @@ import {
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Result, Schema } from "effect";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
 import type { HostRow } from "#pantry/test/host-judge.ts";

@@ -21,13 +21,13 @@ import { readProgram } from "#pantry/import/program.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
-import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
+import { loginSession, qtiSchemaName, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
 
 /**
@@ -110,7 +110,7 @@ describe.skipIf(!hasLease)("import/pattern-laws.db.test.ts, on the lease", () =>
               client,
               `SELECT a.atttypid::pg_catalog.regtype::text AS domain FROM pg_catalog.pg_attribute a
                 WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND NOT a.attisdropped`,
-              [`${qtiSchema}.${table}`, column],
+              [`${qtiSchemaName}.${table}`, column],
             ).pipe(Effect.map((rows) => rows.map(({ domain }) => domain))),
           ),
         );
@@ -140,7 +140,7 @@ describe.skipIf(!hasLease)("import/pattern-laws.db.test.ts, on the lease", () =>
               everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
             );
             const program = yield* readProgram(dir);
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             const outcome = yield* db.workload.importWrite.apply(
               { insert: packageFactsOf(edit(program.inputs)) },
               {},

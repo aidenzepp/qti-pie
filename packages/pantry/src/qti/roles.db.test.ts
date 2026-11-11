@@ -27,7 +27,7 @@ import {
   isServerError,
   loginSession,
   ownerSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
 } from "#pantry/test/direct-sql.ts";
 import { hasLease } from "#pantry/test/settings.ts";
@@ -35,7 +35,7 @@ import { hasLease } from "#pantry/test/settings.ts";
 /**
  * The table the probe writes: a stored relation of `Qti` of one column, `node`.
  */
-const table = `${qtiSchema}.data_ssml`;
+const table = `${qtiSchemaName}.data_ssml`;
 
 /**
  * The row the probe inserts: a node no attribute holds, which the table's deferred foreign key

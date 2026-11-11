@@ -53,7 +53,7 @@ import {
   UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
 import { readPackage } from "#pantry/package/read.ts";

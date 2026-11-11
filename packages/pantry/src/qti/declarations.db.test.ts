@@ -53,7 +53,7 @@ import {
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 import {
   assertVerdict,
@@ -66,7 +66,7 @@ import {
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 
 /**
@@ -371,7 +371,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         // their name, whose family counts every declared name (spec reading 159), inserted beside
         // them; the host finds the key, so `laws` holds it whether or not any SQL ran.
         Effect.gen(function* declarationKey() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const second of ["A", " A"]) {
             const outcome = yield* db.workload.importWrite.apply(
               importFacts({
