@@ -18,6 +18,7 @@
  * union is never paged.
  */
 import { query, uuid, v } from "@bjornpagen/grizzle";
+import type { InputOrigin, Term, Uuid } from "@bjornpagen/grizzle";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -37,16 +38,240 @@ import { Qti } from "#pantry/qti/schema.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * The scan of one document: its `Node` rows where `document = $document`, ordered by `start`,
- * each with what its node owns attached (`#pantry/export/pages.ts` `ScanRow`).
+ * A parent variable of type `uuid`: the term `attach` mints from a parent's head, which each arm
+ * of the scan correlates to and {@link documentScanOf} filters by (grizzle's `InputOrigin`).
  *
- * An attribute is correlated to its element by `node` and keeps it in its head, so its own
- * families, its entity references and its open name, correlate to it by `(node, id)`, the
- * attribute's key: a nested attachment reads its own parent's head, never an enclosing one's (the
- * vendored engine's `query/build/attach.ts`, `runAttach`). Every list is ordered by its family's
- * `at`, which with its owner fixed is the family's key, so the list's order is the one the
- * attachment delivers (grizzle's `adapter/reader/execution.ts`: a child's rows stitch in its
- * completed order).
+ * The type is concrete, never a type parameter, so a match or an equality on it fixes its field in
+ * the evidence the attachments read, and each `"option"` arm's child is proved at most one per
+ * parent. Over a type parameter that proof stays an unresolved conditional (the vendored engine's
+ * `types/evidence/evidence.ts`, `DeliveryClaim`), and every `"option"` arm is refused.
+ */
+type UuidInput = Term<Uuid, unknown, InputOrigin, "uuid">;
+
+/**
+ * Build a node's comment, at most one (`Comment` is keyed by its node).
+ *
+ * @param node - The node's id.
+ * @returns The comment's text.
+ */
+const commentOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { value } = v(Comment, "comment");
+
+    return r.match(Comment, { node, value }).find({ value });
+  });
+
+/**
+ * Build a node's processing instruction, at most one (`Pi` is keyed by its node).
+ *
+ * @param node - The node's id.
+ * @returns The instruction's target and data.
+ */
+const piOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { data, target } = v(Pi, "pi");
+
+    return r.match(Pi, { data, node, target }).find({ data, target });
+  });
+
+/**
+ * Build a node's doctype, at most one (`Doctype` is keyed by its node).
+ *
+ * @param node - The node's id.
+ * @returns The doctype's text.
+ */
+const doctypeOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { value } = v(Doctype, "doctype");
+
+    return r.match(Doctype, { node, value }).find({ value });
+  });
+
+/**
+ * Build an element's governing type, at most one (`ElementType` is keyed by its node).
+ *
+ * @param node - The element's id.
+ * @returns The type.
+ */
+const elementTypeOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { type } = v(ElementType, "elementType");
+
+    return r.match(ElementType, { node, type }).find({ type });
+  });
+
+/**
+ * Build a foreign element's governing open type, at most one (`OpenElementType` is keyed by its
+ * node).
+ *
+ * @param node - The element's id.
+ * @returns The open type.
+ */
+const openElementTypeOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { type } = v(OpenElementType, "openElementType");
+
+    return r.match(OpenElementType, { node, type }).find({ type });
+  });
+
+/**
+ * Build a foreign element's name, at most one (`OpenElementName` is keyed by its node).
+ *
+ * @param node - The element's id.
+ * @returns The name's local part and namespace.
+ */
+const openElementNameOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { local, namespace } = v(OpenElementName, "openElementName");
+
+    return r.match(OpenElementName, { local, namespace, node }).find({ local, namespace });
+  });
+
+/**
+ * Build a declaration's encoding, at most one (`EncodingDecl` is keyed by its node).
+ *
+ * @param node - The document's id.
+ * @returns The encoding name.
+ */
+const encodingOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { encoding } = v(EncodingDecl, "encodingDecl");
+
+    return r.match(EncodingDecl, { encoding, node }).find({ encoding });
+  });
+
+/**
+ * Build a declaration's standalone, at most one (`SdDecl` is keyed by its node).
+ *
+ * @param node - The document's id.
+ * @returns The standalone value.
+ */
+const standaloneOf = (node: UuidInput) =>
+  query(Qti).rule((r) => {
+    const { standalone } = v(SdDecl, "sdDecl");
+
+    return r.match(SdDecl, { node, standalone }).find({ standalone });
+  });
+
+/**
+ * Build a document's XML declaration, at most one (`XmlDecl` is keyed by its node), with its
+ * encoding and its standalone, at most one each. `node` is in the head, so each attachment
+ * correlates to it, its own parent's variable.
+ *
+ * @param node - The document's id.
+ * @returns The declaration's version, with `encoding` and `standalone` attached.
+ */
+const declarationOf = (node: UuidInput) =>
+  query(Qti)
+    .rule((r) => {
+      const { version } = v(XmlDecl, "xmlDecl");
+
+      return r.match(XmlDecl, { node, version }).find({ node, version });
+    })
+    .attach("encoding", (declaration) => encodingOf(declaration.node), "option")
+    .attach("standalone", (declaration) => standaloneOf(declaration.node), "option");
+
+/**
+ * Build a document node's `Document` row, at most one (`Document` is keyed by its node), with its
+ * XML declaration attached. `node` is in the head, so the declaration correlates to it.
+ *
+ * @param node - The node's id.
+ * @returns The document's charsets, with `declaration` attached.
+ */
+const documentRowOf = (node: UuidInput) =>
+  query(Qti)
+    .rule((r) => {
+      const { charset, exportCharset } = v(Document, "documentRow");
+
+      return r
+        .match(Document, { charset, exportCharset, node })
+        .find({ charset, exportCharset, node });
+    })
+    .attach("declaration", (document) => declarationOf(document.node), "option");
+
+/**
+ * Build an element's attributes in `at` order, each with its entity references and its open name
+ * in `at` order. An attribute keeps its element in its head, so its own families correlate to it
+ * by `(node, id)`, the attribute's key: a nested attachment reads its own parent's head, never an
+ * enclosing one's (the vendored engine's `query/build/attach.ts`, `runAttach`).
+ *
+ * @param node - The element's id.
+ * @returns The attributes, with `entities` and `openName` attached.
+ */
+const attributesOf = (node: UuidInput) =>
+  query(Qti)
+    .rule((r) => {
+      const { at, id, lexical, name, prefix } = v(Attribute, "attribute");
+
+      return r
+        .match(Attribute, { at, id, lexical, name, node, prefix })
+        .find({ at, id, lexical, name, node, prefix });
+    })
+    .attach(
+      "entities",
+      (attribute) =>
+        query(Qti)
+          .rule((r) => {
+            const { at, name, offset } = v(AttributeEntity, "attributeEntity");
+
+            return r
+              .match(AttributeEntity, {
+                at,
+                attribute: attribute.id,
+                name,
+                node: attribute.node,
+                offset,
+              })
+              .find({ at, name, offset });
+          })
+          .orderBy(["at", "asc"]),
+      "array",
+    )
+    .attach(
+      "openName",
+      (attribute) =>
+        query(Qti)
+          .rule((r) => {
+            const { at, local, uri } = v(OpenAttributeName, "openAttributeName");
+
+            return r
+              .match(OpenAttributeName, {
+                at,
+                attribute: attribute.id,
+                local,
+                node: attribute.node,
+                uri,
+              })
+              .find({ at, local, uri });
+          })
+          .orderBy(["at", "asc"]),
+      "array",
+    )
+    .orderBy(["at", "asc"]);
+
+/**
+ * Build an element's namespace declarations in `at` order.
+ *
+ * @param node - The element's id.
+ * @returns The declarations' prefixes and URIs.
+ */
+const namespacesOf = (node: UuidInput) =>
+  query(Qti)
+    .rule((r) => {
+      const { at, prefix, uri } = v(Namespace, "namespace");
+
+      return r.match(Namespace, { at, node, prefix, uri }).find({ at, prefix, uri });
+    })
+    .orderBy(["at", "asc"]);
+
+/**
+ * The scan of one document: its `Node` rows where `document = $document`, ordered by `start`,
+ * each with what its node owns attached (`#pantry/export/pages.ts` `ScanRow`), the arms
+ * {@link documentScanOf} attaches.
+ *
+ * Every list is ordered by its family's `at`, which with its owner fixed is the family's key, so
+ * the list's order is the one the attachment delivers (grizzle's `adapter/reader/execution.ts`: a
+ * child's rows stitch in its completed order).
  *
  * `document` is in the head so that the order completes to T1's key: fixed by its parameter, it
  * leaves `start` alone as the order, a total one, which `WHERE document = $1 ORDER BY start`
@@ -62,185 +287,62 @@ export const documentScan = query(Qti)
       .where(r.eq(document, r.param("document", uuid)))
       .find({ at, chars, document, end, id, kind, parent, prefix, start, version });
   })
-  .attach(
-    "comment",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { value } = v(Comment, "comment");
-
-        return r.match(Comment, { node: node.id, value }).find({ value });
-      }),
-    "option",
-  )
-  .attach(
-    "pi",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { data, target } = v(Pi, "pi");
-
-        return r.match(Pi, { data, node: node.id, target }).find({ data, target });
-      }),
-    "option",
-  )
-  .attach(
-    "doctype",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { value } = v(Doctype, "doctype");
-
-        return r.match(Doctype, { node: node.id, value }).find({ value });
-      }),
-    "option",
-  )
-  .attach(
-    "elementType",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { type } = v(ElementType, "elementType");
-
-        return r.match(ElementType, { node: node.id, type }).find({ type });
-      }),
-    "option",
-  )
-  .attach(
-    "openElementType",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { type } = v(OpenElementType, "openElementType");
-
-        return r.match(OpenElementType, { node: node.id, type }).find({ type });
-      }),
-    "option",
-  )
-  .attach(
-    "openElementName",
-    (node) =>
-      query(Qti).rule((r) => {
-        const { local, namespace } = v(OpenElementName, "openElementName");
-
-        return r
-          .match(OpenElementName, { local, namespace, node: node.id })
-          .find({ local, namespace });
-      }),
-    "option",
-  )
-  .attach(
-    "documentRow",
-    (node) =>
-      query(Qti)
-        .rule((r) => {
-          const { charset, exportCharset } = v(Document, "documentRow");
-
-          return r
-            .match(Document, { charset, exportCharset, node: node.id })
-            .find({ charset, exportCharset, node: node.id });
-        })
-        .attach(
-          "declaration",
-          (document) =>
-            query(Qti)
-              .rule((r) => {
-                const { version } = v(XmlDecl, "xmlDecl");
-
-                return r
-                  .match(XmlDecl, { node: document.node, version })
-                  .find({ node: document.node, version });
-              })
-              .attach(
-                "encoding",
-                (declaration) =>
-                  query(Qti).rule((r) => {
-                    const { encoding } = v(EncodingDecl, "encodingDecl");
-
-                    return r
-                      .match(EncodingDecl, { encoding, node: declaration.node })
-                      .find({ encoding });
-                  }),
-                "option",
-              )
-              .attach(
-                "standalone",
-                (declaration) =>
-                  query(Qti).rule((r) => {
-                    const { standalone } = v(SdDecl, "sdDecl");
-
-                    return r
-                      .match(SdDecl, { node: declaration.node, standalone })
-                      .find({ standalone });
-                  }),
-                "option",
-              ),
-          "option",
-        ),
-    "option",
-  )
-  .attach(
-    "attributes",
-    (node) =>
-      query(Qti)
-        .rule((r) => {
-          const { at, id, lexical, name, prefix } = v(Attribute, "attribute");
-
-          return r
-            .match(Attribute, { at, id, lexical, name, node: node.id, prefix })
-            .find({ at, id, lexical, name, node: node.id, prefix });
-        })
-        .attach(
-          "entities",
-          (attribute) =>
-            query(Qti)
-              .rule((r) => {
-                const { at, name, offset } = v(AttributeEntity, "attributeEntity");
-
-                return r
-                  .match(AttributeEntity, {
-                    at,
-                    attribute: attribute.id,
-                    name,
-                    node: attribute.node,
-                    offset,
-                  })
-                  .find({ at, name, offset });
-              })
-              .orderBy(["at", "asc"]),
-          "array",
-        )
-        .attach(
-          "openName",
-          (attribute) =>
-            query(Qti)
-              .rule((r) => {
-                const { at, local, uri } = v(OpenAttributeName, "openAttributeName");
-
-                return r
-                  .match(OpenAttributeName, {
-                    at,
-                    attribute: attribute.id,
-                    local,
-                    node: attribute.node,
-                    uri,
-                  })
-                  .find({ at, local, uri });
-              })
-              .orderBy(["at", "asc"]),
-          "array",
-        )
-        .orderBy(["at", "asc"]),
-    "array",
-  )
-  .attach(
-    "namespaces",
-    (node) =>
-      query(Qti)
-        .rule((r) => {
-          const { at, prefix, uri } = v(Namespace, "namespace");
-
-          return r.match(Namespace, { at, node: node.id, prefix, uri }).find({ at, prefix, uri });
-        })
-        .orderBy(["at", "asc"]),
-    "array",
-  )
+  .attach("comment", (node) => commentOf(node.id), "option")
+  .attach("pi", (node) => piOf(node.id), "option")
+  .attach("doctype", (node) => doctypeOf(node.id), "option")
+  .attach("elementType", (node) => elementTypeOf(node.id), "option")
+  .attach("openElementType", (node) => openElementTypeOf(node.id), "option")
+  .attach("openElementName", (node) => openElementNameOf(node.id), "option")
+  .attach("documentRow", (node) => documentRowOf(node.id), "option")
+  .attach("attributes", (node) => attributesOf(node.id), "array")
+  .attach("namespaces", (node) => namespacesOf(node.id), "array")
   .orderBy(["start", "asc"]);
+
+/**
+ * Build the whole scan of the document `document` names, unpaged: its `Node` rows where
+ * `document` is that term, ordered by `start`, with {@link documentScan}'s arms attached, so each
+ * row is a `#pantry/export/pages.ts` `ScanRow`. An application attaches it inside its own read's
+ * attachment, where the term is in scope: `.attach("document", (served) =>
+ * documentScanOf(served.item), "array")`.
+ *
+ * It is built in the attachment's callback, never imported whole: a parent variable reaches only
+ * the top-level rules of its own attachment's child (`runAttach`), an ordered query has no `bind`,
+ * and a bound query is a match source, which carries no attachment (`query/build/query.ts`).
+ *
+ * @param document - The document's id, a parent variable of the read the scan attaches to.
+ * @returns The ordered scan, which an attachment delivers as an `"array"`.
+ */
+export const documentScanOf = (document: UuidInput) =>
+  query(Qti)
+    .rule((r) => {
+      const {
+        at,
+        chars,
+        document: owner,
+        end,
+        id,
+        kind,
+        parent,
+        prefix,
+        start,
+        version,
+      } = v(Node, "node");
+
+      return r
+        .match(Node, { at, chars, document: owner, end, id, kind, parent, prefix, start, version })
+        .where(r.eq(owner, document))
+        .find({ at, chars, document: owner, end, id, kind, parent, prefix, start, version });
+    })
+    .attach("comment", (node) => commentOf(node.id), "option")
+    .attach("pi", (node) => piOf(node.id), "option")
+    .attach("doctype", (node) => doctypeOf(node.id), "option")
+    .attach("elementType", (node) => elementTypeOf(node.id), "option")
+    .attach("openElementType", (node) => openElementTypeOf(node.id), "option")
+    .attach("openElementName", (node) => openElementNameOf(node.id), "option")
+    .attach("documentRow", (node) => documentRowOf(node.id), "option")
+    .attach("attributes", (node) => attributesOf(node.id), "array")
+    .attach("namespaces", (node) => namespacesOf(node.id), "array")
+    .orderBy(["start", "asc"]);
 
 /**
  * The record of a package: every entry's path and its bytes, in listing order, the `Entry`

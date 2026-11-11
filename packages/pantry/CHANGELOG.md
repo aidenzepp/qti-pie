@@ -20,3 +20,6 @@ pantry's API is plain grizzle values. Breaking changes:
 - New exports: `qti/media.ts`, `import/program.ts`, `import/refusal.ts`, `vocab/laws.ts` and `db/served.ts`
   (`AuthorLogin`). `"sideEffects": false`.
 - One migration, regenerated from zero: `migrations/qti/<timestamp>_sterling-standard`.
+- New export: `documentScanOf(document)` (`export/scan.ts`), `documentScan`'s arms over a document term an
+  application's attachment mints, unpaged: `.attach("document", (served) => documentScanOf(served.item), "array")`.
+  `documentScan`'s served SQL is unchanged.
