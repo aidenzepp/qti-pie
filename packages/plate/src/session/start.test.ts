@@ -18,6 +18,8 @@ import type { PackageVerdict } from "#plate/package/open.ts";
 import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
 import { advance } from "#plate/session/advance.ts";
+import type { CommentModule } from "#plate/session/comment.ts";
+import { sessionControls } from "#plate/session/control.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import {
   current,
@@ -1925,6 +1927,188 @@ describe("recordStep", { tags: ["corpus"] }, () => {
           [12.3, Option.some({ RESPONSE: chosen }), after(2000).toISOString()],
         );
         assert.deepStrictEqual(saved.items.slice(1), session.items.slice(1));
+      }),
+  );
+});
+
+/**
+ * The module file the comment seam is consulted through, which {@link withComment} swaps.
+ */
+const commentFile = "#plate/session/comment.ts";
+
+/**
+ * A test-only comment module that keeps a non-blank posted comment when the item allows one and
+ * keeps what it held otherwise, and records each `allowed` it is asked with.
+ *
+ * @param asked Where each `allowed` the module is asked with is recorded.
+ * @returns The module, which writes no part and reports nothing.
+ */
+const keepingAllowed = (asked: boolean[]): CommentModule => ({
+  implemented: true,
+  keep: (posted, allowed, kept) => {
+    asked.push(allowed);
+
+    return posted.pipe(
+      Option.filter((comment) => allowed && comment.trim() !== ""),
+      Option.orElse(() => kept),
+    );
+  },
+  part: () => Result.succeed(Option.none()),
+  report: (kept) => kept,
+});
+
+/**
+ * Run an effect with a module in place of the comment stub, every module that imports it loaded
+ * afresh, and the stub restored after.
+ *
+ * @param module The module to register.
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withComment = <A, E>(
+  module: CommentModule,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(commentFile, () => ({ commentModule: module }));
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(commentFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * Open a two-item hand-built test whose first item ref allows a comment and whose second does not.
+ *
+ * @returns The test and its items, each item's ref `first` or `second`.
+ */
+const commentingDelivery = Effect.fnUntraced(function* commentingDelivery() {
+  const encoder = new TextEncoder();
+  const test = yield* openTest(
+    "tests/commenting.xml",
+    encoder.encode(
+      [
+        '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="commenting" title="commenting">',
+        '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
+        '<qti-assessment-section identifier="section" title="Section" visible="true">',
+        '<qti-assessment-item-ref identifier="first" href="first.xml">',
+        '<qti-item-session-control allow-comment="true"/></qti-assessment-item-ref>',
+        '<qti-assessment-item-ref identifier="second" href="second.xml"/>',
+        "</qti-assessment-section></qti-test-part></qti-assessment-test>",
+      ].join(""),
+    ),
+  );
+  const items = new Map<string, Accepted>();
+  for (const ref of ["first", "second"]) {
+    items.set(
+      ref,
+      yield* openItem(
+        `tests/${ref}.xml`,
+        encoder.encode(itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false })),
+      ),
+    );
+  }
+
+  return { items, test } satisfies Delivery;
+});
+
+describe("the comment kept on a session item", () => {
+  it.effect("[W0-BG] present writes no comment and the view carries the kept one", () =>
+    Effect.gen(function* viewed() {
+      const delivery = yield* commentingDelivery();
+      const configuration = yield* configure({});
+      const session = started(delivery, configuration);
+      const presented = Result.getOrElse(
+        present(delivery.test.test, delivery.items, session, 1, after(500)),
+        (failure) => assert.fail(failure.message),
+      );
+
+      assert.deepStrictEqual(
+        session.items.map((item) => item.comment),
+        [Option.none(), Option.none()],
+      );
+      assert.deepStrictEqual(
+        presented.items.map((item) => item.comment),
+        [Option.none(), Option.none()],
+      );
+      assert.deepStrictEqual(viewAt(delivery, presented, configuration, 1).comment, Option.none());
+
+      const asked: boolean[] = [];
+      const kept = yield* withComment(
+        keepingAllowed(asked),
+        Effect.gen(function* keeps() {
+          const start = yield* Effect.promise(() => import("#plate/session/start.ts"));
+          const control = yield* Effect.promise(() => import("#plate/session/control.ts"));
+          const recorded = yield* Effect.fromResult(
+            start.recordStep(
+              presented,
+              { comment: "A note", intent: { kind: "next" } },
+              after(1000),
+              control.sessionControls(delivery.test.test),
+            ),
+          );
+
+          return {
+            first: yield* Effect.fromResult(
+              start.itemView(delivery.test, recorded, configuration, 1),
+            ),
+            recorded,
+            second: yield* Effect.fromResult(
+              start.itemView(delivery.test, recorded, configuration, 2),
+            ),
+          };
+        }),
+      );
+
+      assert.deepStrictEqual(asked, [true]);
+      assert.deepStrictEqual(
+        kept.recorded.items.map((item) => item.comment),
+        [Option.some("A note"), Option.none()],
+      );
+      assert.deepStrictEqual(kept.first.comment, Option.some("A note"));
+      assert.deepStrictEqual(kept.second.comment, Option.none());
+    }),
+  );
+
+  it.effect(
+    "[W0-BG] recordStep gives the module the item's allow-comment, false without the test's controls",
+    () =>
+      Effect.gen(function* allowedByControl() {
+        const delivery = yield* commentingDelivery();
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const asked: boolean[] = [];
+
+        yield* withComment(
+          keepingAllowed(asked),
+          Effect.gen(function* records() {
+            const start = yield* Effect.promise(() => import("#plate/session/start.ts"));
+            const posted = { comment: "A note", intent: { kind: "next" } } as const;
+            const unknown = yield* Effect.fromResult(
+              start.recordStep(session, posted, after(1000)),
+            );
+            const second = yield* Effect.fromResult(
+              start.recordStep(
+                { ...session, position: 1 },
+                posted,
+                after(1000),
+                sessionControls(delivery.test.test),
+              ),
+            );
+
+            assert.deepStrictEqual(
+              [unknown.items[0]?.comment, second.items[1]?.comment],
+              [Option.none(), Option.none()],
+            );
+          }),
+        );
+
+        assert.deepStrictEqual(asked, [false, false]);
       }),
   );
 });

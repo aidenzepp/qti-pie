@@ -115,6 +115,17 @@ const selectPlaceBegin = "/* begin select-place (unit W0-BA) */";
 const selectPlaceEnd = "/* end select-place */";
 
 /**
+ * The line that opens the `item-comment` block, which the issue that renders the candidate's
+ * comment fills.
+ */
+const itemCommentBegin = "/* begin item-comment (issue m5-09) */";
+
+/**
+ * The line that closes the `item-comment` block.
+ */
+const itemCommentEnd = "/* end item-comment */";
+
+/**
  * The select-then-place state attributes, which the runtime's select-then-place driver
  * (`#plate/runtime/select-place-driver.dom.ts`) writes on any kind's tokens and targets after the
  * SSR, which never writes them: `aria-pressed` on a token (`"true"` while it is held),
@@ -737,6 +748,8 @@ const contentOwners: ReadonlySet<string> = new Set([
 const prewiredSlots: ReadonlySet<string> = new Set([
   "choice-interaction-mask",
   "choice-interaction-mask-toggle",
+  "item-comment",
+  "item-comment-label",
   "test-content",
   "test-navigation-time",
   ...partTable.filter((row) => contentOwners.has(row.interaction)).map((row) => row.slot),
@@ -2046,6 +2059,32 @@ layer(Stylesheet.layer)("styles.css", (test) => {
           refused.some((rule) => Option.isSome(declared(rule, "opacity"))),
           "a refused token or target is dimmed",
         );
+      }),
+  );
+
+  test.effect(
+    "[W0-BG] holds the item-comment block, found by its delimiters and holding no rule, for the two comment markers the part table carries",
+    () =>
+      Effect.gen(function* itemComment() {
+        const { text } = yield* Stylesheet;
+        const lines = text.split("\n");
+        const begin = lines.indexOf(itemCommentBegin);
+        const end = lines.indexOf(itemCommentEnd);
+
+        assert.strictEqual(lines.filter((line) => line === itemCommentBegin).length, 1);
+        assert.strictEqual(lines.filter((line) => line === itemCommentEnd).length, 1);
+        assert.isBelow(begin, end);
+
+        const block = yield* scanSheet(lines.slice(begin + 1, end).join("\n"));
+
+        assert.isEmpty(block.rules);
+
+        for (const slot of ["item-comment", "item-comment-label"]) {
+          assert.isTrue(
+            partTable.some((row) => row.slot === slot),
+            `the part table carries ${slot}`,
+          );
+        }
       }),
   );
 });

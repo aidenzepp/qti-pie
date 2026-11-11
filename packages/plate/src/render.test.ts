@@ -5,6 +5,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { ItemContentModule } from "#plate/content/contract.ts";
 import { attr, doc, el, qtiNamespace, text as sourceText } from "#plate/document/source.ts";
 import type { SourceDocument } from "#plate/document/source.ts";
+import { itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -26,6 +27,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import type { HostFacts } from "#plate/pci/host.ts";
+import type { CommentFacts, CommentModule } from "#plate/session/comment.ts";
 import {
   InvalidInstance,
   NotRedacted,
@@ -2604,6 +2606,135 @@ describe("render, an element that references a catalog", () => {
         assert.include(rendered, "<p>tern</p>");
         assert.notInclude(rendered, `${instance}-catalog-`);
       }),
+  );
+});
+
+/**
+ * The module file the comment seam is consulted through, which {@link withComment} swaps.
+ */
+const commentFile = "#plate/session/comment.ts";
+
+/**
+ * A test-only comment module whose part is a `textarea` through the `comment` row, written when
+ * the item allows a comment, holding the kept text and posting under `<instance>.comment`.
+ *
+ * @param asked Where each set of facts the module is asked with is recorded.
+ * @returns The module.
+ */
+const textareaComment = (asked: CommentFacts[]): CommentModule => ({
+  implemented: true,
+  keep: (_posted, _allowed, kept) => kept,
+  part: (facts, state) => {
+    asked.push(facts);
+
+    return facts.allowed
+      ? Result.map(
+          itemPart(
+            state.parts,
+            "comment",
+            { id: `${facts.instance}-comment`, name: `${facts.instance}.comment` },
+            [text(Option.getOrElse(facts.kept, () => ""))],
+          ),
+          Option.some,
+        )
+      : Result.succeed(Option.none());
+  },
+  report: () => Option.none(),
+});
+
+/**
+ * Run an effect with a module in place of the comment stub, every module that imports it loaded
+ * afresh, and the stub restored after.
+ *
+ * @param module The module to register.
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withComment = <A, E>(
+  module: CommentModule,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(commentFile, () => ({ commentModule: module }));
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(commentFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * The slots of a render's Root's element children, in order, each by its `data-slot` marker and
+ * by its tag when it has none.
+ *
+ * @param rendering The render's output.
+ * @returns The slot names.
+ */
+const slotsOf = (rendering: Rendered): readonly string[] =>
+  rootOf(rendering).children.flatMap((child) =>
+    child.kind === "element" ? [String(child.attrs["data-slot"] ?? child.tag)] : [],
+  );
+
+describe("render, the comment seam", () => {
+  it.effect(
+    "[W0-BG] the comment part renders after the body and before the live region when the item allows comments",
+    () =>
+      Effect.gen(function* commentPlaced() {
+        const asked: CommentFacts[] = [];
+        const rendersWith = (allowComment: boolean) =>
+          withComment(
+            textareaComment(asked),
+            Effect.gen(function* rendered() {
+              const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+              const configuration = yield* configure({ allowComment });
+
+              return yield* Effect.fromResult(
+                plate.render(plate.redact(acceptForTest(item)), configuration, {
+                  comment: "A note",
+                  instance,
+                }),
+              );
+            }),
+          );
+        const allowed = yield* rendersWith(true);
+        const refused = yield* rendersWith(false);
+        const slots = slotsOf(allowed);
+        const comment = elementsIn(allowed).filter(
+          (element) => element.attrs["data-slot"] === rowFor("item", "comment").slot,
+        );
+
+        assert.deepStrictEqual(slots.slice(-2), ["item-comment", "item-live"]);
+        assert.isAbove(slots.indexOf("item-comment"), slots.indexOf("img"));
+        assert.deepStrictEqual(
+          comment.map((element) => [element.tag, element.attrs["name"], textOf(element)]),
+          [["textarea", `${instance}.comment`, "A note"]],
+        );
+        assert.deepStrictEqual(
+          slotsOf(refused),
+          slots.filter((slot) => slot !== "item-comment"),
+        );
+        assert.deepStrictEqual(asked, [
+          { allowed: true, finished: false, instance, kept: Option.some("A note"), locale: "en" },
+          { allowed: false, finished: false, instance, kept: Option.some("A note"), locale: "en" },
+        ]);
+      }),
+  );
+
+  it.effect("[W0-BG] the stub writes no comment part: the HTML is the one without a comment", () =>
+    Effect.gen(function* stubbed() {
+      const configuration = yield* configure({ allowComment: true });
+      const kept = yield* Effect.fromResult(
+        render(redacted, configuration, { comment: "A note", instance }),
+      );
+      const bare = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+
+      assert.strictEqual(kept.html, bare.html);
+      assert.notInclude(kept.html, "item-comment");
+    }),
   );
 });
 
