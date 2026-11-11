@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "imports": {
     "#pantry/*": "./src/*",
     "#migrations/*": "./migrations/*"
@@ -11,14 +12,19 @@
     "./db/connection.ts": "./src/db/connection.ts",
     "./db/install.ts": "./src/db/install.ts",
     "./db/layer.ts": "./src/db/layer.ts",
+    "./db/served.ts": "./src/db/served.ts",
     "./export/pages.ts": "./src/export/pages.ts",
     "./export/render.ts": "./src/export/render.ts",
     "./export/scan.ts": "./src/export/scan.ts",
     "./import/package.ts": "./src/import/package.ts",
+    "./import/program.ts": "./src/import/program.ts",
     "./import/read.ts": "./src/import/read.ts",
+    "./import/refusal.ts": "./src/import/refusal.ts",
     "./qti/logins.ts": "./src/qti/logins.ts",
+    "./qti/media.ts": "./src/qti/media.ts",
     "./qti/roles.ts": "./src/qti/roles.ts",
-    "./qti/schema.ts": "./src/qti/schema.ts"
+    "./qti/schema.ts": "./src/qti/schema.ts",
+    "./vocab/laws.ts": "./src/vocab/laws.ts"
   },
   "scripts": {
     "db": "scripts/db.sh",
