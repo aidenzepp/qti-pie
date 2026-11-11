@@ -15,9 +15,9 @@
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
 # src/db/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
-# password, and the command stops before psql starts. It then replaces the migration identity's password file, and
-# migrate gives no login a local password, since every login's comes from the command too. This script runs it before
-# psql starts, with no bound; grizzle migrate runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
+# password, and the command stops before psql or grizzle starts. It then replaces the migration identity's password
+# file, and migrate gives no login a local password, since every login's comes from the command too. This script runs
+# it before psql or grizzle starts, with no bound; grizzle runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
 # GR8DES_GRIZZLE_CONFIG names the grizzle config every grizzle command runs (grizzle.config.ts by default).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -92,15 +92,17 @@ exists() {
 }
 
 # Usage: as_migration migrate|roles|uninstall. Only this is given the migration identity's password, unless
-# GR8DES_PG_PASSWORD_COMMAND gives every role its own.
+# GR8DES_PG_PASSWORD_COMMAND gives every role its own. It reads the password first either way, so a password command
+# that gives none is refused here, by owner_password's message, before any grizzle command runs; grizzle then runs
+# the command again for each connection it opens.
 as_migration() {
+	local password
+	password="$(owner_password)" || return
 	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
 		pnpm exec grizzle "$1" "$config"
-		return
+	else
+		GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle "$1" "$config"
 	fi
-	local password
-	password="$(owner_password)"
-	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle "$1" "$config"
 }
 
 create() {
