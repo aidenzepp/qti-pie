@@ -52,6 +52,8 @@ export {
   useTimer,
 } from "#plate/react/assessment-test-provider.tsx";
 
+export { createAssessmentTestServer } from "#plate/react/assessment-test-server.tsx";
+
 export { Associate } from "#plate/react/associate.tsx";
 
 export { Choice } from "#plate/react/choice.tsx";
@@ -97,8 +99,6 @@ export { SelectPoint } from "#plate/react/select-point.tsx";
 export { Slider } from "#plate/react/slider.tsx";
 
 export { Status } from "#plate/react/status.tsx";
-
-export { createTestServer } from "#plate/react/test-server.tsx";
 
 export { TextEntry } from "#plate/react/text-entry.tsx";
 

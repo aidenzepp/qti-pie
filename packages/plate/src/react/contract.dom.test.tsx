@@ -207,10 +207,10 @@ const interactionStubs: readonly (readonly [string, string, InteractionComponent
 ];
 
 /**
- * The exports `TestProvider`'s own case checks while it is a stub, which fail at mount rather than
- * render a notice.
+ * The exports `AssessmentTestProvider`'s own case checks while it is a stub, which fail at mount
+ * rather than render a notice.
  */
-const failingStubs: ReadonlySet<string> = new Set(["TestProvider"]);
+const failingStubs: ReadonlySet<string> = new Set(["AssessmentTestProvider"]);
 
 /**
  * A component that projects a tree through `useParts`.

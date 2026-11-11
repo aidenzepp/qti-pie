@@ -1,10 +1,10 @@
 /**
- * The test layer over plate's pieces: `AssessmentTestProvider` holds a test session reached through a
- * `AssessmentTestTransport`, and its hooks read it; `fetchTransport` is the transport that speaks the wire
- * `createAssessmentTestServer` (`#plate/react/test-server.tsx`) answers. The provider renders no form and no
- * submit control: the host renders the current item inside its own form and posts that form's
- * data through `useSubmit`. {@link NoAssessmentTestProvider} is the failure every hook throws outside a
- * provider.
+ * The test layer over plate's pieces: `AssessmentTestProvider` holds a test session reached through
+ * an `AssessmentTestTransport`, and its hooks read it; `fetchTransport` is the transport that
+ * speaks the wire `createAssessmentTestServer` (`#plate/react/assessment-test-server.tsx`) answers.
+ * The provider renders no form and no submit control: the host renders the current item inside its
+ * own form and posts that form's data through `useSubmit`. {@link NoAssessmentTestProvider} is the
+ * failure every hook throws outside a provider.
  *
  * @module
  */
@@ -48,9 +48,10 @@ export class NotImplemented extends Data.TaggedError("NotImplemented")<{
 }
 
 /**
- * A hook of the test layer called outside a `AssessmentTestProvider`: the hook has no session to read. Every
- * hook throws it when no provider is mounted above the component that calls it. It is thrown,
- * since React reports a component's failure only by a throw, which an error boundary catches.
+ * A hook of the test layer called outside an `AssessmentTestProvider`: the hook has no session to
+ * read. Every hook throws it when no provider is mounted above the component that calls it. It is
+ * thrown, since React reports a component's failure only by a throw, which an error boundary
+ * catches.
  */
 export class NoAssessmentTestProvider extends Data.TaggedError("NoAssessmentTestProvider")<{
   /**
@@ -149,23 +150,23 @@ const withIntent = (form: FormData, instance: string, intent: Parameters<Submit>
 };
 
 /**
- * Make the transport that speaks `createTestServer`'s wire over `fetch`, to the URL the server is
- * mounted at: `view` sends `GET`, and `post` sends `POST` with the form's entries and the intent's
- * entry, named by the session's instance, which the transport reads from the last view it was
- * answered with. A `post` before any view first asks for one, and answers the test's end without
- * posting when that is what it gets.
+ * Make the transport that speaks `createAssessmentTestServer`'s wire over `fetch`, to the URL the
+ * server is mounted at: `view` sends `GET`, and `post` sends `POST` with the form's entries and the
+ * intent's entry, named by the session's instance, which the transport reads from the last view it
+ * was answered with. A `post` before any view first asks for one, and answers the test's end
+ * without posting when that is what it gets.
  *
  * @example
- *   <TestProvider transport={fetchTransport("/api/test-session")}>
+ *   <AssessmentTestProvider transport={fetchTransport("/api/test-session")}>
  *     <TestPage />
- *   </TestProvider>;
+ *   </AssessmentTestProvider>;
  *
  * @param url The URL the test server answers at, which the requests go to.
  * @returns The transport. Its requests resolve with the server's answer, a `422`'s refusal
  *   included, and reject with `fetch`'s own failure, or with {@link InvalidItemView} at stage
  *   `decode` for an answer that is not the wire's.
  */
-export const fetchTransport = (url: string): TestTransport => {
+export const fetchTransport = (url: string): AssessmentTestTransport => {
   const last = { instance: Option.none<string>() };
   const remember = (answer: Posted): Posted => {
     if (answer.kind === "view") {
@@ -211,26 +212,26 @@ export const fetchTransport = (url: string): TestTransport => {
  */
 interface Held {
   readonly firstView: Promise<ItemViewPayload>;
-  readonly state: TestSessionState;
+  readonly state: AssessmentTestState;
   readonly submit: Submit;
 }
 
 /**
- * The provider's context: none outside a `TestProvider`.
+ * The provider's context: none outside an `AssessmentTestProvider`.
  */
 const TestContext = createContext<Held | undefined>(undefined);
 
 /**
  * Give what the provider above holds.
  *
- * @param hook The calling hook's name, which {@link NoTestProvider} names.
+ * @param hook The calling hook's name, which {@link NoAssessmentTestProvider} names.
  * @returns What the provider holds.
- * @throws {NoTestProvider} When no provider is mounted above the caller.
+ * @throws {NoAssessmentTestProvider} When no provider is mounted above the caller.
  */
 const useHeld = (hook: string): Held => {
   const held = useContext(TestContext);
   if (held === undefined) {
-    throw new NoTestProvider({ hook });
+    throw new NoAssessmentTestProvider({ hook });
   }
 
   return held;
@@ -256,24 +257,22 @@ const useShownView = (held: Held): ItemViewPayload => held.state.view ?? use(hel
  * rejects the promise `useSubmit`'s function returned and leaves the view as it was.
  *
  * @example
- *   const Page = () => {
- *   const view = useCurrentItem();
- *   const submit = useSubmit();
- *   return (
- *   <form onSubmit={(event) => { event.preventDefault(); void submit({ kind: "next" }, new FormData(event.currentTarget)); }}>
- *   <Item key={view.instance} configuration={view.configuration} redacted={…} options={{ instance: view.instance }} />
- *   <button>Next</button>
- *   </form>
- *   );
- *   };
- *   <TestProvider transport={fetchTransport("/api/test-session")}><Page /></TestProvider>;
+ *   const Page = () => { const view = useCurrentItem(); const submit = useSubmit(); return (
+ *   <form onSubmit={(event) => { event.preventDefault(); void submit({ kind: "next" }, new
+ *   FormData(event.currentTarget)); }}> <Item key={view.instance}
+ *   configuration={view.configuration} redacted={…} options={{ instance: view.instance }} />
+ *   <button>Next</button> </form> ); }; <AssessmentTestProvider
+ *   transport={fetchTransport("/api/test-session")}><Page /></AssessmentTestProvider>;
  *
  * @param props The transport and the children.
  * @param props.children What reads the session through the hooks.
  * @param props.transport How the provider reaches the test server.
  * @returns The children, under the provider's context.
  */
-export const AssessmentTestProvider = ({ children, transport }: AssessmentTestProviderProps): ReactNode => {
+export const AssessmentTestProvider = ({
+  children,
+  transport,
+}: AssessmentTestProviderProps): ReactNode => {
   const [state, setState] = useState<AssessmentTestState>({ finished: false, pending: true });
   const [failure, setFailure] = useState<Option.Option<unknown>>(Option.none());
   const [firstView] = useState(() => Promise.withResolvers<ItemViewPayload>());
@@ -348,17 +347,17 @@ export const AssessmentTestProvider = ({ children, transport }: AssessmentTestPr
  * and whether the test has finished.
  *
  * @returns The session's state.
- * @throws {NoTestProvider} Outside a `TestProvider`.
+ * @throws {NoAssessmentTestProvider} Outside an `AssessmentTestProvider`.
  */
 export const useAssessmentTest = (): AssessmentTestState => useHeld("useAssessmentTest").state;
 
 /**
  * Read the current item's view: the last one the server answered, a refusal's included. Before
  * the first view arrives it suspends, so a `Suspense` above it shows its fallback; a test that
- * finished before any item was shown has none, so read `useTestSession().finished` first.
+ * finished before any item was shown has none, so read `useAssessmentTest().finished` first.
  *
  * @returns The view.
- * @throws {NoTestProvider} Outside a `TestProvider`.
+ * @throws {NoAssessmentTestProvider} Outside an `AssessmentTestProvider`.
  */
 export const useCurrentItem = (): ItemViewPayload => useShownView(useHeld("useCurrentItem"));
 
@@ -367,7 +366,7 @@ export const useCurrentItem = (): ItemViewPayload => useShownView(useHeld("useCu
  * the first view arrives, as {@link useCurrentItem} does.
  *
  * @returns The navigation.
- * @throws {NoTestProvider} Outside a `TestProvider`.
+ * @throws {NoAssessmentTestProvider} Outside an `AssessmentTestProvider`.
  */
 export const useNavigation = (): NavigationState =>
   useShownView(useHeld("useNavigation")).navigation;
@@ -377,7 +376,7 @@ export const useNavigation = (): NavigationState =>
  * it: none while no view has arrived or no limit is in force.
  *
  * @returns The time left.
- * @throws {NoTestProvider} Outside a `TestProvider`.
+ * @throws {NoAssessmentTestProvider} Outside an `AssessmentTestProvider`.
  */
 export const useTimer = (): TimerState => {
   const { view } = useHeld("useTimer").state;
@@ -391,6 +390,6 @@ export const useTimer = (): TimerState => {
  * resolves with it.
  *
  * @returns The submit function.
- * @throws {NoTestProvider} Outside a `TestProvider`.
+ * @throws {NoAssessmentTestProvider} Outside an `AssessmentTestProvider`.
  */
 export const useSubmit = (): Submit => useHeld("useSubmit").submit;

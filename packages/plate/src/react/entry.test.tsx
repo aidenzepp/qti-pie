@@ -1,7 +1,7 @@
 /**
- * The React entry's `ItemScope` piece, the composable layer beneath `TestProvider` (operator ruling
- * OD-8): `@qti-pie/plate/react` exports `ItemScope`, and `ItemScopeProps` names the six props it
- * takes, so a host that wires one item by hand can import both.
+ * The React entry's `ItemScope` piece, the composable layer beneath `AssessmentTestProvider`
+ * (operator ruling OD-8): `@qti-pie/plate/react` exports `ItemScope`, and `ItemScopeProps` names
+ * the six props it takes, so a host that wires one item by hand can import both.
  */
 import { assert, describe, expectTypeOf, it } from "@effect/vitest";
 import type { ReactNode } from "react";

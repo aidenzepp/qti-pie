@@ -1,7 +1,8 @@
 /**
- * The React test layer in each engine's page (issue m3g-06): `createTestServer` answers the wire
- * over the M2 fixture test, keeping the session in an in-memory store, `fetchTransport` speaks the
- * wire over `fetch`, and `TestProvider` and its hooks run the test through that transport.
+ * The React test layer in each engine's page (issue m3g-06): `createAssessmentTestServer` answers
+ * the wire over the M2 fixture test, keeping the session in an in-memory store, `fetchTransport`
+ * speaks the wire over `fetch`, and `AssessmentTestProvider` and its hooks run the test through
+ * that transport.
  *
  * The handler runs in the page, with the browser's own `Request` and `Response`, and no server is
  * started: a transport's `fetch` is routed to the handler for the case's duration. The M2 package
@@ -30,24 +31,24 @@ import type { PackageTest } from "#plate/package/open.ts";
 import { postings } from "#plate/payload.ts";
 import type { Posting } from "#plate/payload.ts";
 import {
-  createTestServer,
+  createAssessmentTestServer,
   fetchTransport,
   Item,
-  NoTestProvider,
-  TestProvider,
+  NoAssessmentTestProvider,
+  AssessmentTestProvider,
   useCurrentItem,
   useNavigation,
   useSubmit,
-  useTestSession,
+  useAssessmentTest,
   useTimer,
 } from "#plate/react/index.tsx";
 import type {
   ItemViewPayload,
   Posted,
   Submit,
-  TestSessionState,
-  TestSessionStore,
-  TestTransport,
+  AssessmentTestState,
+  AssessmentTestStore,
+  AssessmentTestTransport,
   TimerState,
 } from "#plate/react/index.tsx";
 import { isStub } from "#plate/react/parts.tsx";
@@ -149,7 +150,7 @@ interface Sitting {
 const sitting = Effect.gen(function* sitting() {
   const delivery = yield* openM2;
   const sessions = new Map<string, StoredTestSession>();
-  const store: TestSessionStore = {
+  const store: AssessmentTestStore = {
     load: (id) => Promise.resolve(sessions.get(id)),
     save: (id, session) => {
       sessions.set(id, session);
@@ -157,7 +158,7 @@ const sitting = Effect.gen(function* sitting() {
       return Promise.resolve();
     },
   };
-  const handler = createTestServer({
+  const handler = createAssessmentTestServer({
     configuration: yield* configure({}),
     items: delivery.items,
     now: () => startedAt,
@@ -371,7 +372,7 @@ const eventually = <A,>(check: () => A) =>
 interface Seen {
   items: ItemViewPayload[];
   navigations: ItemViewPayload["navigation"][];
-  states: TestSessionState[];
+  states: AssessmentTestState[];
   submit?: Submit;
   timers: TimerState[];
 }
@@ -389,7 +390,7 @@ const seen = (): Seen => ({ items: [], navigations: [], states: [], timers: [] }
  * @param record What the probes saw.
  * @returns The last state.
  */
-const lastState = (record: Seen): TestSessionState =>
+const lastState = (record: Seen): AssessmentTestState =>
   record.states.at(-1) ?? assert.fail("the provider has not rendered its children");
 
 /**
@@ -442,7 +443,7 @@ const ShownItem = (): ReactNode => {
  * @returns The form.
  */
 const HostPage = ({ record }: { readonly record: Seen }): ReactNode => {
-  const state = useTestSession();
+  const state = useAssessmentTest();
 
   record.states.push(state);
   record.timers.push(useTimer());
@@ -477,13 +478,13 @@ const CurrentItemAlone = (): ReactNode => {
  * @param transport The transport.
  * @returns What the probes saw, the mounted page and the first view.
  */
-const mountedPage = (transport: TestTransport) =>
+const mountedPage = (transport: AssessmentTestTransport) =>
   Effect.gen(function* mountPage() {
     const record = seen();
     const mounted = mount(
-      <TestProvider transport={transport}>
+      <AssessmentTestProvider transport={transport}>
         <HostPage record={record} />
-      </TestProvider>,
+      </AssessmentTestProvider>,
     );
     const first = yield* eventually(
       () => lastState(record).view ?? assert.fail("no view has arrived"),
@@ -518,7 +519,7 @@ const submitted = (record: Seen, container: HTMLElement, intent: Intent) =>
   );
 
 describe(server.browser, () => {
-  describe("createTestServer", () => {
+  describe("createAssessmentTestServer", () => {
     it.effect("[m3g-06] a GET for a new session starts it and answers the first item's view", () =>
       Effect.gen(function* startsOnGet() {
         const run = yield* sitting;
@@ -742,8 +743,8 @@ describe(server.browser, () => {
     );
   });
 
-  describe("TestProvider", () => {
-    it.effect("[m3g-06] TestProvider loads the view and its hooks read it", () =>
+  describe("AssessmentTestProvider", () => {
+    it.effect("[m3g-06] AssessmentTestProvider loads the view and its hooks read it", () =>
       restoringFetch(
         Effect.gen(function* loadsTheView() {
           const run = yield* sitting;
@@ -883,7 +884,7 @@ describe(server.browser, () => {
       ),
     );
 
-    it("[m3g-06] a hook outside a TestProvider throws NoTestProvider naming the hook", () => {
+    it("[m3g-06] a hook outside an AssessmentTestProvider throws NoAssessmentTestProvider naming the hook", () => {
       const errors: unknown[] = [];
       const { unmount } = mount(<CurrentItemAlone />, {
         onUncaughtError: (thrown) => {
@@ -896,12 +897,12 @@ describe(server.browser, () => {
       const [error] = errors;
 
       assert.strictEqual(errors.length, 1);
-      assert.instanceOf(error, NoTestProvider);
+      assert.instanceOf(error, NoAssessmentTestProvider);
       assert.strictEqual(error.hook, "useCurrentItem");
     });
 
-    it("[m3g-06] TestProvider is no longer a stub", () => {
-      assert.isFalse(isStub(TestProvider));
+    it("[m3g-06] AssessmentTestProvider is no longer a stub", () => {
+      assert.isFalse(isStub(AssessmentTestProvider));
     });
   });
 });

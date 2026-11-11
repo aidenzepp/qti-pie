@@ -1,8 +1,8 @@
 /**
- * The server side of the React test layer: {@link createTestServer}, a Fetch handler that answers
- * the wire `TestProvider`'s transport speaks, over plate's session functions. It keeps the accepted
- * test and items, and every session lives in the host's store, so the page receives only what
- * `redact` writes, in the view codec's JSON form.
+ * The server side of the React test layer: {@link createAssessmentTestServer}, a Fetch handler that
+ * answers the wire `AssessmentTestProvider`'s transport speaks, over plate's session functions. It
+ * keeps the accepted test and items, and every session lives in the host's store, so the page
+ * receives only what `redact` writes, in the view codec's JSON form.
  *
  * It holds no JSX and imports no React, so a server that mounts it loads only plate's session
  * functions; the contract's types it reads are type imports.
@@ -24,10 +24,10 @@ import { navigationState } from "#plate/navigation.ts";
 import { postings } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type {
-  CreateTestServer,
+  CreateAssessmentTestServer,
   ItemViewPayload,
   Posted,
-  TestServerOptions,
+  AssessmentTestServerOptions,
 } from "#plate/react/contract.tsx";
 import { redact } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -104,7 +104,7 @@ const methodNotAllowed = (): Response =>
  * @returns The item, or {@link UnknownItemRef} when the items the host passed lack it.
  */
 const itemOf = (
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   view: ItemView,
 ): Result.Result<Accepted, UnknownItemRef> =>
   Result.fromNullishOr(
@@ -260,7 +260,7 @@ const refusalOf = (
  * @returns The payload.
  */
 const payloadOf = Effect.fn("plate.testServer.view")(function* payloadOf(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   session: TestSession,
   view: ItemView,
   shown: {
@@ -311,7 +311,7 @@ const wireOf = (payload: ItemViewPayload) => Effect.sync(() => encodeItemView(pa
  * @param session The session.
  */
 const save = Effect.fn("plate.testServer.save")(function* save(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   id: string,
   session: TestSession,
 ) {
@@ -330,7 +330,7 @@ const save = Effect.fn("plate.testServer.save")(function* save(
  * @returns The session.
  */
 const sessionOf = Effect.fn("plate.testServer.load")(function* sessionOf(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   id: string,
   now: () => Date,
 ) {
@@ -363,7 +363,7 @@ const sessionOf = Effect.fn("plate.testServer.load")(function* sessionOf(
  * @returns The JSON the wire carries for a {@link Posted}'s view, or the finished member.
  */
 const shownNow = Effect.fn("plate.testServer.current")(function* shownNow(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   session: TestSession,
   shown: (view: ItemView) => { readonly status?: StatusInput },
 ) {
@@ -391,7 +391,7 @@ const shownNow = Effect.fn("plate.testServer.current")(function* shownNow(
  * @returns The `422`.
  */
 const refused = Effect.fn("plate.testServer.refuse")(function* refused(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   session: TestSession,
   view: ItemView,
   refusal: Refusal,
@@ -425,7 +425,7 @@ const refused = Effect.fn("plate.testServer.refuse")(function* refused(
  * @returns The answer.
  */
 const answerPost = Effect.fn("plate.testServer.post")(function* answerPost(
-  options: TestServerOptions,
+  options: AssessmentTestServerOptions,
   id: string,
   session: TestSession,
   request: Request,
@@ -491,10 +491,10 @@ const answerPost = Effect.fn("plate.testServer.post")(function* answerPost(
 });
 
 /**
- * Make the server side of `TestProvider`'s transport: a Fetch handler that answers the wire
- * `fetchTransport` speaks for the session {@link TestServerOptions.sessionOf} names, over
- * `startTest`, `current`, `advance` and `navigationState`, keeping every session in the host's
- * {@link TestServerOptions.store}.
+ * Make the server side of `AssessmentTestProvider`'s transport: a Fetch handler that answers the
+ * wire `fetchTransport` speaks for the session {@link AssessmentTestServerOptions.sessionOf} names,
+ * over `startTest`, `current`, `advance` and `navigationState`, keeping every session in the host's
+ * {@link AssessmentTestServerOptions.store}.
  *
  * - `GET` answers the current item's view, `encodeItemView`'s JSON, while the session is open, and `{
  *   "kind": "finished" }` once it is closed. A session the store lacks is started and saved first.
@@ -511,7 +511,7 @@ const answerPost = Effect.fn("plate.testServer.post")(function* answerPost(
  * accepted item or test, a record, a correct response or the session's seed.
  *
  * @example
- *   const handler = createTestServer({
+ *   const handler = createAssessmentTestServer({
  *     configuration,
  *     items: delivery.items,
  *     sessionOf: (request) => sessionIdFromCookie(request),
@@ -528,7 +528,7 @@ const answerPost = Effect.fn("plate.testServer.post")(function* answerPost(
  *   (`InvalidSessionInstance`) or a test it cannot deliver, and an `advance` failure other than a
  *   refusal (`EngineFailure` and the like), so the host's own error handling sees the cause.
  */
-export const createTestServer: CreateTestServer = (options) => {
+export const createAssessmentTestServer: CreateAssessmentTestServer = (options) => {
   const now = options.now ?? (() => new Date());
   const handle = Effect.fn("plate.testServer.handle")(function* handle(request: Request) {
     yield* Effect.annotateCurrentSpan({ "http.request.method": request.method });

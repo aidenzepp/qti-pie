@@ -19,7 +19,10 @@ import type {
   ItemViewPayload,
   Posted,
 } from "#plate/react/contract.tsx";
-import { fetchTransport, NoAssessmentTestProvider } from "#plate/react/assessment-test-provider.tsx";
+import {
+  fetchTransport,
+  NoAssessmentTestProvider,
+} from "#plate/react/assessment-test-provider.tsx";
 import { redact } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
