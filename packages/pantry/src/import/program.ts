@@ -8,10 +8,12 @@
  * layer's flat rows, every overlay's, and the package's record, each entry's content the bytes the
  * read holds. Nothing is read from the package's directory again.
  *
- * The import (`#pantry/import/package.ts`) and the dry run (`#pantry/import/preview.ts`) build
- * through {@link programOf}, so a dry run builds exactly what an import writes. Nothing here
- * reaches the author login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that
- * module is evaluated.
+ * {@link importRowsOf} gives an application the rows to write with its own grizzle `Db`; the
+ * import (`#pantry/import/package.ts`) writes them through it, and the dry run
+ * (`#pantry/import/preview.ts`) counts them, both through {@link programOf}, so a dry run builds
+ * exactly what an import writes. Nothing here reaches `Qti` or the author login
+ * (`#pantry/qti/schema.ts`, `#pantry/qti/logins.ts`), which are built when their modules are
+ * evaluated.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
@@ -23,7 +25,7 @@ import type { QtiPackage } from "#pantry/import/read.ts";
 import { packageRecordOf } from "#pantry/import/record.ts";
 import { documentLayer } from "#pantry/import/roster.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
-import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
+import { documentRowsOf, nodeIdsOf, packageFactsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot, PackageInputs, PlacedDocument } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 
@@ -95,6 +97,43 @@ export const programOf = Effect.fn("import.programOf")(function* programOf(
     },
     packageId: ids.package,
   };
+});
+
+/**
+ * The rows one package is written as, in the shape the import's write program takes them
+ * (`importWrite` of `#pantry/qti/logins.ts`): `insert`, one array of rows per relation an import
+ * writes, and `packageId`, the id minted for its `Package` row.
+ */
+export interface ImportRows {
+  readonly insert: ReturnType<typeof packageFactsOf>;
+  readonly packageId: Uuid;
+}
+
+/**
+ * Build the rows a package `readPackage` read is written as ({@link programOf}), for an application
+ * to write with its own grizzle `Db`, in its own transaction:
+ *
+ * ```ts
+ * const { insert, packageId } = yield * importRowsOf(pkg);
+ * const outcome = yield * db.workload.importWrite.apply({ insert }, {});
+ * ```
+ *
+ * It opens no database and judges no law: every law is the database's, and a refusal is grizzle's
+ * `invariant-rejected` outcome, whose laws the law table names (`lawNameOf` and `rulesOf` of
+ * `#pantry/import/refusal.ts`). Each call mints its own ids, so one package built twice is two
+ * packages.
+ *
+ * @param pkg - The package, as `readPackage` read it.
+ * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
+ * @returns The rows and the package's id.
+ */
+export const importRowsOf = Effect.fn("import.importRowsOf")(function* importRowsOf(
+  pkg: QtiPackage,
+  mint: () => NodeId = () => crypto.randomUUID(),
+): Effect.fn.Return<ImportRows> {
+  const { inputs, packageId } = yield* programOf(pkg, mint);
+
+  return { insert: packageFactsOf(inputs), packageId };
 });
 
 /**

@@ -2,14 +2,17 @@
  * The importer's front door: a package as `readPackage` read it (`#pantry/import/read.ts`) in, one
  * committed package out or one named refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
  *
- * The read package is built into its rows once (`programOf` of `#pantry/import/program.ts`), its
- * directory never read again, and written by the author login's `importWrite` member, the one
- * ChangeSet step over the author role (`#pantry/qti/logins.ts`) that `grizzle generate` compiled
- * into the login's served file, applied once to the package's facts
- * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
- * nothing of it: there is no split and no completion marker. grizzle writes each relation's rows in
- * one statement, its nested rows past one Bind message through a carrier, a temporary table of the
- * write's own (README, "Sizes"; grizzle `164aeb06`), so no transport bound splits the write.
+ * The read package is built into its rows once (`importRowsOf` of `#pantry/import/program.ts`, the
+ * rows an application writes itself with its own grizzle `Db` where it needs the package in a
+ * transaction of its own), its directory never read again, and written by the author login's
+ * `importWrite` member, the one ChangeSet step (`#pantry/qti/logins.ts`) that `grizzle generate`
+ * compiled into the login's served file, applied once to those rows. This module is a convenience
+ * over that one apply: it retries a transient refusal, settles a commit with no answer by reading
+ * the package back, and names a refusal's QTI rules. The apply is one transaction, so the database
+ * holds the whole package or nothing of it: there is no split and no completion marker. grizzle
+ * writes each relation's rows in one statement, its nested rows past one Bind message through a
+ * carrier, a temporary table of the write's own (README, "Sizes"; grizzle `164aeb06`), so no
+ * transport bound splits the write.
  */
 import {
   CommitUnknown,
@@ -21,11 +24,10 @@ import {
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
-import { programOf } from "#pantry/import/program.ts";
+import { importRowsOf } from "#pantry/import/program.ts";
 import type { QtiPackage } from "#pantry/import/read.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
-import { packageFactsOf } from "#pantry/import/write.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
 
@@ -211,13 +213,11 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const schedule = yield* RetrySchedule;
   const wrap = yield* WrapApply;
   const login = yield* AuthorLogin;
-  const program = yield* programOf(pkg);
-  const { packageId } = program;
-  const facts = packageFactsOf(program.inputs);
+  const { insert, packageId } = yield* importRowsOf(pkg);
   const db = yield* Db.open(login.roles.author, {});
   const [elapsed, outcome] = yield* retried(
     "importWrite",
-    wrap(db.workload.importWrite.apply({ insert: facts }, {})),
+    wrap(db.workload.importWrite.apply({ insert }, {})),
     schedule,
   ).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
