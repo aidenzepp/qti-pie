@@ -35,7 +35,7 @@
  *   relation's description) where there is none, at a first member or an owner of no members;
  * - **each field PostgreSQL generates** (`relation.generated`): its term, as grizzle keeps it in the
  *   relation's description, evaluated over the row's written fields as a predicate is
- *   ({@link generatedFields}).
+ *   (`#pantry/test/generated-fields.ts` `withGenerated`).
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
  * grizzle keeps in its own field builders; a generated field whose term holds one the evaluator
@@ -55,7 +55,6 @@ import { Array as Arr, Formatter, Function as Fn, Option, Order, Predicate, Sche
 import {
   closedOf,
   datumText,
-  evaluate,
   fieldsOf,
   floatDatum,
   isJudged,
@@ -73,6 +72,7 @@ import {
 import type { Datum, Row, Source, StoredSide } from "#pantry/test/predicates.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { withGenerated } from "#pantry/test/generated-fields.ts";
 import { statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
@@ -207,68 +207,20 @@ const relations = modelledRelations(Object.values(Qti.relations));
 const keyOf = (relation: string): readonly string[] => relations.get(relation)?.key ?? [];
 
 /**
- * Read a generated field's term as the host evaluates it: the term grizzle keeps at the field's
- * writing in its relation's description (`relation.generated`), read as a predicate's terms are
- * and evaluated over the row, as PostgreSQL computes the column from the row's written fields.
- *
- * @param expr - The term, as grizzle keeps it.
- * @returns The field's value over a row: unknown where the term reads a field the row lacks, or
- *   holds a term the host does not read (`#pantry/test/predicates.ts` `termOf`).
- * @throws {Error} When grizzle keeps no term there: a defect of the host judge, which must learn
- *   the description's shape before it restores the field.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A description's term is read here, by its shape.
-const generatedValueOf = (expr: unknown): ((row: Row) => Datum | undefined) => {
-  const term = termOf(Schema.decodeUnknownSync(StoredTermSchema)(expr));
-
-  return (row) => evaluate(term, row, () => false, closed);
-};
-
-/**
- * A stored relation's description as grizzle keeps it, for its generated and its accumulated
- * fields: each field's writing, a generated field's with the term PostgreSQL computes it by, an
- * accumulated field's with the start it holds at its axis's base.
+ * A stored relation's description as grizzle keeps it, for its accumulated fields: each field's
+ * writing, an accumulated field's with the start it holds at its axis's base.
  */
 const DescribedSchema = Schema.Struct({
   desc: Schema.Struct({
     fields: Schema.Record(
       Schema.String,
       Schema.Struct({
-        writing: Schema.Struct({
-          expr: Schema.optionalKey(Schema.Unknown),
-          kind: Schema.String,
-          start: Schema.optionalKey(Schema.Unknown),
-        }),
+        writing: Schema.Struct({ kind: Schema.String, start: Schema.optionalKey(Schema.Unknown) }),
       }),
     ),
   }),
   name: Schema.String,
 });
-
-/**
- * Every field PostgreSQL generates of each stored relation of the composed schema, by relation and
- * then field: its value over a row ({@link generatedValueOf}), from the term grizzle keeps in the
- * relation's description. A relation that generates no field has no entry. A stored relation's
- * description is read strictly, so a shape grizzle changes fails here, by its decode, rather than
- * leaving a generated field unrestored without a word.
- */
-export const generatedFields: ReadonlyMap<
-  string,
-  ReadonlyMap<string, (row: Row) => Datum | undefined>
-> = new Map(
-  Object.values(Qti.relations).flatMap((member) => {
-    if (!Predicate.hasProperty(member, "kind") || member.kind !== "relation") {
-      return [];
-    }
-
-    const { desc, name } = Schema.decodeUnknownSync(DescribedSchema)(member);
-    const generated = Object.entries(desc.fields).flatMap(([field, { writing }]) =>
-      writing.kind === "generated" ? [[field, generatedValueOf(writing.expr)] as const] : [],
-    );
-
-    return generated.length === 0 ? [] : [[name, new Map(generated)] as const];
-  }),
-);
 
 /**
  * One side of a statement as the host judges it: its relation and its terms as an outcome names
@@ -1399,14 +1351,7 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
       }
     }
 
-    for (const generated of Option.toArray(Option.fromUndefinedOr(generatedFields.get(relation)))) {
-      for (const [field, valueOf] of generated) {
-        const value = valueOf(row);
-        if (value !== undefined) {
-          row[field] = value;
-        }
-      }
-    }
+    Object.assign(row, withGenerated(relation, row));
 
     const tree = trees.has(relation);
     if (tree) {

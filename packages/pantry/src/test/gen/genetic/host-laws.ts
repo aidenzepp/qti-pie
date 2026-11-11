@@ -46,6 +46,7 @@ import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { withGenerated } from "#pantry/test/generated-fields.ts";
 import { identityOf, keyTextFields } from "#pantry/test/key-copies.ts";
 import {
   checksOf,
@@ -880,10 +881,33 @@ const flattenTree = (root: Stored, add: (relation: string, row: Row) => void): v
 };
 
 /**
+ * Whether a datum is of a {@link Value} type.
+ */
+const isValue = Schema.is(ValueSchema);
+
+/**
+ * Restore a row's generated fields at the values PostgreSQL computes for them, by the host's one
+ * evaluator of Qti's generated terms (`#pantry/test/generated-fields.ts` `withGenerated`), keeping
+ * each value of a {@link Value} type: a generated field the evaluator cannot compute, or of a type
+ * the view does not hold, stays absent, so a statement that reads it is unknown.
+ *
+ * @param relation - The row's relation.
+ * @param row - The row as the program writes it.
+ * @returns The row as the database holds it, as far as the host computes it.
+ */
+const restored = (relation: string, row: Row): Row =>
+  Object.fromEntries(
+    Object.entries(withGenerated(relation, row)).flatMap(([field, value]) =>
+      isValue(value) ? [[field, value] as const] : [],
+    ),
+  );
+
+/**
  * Read a program's inputs as rows by relation: each flat keyed set as its rows, and each tree as
  * the rows of its nodes, attributes and namespace declarations, with the `document`, `parent` and
- * `node` its nesting supplies. A relation the program nests deeper than that, or whose rows hold a
- * value of no {@link Value} type, is left out, so a statement over it is unknown.
+ * `node` its nesting supplies, each row with its generated fields ({@link restored}). A relation
+ * the program nests deeper than that, or whose rows hold a value of no {@link Value} type, is left
+ * out, so a statement over it is unknown.
  *
  * @param inputs - The program's inputs.
  * @returns The rows.
@@ -891,7 +915,7 @@ const flattenTree = (root: Stored, add: (relation: string, row: Row) => void): v
 export const viewOf = (inputs: PackageInputs): View => {
   const view = new Map<string, Row[]>();
   const add = (relation: string, row: Row): void => {
-    view.set(relation, [...(view.get(relation) ?? []), row]);
+    view.set(relation, [...(view.get(relation) ?? []), restored(relation, row)]);
   };
   const written = Option.getOrElse(Schema.decodeUnknownOption(InputsSchema)(inputs), () => ({}));
   for (const [relation, held] of Object.entries(written)) {

@@ -53,7 +53,7 @@ import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf, viewOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { Row } from "#pantry/test/gen/genetic/host-laws.ts";
-import { generatedFields } from "#pantry/test/host-judge.ts";
+import { generatedFields } from "#pantry/test/generated-fields.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -282,10 +282,9 @@ const describingOf = (
 };
 
 /**
- * Read a form's compared value as the database generates it: `DocumentLang`'s or
- * `AssembledLang`'s `value`, the term the schema states evaluated over the row
- * (`#pantry/test/host-judge.ts` `generatedFields`), so the host judges R26 by the database's own
- * derivation.
+ * Read a form's compared value as the database generates it: `DocumentLang`'s or `AssembledLang`'s
+ * `value`, the term the schema states evaluated over the row (`#pantry/test/generated-fields.ts`
+ * `generatedFields`), so the host judges R26 by the database's own derivation.
  *
  * @param relation - `DocumentLang` or `AssembledLang`.
  * @param form - The form's row, as the import writes it.

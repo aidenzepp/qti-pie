@@ -96,6 +96,7 @@ export type Term =
   | { readonly arg: Term; readonly kind: "in"; readonly values: readonly Term[] }
   | { readonly arg: Term; readonly kind: "not" }
   | { readonly arg: Term; readonly kind: "cast"; readonly to: CastType }
+  | { readonly kind: "cond"; readonly onFalse: Term; readonly onTrue: Term; readonly pred: Term }
   | { readonly field: string; readonly kind: "field" }
   | { readonly kind: "compare"; readonly left: Term; readonly op: string; readonly right: Term }
   | { readonly kind: "literal"; readonly value: Datum }
@@ -120,8 +121,11 @@ interface StoredTerm {
   readonly guard?: { readonly kind: string; readonly pattern?: string };
   readonly kind: string;
   readonly left?: StoredTerm;
+  readonly onFalse?: StoredTerm;
+  readonly onTrue?: StoredTerm;
   readonly op?: string;
   readonly otherwise?: StoredTerm;
+  readonly pred?: StoredTerm;
   readonly proved?: StoredTerm;
   readonly relation?: string;
   readonly right?: StoredTerm;
@@ -146,8 +150,11 @@ export const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
   ),
   kind: Schema.String,
   left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  onFalse: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  onTrue: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   op: Schema.optionalKey(Schema.String),
   otherwise: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  pred: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   proved: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   relation: Schema.optionalKey(Schema.String),
   right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
@@ -426,8 +433,11 @@ export const termOf = (stored: StoredTerm): Term => {
     fn,
     guard,
     left,
+    onFalse,
+    onTrue,
     op,
     otherwise,
+    pred,
     proved,
     relation,
     right,
@@ -503,6 +513,13 @@ export const termOf = (stored: StoredTerm): Term => {
 
         return to?.kind === "numeric" ? { arg: termOf(arg), kind: "cast", to: "numeric" } : unread;
       },
+    ],
+    [
+      "cond",
+      () =>
+        pred === undefined || onTrue === undefined || onFalse === undefined
+          ? unread
+          : { kind: "cond", onFalse: termOf(onFalse), onTrue: termOf(onTrue), pred: termOf(pred) },
     ],
     ["field", () => (field === undefined ? unread : { field, kind: "field" })],
     [
@@ -595,6 +612,9 @@ const operandsOf = (term: Term): readonly Term[] => {
     case "cast":
     case "not": {
       return [term.arg];
+    }
+    case "cond": {
+      return [term.pred, term.onTrue, term.onFalse];
     }
     case "when": {
       return [term.subject, term.proved, term.otherwise];
@@ -1209,12 +1229,34 @@ const branchOf = (
     : Option.none();
 
 /**
+ * Choose the arm of a `Compute.cond` its predicate's value takes. grizzle lowers `Compute.cond(p,
+ * a, b)` to `CASE WHEN p THEN a ELSE b END` (grizzle-engine `physical/ddl/expr.ts`, "cond"), so a
+ * true predicate takes the first arm and a false one the else arm. A predicate the host holds no
+ * value of, a field the row lacks or SQL's NULL, takes neither: the host cannot tell the two apart,
+ * and only the NULL takes the else arm, so the value is left unknown rather than guessed.
+ *
+ * @param term - The conditional.
+ * @param held - Its predicate's value.
+ * @returns The arm, none where the predicate's value is unknown.
+ */
+const armOf = (
+  term: Extract<Term, { readonly kind: "cond" }>,
+  held: Datum | undefined,
+): Option.Option<Term> => {
+  if (held === true) {
+    return Option.some(term.onTrue);
+  }
+
+  return held === false ? Option.some(term.onFalse) : Option.none();
+};
+
+/**
  * Evaluate a term over a row in SQL's three-valued logic: a field the row does not know, a closed
  * read at a key its relation holds no tuple at, and an unread term are unknown, `and`, `or` and
  * `not` are Kleene's, and every other operation of an unknown operand is unknown. A
  * `Compute.when` takes its branch where its subject matches its guard's pattern and its otherwise
- * elsewhere, as grizzle's `CASE` does. A comparison `forced` holds is read as false wherever it
- * occurs.
+ * elsewhere, as grizzle's `CASE` does, and a `Compute.cond` the arm {@link armOf} chooses. A
+ * comparison `forced` holds is read as false wherever it occurs.
  *
  * @param term - The term.
  * @param row - The row's known fields.
@@ -1268,6 +1310,11 @@ export const evaluate = (
     }
     case "cast": {
       return castOf(term.to, value(term.arg));
+    }
+    case "cond": {
+      return Option.getOrUndefined(
+        Option.flatMap(armOf(term, value(term.pred)), (arm) => Option.fromUndefinedOr(value(arm))),
+      );
     }
     case "when": {
       return Option.getOrUndefined(

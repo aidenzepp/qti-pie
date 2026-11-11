@@ -5,9 +5,12 @@
  * each overlay's row from its element, its attributes and its children. The walk shares no code
  * with the builder, which reads the tree's flat rows (`flatten`).
  *
- * The codes are checked against the closed relations themselves: every `base-type` and
- * `cardinality` a fixture or a corpus document writes reads back, through `BaseTypeLexical` and
- * `CardinalityLexical`, as the lexical form the builder copied (C17).
+ * The builder writes no field the database generates, so each of its rows is compared with those
+ * fields restored by the host's evaluator of Qti's generated terms
+ * (`#pantry/test/generated-fields.ts` `withGenerated`), which reads which fields are generated, and
+ * how, from the schema. The codes are so checked against the closed relations themselves: every
+ * `base-type` and `cardinality` a fixture or a corpus document writes reads back, through
+ * `BaseTypeLexical` and `CardinalityLexical`, as the lexical form it was written in (C17).
  */
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
@@ -46,6 +49,7 @@ import { readEntries } from "#pantry/package/read.ts";
 import { declarationKinds, valueSetKinds } from "#pantry/qti/declarations.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { withGenerated } from "#pantry/test/generated-fields.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
 
@@ -581,7 +585,9 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
   [...map].toSorted(([left], [right]) => left.localeCompare(right));
 
 /**
- * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike.
+ * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, each of
+ * the builder's rows with the fields the database generates from it restored
+ * ({@link withGenerated}).
  *
  * @param rows - The builder's rows.
  * @param expected - The walk's.
@@ -589,8 +595,11 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
  */
 const assertRows = (rows: DeclarationRows, expected: Expected, label: string): void => {
   for (const relation of relationNames) {
+    const held = new Map(
+      [...rows[relation]].map(([node, row]) => [node, withGenerated(relation, row)] as const),
+    );
     assert.deepStrictEqual(
-      sortedEntries(rows[relation]),
+      sortedEntries(held),
       sortedEntries(expected[relation]),
       `${label} ${relation}`,
     );

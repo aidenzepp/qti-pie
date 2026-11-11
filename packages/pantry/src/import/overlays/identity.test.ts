@@ -34,7 +34,7 @@ import type {
 } from "#pantry/model/xdm.ts";
 import { statedLanguagePattern } from "#pantry/qti/identity.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
-import { generatedFields } from "#pantry/test/host-judge.ts";
+import { generatedFields } from "#pantry/test/generated-fields.ts";
 
 /**
  * The version every case is written in, but the content box's, which draws its own.
@@ -977,9 +977,9 @@ const statedForm = new RegExp(statedLanguagePattern.source, patternFlags);
 
 /**
  * `DocumentLang`'s generated `value` as the schema states it, read off the relation's description
- * and evaluated over a row (`#pantry/test/host-judge.ts` `generatedFields`), so the box compares
- * each form by the database's own derivation, and holds that derivation to this file's reading of
- * a tag's value ({@link collapsed}, {@link folded}).
+ * and evaluated over a row (`#pantry/test/generated-fields.ts` `generatedFields`), so the box
+ * compares each form by the database's own derivation, and holds that derivation to this file's
+ * reading of a tag's value ({@link collapsed}, {@link folded}).
  */
 const valueOf = Option.getOrThrowWith(
   Option.fromUndefinedOr(generatedFields.get("DocumentLang")?.get("value")),

@@ -34,7 +34,8 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { SideSchema } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
-import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
+import { generatedFields } from "#pantry/test/generated-fields.ts";
+import { judgedSideOf } from "#pantry/test/host-judge.ts";
 import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { schemaRuleOfLaw, statedLaws } from "#pantry/test/law-namer.ts";
@@ -547,7 +548,8 @@ const WrittenMap = Schema.ReadonlyMap(Schema.String, WrittenRow);
 type Written = typeof WrittenRow.Type;
 
 /**
- * A written row's scalar fields as a selection reads them: its texts and its integers.
+ * A written row's scalar fields as a selection or a generated term reads them: its texts, its
+ * integers and its booleans, such as the `folded` a map key's `matched` branches on.
  *
  * @param row - The row.
  * @returns Its scalars.
@@ -555,7 +557,9 @@ type Written = typeof WrittenRow.Type;
 const scalarsOf = (row: Written): Readonly<Record<string, Datum>> =>
   Object.fromEntries(
     Object.entries(row).flatMap(([field, value]) =>
-      Predicate.isString(value) || Predicate.isBigInt(value) ? [[field, value] as const] : [],
+      Predicate.isString(value) || Predicate.isBigInt(value) || Predicate.isBoolean(value)
+        ? [[field, value] as const]
+        : [],
     ),
   );
 
@@ -582,7 +586,7 @@ const writtenText = (row: Written, field: string): string => {
 
 /**
  * Read a generated key text of a written row at the value PostgreSQL computes: its term, as
- * grizzle keeps it in its relation's description (`#pantry/test/key-copies.ts`
+ * grizzle keeps it in its relation's description (`#pantry/test/generated-fields.ts`
  * `generatedFields`), over the row's written scalars ({@link scalarsOf}). Its type is `keyText`,
  * whose domain refuses a value past the bound as a written key text's does.
  *
@@ -603,7 +607,7 @@ const generatedText = (
   const value = valueOf(scalarsOf(row));
   if (!Predicate.isString(value)) {
     throw new TypeError(
-      `The generated key text ${relation}.${field} is unknown over a written row: its term reads a field the row does not write, or a term the host's evaluator does not read. Teach key-copies.ts's evaluator the term, so the text's bound is checked.`,
+      `The generated key text ${relation}.${field} is unknown over a written row: its term reads a field the row does not write, or a term the host's evaluator does not read. Teach the host's reader of grizzle's terms (src/test/predicates.ts termOf and evaluate), which src/test/generated-fields.ts evaluates generated fields by, the term, so the text's bound is checked.`,
     );
   }
 
