@@ -10,13 +10,7 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
- * The timeout, in milliseconds, for judging one corpus package: one read of its entries, then a
- * shred, a fold and every law over each document it lists, with no database.
- *
- * The slowest package, `BPIG_22April`, took under 10 s beside three other suites when measured on
- * 2026-11-05 (`prewitness.corpus.oracle.test.ts`); this test judges five packages and keeps that
- * file's budget. Raise it only on a new measurement recorded here.
- * Measured 2026-11-07: 1.9 s at a load average of 69 to 105, the slowest package, `BPIG_22April`.
+ * The timeout, in milliseconds, for judging one corpus package: a hang guard.
  */
 const caseTimeoutMs = 60_000;
 

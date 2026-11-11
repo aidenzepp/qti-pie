@@ -35,43 +35,21 @@ export const settings = Effect.runSync(
 export const hasLease = Option.isSome(settings.leaseDatabase);
 
 /**
- * The timeout, in milliseconds, for each test of a lease suite that writes.
- *
- * The longest lease test on trunk a1d5af1 is the export round trip, at 24,095 ms
- * (gt-w3, 2026-11-04: 21,385, 22,160 and 24,095 ms in three runs of the lease
- * files, load 6.5 to 132). The value is twice that, rounded up to the next 1,000.
- * Raise it only on a new measurement recorded here, never to make a run pass. A
- * lease suite that only reads keeps the database project's timeout.
- *
- * A probe login's layer (`#pantry/test/served-members.ts` `servedProbe`), which
- * compiles the login's workloads in process, runs under the database project's
- * `hookTimeout`: its compile took 4.8 s on 2026-11-10 at a load average of 19 to
- * 25, on grizzle eb56d58.
+ * The timeout, in milliseconds, for each test of a lease suite that writes: a hang guard. A lease
+ * suite that only reads keeps the database project's timeout.
  */
 export const leaseTestTimeoutMs = 49_000;
 
 /**
- * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
- *
- * Such a test pays Node's start and the module graph of `cli.ts`. Measured 2026-11-07: 3.0 s at a
- * load average of 63 to 73, the slowest CLI process test of the free project. The budget is the
- * larger of twice that and 10 s, twice vitest's 5 s default, which the parallel leased suite
- * exceeded under load averages of 8 to 15 (merges `8b3f2a65`, `1a3d4f4c`, `998fe309` and
- * `655ddd9f`). A test file whose handlers load the engine loads it first in a `beforeAll` under
- * `engineLoadHookTimeoutMs`, so no test pays that load. Raise it only on a new measurement recorded
- * here, never to make a run pass.
+ * The timeout, in milliseconds, for one test that spawns the CLI as a child process: a hang guard.
+ * A test file whose handlers load the engine loads it first in a `beforeAll` under
+ * `engineLoadHookTimeoutMs`, so no test pays that load.
  */
 export const cliProcessTestTimeoutMs = 10_000;
 
 /**
- * The timeout, in milliseconds, for the hook that loads the engine once per CLI test file: the
+ * The timeout, in milliseconds, for the hook that loads the engine once per CLI test file, the
  * modules `#pantry/test/cli.ts`'s `preloadEngine` imports, which the command handlers import when
- * they run.
- *
- * Measured 2026-11-07: 36.9 s at a load average of 80 to 83, the hook of `cli/import.test.ts`,
- * since deleted, beside one other suite, which the budget is over twice; `cli/present.test.ts` is
- * the one file that takes the hook now. Nine concurrent loads of the five modules took 4.2 to 4.6 s
- * on 2026-11-10 at a load average of 19 to 22, on grizzle eb56d58. Raise it only on a new
- * measurement recorded here, never to make a run pass.
+ * they run: a hang guard.
  */
 export const engineLoadHookTimeoutMs = 97_000;

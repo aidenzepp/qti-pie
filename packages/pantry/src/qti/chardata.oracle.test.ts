@@ -437,11 +437,7 @@ const productionCases: Gen<ProductionCase> = (source) => {
 };
 
 /**
- * How long an exhaustive box may run: the productions box's 14,817 cases each read one small
- * document through crust's reader, and the bounds box's 300 match texts of up to 649 code points
- * against patterns of counted repetitions, which JavaScript's backtracking engine tries split by
- * split.
- * Measured 2026-11-07: 9.6 s at a load average of 63 to 73, the slowest box.
+ * How long an exhaustive box may run: a hang guard.
  */
 const boxTimeout = 120_000;
 

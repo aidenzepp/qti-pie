@@ -277,8 +277,7 @@ const named = (laws: readonly { readonly law: Law }[]): ReadonlySet<string> =>
   new Set(laws.flatMap(({ law }) => Option.toArray(schemaLawNameOf(law))));
 
 /**
- * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
- * Measured 2026-11-07: 20.6 s at a load average of 83 to 96, its slowest test.
+ * The timeout, in milliseconds, that this file's test states: a hang guard.
  */
 const testTimeoutMs = 120_000;
 

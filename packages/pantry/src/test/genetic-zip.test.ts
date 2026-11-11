@@ -102,12 +102,7 @@ const counts = settings.geneticRequested
 const reduction = { batch: 60, kinds: 6, tries: 600 } as const;
 
 /**
- * The timeout, in milliseconds, of each test. Measured 2026-11-07: 1.8 s at a load average of 81.8
- * to 87.5 on 10 cores, the slowest free test, the writer's 200 archives of the floor stream; the
- * box took 1.6 s and the 100 fixed seeds 1.1 s. The bred search that ran free before took 18.6 s at
- * a load average of 70 to 78 for 1,700 archives. The free suite's is over six times that, for a
- * machine loaded further; the exploration's two hours. Raise it only on a new measurement recorded
- * here.
+ * The timeout, in milliseconds, of each test: a hang guard.
  */
 const timeoutMs = settings.geneticRequested ? 7_200_000 : 120_000;
 

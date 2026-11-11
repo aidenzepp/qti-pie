@@ -35,9 +35,7 @@ import type { Child } from "@qti-pie/crust/tree.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 22.4 s at a load average of 63 to
- * 73, its slowest test. Two trees of 100,000 nodes through four walks take about 10 s on an idle
- * laptop: the timeout leaves room for a busy one.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 120_000;
 

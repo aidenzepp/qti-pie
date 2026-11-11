@@ -29,8 +29,7 @@ import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
- * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
- * Measured 2026-11-09: 0.5 s at a load average of 172 to 358, its one test alone.
+ * The timeout, in milliseconds, that this file's test states: a hang guard.
  */
 const testTimeoutMs = 600_000;
 

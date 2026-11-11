@@ -91,14 +91,7 @@ const outputRoot = fileScratchDirectory("xsd-corpus-");
 const oracleRoot = fileScratchDirectory("xsd-oracle-");
 
 /**
- * The timeout, in milliseconds, for the one test: two `xmllint` runs over every corpus document
- * (one per version, each compiling its version's XSDs once) and the law oracle over every document
- * in both versions.
- *
- * Measured on 2026-11-05: each `xmllint` run over the 380 documents took 16.4 s of wall time at a
- * load average near 30 (3.4 s of CPU). Measured 2026-11-07: 168.2 s at a load average of 63 to
- * 78, the whole test, under `GR8DES_CORPUS=1`. The budget is twice that, rounded up to the next
- * minute. Raise it only on a new measurement recorded here, never to make a run pass.
+ * The timeout, in milliseconds, for the one test: a hang guard.
  */
 const testTimeoutMs = 360_000;
 
@@ -380,10 +373,7 @@ describe.skipIf(!settings.corpusRequested || !xsdCached)(
 );
 
 /**
- * The timeout, in milliseconds, for the libxml2 control: one `xmllint` run over four small
- * documents, which compiles the 3.0.0 XSDs once. Measured on 2026-11-05 under the shared tree's
- * load: over 5 s. Measured 2026-11-07: 35.6 s at a load average of 63 to 73, and 34.4 s at 70 to
- * 74, so the hang guard is 90 s. Raise it only on a new measurement recorded here.
+ * The timeout, in milliseconds, for the libxml2 control: a hang guard.
  */
 const controlTimeoutMs = 90_000;
 

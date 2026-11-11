@@ -18,9 +18,7 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
- * How long building a schema over every relation of the schema may take: its statements are planned
- * whole, which takes some seconds beside the composed grammar.
- * Measured 2026-11-07: 16.7 s at a load average of 63 to 73.
+ * How long building a schema over every relation of the schema may take: a hang guard.
  */
 const buildTimeout = 60_000;
 

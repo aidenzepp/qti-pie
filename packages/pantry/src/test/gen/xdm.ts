@@ -109,10 +109,7 @@ export const scrambledIdOf = (index: number): NodeId =>
 export const caseHang = Duration.seconds(30);
 
 /**
- * How long a test that searches generated trees may run: a few hundred cases of a few milliseconds
- * each, beside the composed grammar, which takes some seconds to read once a file. Measured
- * 2026-11-07: 106.5 s at a load average of 75, under V8 coverage, the slowest of the 65 tests it
- * times, and 82.3 s at 63 to 73 without it.
+ * How long a test that searches generated trees may run: a hang guard.
  */
 export const searchTimeout = 300_000;
 

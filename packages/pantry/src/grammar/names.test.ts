@@ -39,9 +39,7 @@ const grammar = await Effect.runPromise(Effect.fromResult(composed()));
 const caseHang = Duration.minutes(1);
 
 /**
- * How long each search may run: about ten times the slowest, a few seconds, measured on
- * 2026-11-06 at a load average of about 25.
- * Measured 2026-11-07: 1.2 s at a load average of 63 to 73.
+ * How long each search may run: a hang guard.
  */
 const searchTimeout = 120_000;
 

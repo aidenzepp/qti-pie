@@ -71,8 +71,7 @@ import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. On grizzle eb56d58 (2026-11-10), alone at a load average
- * of 43 to 54, the slowest test, the swarm's at 200 runs, took 35.9 s; it now draws 40.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 180_000;
 

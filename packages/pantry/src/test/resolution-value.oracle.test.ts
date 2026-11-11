@@ -28,10 +28,8 @@ import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 const largeLength = 64_000_000;
 
 /**
- * The timeout, in milliseconds, of the test that judges an item with an attribute of
- * {@link largeLength} characters, which reads the value beside the document's other laws: a hang
- * guard, never a budget. Measured 2026-11-10: 0.8 s at a load average of 138 to 321, beside 320
- * busy processes on 8 cores. Measured 2026-11-10: 0.8 s at a load average of 140 to 321, likewise.
+ * The timeout, in milliseconds, of the test that judges an item with an attribute of {@link
+ * largeLength} characters, which reads the value beside the document's other laws: a hang guard.
  */
 const judgeTimeoutMs = 30_000;
 

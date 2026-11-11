@@ -82,14 +82,13 @@ import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 51 s at a load average of 68 to 108,
- * its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 600_000;
 
 /**
- * The timeout, in milliseconds, of the search that runs only under `GR8DES_GENETIC=1`: the long
- * budget's hang guard, measured by the long run, not the free one.
+ * The timeout, in milliseconds, of the search that runs only under `GR8DES_GENETIC=1`: a hang
+ * guard.
  */
 const longTimeoutMs = 3_600_000;
 

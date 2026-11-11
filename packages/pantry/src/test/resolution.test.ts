@@ -26,11 +26,7 @@ const largeLength = 64_000_000;
 
 /**
  * The timeout, in milliseconds, of each test that reads a value of {@link largeLength} characters
- * through `oracleValueOf` alone. A read by string operations takes tens of milliseconds, and one
- * that builds an array of a character each takes seconds, so this separates the two where a hang
- * guard would not. Measured 2026-11-10: 0.09 s at a load average of 138 to 321, its slowest test,
- * beside 320 busy processes on 8 cores. Measured 2026-11-10: 0.11 s at a load average of 140 to
- * 321, likewise.
+ * through `oracleValueOf` alone: a hang guard.
  */
 const readTimeoutMs = 2000;
 

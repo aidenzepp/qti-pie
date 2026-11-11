@@ -34,10 +34,7 @@ import { judge } from "#pantry/test/oracle.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
- * The timeout, in milliseconds, of the test: a hang guard, never a budget. Measured 2026-11-07:
- * 140.2 s at a load average of 63 to 73, the slowest test of the file this one was cut from, which
- * held this test and two compiles; on 2026-11-10 it took 98.1 s alone, at a load average of 35 to
- * 57.
+ * The timeout, in milliseconds, of the test: a hang guard.
  */
 const testTimeoutMs = 1_200_000;
 

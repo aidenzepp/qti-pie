@@ -97,8 +97,7 @@ import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 0.2 s at a load average of 68 to 97,
- * its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 120_000;
 
@@ -132,9 +131,7 @@ const budget: Budget = { candidates: 2400, edits: 4, generation: 96, initial: 96
 const reduction = { batch: 60, findings: 8, tries: 180, until: 6_000_000 } as const;
 
 /**
- * The replay's timeout, in milliseconds: the grammar, the seeds and the kept documents, judged once
- * each in both versions, a hang guard. Measured 2026-11-07: 165.1 s at a load average of 87.8 to
- * 92.1, the replay of 214 seeds and 8 kept documents; this is over three times that.
+ * The replay's timeout, in milliseconds: a hang guard.
  */
 const replayTimeoutMs = 600_000;
 

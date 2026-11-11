@@ -22,8 +22,7 @@ import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 137.3 s at a load average of 75,
- * under V8 coverage, its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 600_000;
 

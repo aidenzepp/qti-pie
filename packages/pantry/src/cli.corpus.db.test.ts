@@ -17,15 +17,7 @@ import { renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
 import type { VerdictRow } from "#pantry/test/verdicts.ts";
 
 /**
- * The timeout, in milliseconds, for one corpus package: an import and an export in process, then
- * the CLI's own `roundtrip` of the same package as a child process.
- *
- * Measured on 2026-11-03 at `15ab803` on a lease, over the 28 corpus packages with the CLI's
- * default `--timeout`: the slowest case was `simple` at 27.58 s (`sharedMedia` 27.45 s, `svg` 27.13
- * s), the accepted packages' round trip through the CLI, and a refused package took 13.9 to 18.0 s,
- * nearly all of it the child's start and the layer's build. The budget is the larger of twice the
- * slowest case (55.2 s) and 120 s, the floor the slice sets. Raise it only on a new measurement
- * recorded here, never to make a run pass.
+ * The timeout, in milliseconds, for one corpus package: a hang guard.
  */
 const corpusCaseTimeoutMs = 120_000;
 

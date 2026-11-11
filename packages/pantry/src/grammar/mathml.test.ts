@@ -74,8 +74,7 @@ import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 8.7 s at a load average of 63 to 73,
- * its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 120_000;
 
@@ -116,9 +115,7 @@ const cached = await Effect.runPromise(
 );
 
 /**
- * How long one xmllint run over a batch may take: compiling the MathML 3 RelaxNG took 8 s on
- * 2026-11-05 at a load average of about 40, with each instance after that milliseconds.
- * Measured 2026-11-07: 42.1 s at a load average of 63 to 73, the slower of its two tests.
+ * How long one xmllint run over a batch may take: a hang guard.
  */
 const xmllintTimeout = 120_000;
 

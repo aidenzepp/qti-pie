@@ -21,9 +21,8 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
- * The packaging search's timeout, in milliseconds: a hang guard past the describe's, never a
- * budget, which `searched` reads as its deadline. Its 12 imports took 0.3 s each in the full run at
- * 8a6af2e6, on the lease.
+ * The packaging search's timeout, in milliseconds: a hang guard past the describe's, which
+ * `searched` reads as its deadline.
  */
 const searchTimeoutMs = 600_000;
 

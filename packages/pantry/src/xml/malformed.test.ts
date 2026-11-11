@@ -1029,10 +1029,7 @@ interface FaultCase {
 }
 
 /**
- * How long the search may take: it reads the seeds, writes and judges every case's file, and
- * reads each case with crust (the grammar is composed when the file loads, before the test).
- * Measured 2026-11-07: 25.3 s at a load average of 83 to 90, and the budget is over four times
- * that.
+ * How long the search may take: a hang guard.
  */
 const searchTimeout = 120_000;
 

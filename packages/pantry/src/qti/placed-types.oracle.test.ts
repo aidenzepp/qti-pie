@@ -49,8 +49,7 @@ import {
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
- * The timeout, in milliseconds, that this file's test states: a hang guard, never a budget.
- * Measured 2026-11-09: 0.2 s at a load average of 68 to 127, its one test alone.
+ * The timeout, in milliseconds, that this file's test states: a hang guard.
  */
 const testTimeoutMs = 600_000;
 

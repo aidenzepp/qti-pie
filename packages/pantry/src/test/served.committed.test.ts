@@ -50,10 +50,7 @@ const configured: readonly { readonly login: AnyLogin; readonly schema: string }
 ];
 
 /**
- * How long one login's compile and comparison may take, the compile nearly all of it: 3.7 s on an
- * idle 8-core machine. On that machine beside 150 busy loops, Measured 2026-11-10: 80.3 s at a load
- * average of 63.7 to 151.4, and 74.3 s at a load average of 77.2 to 151.4; the constant is over
- * twice the slowest.
+ * How long one login's compile and comparison may take, the compile nearly all of it: a hang guard.
  */
 const servedTimeoutMs = 200_000;
 

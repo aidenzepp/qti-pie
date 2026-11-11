@@ -35,22 +35,17 @@ import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 5 s at a load average of 63 to 73,
- * its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 600_000;
 
 /**
- * How long building a schema over every relation of the schema may take: its statements are planned
- * whole, which takes some seconds beside the composed grammar.
- * Measured 2026-11-07: 2.8 s at a load average of 63 to 73.
+ * How long building a schema over every relation of the schema may take: a hang guard.
  */
 const buildTimeout = 60_000;
 
 /**
- * How long a search over the patterns may take: the value box is 16,105 cases, about 1.5 ms each
- * under the swarm's load, and the figures box 4,681.
- * Measured 2026-11-07: 3.6 s at a load average of 63 to 73, the slower box.
+ * How long a search over the patterns may take: a hang guard.
  */
 const searchTimeout = 180_000;
 

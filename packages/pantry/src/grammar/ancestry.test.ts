@@ -163,11 +163,7 @@ const flagged = [
 ] as const;
 
 /**
- * How long the exhaustive path search may take: ten times the 4.5 s its 16,276 cases (25 kinds)
- * took on 2026-11-05 at a load average of about 15, rounded up. Its 18,279 cases (every path of at
- * most 3 of 26 kinds, 1 + 26 + 26² + 26³) took 6.5 s the same day at a load average of about 40,
- * and its 20,440 (27 kinds) are within the same bound.
- * Measured 2026-11-07: 5.2 s at a load average of 63 to 73.
+ * How long the exhaustive path search may take: a hang guard.
  */
 const pathsTimeout = 60_000;
 

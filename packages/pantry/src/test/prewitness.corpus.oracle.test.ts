@@ -14,13 +14,7 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
 
 /**
- * The timeout, in milliseconds, for judging one corpus package: one read of its entries, then a
- * shred, a fold and every law over each document it lists, with no database.
- *
- * Measured on 2026-11-05 with the grammar of W3 on the shared tree: the slowest package,
- * `BPIG_22April`, took under 10 s while three other suites ran beside it. Measured 2026-11-07:
- * 9.6 s at a load average of 63 to 78, `BPIG_22April` again. The budget is the larger of twice that
- * and 60 s. Raise it only on a new measurement recorded here, never to make a run pass.
+ * The timeout, in milliseconds, for judging one corpus package: a hang guard.
  */
 const caseTimeoutMs = 60_000;
 

@@ -33,10 +33,7 @@ const absence = await Effect.runPromise(
 
 /**
  * The timeout, in milliseconds, of the regeneration, which reads both versions' schemas, derives
- * their models and formats the leaf through `vp fmt`. Measured 2026-11-07: 427.5 s at a load
- * average of 76 to 87, the hook that then also ran the xmllint oracle over every probe, an upper
- * bound on this test alone, which is not remeasured under the moratorium. Raise it only on a new
- * measurement recorded here, never to make a run pass.
+ * their models and formats the leaf through `vp fmt`: a hang guard.
  */
 const regenerateTimeoutMs = 900_000;
 

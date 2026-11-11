@@ -46,8 +46,7 @@ import { asiNamespace, xsiNamespace, xsNamespace } from "#pantry/vocab/namespace
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 11.1 s at a load average of 68 to
- * 108, its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 300_000;
 

@@ -22,8 +22,7 @@ import { Array as Arr, Equal } from "effect";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
- * How long reading `Qti`'s laws may take: `lawsOf` compiles its law model.
- * Measured 2026-11-08: 44.8 s at a load average of 68 to 80.
+ * How long reading `Qti`'s laws may take: a hang guard.
  */
 const compileTimeout = 180_000;
 

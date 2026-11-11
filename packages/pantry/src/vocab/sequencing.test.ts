@@ -25,8 +25,7 @@ import type { Automaton } from "#pantry/vocab/sequencing.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 99.7 s at a load average of 70 to
- * 74, its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 240_000;
 

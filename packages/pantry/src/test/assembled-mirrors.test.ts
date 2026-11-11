@@ -33,8 +33,7 @@ import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 14.2 s at a load average of 68 to
- * 108, its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 600_000;
 

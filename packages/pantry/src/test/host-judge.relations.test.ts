@@ -56,10 +56,7 @@ import { isJudged, readsDerived, SideSchema, StatementSchema } from "#pantry/tes
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
- * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard,
- * never a budget. Measured 2026-11-08: 79 s at a load average of 74 to 80, its slowest test. On
- * grizzle eb56d58 (2026-11-10) the same test took 89.7 s alone at a load average of 43 to 54, so
- * the value stays over three times either.
+ * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard.
  */
 const testTimeoutMs = 300_000;
 

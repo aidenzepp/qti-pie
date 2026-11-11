@@ -68,8 +68,7 @@ import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 0.7 s at a load average of 63 to 73,
- * its slowest test.
+ * describe: a hang guard.
  */
 const testTimeoutMs = 60_000;
 
@@ -274,10 +273,7 @@ const wildcardSchemas: readonly (readonly [SourcePath, SchemaVersion, string])[]
 ];
 
 /**
- * How long the differentials may take: six reads of the pinned XSDs (the two ASI ones 18 MB each,
- * 3.2 s apiece on 2026-11-05 at a load average of about 15), two `xmllint` runs over the ASI schema
- * (16 s each, the same day), and the in-process comparison. Twice the worst measured, rounded up.
- * Measured 2026-11-07: 189.5 s at a load average of 63 to 73, the slowest differential.
+ * How long the differentials may take: a hang guard.
  */
 const xsdTimeout = 600_000;
 

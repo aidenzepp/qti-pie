@@ -128,8 +128,7 @@ describe("grammar/labels.ts, the kinds whose label asks for its tool", () => {
 
 /**
  * The timeout, in milliseconds, for reading both versions' ASI XSDs, each hashed against its pin
- * and parsed whole: 20 s on 2026-11-06 at a load of about 40. Measured 2026-11-07: 37.8 s at a load
- * average of 63 to 73, which the budget is over twice.
+ * and parsed whole: a hang guard.
  */
 const xsdTimeoutMs = 90_000;
 

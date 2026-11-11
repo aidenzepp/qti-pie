@@ -40,8 +40,7 @@ const grammar = Result.getOrThrow(composed());
 const laws = lawsOf(grammar);
 
 /**
- * The timeout, in milliseconds, that each of this file's tests states: a hang guard, never a
- * budget. Measured 2026-11-07: 2.8 s at a load average of 85 to 93, its slowest test.
+ * The timeout, in milliseconds, that each of this file's tests states: a hang guard.
  */
 const testTimeoutMs = 120_000;
 

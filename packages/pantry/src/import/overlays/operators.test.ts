@@ -55,8 +55,7 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 const shredGrammar = shredGrammarOf(Result.getOrThrow(composed()));
 
 /**
- * How long a search over documents may take: each case reads and shreds an item. Measured
- * 2026-11-07: 2.8 s at a load average of 75, under V8 coverage, and 1.7 s at 63 to 73 without it.
+ * How long a search over documents may take: a hang guard.
  */
 const searchTimeout = 180_000;
 

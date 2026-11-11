@@ -53,8 +53,7 @@ import { hasLease } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
- * How long the search may run, a hang guard: each case imports its package twice and exports what
- * it accepts, a few seconds a case on the lease.
+ * How long the search may run: a hang guard.
  */
 const orderTimeoutMs = 900_000;
 

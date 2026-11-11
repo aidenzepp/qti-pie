@@ -64,10 +64,7 @@ import type { Domain } from "#pantry/vocab/inventory/types.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
- * The timeout, in milliseconds, for the one test: one `xmllint` run per version over every probe,
- * after reading both versions' XSDs with the shared reader. Measured 2026-11-07: 141.9 s at a load
- * average of 63 to 73, which the budget, 300 s, is over twice. Raise it only on a new measurement
- * recorded here, never to make a run pass.
+ * The timeout, in milliseconds, for the one test: a hang guard.
  */
 const testTimeoutMs = 300_000;
 
