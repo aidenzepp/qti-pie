@@ -267,6 +267,11 @@ export type GraphicAssociatePart =
  * image with its hotspots and the pairs. The Hotspots and the Pairs are lists, so a swap to a flow
  * container takes the list joint rule's roles. The Outline is an `svg` that stays `aria-hidden`;
  * the Hidden input stays a hidden input of the name and value plate computed.
+ *
+ * The Outline is the `svg` that opens the picture, so it is `svg` and not `any` (handbook rule 18,
+ * issue ei-10c, GitHub issue #425, feature Q-7): only an `svg` may replace it, because under any
+ * other element its shapes parse as unknown HTML elements that draw nothing. A replacement of any
+ * other name is refused with `PartSwapRefused`.
  */
 const parts = {
   hidden: {
@@ -309,7 +314,7 @@ const parts = {
     element: "svg",
     listOwner: false,
     merged: ["aria-hidden", "preserveAspectRatio", "viewBox"],
-    tagClass: "any",
+    tagClass: "svg",
   },
   pair: {
     defaults: {},

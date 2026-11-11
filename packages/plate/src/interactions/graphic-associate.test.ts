@@ -9,7 +9,9 @@ import {
   decodeRedacted,
   encodeRedacted,
   entryName,
+  h,
   open,
+  PartSwapRefused,
   postings,
   redact,
   render,
@@ -808,6 +810,42 @@ describe("[Q-7] Graphic Associate", () => {
         );
 
         assert.isTrue(Result.isFailure(decodeRedacted(tampered)));
+      }),
+  );
+
+  it.effect(
+    "[Q-7] an Outline swap to a div is refused root-not-allowed, and a swap to an svg keeps the shape inside it",
+    () =>
+      Effect.gen(function* outlineSwapped() {
+        const accepted = yield* fixture();
+        const refused = yield* Effect.flip(
+          rendered(accepted, {
+            parts: { [owner]: { outline: (props, children) => h("div", props, children) } },
+          }),
+        );
+        const page = yield* rendered(accepted, {
+          parts: {
+            [owner]: {
+              outline: (props, children) => h("svg", { ...props, "data-swapped": "yes" }, children),
+            },
+          },
+        });
+        const outlines = parts(page.root, "-outline");
+
+        assert.strictEqual(refused._tag, "PartSwapRefused");
+        assert.instanceOf(refused, PartSwapRefused);
+        assert.strictEqual(refused.cause, "root-not-allowed");
+        assert.strictEqual(refused.interaction, owner);
+        assert.strictEqual(refused.part, "outline");
+        assert.lengthOf(outlines, 4);
+        assert.isTrue(
+          outlines.every((svg) => svg.tag === "svg" && attr(svg, "data-swapped") === "yes"),
+          "every Outline is a swapped svg",
+        );
+        assert.deepStrictEqual(drawnOf(outlineOf(page.root, "H1")?.figure), {
+          attrs: { height: "60", width: "70", x: "20", y: "30" },
+          tag: "rect",
+        });
       }),
   );
 });

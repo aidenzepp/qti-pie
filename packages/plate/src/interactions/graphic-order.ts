@@ -238,9 +238,15 @@ export type GraphicOrderPart =
  * The Root is a `role="group"` custom element, as an Extended Text's is, and holds the Prompt, the
  * image with its hotspots and the positions. The Hotspots and the positions are lists, so a
  * swap to a flow container takes the list joint rule's roles. The Outline is an `svg` that stays
- * `aria-hidden` and holds its shape and, for an ordered hotspot, the Badge, an SVG `text` that
- * `any` element may replace; the Hidden input stays a hidden input of the name and value plate
- * computed.
+ * `aria-hidden` and holds its shape and, for an ordered hotspot, the Badge, an SVG `text`; the
+ * Hidden input stays a hidden input of the name and value plate computed.
+ *
+ * Both parts live in foreign content, so neither is `any` (handbook rule 18, issue ei-10c, GitHub
+ * issue #425, feature Q-9). The Badge is `svg-content`: only an SVG element may replace it, because
+ * the HTML parser moves a `strong` or a `div` out of the Outline to its next sibling, and keeps any
+ * other name as an element that renders nothing. The Outline is `svg`: only an `svg` may replace
+ * it, because under any other element its shapes parse as unknown HTML elements that draw nothing.
+ * A replacement of any other name is refused with `PartSwapRefused`.
  */
 const parts = {
   badge: {
@@ -248,7 +254,7 @@ const parts = {
     element: "text",
     listOwner: false,
     merged: ["x", "y", "data-position"],
-    tagClass: "any",
+    tagClass: "svg-content",
   },
   hidden: {
     defaults: {},
@@ -290,7 +296,7 @@ const parts = {
     element: "svg",
     listOwner: false,
     merged: ["aria-hidden", "preserveAspectRatio", "viewBox"],
-    tagClass: "any",
+    tagClass: "svg",
   },
   prompt: {
     defaults: {},
