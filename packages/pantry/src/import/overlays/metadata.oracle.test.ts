@@ -23,9 +23,9 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
-import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { declaredVersionOf } from "#pantry/import/read.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
 import type { MetadataIds, MetadataRows } from "#pantry/import/overlays/metadata.ts";
@@ -102,27 +102,6 @@ const idsFor = (
 });
 
 /**
- * Read the schema version a manifest declares: its root's `metadata` child's `schemaversion` text.
- *
- * @param manifest - The manifest crust read.
- * @returns The text, none when it declares none.
- */
-const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
-  Option.fromNullishOr(
-    manifest.root.children
-      .flatMap((child) => (child.kind === "element" && child.local === "metadata" ? [child] : []))
-      .flatMap(({ children }) =>
-        children.flatMap((child) =>
-          child.kind === "element" && child.local === "schemaversion" ? [child] : [],
-        ),
-      )
-      .map(({ children }) =>
-        children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
-      )
-      .at(0),
-  );
-
-/**
  * A package's documents as the builder reads them: the manifest's tree, and each other XML entry's
  * that shreds, by its path, with its number.
  */
@@ -148,7 +127,7 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
 
   const manifestXml = yield* Effect.orDie(readXml(manifestFile.bytes));
   const version = Result.getOrThrow(
-    versionOf(grammar.kinds.versions.handles, declaredVersion(manifestXml)),
+    versionOf(grammar.kinds.versions.handles, declaredVersionOf(manifestXml)),
   );
   const manifest = yield* Effect.orDie(shred(manifestXml, version, shredGrammar));
   const documents = new Map<

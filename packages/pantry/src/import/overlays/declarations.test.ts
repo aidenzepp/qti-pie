@@ -23,13 +23,13 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import {
   BaseTypeLexical,
   CardinalityLexical,
   grammar,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
+import { declaredVersionOf } from "#pantry/import/read.ts";
 import { rowsOf } from "#pantry/import/overlays/declarations.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
@@ -976,27 +976,6 @@ describe("import/overlays/declarations.ts", () => {
 });
 
 /**
- * Read a manifest's schema version from its tree: the text of `metadata/schemaversion`.
- *
- * @param manifest - The manifest as crust read it.
- * @returns The version it declares, none when it declares none.
- */
-const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
-  Option.fromNullishOr(
-    manifest.root.children
-      .flatMap((child) => (child.kind === "element" && child.local === "metadata" ? [child] : []))
-      .flatMap((metadata) =>
-        metadata.children.flatMap((child) =>
-          child.kind === "element" && child.local === "schemaversion" ? [child] : [],
-        ),
-      )
-      .map((found) =>
-        found.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
-      )
-      .at(0),
-  );
-
-/**
  * Read a package's documents and build each one's overlay rows: every XML entry that shreds under
  * the manifest's schema version.
  *
@@ -1013,7 +992,7 @@ const documentsOf = (dir: string) =>
 
     const version = versionOf(
       grammar.kinds.versions.handles,
-      declaredVersion(yield* readXml(manifest.bytes)),
+      declaredVersionOf(yield* readXml(manifest.bytes)),
     );
     if (Result.isFailure(version)) {
       return [];

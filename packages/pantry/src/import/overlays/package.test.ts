@@ -18,7 +18,6 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import {
   documentTypes,
   grammar,
@@ -26,6 +25,7 @@ import {
   ReferenceAttribute,
   ResourceTypeLexical,
 } from "#pantry/grammar/install.ts";
+import { declaredVersionOf } from "#pantry/import/read.ts";
 import {
   namedDocuments,
   referenceCensus,
@@ -717,27 +717,6 @@ const fixtures = [
 const packages = ["lti", "metaData", "usageData"] as const satisfies readonly NamedPackage[];
 
 /**
- * Read a manifest's schema version from its tree: the text of `metadata/schemaversion`.
- *
- * @param manifest - The manifest as crust read it.
- * @returns The version it declares, none when it declares none.
- */
-const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
-  Option.fromNullishOr(
-    manifest.root.children
-      .flatMap((child) => (child.kind === "element" && child.local === "metadata" ? [child] : []))
-      .flatMap((metadata) =>
-        metadata.children.flatMap((child) =>
-          child.kind === "element" && child.local === "schemaversion" ? [child] : [],
-        ),
-      )
-      .map((found) =>
-        found.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
-      )
-      .at(0),
-  );
-
-/**
  * Build a manifest of resources, each its own identifier, its href listed as its one file and the
  * type it writes, if any, and read the unread-type hrefs of the builder's rows
  * ({@link unreadTypeHrefsOf}).
@@ -948,7 +927,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
           }
 
           const xml = yield* readXml(manifest.bytes);
-          const version = versionOf(grammar.kinds.versions.handles, declaredVersion(xml));
+          const version = versionOf(grammar.kinds.versions.handles, declaredVersionOf(xml));
           if (Result.isFailure(version)) {
             continue;
           }
