@@ -27,6 +27,7 @@
  * `#pantry/import/fold.ts`), so the tree and every overlay builder read one view and name each node
  * by one id.
  */
+import { randomUUIDv7 } from "node:crypto";
 import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
 import { Option, Struct } from "effect";
@@ -155,6 +156,16 @@ export interface PackageIds {
 }
 
 /**
+ * Draw a fresh id: an RFC 9562 version 7 uuid, whose leading 48 bits are the Unix time in
+ * milliseconds, so an id drawn later is greater. The package's id is the first an import draws, so
+ * of two imports of a package, the later one's id is the greater: an application lists the newest
+ * import of a package by its id alone. Two imports in the same millisecond are ordered by chance.
+ *
+ * @returns The id.
+ */
+export const mintId = (): NodeId => randomUUIDv7();
+
+/**
  * Mint the ids of one package and view each of its documents: one fresh uuid for the package, then
  * each document flattened once, `flatten` drawing a fresh uuid for each XDM node and each attribute
  * as it numbers them, judged in its context (`contextsOf` of `#pantry/import/context.ts`) and
@@ -169,13 +180,13 @@ export interface PackageIds {
  *
  * @param documents - The package's documents, in the listing's order.
  * @param entries - The paths of the package's entries.
- * @param mint - Draws a fresh uuid. Defaults to `crypto.randomUUID`.
+ * @param mint - Draws a fresh uuid. Defaults to {@link mintId}.
  * @returns The package's id and each document placed and viewed, in the order given.
  */
 export const nodeIdsOf = (
   documents: readonly ListedDocument[],
   entries: Iterable<string>,
-  mint: () => NodeId = () => crypto.randomUUID(),
+  mint: () => NodeId = mintId,
 ): PackageIds => {
   const entryPaths: ReadonlySet<string> = new Set(entries);
   const entryAt = (path: string): boolean => entryPaths.has(path);

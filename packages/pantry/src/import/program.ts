@@ -25,7 +25,13 @@ import type { QtiPackage } from "#pantry/import/read.ts";
 import { packageRecordOf } from "#pantry/import/record.ts";
 import { documentLayer } from "#pantry/import/roster.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
-import { documentRowsOf, nodeIdsOf, packageFactsOf, rootInsertOf } from "#pantry/import/write.ts";
+import {
+  documentRowsOf,
+  mintId,
+  nodeIdsOf,
+  packageFactsOf,
+  rootInsertOf,
+} from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot, PackageInputs, PlacedDocument } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 
@@ -54,12 +60,12 @@ export interface ImportProgram {
  * `OverlayConflict` that names it.
  *
  * @param pkg - The package, as `readPackage` read it.
- * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
+ * @param mint - Draws each fresh uuid. Defaults to `mintId`, time-ordered; a test passes its own.
  * @returns The program.
  */
 export const programOf = Effect.fn("import.programOf")(function* programOf(
   pkg: QtiPackage,
-  mint: () => NodeId = () => crypto.randomUUID(),
+  mint: () => NodeId = mintId,
 ): Effect.fn.Return<ImportProgram> {
   const ids = nodeIdsOf([pkg.manifest, ...pkg.documents], pkg.files.keys(), mint);
   const placed = ids.documents;
@@ -124,12 +130,12 @@ export interface ImportRows {
  * packages.
  *
  * @param pkg - The package, as `readPackage` read it.
- * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
+ * @param mint - Draws each fresh uuid. Defaults to `mintId`, time-ordered; a test passes its own.
  * @returns The rows and the package's id.
  */
 export const importRowsOf = Effect.fn("import.importRowsOf")(function* importRowsOf(
   pkg: QtiPackage,
-  mint: () => NodeId = () => crypto.randomUUID(),
+  mint: () => NodeId = mintId,
 ): Effect.fn.Return<ImportRows> {
   const { inputs, packageId } = yield* programOf(pkg, mint);
 
@@ -141,13 +147,13 @@ export const importRowsOf = Effect.fn("import.importRowsOf")(function* importRow
  * {@link programOf}. The dry run and the tests that judge the import's rows read a package this way.
  *
  * @param dir - The package directory or `.zip` file.
- * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
+ * @param mint - Draws each fresh uuid. Defaults to `mintId`, time-ordered; a test passes its own.
  * @returns The program. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be read.
  */
 export const readProgram = Effect.fn("import.readProgram")(function* readProgram(
   dir: string,
-  mint: () => NodeId = () => crypto.randomUUID(),
+  mint: () => NodeId = mintId,
 ): Effect.fn.Return<
   ImportProgram,
   ImportRefused | PlatformError.PlatformError,

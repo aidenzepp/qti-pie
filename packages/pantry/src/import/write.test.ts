@@ -30,7 +30,7 @@ import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
 import { tokensOf } from "#pantry/import/pieces.ts";
-import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
+import { documentRowsOf, mintId, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   AttributeInsert,
   DocumentLayerRows,
@@ -1160,4 +1160,21 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
         }
       }),
   );
+});
+
+describe("mintId", () => {
+  it("draws a version 7 uuid whose leading 48 bits are the millisecond it was drawn, so a later draw is greater", () => {
+    // Oracle: RFC 9562 §5.7, UUIDv7's layout: unix_ts_ms in the first 48 bits, the version 7 in
+    // the 13th hex digit and the variant 10 in the 17th. A later millisecond gives a greater id.
+    // Bound: one draw, read against the clock on both sides of it.
+    const before = Date.now();
+    const hex = mintId().replaceAll("-", "");
+    const after = Date.now();
+    const drawnAt = Number.parseInt(hex.slice(0, 12), 16);
+
+    assert.strictEqual(hex[12], "7");
+    assert.include(["8", "9", "a", "b"], hex[16]);
+    assert.isAtLeast(drawnAt, before);
+    assert.isAtMost(drawnAt, after);
+  });
 });
