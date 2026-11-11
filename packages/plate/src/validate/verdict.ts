@@ -26,6 +26,7 @@ import {
   walk,
   xincludeNamespace,
   xmlNamespace,
+  xsiNamespace,
 } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -469,6 +470,16 @@ const secureAttributes = (
 };
 
 /**
+ * Report whether an attribute is `xsi:type`, the one attribute by which an element's governing
+ * table can be other than its name's.
+ *
+ * @param attribute The attribute.
+ * @returns Whether it is `xsi:type`.
+ */
+const isXsiType = (attribute: SourceAttribute): boolean =>
+  attribute.namespace === xsiNamespace && attribute.local === "type";
+
+/**
  * Secure a source before the item is built from it.
  *
  * Each element is rebuilt after its descendants, from the walk in reverse, so the work needs no
@@ -478,16 +489,28 @@ const secureAttributes = (
  * It reads only the fields of {@link SecuringTables}, so the full tables and the securing tables'
  * projection of them secure a document alike.
  *
+ * The table that governs an element is its name's unless the element writes an `xsi:type` that
+ * names a type ({@link governingTables}, whose walk resolves the type's prefix and checks it
+ * derives from the name's), so only a document that writes an `xsi:type` is walked by the tables:
+ * in any other, every element's governing table is its name's, which {@link secureAttributes}
+ * looks up itself.
+ *
  * @param source A document the validators accepted, or content admission already checked, that
  *   phase 1 can judge.
+ * @param visits The document's walk ({@link walk}), in document order.
  * @param tables The securing tables: the full tables it was checked against, or their projection.
  * @returns The secured source, E3's marks and the dropped URLs.
  */
-const secure = (source: SourceDocument, tables: SecuringTables): Secured => {
+const secure = (
+  source: SourceDocument,
+  visits: readonly Visit[],
+  tables: SecuringTables,
+): Secured => {
   const marks: UnsupportedFeature[] = [];
   const drops = new Map<string, string[]>();
-  const governing = governingTables(source, tables);
-  const visits = [...walk(source)];
+  const governing = visits.some(({ element }) => element.attributes.some(isXsiType))
+    ? governingTables(source, tables)
+    : new Map<SourceElement, SecuringContent>();
   const attributes = new Map(
     visits.map(
       (visit) => [visit.element, secureAttributes(visit, tables, governing, marks, drops)] as const,
@@ -725,14 +748,15 @@ const placeNode = (
  * and path.
  *
  * @param entries The item's own features, then E3's marks, then the dropped URLs'.
- * @param source The document, whose walk gives each element's order.
+ * @param visits The document's walk, which gives each element's order; securing keeps every
+ *   element and its path, so the walk of the source before securing serves. Only the features'
+ *   own paths are indexed.
  * @returns The features ordered by their element, keeping the given order within one element.
  */
 const inDocumentOrder = (
   entries: readonly UnsupportedFeature[],
-  source: SourceDocument,
+  visits: readonly Visit[],
 ): readonly UnsupportedFeature[] => {
-  const order = new Map(Array.from(walk(source), (visit, index) => [visit.path, index] as const));
   const seen = new Set<string>();
   const unique = entries.filter((entry) => {
     const key = `${entry.feature}\n${entry.path}`;
@@ -741,6 +765,13 @@ const inDocumentOrder = (
 
     return fresh;
   });
+  const paths = new Set(unique.map((entry) => entry.path));
+  const order = new Map<string, number>();
+  for (const [index, visit] of visits.entries()) {
+    if (paths.has(visit.path)) {
+      order.set(visit.path, index);
+    }
+  }
 
   return unique.toSorted((a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0));
 };
@@ -754,9 +785,10 @@ const inDocumentOrder = (
  *
  * @param built The item built from the secured source.
  * @param secured The secured source and what securing it removed.
+ * @param visits The walk of the source before securing, whose paths are the secured source's.
  * @returns The item with its notices placed and every unsupported feature listed.
  */
-const complete = (built: Item, secured: Secured): Item => {
+const complete = (built: Item, secured: Secured, visits: readonly Visit[]): Item => {
   const placed = new Set<string>();
   const result = placeNodes(built.body, secured.drops, placed, false);
   const modalFeedback = built.modalFeedback?.map((feedback) => {
@@ -775,10 +807,7 @@ const complete = (built: Item, secured: Secured): Item => {
   const completed: Item = {
     ...built,
     body: [...result.nodes, ...result.lifted],
-    unsupported: inDocumentOrder(
-      [...built.unsupported, ...secured.marks, ...dropped],
-      secured.source,
-    ),
+    unsupported: inDocumentOrder([...built.unsupported, ...secured.marks, ...dropped], visits),
   };
 
   return modalFeedback === undefined ? completed : { ...completed, modalFeedback };
@@ -799,16 +828,16 @@ const complete = (built: Item, secured: Secured): Item => {
  * shares P4 in part: reading 115 ("An include names a document of its package or a resource
  * outside it") admits an external include, and reading 85 still refuses the other two.
  *
- * @param source A document whose root is in QTI's namespace.
+ * @param visits The walk of a document whose root is in QTI's namespace.
  * @param kind The root's kind.
  * @returns The reasons, empty when plate can judge all of it.
  */
 const uncheckedReasons = (
-  source: SourceDocument,
+  visits: readonly Visit[],
   kind: VerdictKind,
 ): readonly UncheckedReason[] => {
   const reasons: UncheckedReason[] = [];
-  for (const { element, parent, path } of walk(source)) {
+  for (const { element, parent, path } of visits) {
     /**
      * Report whether the element starts an island of a namespace: it is in that namespace and its
      * parent, if any, is not.
@@ -959,23 +988,25 @@ const withDefaultMinimum = (
  * defaults ({@link withDefaultMinimum}), and accept it.
  *
  * @param source The item.
+ * @param visits The item's walk ({@link walk}).
  * @param tables The securing tables: the full tables it was checked against, or their projection.
  * @param version The document's QTI version, none when it states none.
  * @returns `refused` when the builder refuses it, else `accepted` or `accepted-with-unsupported`.
  */
 const checkItem = (
   source: SourceDocument,
+  visits: readonly Visit[],
   tables: SecuringTables,
   version: Option.Option<CpVersion>,
 ): Verdict => {
   const document = source.location;
-  const secured = secure(source, tables);
+  const secured = secure(source, visits, tables);
   const built = buildItem(secured.source);
   if (Result.isFailure(built)) {
     return { document, kind: "item", refusals: [built.failure], verdict: "refused" };
   }
 
-  const completed = complete(built.success, secured);
+  const completed = complete(built.success, secured, visits);
   const item = { ...completed, outcomes: withDefaultMinimum(completed.outcomes, version) };
   const accepted = accept({ document, item, unsupported: item.unsupported });
 
@@ -1099,7 +1130,8 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
 /**
  * Give the verdict on a QTI document no validator refuses, from step 3 of {@link check} on: it is
  * `unchecked` for any of {@link uncheckedReasons} or a root plate does not judge, and is otherwise
- * secured, built and accepted by its kind.
+ * secured, built and accepted by its kind. The document is walked once, here, and the reasons,
+ * the securing and the order of the unsupported features all read that walk.
  *
  * @param source The document.
  * @param kind Its root's kind.
@@ -1114,14 +1146,15 @@ const judge = (
   version: Option.Option<CpVersion>,
 ): Verdict => {
   const document = source.location;
-  const reasons = uncheckedReasons(source, kind);
+  const visits = [...walk(source)];
+  const reasons = uncheckedReasons(visits, kind);
   if (reasons.length > 0 || !isAcceptedKind(kind)) {
     return { document, kind, reasons, verdict: "unchecked" };
   }
 
   switch (kind) {
     case "item": {
-      return checkItem(source, tables, version);
+      return checkItem(source, visits, tables, version);
     }
     case "test": {
       return checkTest(source, version);
