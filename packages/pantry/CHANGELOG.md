@@ -12,6 +12,20 @@ pantry is not tagged yet; the first `pantry-v0.<n>.0` tag carries these entries.
 exported eight module subpaths and the command line read an install folder. [Moving an app to the entry
 point](#moving-an-app-to-the-entry-point) says what replaces each.
 
+### One migration, drawn from zero
+
+- pantry's migration history is collapsed into one migration, `20261111045312_sterling-standard`, which
+  `grizzle generate` drew from zero over the schema of every entry below. It installs what
+  `20261110175742_sterling-standard` and `20261111020155_pantry-api-1` installed together, plus `Entry`'s `digest`
+  column. Those two folders are gone, and no migration leads from them to the new one.
+- Breaking, with no backwards compatibility: a database installed from the old chain is not migrated. Drop it, and
+  the installation's PostgreSQL roles with it (roles are cluster-wide, and the new migration creates them), then
+  install fresh: create the database and run `grizzle migrate` over the one migration. No stored row carries over, so
+  import the packages again.
+- An app's own migrations are drawn from its own snapshot, so the collapse moves none of them. The schema change it
+  regenerates for is `Entry.digest`, below.
+- No rule name or LawId changes: `src/vocab/law-names.json`, written again from the new snapshot, is unchanged.
+
 ### A package parsed once
 
 - `parsePackage(source)` reads and parses a package once, with no database, and succeeds with a `ParseVerdict`:
@@ -150,8 +164,9 @@ and `PublishedRow<Name>` types. Every other field and relation is internal.
 - An attribute's value is at most 268,435,454 UTF-8 bytes, the longest text PostgreSQL's regular expressions read.
   A longer value is refused under the new rule `regex-text-bound` (reading 178, proposed). Before, it failed with a
   raw database error, so no value that was stored before is refused now, and no corpus verdict changes.
-- The migration `20261110175052_pantry-api-1`, after `20261110140649_init`, puts that bound on `Attribute`'s value.
-  An app regenerates its own migration over it, and its served file with it.
+- pantry's one migration, `20261111045312_sterling-standard` ([One migration, drawn from
+  zero](#one-migration-drawn-from-zero)), puts that bound on `Attribute`'s value. An app regenerates its own migration
+  over it, and its served file with it.
 
 ### The command line
 

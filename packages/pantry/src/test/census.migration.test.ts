@@ -1,12 +1,12 @@
 /**
- * The census of the committed migration chain (plan-qti-pie Q6.02): the two migration folders the
- * Qti schema holds, the `_sterling-standard` first and pantry-api-1 on top, beside the snapshot's
- * two files and `served/`, which holds the one file `grizzle generate` writes for the author login
+ * The census of the committed migration chain (plan-qti-pie Q6.02): the migration folders the Qti
+ * schema holds, today the one `_sterling-standard` drawn from zero, beside the snapshot's two files
+ * and `served/`, which holds the one file `grizzle generate` writes for the author login
  * (`#pantry/db/served.ts`), taken together by `#pantry/test/census.ts`, meet fin.md §13's zero
  * targets, except its validate files and constraint triggers, which the measured counts hold
- * instead (2 validate files and 97 constraint triggers across the chain, 96 of them in the
- * database), and hold those counts. It lands with the migrations it reads, so it is a file of its
- * own: the census's parser and its targets are `census.test.ts`'s, which need no migration.
+ * instead (1 validate file and 96 constraint triggers), and hold those counts. It lands with the
+ * migrations it reads, so it is a file of its own: the census's parser and its targets are
+ * `census.test.ts`'s, which need no migration.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -16,15 +16,14 @@ import { Qti } from "#pantry/test/qti.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed chain's measured counts (the `_sterling-standard` drafted from zero on grizzle
- * `eb56d58b` (#379), which holds the counts the `_init` drafted from zero on grizzle `450d098` held
- * after the composition's restated include, symbol and admission sets and the author login's
- * package read, which move none of them, and after the merge of upstream's genetic repair round 4,
- * whose placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads
- * four tables, so four constraint triggers more, and its placed map responses' two containments
- * move no count; then pantry-api-1 on top, which rebuilds the one constraint trigger that reads
- * `attribute.lexical`, dropped in its structure step and created again in its own `-validate.sql`,
- * so the chain's text counts 97 triggers and 2 validate files while the database holds 96), as a
+ * The committed chain's measured counts (the one `_sterling-standard`, drawn from zero on grizzle
+ * `eb56d58b` over the schema with `Entry.digest` and `Attribute.lexical`'s byte bound, which move
+ * none of them: it holds the counts the `_init` drafted from zero on grizzle `450d098` held after
+ * the composition's restated include, symbol and admission sets and the author login's package
+ * read, which move none of them, and after the merge of upstream's genetic repair round 4, whose
+ * placed reference type is a query, `PlacedReferenceType`: its rule, "Condition type", reads four
+ * tables, so four constraint triggers more, and its placed map responses' two containments move no
+ * count; the chain's text and the database both hold 96 triggers, in its one `-validate.sql`), as a
  * ratchet: a change that moves one fails here until the count is measured again. A regeneration
  * updates them here, and only here.
  *
@@ -45,13 +44,13 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  */
 const measured = {
   constants: 119,
-  constraintTriggers: 97,
+  constraintTriggers: 96,
   live: 7,
   names: 48,
   nodeAxes: 5,
   nodeKeys: 48,
   tables: 251,
-  validateFiles: 2,
+  validateFiles: 1,
 } as const;
 
 /**

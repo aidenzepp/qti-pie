@@ -139,7 +139,7 @@ CREATE TABLE "qti"."attribute" (
   "idref_text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "idrefs" "qti"."__domain_gfw43vigph" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "lexical" "qti"."__text_c6iptmtj2x" NOT NULL,
+  "lexical" "qti"."__text_tfkvgtjblt" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "open_name" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -948,6 +948,7 @@ CREATE TABLE "qti"."entry" (
   "content" "pg_catalog"."bytea" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
   "path" "qti"."__text_ca4i7j77gp" NOT NULL,
+  "digest" "qti"."__text_vrcyezm7ka" GENERATED ALWAYS AS ("pg_catalog"."encode"("pg_catalog"."sha256"("content"), 'hex'::"pg_catalog"."text")) STORED NOT NULL,
   CONSTRAINT "__entry_pk_pft7stbhq7" PRIMARY KEY ("package", "at"),
   CONSTRAINT "__entry_key_package_path_axr6pzomhu" UNIQUE NULLS DISTINCT ("package", "path")
 );
