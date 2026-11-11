@@ -14,7 +14,17 @@
 import { createHash } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Db, login, query, uuid, v, workload } from "@bjornpagen/grizzle";
+import {
+  Db,
+  login,
+  query,
+  role,
+  uuid,
+  v,
+  wholeEntriesOf,
+  workload,
+  writableNamesOf,
+} from "@bjornpagen/grizzle";
 import type { Addition, Fact } from "@bjornpagen/grizzle";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
@@ -23,7 +33,6 @@ import type { EntryRow } from "#pantry/package/record.ts";
 import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { Entry } from "#pantry/qti/package.ts";
-import { authorRoleOf } from "#pantry/qti/roles.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { servedProbe } from "#pantry/test/served-members.ts";
@@ -49,10 +58,11 @@ const digestUnwritten = {
 };
 
 /**
- * The author role of this file's probe login: grizzle puts a role in one login only, so the probe
- * holds a role of its own, named as the installed one.
+ * The author role of this file's probe login, declared as `#pantry/qti/roles.ts` declares `Author`:
+ * grizzle puts a role in one login only, and `Author` is `AuthorApp`'s, so the probe holds a role
+ * of its own, named as the installed one.
  */
-const probeAuthor = authorRoleOf(Qti);
+const probeAuthor = role(Qti, "author", wholeEntriesOf(Qti), { insert: writableNamesOf(Qti) });
 
 /**
  * The author login with this file's read of a package's entries, each with its bytes and its
