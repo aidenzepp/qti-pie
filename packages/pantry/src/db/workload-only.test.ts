@@ -2,8 +2,8 @@
  * The programs pantry runs on a database, held to its author login's workload: no production module
  * calls a `Db` outside its `workload` handles. A served `Db` runs the programs `grizzle generate`
  * compiled into the login's served file alone, and refuses every other operation before any SQL,
- * yet its type still declares `apply`, `compile`, `execute`, `explain`, `get`, `page` and
- * `refresh`, so a call of one typechecks and fails only when it runs. This search refuses it.
+ * yet its type still declares `apply`, `compile`, `execute`, `get`, `page` and `refresh`, so a call
+ * of one typechecks and fails only when it runs. This search refuses it.
  *
  * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/adapter/db/served.ts#L144-L171
  */
@@ -20,7 +20,7 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 /**
  * A `Db`'s operations outside its workload, each one a served `Db` refuses.
  */
-const adHocOperations = ["apply", "compile", "execute", "explain", "get", "page", "refresh"];
+const adHocOperations = ["apply", "compile", "execute", "get", "page", "refresh"];
 
 /**
  * Blank out a module's comments, keeping its strings whole, so a call a comment names counts for
@@ -100,7 +100,7 @@ describe("pantry's programs on a database", () => {
       "yield* session\n  .apply(changes, {});",
       "yield* session.workload.packageOf.get({ id });",
       "yield* other.get(Package, { id });",
-      "// session.explain(scan, {}) reads a plan",
+      "// session.execute(scan, {}) reads the rows",
     ].join("\n");
 
     assert.deepStrictEqual(adHocCalls(planted), ["session.apply", "session.get"]);
