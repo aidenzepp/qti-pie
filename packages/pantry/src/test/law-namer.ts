@@ -150,11 +150,12 @@ export const namedBy = (
  * - An entry's `digest` is the SHA-256 of its `content`, `Compute.sha256`, defined on every bytes
  *   value: never NULL, so it is named by the law of its relation's rows, "Entry family".
  * - A key text's compared form is its lexical form collapsed (a manifest's and a resource's
- *   `identifier`, a dependency's `ref`, a card's `support`, a default entry's `value`), with each
- *   whitespace character replaced (an object's `titleValue`, a LOM title string's `textValue`),
- *   ASCII case-folded (a LOM string's `languageTag`) or collapsed and case-folded (an object's
- *   `langTag`), cast into the form's own key text, a cast the schema proves total: a written text,
- *   never NULL.
+ *   `identifier`, a dependency's `ref`, a card's `support`, a default entry's `value`, an
+ *   interaction attribute's `value`, a rounding operator's `figures`), with each whitespace
+ *   character replaced (an object's `titleValue`, a LOM title string's `textValue`), ASCII
+ *   case-folded (a LOM string's `languageTag`, and a map key's `matched` where its mapping folds
+ *   case, its `key` as written otherwise) or collapsed and case-folded (an object's `langTag`),
+ *   cast into the form's own key text, a cast the schema proves total: a written text, never NULL.
  * - A code's spelling and its expression type are a closed read keyed by the row's own code, which
  *   holds a row for every handle: a declaration's cardinality's and base type's, a value's base
  *   type's and a resource type's `…Lexical` (`CardinalityLexical`, `BaseTypeLexical`,
@@ -191,6 +192,9 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "Dependency.ref",
     "CardSupport.support",
     "DefaultEntry.value",
+    "InteractionAttribute.value",
+    "RoundingFigures.figures",
+    "MapKey.matched",
     "ObjectTitle.titleValue",
     "LomTitleString.textValue",
     "LomStringLanguage.languageTag",
