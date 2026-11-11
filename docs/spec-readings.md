@@ -1400,7 +1400,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     held by the reader's namespace well-formedness (Namespaces in XML 1.0, section 5, "Namespace constraint: Prefix
     Declared"), since crust's reader refuses a prefix no declaration in scope binds as a `WellFormednessError`
     (`packages/crust/src/read.ts`, `saxes` reading with namespaces on). The corpus holds no `xsi:type` and no `role`, so
-    no verdict moves. (The limit recorded 2026-11-06 from W5 seat PN, C48 of `docs/research/up.md`, closed 2026-11-07 by
+    no verdict moves. (The limit recorded 2026-11-06 from W5 seat PN, C48 of the port's audit, a local record not in the repository, closed 2026-11-07 by
     GEN-B (`5cdc88e7`), after the lexical differential found `ssml:token`'s `role="a:b"` accepted where xmllint refuses
     it.)
 
