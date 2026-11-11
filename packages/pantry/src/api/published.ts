@@ -17,7 +17,7 @@ import type { AnyRelation, AnyRoster, Fact } from "@bjornpagen/grizzle";
 import { BaseType } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
-import { Package } from "#pantry/qti/package.ts";
+import { Entry, Package, ReferencePath } from "#pantry/qti/package.ts";
 import {
   ItemRefDocument,
   Named,
@@ -34,7 +34,7 @@ export { Document } from "#pantry/qti/chardata.ts";
 
 export { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 
-export { Package } from "#pantry/qti/package.ts";
+export { Entry, Package, ReferencePath } from "#pantry/qti/package.ts";
 
 export {
   ItemRefDocument,
@@ -92,8 +92,11 @@ const published = <
  * The published relations by name (spec section 2.2, on the schema #55 brought: `Document`'s type
  * field is `documentType`): each relation's key and published fields, and {@link BaseType} as a
  * roster. A section's visibility is no field of `Section`: it is the section's {@link TestFlag}
- * row named `visible`, which QTI's required attribute gives every section (decision 503). The
- * surface test pins this record, and its fields are the contract {@link PublishedRow} types.
+ * row named `visible`, which QTI's required attribute gives every section (decision 503).
+ * {@link Entry} and {@link ReferencePath} are published with every field they declare, so an app
+ * finds an item's media by path: a reference's resolved path, and the package entry at that path
+ * with its bytes (operator ruling 6a456d85). The surface test pins this record, and its fields are
+ * the contract {@link PublishedRow} types.
  */
 export const publishedRelations = {
   BaseType: { kind: "roster", relation: BaseType } satisfies PublishedRoster<typeof BaseType>,
@@ -103,9 +106,15 @@ export const publishedRelations = {
     ["node", "document", "identifier", "declarationKind"],
   ),
   Document: published(Document, ["node"], ["node", "package", "path", "documentType", "rootKind"]),
+  Entry: published(Entry, ["package", "at"], ["package", "at", "path", "content"]),
   ItemRefDocument: published(ItemRefDocument, ["node"], ["node", "document", "package", "path"]),
   Named: published(Named, ["node"], ["node", "document", "identifier", "kind", "parent", "part"]),
   Package: published(Package, ["id"], ["id", "name"]),
+  ReferencePath: published(
+    ReferencePath,
+    ["node", "name"],
+    ["node", "name", "document", "package", "kind", "path"],
+  ),
   Section: published(
     Section,
     ["node"],

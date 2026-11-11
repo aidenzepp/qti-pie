@@ -66,24 +66,28 @@ point](#moving-an-app-to-the-entry-point) says what replaces each.
 These relations, their keys and their published fields are new, and are the contract `publishedRelations` records
 and `PublishedRow<Name>` types. Every other field and relation is internal.
 
-| Relation                | Key            | Published fields                                                                                  |
-| ----------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `Package`               | `id`           | `id`, `name`                                                                                      |
-| `Document`              | `node`         | `node`, `package`, `path`, `documentType`, `rootKind`                                             |
-| `TestDocument`          | `node`         | `node`, `package`, `path`, `rootKind`                                                             |
-| `Named`                 | `node`         | `node`, `document`, `identifier`, `kind`, `parent`, `part`                                        |
-| `Section`               | `node`         | `node`, `document`, `parent`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
-| `SectionSelection`      | `node`         | `node`, `document`, `parent`, `select`, `withReplacement`                                         |
-| `SectionMember`         | `node`         | `node`, `section`, `document`, `kind`, `required`, `start`                                        |
-| `TestFlag`              | `node`, `name` | `node`, `name`, `value`                                                                           |
-| `ItemRefDocument`       | `node`         | `node`, `document`, `package`, `path`                                                             |
-| `DeclarationIdentifier` | `node`         | `node`, `document`, `identifier`, `declarationKind`                                               |
-| `BaseType`              | roster         | Its handles, which an app's `closedId(BaseType)` columns name                                     |
+| Relation                | Key             | Published fields                                                                                  |
+| ----------------------- | --------------- | ------------------------------------------------------------------------------------------------- |
+| `Package`               | `id`            | `id`, `name`                                                                                      |
+| `Entry`                 | `package`, `at` | `package`, `at`, `path`, `content`                                                                |
+| `Document`              | `node`          | `node`, `package`, `path`, `documentType`, `rootKind`                                             |
+| `TestDocument`          | `node`          | `node`, `package`, `path`, `rootKind`                                                             |
+| `Named`                 | `node`          | `node`, `document`, `identifier`, `kind`, `parent`, `part`                                        |
+| `Section`               | `node`          | `node`, `document`, `parent`, `keepTogether`, `shuffle`, `withReplacement`, `members`, `required` |
+| `SectionSelection`      | `node`          | `node`, `document`, `parent`, `select`, `withReplacement`                                         |
+| `SectionMember`         | `node`          | `node`, `section`, `document`, `kind`, `required`, `start`                                        |
+| `TestFlag`              | `node`, `name`  | `node`, `name`, `value`                                                                           |
+| `ItemRefDocument`       | `node`          | `node`, `document`, `package`, `path`                                                             |
+| `DeclarationIdentifier` | `node`          | `node`, `document`, `identifier`, `declarationKind`                                               |
+| `ReferencePath`         | `node`, `name`  | `node`, `name`, `document`, `package`, `kind`, `path`                                             |
+| `BaseType`              | roster          | Its handles, which an app's `closedId(BaseType)` columns name                                     |
 
 - `Document`'s `resourceType` field is now `documentType`: `manifest` for the manifest, else the type of the manifest
   resource that lists the document.
 - `Section` has no `visible` field. A section's visibility is its published `TestFlag` row named `visible`, a boolean
   `value`. QTI requires the attribute on every section, so every section has that row.
+- `Entry` and `ReferencePath` are published with every field they declare: a reference's `ReferencePath` row holds
+  its resolved `path` in its `package`, and that package's `Entry` row with the same `path` holds the file's bytes.
 - `PublishedRow<"BaseType">` types a handle as a plain `string`, not as one of the roster's handles.
 
 ### Reading 178, the regex text bound, and the migration
@@ -126,7 +130,8 @@ name the entry does not export fails the app's build.
 | `qti.relations.TestDocument` and the other relations, by the schema value                                                                                         | The published relations, imported by name, or still `qti().relations`, which holds the same objects. Only the published fields are the contract                                                                                     |
 | `Section`'s `visible` and `Document`'s `resourceType`                                                                                                             | A section's `TestFlag` row named `visible`, and `Document`'s `documentType`                                                                                                                                                         |
 | `Named` and `Section`                                                                                                                                             | The same relations, published. `Named`'s published fields are listed above                                                                                                                                                          |
-| `Attribute`, `Entry` and `ReferencePath`                                                                                                                          | Still `qti().relations`, but internal: they may change in any release without a changelog entry                                                                                                                                     |
+| `Attribute`                                                                                                                                                       | Still `qti().relations`, but internal: it may change in any release without a changelog entry                                                                                                                                       |
+| `Entry` and `ReferencePath`                                                                                                                                       | The same relations, published with every field they declare                                                                                                                                                                         |
 
 On upgrade, the app:
 
