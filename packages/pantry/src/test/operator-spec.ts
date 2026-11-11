@@ -110,7 +110,7 @@ export const roundingRefused = (
  * What a tolerance value is as reading 121 reads it: a number where it is in `xs:double`'s lexical
  * space, and then whether that number is positive.
  */
-export interface DoubleReading {
+interface DoubleReading {
   readonly numeric: boolean;
   readonly positive: boolean;
 }

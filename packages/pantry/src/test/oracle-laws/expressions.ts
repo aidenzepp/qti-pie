@@ -68,7 +68,7 @@ export const expressionLaws = [
 /**
  * A law of {@link expressionLaws}.
  */
-export type ExpressionLaw = (typeof expressionLaws)[number];
+type ExpressionLaw = (typeof expressionLaws)[number];
 
 /**
  * A breach of one of this module's laws.

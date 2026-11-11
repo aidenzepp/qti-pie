@@ -21,7 +21,7 @@ import { vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
  * @param handle - The handle.
  * @returns The local name and namespace name it is written and read with.
  */
-export const attributeNameOf = (handle: string): ExpandedName =>
+const attributeNameOf = (handle: string): ExpandedName =>
   Option.getOrElse(
     Arr.findFirst(handlePrefixes, ({ prefix }) => handle.startsWith(`${prefix}:`)).pipe(
       Option.map(({ namespace, prefix }) => ({

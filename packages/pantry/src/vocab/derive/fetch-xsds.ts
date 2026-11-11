@@ -77,7 +77,7 @@ const PinFaultSchema = Schema.Struct({
 /**
  * One entry of a pin table that breaks one of {@link pinRules}.
  */
-export type PinFault = typeof PinFaultSchema.Type;
+type PinFault = typeof PinFaultSchema.Type;
 
 /**
  * A SHA-256 digest as `Digest.digestHex` writes it.
@@ -190,7 +190,7 @@ export const pinFaults = (pins: XsdPins): readonly PinFault[] =>
  *
  * `faults` lists each entry that breaks a rule.
  */
-export class XsdPinsInvalid extends Schema.TaggedError<XsdPinsInvalid>()("XsdPinsInvalid", {
+class XsdPinsInvalid extends Schema.TaggedError<XsdPinsInvalid>()("XsdPinsInvalid", {
   faults: Schema.Array(PinFaultSchema),
 }) {
   /**
@@ -253,7 +253,7 @@ export class XsdPublishedChanged extends Schema.TaggedError<XsdPublishedChanged>
 /**
  * Why one pin could not be settled: its download failed, or it served other bytes than its pin.
  */
-export type PinFailure = XsdDownloadFailed | XsdPublishedChanged;
+type PinFailure = XsdDownloadFailed | XsdPublishedChanged;
 
 /**
  * Keep a pin's failure as a value, so a run attempts every pin before it fails.

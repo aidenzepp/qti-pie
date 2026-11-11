@@ -837,7 +837,7 @@ export const elementsOf = (
  * What a walk of a schema set gives: each kind's contents, by kind, and each element name no kind
  * resolves, with the parent kind it stood under.
  */
-export interface XsdContents {
+interface XsdContents {
   readonly contents: ReadonlyMap<string, readonly Content[]>;
   readonly unresolved: readonly string[];
 }

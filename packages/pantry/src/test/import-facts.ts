@@ -14,7 +14,7 @@ import type { packageFactsOf } from "#pantry/import/write.ts";
  * The facts of one import: one array of rows under each relation an import writes, as
  * `packageFactsOf` builds them from a package's inputs.
  */
-export type PackageFacts = ReturnType<typeof packageFactsOf>;
+type PackageFacts = ReturnType<typeof packageFactsOf>;
 
 /**
  * The facts of no row: an empty array under every relation an import writes.

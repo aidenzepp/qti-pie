@@ -16,7 +16,7 @@ import type { negativeNames } from "#pantry/test/fixtures.ts";
  * breaches name, sorted. `main` is the rules `main`'s leased suite expected the import to refuse it
  * under.
  */
-export interface NegativeExpectation {
+interface NegativeExpectation {
   readonly main: readonly string[];
   readonly oracle: "accepted" | readonly string[];
 }

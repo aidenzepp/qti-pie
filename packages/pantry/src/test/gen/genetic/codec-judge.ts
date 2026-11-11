@@ -65,7 +65,7 @@ import { xmllintRun } from "#pantry/xml/oracle.ts";
 /**
  * Which oracle a disagreement breaks.
  */
-export type OracleName = "O1" | "O2" | "O3" | "O4" | "O5" | "O6";
+type OracleName = "O1" | "O2" | "O3" | "O4" | "O5" | "O6";
 
 /**
  * One disagreement: the oracle, its class (the signature a run keys its findings by, coarse enough
@@ -480,10 +480,7 @@ const elementDifferences = (
  * @returns The differences, none when they are the same tree; at most one per class and
  *   {@link mostDifferences} in all.
  */
-export const treeDifferences = (
-  left: XmlDocument,
-  right: XmlDocument,
-): readonly TreeDifference[] => {
+const treeDifferences = (left: XmlDocument, right: XmlDocument): readonly TreeDifference[] => {
   const found = new Map<string, string>();
   const add = (what: string, detail: string): void => {
     if (!found.has(what) && found.size < mostDifferences) {
@@ -1315,7 +1312,7 @@ type TreeClass = "namespace name holds a reference";
  * A class of input whose every disagreement has one cause: a {@link TreeClass}, or a document
  * whose declaration names another encoding than its bytes are in.
  */
-export type InputClass =
+type InputClass =
   | TreeClass
   | "UTF-16 input ends inside a surrogate pair"
   | "default names an entity declared after it"

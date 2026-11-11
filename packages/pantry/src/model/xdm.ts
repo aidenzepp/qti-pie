@@ -332,7 +332,7 @@ export type XdmAttributeName<V extends XdmVocabulary> = XdmClosedName<V> | OpenN
  * The name of an attribute a closed handle names. Its tag is `closed`, and its `AttributeName`
  * handle is `handle`, as an element's tag is `element` and its handle is its `kind`.
  */
-export interface XdmClosedName<V extends XdmVocabulary> {
+interface XdmClosedName<V extends XdmVocabulary> {
   readonly _tag: "closed";
   readonly handle: ClosedName<V>;
   /**
@@ -431,7 +431,7 @@ export interface XdmComment {
 /**
  * A processing instruction: its target, and the data after it, empty when it has none.
  */
-export interface XdmPi {
+interface XdmPi {
   readonly _tag: "pi";
   readonly data: string;
   readonly target: string;
@@ -450,7 +450,7 @@ export interface XdmEntityRef {
  * The document node's doctype child, as its family holds it ({@link documentFamily}): the doctype
  * text a document's {@link XdmDocument.doctype} holds.
  */
-export interface XdmDoctype {
+interface XdmDoctype {
   readonly _tag: "doctype";
   readonly value: string;
 }

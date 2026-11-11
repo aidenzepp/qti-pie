@@ -8,7 +8,7 @@ import type { RefusedPackage } from "#pantry/test/fixtures.ts";
  * The fixtures every test run materializes once, before the first test file opens: `simple` and the
  * four packages the importer refuses.
  */
-export type BaseFixture = "simple" | RefusedPackage;
+type BaseFixture = "simple" | RefusedPackage;
 
 declare module "vitest" {
   /**

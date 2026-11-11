@@ -32,12 +32,7 @@ import type { Entry, Genome } from "#pantry/test/gen/genetic/genome.ts";
 /**
  * The noise kinds.
  */
-export const noises = [
-  "attribute-order",
-  "prefix-rename",
-  "resource-order",
-  "path-rename",
-] as const;
+const noises = ["attribute-order", "prefix-rename", "resource-order", "path-rename"] as const;
 
 /**
  * One noise kind.

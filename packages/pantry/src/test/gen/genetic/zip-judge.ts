@@ -28,7 +28,7 @@ import type { Rendered, ZipIntent } from "#pantry/test/gen/genetic/zip-archive.t
  * Python's report could not be read: a line that is no JSON of the shape the script writes, or a
  * process that wrote no line for an archive.
  */
-export class PythonUnreadable extends Schema.TaggedError<PythonUnreadable>()("PythonUnreadable", {
+class PythonUnreadable extends Schema.TaggedError<PythonUnreadable>()("PythonUnreadable", {
   report: Schema.String,
 }) {
   /**
@@ -64,7 +64,7 @@ export const pythonRuns = Effect.scoped(
  * command line, one JSON line of what `zipfile` reads, each entry with its data's SHA-256 or the
  * error reading it raised.
  */
-export const pythonScript = `import hashlib, json, sys, zipfile
+const pythonScript = `import hashlib, json, sys, zipfile
 for path in sys.argv[1:]:
     try:
         archive = zipfile.ZipFile(path)
@@ -114,7 +114,7 @@ const PythonInfoSchema = Schema.Struct({
 /**
  * {@link PythonInfoSchema}'s type.
  */
-export type PythonInfo = typeof PythonInfoSchema.Type;
+type PythonInfo = typeof PythonInfoSchema.Type;
 
 /**
  * What Python read of one archive: its entries, or the error opening it raised.
@@ -127,7 +127,7 @@ const PythonViewSchema = Schema.Union([
 /**
  * {@link PythonViewSchema}'s type.
  */
-export type PythonView = typeof PythonViewSchema.Type;
+type PythonView = typeof PythonViewSchema.Type;
 
 /**
  * Decode one line of the script's report as the view it writes.
@@ -237,7 +237,7 @@ const featureClasses: readonly (readonly [RegExp, RefusalClass])[] = [
 /**
  * What the package reader said of one archive: its files, or its refusal's rule, class and entry.
  */
-export type PantryVerdict =
+type PantryVerdict =
   | {
       readonly entries: readonly { readonly path: string; readonly sha: string }[];
       readonly kind: "accepted";
@@ -256,8 +256,7 @@ export type PantryVerdict =
  * @param bytes - The bytes.
  * @returns The digest.
  */
-export const shaOf = (bytes: Uint8Array): string =>
-  createHash("sha256").update(bytes).digest("hex");
+const shaOf = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
 /**
  * Read an archive with the package reader under the production budgets.
@@ -980,7 +979,7 @@ export const writeScript = Effect.fn("test.geneticZip.writeScript")(function* wr
 /**
  * The feature families the search reports a residual for.
  */
-export const zipFamilies = ["archive", "entry", "verdict"] as const;
+const zipFamilies = ["archive", "entry", "verdict"] as const;
 
 /**
  * A feature: its family, then what it names.

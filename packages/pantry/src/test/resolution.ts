@@ -26,7 +26,7 @@ export type OracleWhiteSpace = "collapse" | "preserve" | "replace";
 /**
  * The stated limits an href meets (reading 102), named as the importer's are.
  */
-export type OracleLimit =
+type OracleLimit =
   | "backslash"
   | "colon"
   | "control"

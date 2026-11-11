@@ -48,7 +48,7 @@ export const fragmentType = "imsqti_fragment_xmlv3p0";
 /**
  * One kind an include under a parent may stand for, in one schema version.
  */
-export interface IncludeAlternative {
+interface IncludeAlternative {
   readonly kind: string;
   readonly parent: string;
   readonly version: SchemaVersion;

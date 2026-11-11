@@ -28,7 +28,7 @@ import type { XmllintReport } from "#pantry/xml/oracle.ts";
 /**
  * The folder the cache keeps its slots in.
  */
-export const verdictCacheRoot = path.join(workRoot, "xmllint-verdicts");
+const verdictCacheRoot = path.join(workRoot, "xmllint-verdicts");
 
 /**
  * The folder one suite keeps one version's reports in, one file per key.
@@ -77,7 +77,7 @@ export const keepOnly = Effect.fn("test.verdictCache.keepOnly")(function* keepOn
  * account of its version, each pinned XSD's SHA-256 by its path, the catalog's text, the driver
  * schema's text and the batch's text.
  */
-export interface VerdictInputs {
+interface VerdictInputs {
   readonly batch: string;
   readonly catalog: string;
   readonly driver: string;
@@ -92,7 +92,7 @@ export interface VerdictInputs {
  * @param inputs - What the batch's report depends on.
  * @returns The text.
  */
-export const verdictKeyText = (inputs: VerdictInputs): string =>
+const verdictKeyText = (inputs: VerdictInputs): string =>
   JSON.stringify([
     "xmllint --nonet --noout --schema driver.xsd batch.xml, XML_CATALOG_FILES=catalog.xml",
     inputs.xmllint,

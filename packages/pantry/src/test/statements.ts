@@ -10,7 +10,7 @@ import { schemaLawsOf } from "#pantry/test/law-namer.ts";
 /**
  * A foreign key as the laws give it: from one relation into another, by their declared names.
  */
-export interface ForeignKey {
+interface ForeignKey {
   readonly from: string;
   readonly to: string;
 }

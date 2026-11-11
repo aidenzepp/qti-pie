@@ -213,7 +213,7 @@ export interface ShredGrammar<V extends XdmVocabulary> {
 /**
  * Where a value of an element stands: one of its attributes, by its closed handle, or its text.
  */
-export type ValueSite<V extends XdmVocabulary> =
+type ValueSite<V extends XdmVocabulary> =
   | { readonly _tag: "attribute"; readonly name: ClosedName<V> }
   | { readonly _tag: "text" };
 

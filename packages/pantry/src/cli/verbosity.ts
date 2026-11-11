@@ -9,7 +9,7 @@ import { CliError, Command, Flag, GlobalFlag } from "effect/cli";
 /**
  * The `--quiet` / `-q` setting: log nothing, so standard error holds only errors.
  */
-export const quietSetting = GlobalFlag.Setting("quiet")({
+const quietSetting = GlobalFlag.Setting("quiet")({
   flag: Flag.Boolean("quiet").pipe(
     Flag.withAlias("q"),
     Flag.withFallbackConfig(Config.Boolean("QTI_QUIET")),
@@ -21,7 +21,7 @@ export const quietSetting = GlobalFlag.Setting("quiet")({
 /**
  * The `--verbose` setting: log in full, down to debug lines.
  */
-export const verboseSetting = GlobalFlag.Setting("verbose")({
+const verboseSetting = GlobalFlag.Setting("verbose")({
   flag: Flag.Boolean("verbose").pipe(
     Flag.withFallbackConfig(Config.Boolean("QTI_VERBOSE")),
     Flag.withDefault(false),
@@ -41,7 +41,7 @@ export const verbosityGlobalFlags = [quietSetting, verboseSetting] as const;
  *
  * Both flags at once fail with a usage error, so a handler fails before it does any work.
  */
-export const minimumLogLevel = Effect.gen(function* resolveMinimumLogLevel() {
+const minimumLogLevel = Effect.gen(function* resolveMinimumLogLevel() {
   // `Command.run` always provides `--log-level`; reading it as an optional service keeps it out of
   // the command's requirements, as `Command.make` does for a handler.
   const given = Option.flatten(yield* Effect.serviceOption(GlobalFlag.LogLevel));

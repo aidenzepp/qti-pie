@@ -109,7 +109,7 @@ export class TargetNotEmpty extends Schema.TaggedError<TargetNotEmpty>()("Target
  * The target is the folder the person is in, a folder above it, their home folder or the
  * filesystem root, which no command replaces, `--yes` or not.
  */
-export class TargetProtected extends Schema.TaggedError<TargetProtected>()("TargetProtected", {
+class TargetProtected extends Schema.TaggedError<TargetProtected>()("TargetProtected", {
   target: Schema.String,
 }) {
   /**
@@ -147,7 +147,7 @@ export class TargetProtected extends Schema.TaggedError<TargetProtected>()("Targ
 /**
  * The package id is not a UUID.
  */
-export class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackageId", {
+class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackageId", {
   packageId: Schema.String,
 }) {
   /**
@@ -267,7 +267,7 @@ const contentOf = Effect.fn("cli.contentOf")(function* contentOf(target: string)
  * What a write does to its target: `create` it where nothing is, or `replace` what is there, an
  * empty directory, a file or a symlink included.
  */
-export type TargetAction = "create" | "replace";
+type TargetAction = "create" | "replace";
 
 /**
  * What a dry run says about the database.

@@ -13,7 +13,7 @@ import { Predicate } from "effect";
  * statement that is wholly `import type` or `export type`, which brings no value in. `dynamic` is
  * an `import("…")`, a call that loads the module only when it runs, or a type that names it.
  */
-export type ImportForm = "dynamic" | "type" | "value";
+type ImportForm = "dynamic" | "type" | "value";
 
 /**
  * One import, re-export or `import("…")` of a module: how it names the module, the specifier, and

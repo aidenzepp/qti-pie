@@ -40,7 +40,7 @@ export const toolLabelTypes = [
 /**
  * The kinds whose `label` asks for its tool: each version's, and every version's at once.
  */
-export interface ToolLabelKinds<K extends string> {
+interface ToolLabelKinds<K extends string> {
   /**
    * Each version's kinds, in roster order.
    */

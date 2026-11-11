@@ -69,7 +69,7 @@ export const xmlSecondEdition: FetchedSource = {
 /**
  * XML Schema 1.0 Part 2, Second Edition, as published. Pinned as fetched on 2026-11-10.
  */
-export const xsdPart2Html: FetchedSource = {
+const xsdPart2Html: FetchedSource = {
   path: "anyuri-specs/xsd10-2.html",
   sha256: "980de872aa2c50013d5202176eb85eef3f183a7df635fdcb6b4aa34c1c12eb72",
   url: "https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/",

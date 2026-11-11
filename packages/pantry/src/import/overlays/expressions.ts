@@ -1444,15 +1444,12 @@ export interface NamedResource {
 /**
  * A name piece of a reference as its owner nests it: every written field but the owner's key.
  */
-export type SegmentMember = Omit<
-  Addition<typeof ReferenceSegment>,
-  "assembly" | "attribute" | "node"
->;
+type SegmentMember = Omit<Addition<typeof ReferenceSegment>, "assembly" | "attribute" | "node">;
 
 /**
  * A reference as one test reads it, its name's pieces nested at `segments` in order.
  */
-export type AssembledReferenceRow = Addition<typeof AssembledReference> & {
+type AssembledReferenceRow = Addition<typeof AssembledReference> & {
   readonly segments: readonly SegmentMember[];
 };
 

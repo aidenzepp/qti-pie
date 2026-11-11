@@ -79,7 +79,7 @@ type BarredByRow = SourcedRow<
 /**
  * A barring's kinds hold several positions, or none, so one position cannot stand for them.
  */
-export class SplitMembers extends Schema.TaggedError<SplitMembers>()("SplitMembers", {
+class SplitMembers extends Schema.TaggedError<SplitMembers>()("SplitMembers", {
   kinds: Schema.String,
   parent: Schema.String,
   source: Schema.String,

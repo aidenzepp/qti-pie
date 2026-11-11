@@ -61,12 +61,12 @@ import { integerForm } from "#pantry/qti/limits.ts";
  * One complete element of a cell as its cell's family nests it: without the `cell` the nesting
  * supplies, nor the `at` the family draws.
  */
-export type CellLeafInsert = Omit<Addition<typeof CellLeaf>, "cell">;
+type CellLeafInsert = Omit<Addition<typeof CellLeaf>, "cell">;
 
 /**
  * A cell's row, with its leaves nested at its count field, in document order.
  */
-export type MathCellRow = Omit<Addition<typeof MathCell>, "leaves"> & {
+type MathCellRow = Omit<Addition<typeof MathCell>, "leaves"> & {
   readonly leaves: readonly CellLeafInsert[];
 };
 

@@ -100,7 +100,7 @@ export const testLaws = [
 /**
  * A law of {@link testLaws}.
  */
-export type TestLaw = (typeof testLaws)[number];
+type TestLaw = (typeof testLaws)[number];
 
 /**
  * The item built-ins a variable mapping's target may not name (information model §2.2.2, §4.5.1:

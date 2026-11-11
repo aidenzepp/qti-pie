@@ -115,7 +115,7 @@ export const specDocuments: readonly SpecDocument[] = [
  * The URL every IMS specification's citation starts with: a citation of one that
  * {@link specDocuments} does not hold names a specification whose sections cannot be judged.
  */
-export const imsUrl = "https://www.imsglobal.org/";
+const imsUrl = "https://www.imsglobal.org/";
 
 /**
  * A specification's sections as its renderings state them: the marks its headings carry, the
@@ -158,7 +158,7 @@ const markPattern = /This (?:Section|Appendix|section) is (?<not>NOT )?NORMATIVE
  * @param text - The heading's text, tags removed.
  * @returns The number, or none for a heading that numbers no section.
  */
-export const sectionNumberOf = (text: string): Option.Option<string> => {
+const sectionNumberOf = (text: string): Option.Option<string> => {
   const match =
     /^\s*(?:Appendix\s+(?<appendix>[A-Z])\b|(?<lettered>[A-Z]\d+(?:\.\d+)*)\.?(?:\s|$)|(?<numbered>\d+(?:\.\d+)*)\.?(?:\s|$))/u.exec(
       text,
@@ -388,7 +388,7 @@ export const specSections = (renderings: {
  * One citation of a specification in a law's source: the document, the anchor its URL names, and
  * the `§` numbers the parenthetical after it cites; or a line of its text.
  */
-export interface Citation {
+interface Citation {
   /**
    * The URL's fragment, none where the URL names the document alone.
    */
@@ -440,7 +440,7 @@ const parentheticalAt = (text: string, at: number): string => {
 /**
  * A law source's citations of the IMS specifications.
  */
-export interface Cited {
+interface Cited {
   /**
    * Each URL of a specification {@link specDocuments} holds, with its anchor and its `§` numbers,
    * and each line of its text.
@@ -458,7 +458,7 @@ export interface Cited {
  * @param source - The law's source.
  * @returns The citations, and the unjudgeable URLs.
  */
-export const citationsOf = (source: string): Cited => {
+const citationsOf = (source: string): Cited => {
   const urls = [...source.matchAll(/https?:\/\/[^\s'"(),;]+/gu)].map((url) => ({
     at: url.index,
     end: url.index + url[0].length,

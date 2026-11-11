@@ -21,7 +21,7 @@ import { asiNamespace, cpNamespace, vocabularyNamespaces } from "#pantry/vocab/n
  * One naming decision: the handle of an element of one of its types, by the names the versions'
  * XSDs give that type.
  */
-export interface TypedHandle {
+interface TypedHandle {
   readonly element: string;
   readonly handle: string;
   readonly namespace: string;
@@ -49,7 +49,7 @@ const decided = (
 /**
  * Every naming decision, by namespace.
  */
-export const typedHandles: readonly TypedHandle[] = [
+const typedHandles: readonly TypedHandle[] = [
   ...decided(asiNamespace, {
     "qti-content-body.feedback": ["qti-content-body", "FeedbackContentBodyDType"],
     "qti-content-body.modal": ["qti-content-body", "FeedbackFlowContentBodyDType"],

@@ -52,7 +52,7 @@ import { admits } from "#pantry/test/indexes.ts";
 /**
  * One lawful document and the name the report gives it.
  */
-export interface Lawful {
+interface Lawful {
   readonly doc: XmlDocument;
   readonly name: string;
 }
@@ -707,7 +707,7 @@ const documentOf = (
 /**
  * How deep a covering document varies its families: below it every family is minimal.
  */
-export const coveringDepth = 4;
+const coveringDepth = 4;
 
 /**
  * The most families a covering document varies before every later one is minimal, so one document

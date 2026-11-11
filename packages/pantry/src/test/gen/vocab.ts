@@ -241,7 +241,7 @@ export const unitCost: Cost = () => 1;
  * a global declaration validates, and every strict wildcard of the pinned XSDs is `##other` under
  * a kind of the content package, the AfA DRD or the ASI, none of them in LOM's namespace.
  */
-export const strictWildcardLetter = "lom:lom";
+const strictWildcardLetter = "lom:lom";
 
 /**
  * The letter a particle's occurrence stands for in a generated word: an element particle's
@@ -643,7 +643,7 @@ export const attributeClasses = [
 /**
  * A class of attribute name.
  */
-export type AttributeClass = (typeof attributeClasses)[number];
+type AttributeClass = (typeof attributeClasses)[number];
 
 /**
  * The spellings each class of undeclared name is tried with, exhaustively: the box the admission

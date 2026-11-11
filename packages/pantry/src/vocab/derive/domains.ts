@@ -322,16 +322,13 @@ const spellFacet = (held: { readonly facet: string; readonly value: string }): s
  * as the derivation states them: the two in conflict, the step's first where one is the step's and
  * the other its base's, or the one whose value is no `nonNegativeInteger`.
  */
-export class InvalidLengthFacets extends Schema.TaggedError<InvalidLengthFacets>()(
-  "InvalidLengthFacets",
-  {
-    facets: Schema.Array(
-      Schema.Struct({ facet: Schema.Literals(lengthFacets), value: Schema.String }),
-    ),
-    rule: Schema.Literals(lengthRules),
-    type: Schema.String,
-  },
-) {
+class InvalidLengthFacets extends Schema.TaggedError<InvalidLengthFacets>()("InvalidLengthFacets", {
+  facets: Schema.Array(
+    Schema.Struct({ facet: Schema.Literals(lengthFacets), value: Schema.String }),
+  ),
+  rule: Schema.Literals(lengthRules),
+  type: Schema.String,
+}) {
   /**
    * The type, the facets and the rule they break, and what to change.
    */

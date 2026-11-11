@@ -49,21 +49,14 @@ import { Qti } from "#pantry/qti/schema.ts";
  * The fields of an `Attribute` row the oracle knows before the database writes it: its owner's
  * kind, version, governor and document's type, its name and its lexical form.
  */
-export const attributeFields = [
-  "documentType",
-  "governor",
-  "kind",
-  "lexical",
-  "name",
-  "version",
-] as const;
+const attributeFields = ["documentType", "governor", "kind", "lexical", "name", "version"] as const;
 
 /**
  * The fields of a `Node` row the oracle knows before the database writes it: its own kind, version,
  * governor, start and characters, its document's type, its parent's kind and governor, its
  * grandparent's kind, and its string value.
  */
-export const nodeFields = [
+const nodeFields = [
   "chars",
   "documentType",
   "governor",
@@ -121,7 +114,7 @@ export interface DocumentRows {
 /**
  * A document relation the oracle has rows for.
  */
-export type DocumentRelation = keyof DocumentRows;
+type DocumentRelation = keyof DocumentRows;
 
 /**
  * Whether a relation name is a document relation's.
@@ -136,7 +129,7 @@ const isDocumentRelation = (name: string): name is DocumentRelation =>
  * How a statement writes a document's text into a key text: a containment's copy, a check's
  * equation, or a fold's end.
  */
-export type CopiedBy = "check" | "contained" | "fold";
+type CopiedBy = "check" | "contained" | "fold";
 
 /**
  * The parts of a copy every document relation shares.
@@ -289,7 +282,7 @@ const holdsKeyText = (relation: string, field: string): boolean =>
  * A copy the derivation could not read: one that holds a field the oracle does not know of its row,
  * or whose selection reads one, or reads a term no part of {@link Term}.
  */
-export interface UnreadCopy {
+interface UnreadCopy {
   readonly field: string;
   readonly law: string;
   readonly reason: string;

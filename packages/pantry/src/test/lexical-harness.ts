@@ -40,7 +40,7 @@ import { admittedOf } from "#pantry/test/indexes.ts";
  * The namespace an attribute handle's prefix stands for, for the handles a probe writes with a
  * prefix.
  */
-export const attributePrefixes: ReadonlyMap<string, string> = new Map([
+const attributePrefixes: ReadonlyMap<string, string> = new Map([
   ["xml", "http://www.w3.org/XML/1998/namespace"],
   ["xsi", "http://www.w3.org/2001/XMLSchema-instance"],
   ["xlink", "http://www.w3.org/1999/xlink"],
@@ -98,7 +98,7 @@ export interface Probe {
  * declares no attribute of that name, or `unjudged` when a framed element was not expected where
  * its frame put it, so no declaration judged its value.
  */
-export type XsdOutcome = "invalid" | "undeclared" | "unjudged" | "valid";
+type XsdOutcome = "invalid" | "undeclared" | "unjudged" | "valid";
 
 /**
  * One disagreement: the probe, both verdicts, and whether the grammar accepts the value once its
@@ -115,7 +115,7 @@ export interface Disagreement {
 /**
  * The libxml2 departures the records name, each a case of {@link proofs}.
  */
-export type ProofName = keyof typeof proofs;
+type ProofName = keyof typeof proofs;
 
 /**
  * Why a disagreement is no defect of either side:
@@ -764,7 +764,7 @@ export const familyTable: ReadonlyMap<string, readonly string[]> = new Map(
  * @param domain - The domain.
  * @returns The names.
  */
-export const builtinsOf = (domain: Domain): readonly string[] => {
+const builtinsOf = (domain: Domain): readonly string[] => {
   switch (domain._tag) {
     case "atomic": {
       return [domain.builtin, domain.primitive];
@@ -826,7 +826,7 @@ export const familiesOf = (domain: ValueDomain, xsd: Option.Option<Domain>): rea
  * @param pattern - A domain's compiled pattern.
  * @returns The bounded pattern; the pattern itself where it repeats nothing without a bound.
  */
-export const boundedPattern = (pattern: string): string => {
+const boundedPattern = (pattern: string): string => {
   let bounded = "";
   let inClass = false;
   for (let at = 0; at < pattern.length; at += 1) {
@@ -912,7 +912,7 @@ export const numberOf = (text: string): number => {
  * @param raw - The value as written.
  * @returns Whether the bound holds.
  */
-export const boundHolds = (bound: Option.Option<DoubleBound>, raw: string): boolean =>
+const boundHolds = (bound: Option.Option<DoubleBound>, raw: string): boolean =>
   !Option.exists(bound, ({ facet, value: limit }) => {
     const value = numberOf(raw);
     switch (facet) {
@@ -1076,7 +1076,7 @@ export const elementText = (name: XsdName, rest: string, body: string): string =
  * @param body - Its content.
  * @returns The element.
  */
-export const plainElement = (
+const plainElement = (
   target: Exclude<Target, { readonly _tag: "framed" }>,
   rest: string,
   body: string,
@@ -1092,7 +1092,7 @@ export const plainElement = (
  * @param probe - The probe.
  * @returns The line.
  */
-export const probeLine = (probe: Probe): string => {
+const probeLine = (probe: Probe): string => {
   const value = escaped(probe.value);
   const attribute = probe.subject._tag === "text" ? "" : attributeText(probe.subject.name, value);
   const content = probe.subject._tag === "text" ? value : "";
@@ -1121,7 +1121,7 @@ export const probeLine = (probe: Probe): string => {
  * @param target - The probe's target.
  * @returns The name.
  */
-export const judgedElement = (target: Target): string => {
+const judgedElement = (target: Target): string => {
   switch (target._tag) {
     case "framed": {
       return nameKey(target.child);
@@ -1374,7 +1374,7 @@ export const targetsOf = Effect.fn("lexical.targetsOf")(function* targetsOf(
  * One attribute or text row of the grammar in one version, with the XSD type the inventory
  * gives it.
  */
-export interface ProbedRow {
+interface ProbedRow {
   readonly domain: string;
   readonly kind: string;
   readonly subject: Subject;
@@ -1404,7 +1404,7 @@ export const subjectName = (subject: Subject): string =>
 /**
  * The inventory's attribute declarations, by `version kind name`.
  */
-export const declaredAttributes = new Map(
+const declaredAttributes = new Map(
   attributeDeclarations.flatMap((row) =>
     row.versions.map((version) => [`${version} ${row.kind} ${row.name}`, row] as const),
   ),
@@ -1413,7 +1413,7 @@ export const declaredAttributes = new Map(
 /**
  * The inventory's text types, by `version kind`.
  */
-export const declaredTexts = new Map(
+const declaredTexts = new Map(
   textTypes.flatMap((row) =>
     row.versions.map((version) => [`${version} ${row.kind}`, row] as const),
   ),
@@ -1573,7 +1573,7 @@ export interface Judged {
  * @param probe - The probe.
  * @returns The bound prefixes.
  */
-export const probeScopeOf = (probe: Probe): ReadonlySet<string> => {
+const probeScopeOf = (probe: Probe): ReadonlySet<string> => {
   const namespaces = ((): readonly string[] => {
     switch (probe.target._tag) {
       case "framed": {

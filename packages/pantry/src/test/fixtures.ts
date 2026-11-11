@@ -183,8 +183,7 @@ const transformHash = (spec: FixtureSpec, version: string): string =>
  * @param spec - The fixture's name, tarball member and edit list.
  * @returns The first 12 hex digits of the hash under {@link FIXTURES_VERSION}.
  */
-export const hash12 = (spec: FixtureSpec): string =>
-  transformHash(spec, FIXTURES_VERSION).slice(0, 12);
+const hash12 = (spec: FixtureSpec): string => transformHash(spec, FIXTURES_VERSION).slice(0, 12);
 
 /**
  * The names of the cut items: one `cut-<interaction>` fixture per interaction that has an

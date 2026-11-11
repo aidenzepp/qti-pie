@@ -77,7 +77,7 @@ export interface RecordSketch {
 /**
  * The features a case's swarm weighs.
  */
-export type LomFeature =
+type LomFeature =
   | "cdata"
   | "charref"
   | "comment"
@@ -96,7 +96,7 @@ export type LomFeature =
 /**
  * Every feature, in the order the swarm draws them.
  */
-export const lomFeatures = [
+const lomFeatures = [
   "forbidden",
   "lom source",
   "other source",
@@ -125,17 +125,12 @@ export interface PackageSketch {
  * The values a sketch writes that the specification forbids once collapsed, and the near misses
  * it allows: another case, a hyphen, a repetition, a longer word, and the values it advises.
  */
-export const forbiddenCores = [
-  "exam",
-  "self assessment",
-  "self  assessment",
-  "self\tassessment",
-] as const;
+const forbiddenCores = ["exam", "self assessment", "self  assessment", "self\tassessment"] as const;
 
 /**
  * The values the specification allows, each a near miss of a forbidden one or one it advises.
  */
-export const allowedCores = [
+const allowedCores = [
   "exercise",
   "questionnaire",
   "Exam",
@@ -148,18 +143,12 @@ export const allowedCores = [
 /**
  * The sources of the LOM vocabulary once collapsed: `LOMv1.0`, and the empty source.
  */
-export const lomSourceCores = ["LOMv1.0", ""] as const;
+const lomSourceCores = ["LOMv1.0", ""] as const;
 
 /**
  * The sources of other vocabularies, each a near miss of the LOM's.
  */
-export const otherSourceCores = [
-  "MyVocab",
-  "lomv1.0",
-  "LOMv1.0x",
-  "LOM v1.0",
-  "LOMv1.0 LOMv1.0",
-] as const;
+const otherSourceCores = ["MyVocab", "lomv1.0", "LOMv1.0x", "LOM v1.0", "LOMv1.0 LOMv1.0"] as const;
 
 /**
  * The whitespace a sketch writes around a term's text.

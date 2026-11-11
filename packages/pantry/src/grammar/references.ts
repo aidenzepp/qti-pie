@@ -72,7 +72,7 @@ export interface ReferenceRow {
  * it stands as there. A record has no base type ("Variables with record cardinality have no
  * base-type", information model tables 4.5.3 and 5.34.3), so `QTI_CONTEXT`'s is none.
  */
-export interface BuiltInRow {
+interface BuiltInRow {
   readonly baseType: Option.Option<string>;
   readonly cardinality: string;
   readonly declaration: string;
@@ -100,7 +100,7 @@ export type BoundZero = (typeof boundZeros)[number];
  * One kind's bound on a count: the attribute of the least count, the attribute of the most, and
  * what a most of 0 means there.
  */
-export interface BoundRow {
+interface BoundRow {
   readonly kind: string;
   readonly max: string;
   readonly min: string;
@@ -111,7 +111,7 @@ export interface BoundRow {
  * One kind whose counts its choices bound: the kind, and the kind of the children it counts as its
  * choices. Where its least is written, both its least and its most are at most that many.
  */
-export interface ChoiceCountRow {
+interface ChoiceCountRow {
   readonly choice: string;
   readonly kind: string;
 }
@@ -121,7 +121,7 @@ export interface ChoiceCountRow {
  * roster's handles. A `uri` value is one URI reference; a `srcset` value is HTML's list of image
  * candidate strings, each candidate's URL one reference (HTML, "srcset attributes").
  */
-export const referenceForms = ["uri", "srcset"] as const;
+const referenceForms = ["uri", "srcset"] as const;
 
 /**
  * A `ReferenceForm` handle.
@@ -132,7 +132,7 @@ export type ReferenceForm = (typeof referenceForms)[number];
  * One attribute by which an element of a kind names a file of its package, in the versions that
  * declare it, and how its value names it (spec reading 103).
  */
-export interface FileReferenceRow {
+interface FileReferenceRow {
   readonly form: ReferenceForm;
   readonly kind: string;
   readonly name: string;
@@ -177,11 +177,11 @@ export const noReferences: ReferenceFacet = {
  * The kinds a census entry names its attribute on: the kinds it lists, or every kind whose handle
  * carries its vocabulary's prefix (MathML's `href`, which makes any element a hyperlink).
  */
-export type CensusKinds =
+type CensusKinds =
   | { readonly _tag: "listed"; readonly kinds: readonly [string, ...string[]] }
   | { readonly _tag: "prefixed"; readonly prefix: string };
 
-export interface CensusEntry {
+interface CensusEntry {
   readonly form: ReferenceForm;
   readonly kinds: CensusKinds;
   readonly name: string;
@@ -275,7 +275,7 @@ export const asiCensus: readonly CensusEntry[] = [
  * One element whose text names a file of its package, and the whitespace class its text is read
  * under before it resolves.
  */
-export interface TextReferenceKind {
+interface TextReferenceKind {
   readonly kind: string;
   readonly source: string;
   readonly whiteSpace: Exclude<WhiteSpace, "union">;
@@ -371,7 +371,7 @@ export const ssmlCensus: readonly CensusEntry[] = [
  * @param census - The census.
  * @returns The rows, in declaration order.
  */
-export const fileReferencesIn = (
+const fileReferencesIn = (
   declarations: readonly AttributeDeclaration[],
   census: readonly CensusEntry[],
 ): readonly FileReferenceRow[] =>

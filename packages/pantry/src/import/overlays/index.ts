@@ -88,7 +88,7 @@ import { manifestPath } from "#pantry/vocab/terms/package.ts";
  * Every overlay's rows of a package, one keyed set per relation: each document builder's, and the
  * four a package's documents build together.
  */
-export type OverlayRows = AssembledExpressionRows &
+type OverlayRows = AssembledExpressionRows &
   AssembledRows &
   CatalogRows &
   DataSsmlRows &

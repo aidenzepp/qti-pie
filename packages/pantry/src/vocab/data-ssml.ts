@@ -23,7 +23,7 @@ import { Option } from "effect";
 /**
  * One property of a `data-ssml` member as written: its name and its value, each decoded.
  */
-export interface SsmlPropertyText {
+interface SsmlPropertyText {
   readonly name: string;
   readonly value: string;
 }
@@ -48,7 +48,7 @@ export type Domain =
 /**
  * One property of a member: its name, its domain and whether the schema requires it.
  */
-export interface Property {
+interface Property {
   readonly domain: Domain;
   readonly name: string;
   readonly required: boolean;

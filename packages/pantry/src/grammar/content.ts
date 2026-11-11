@@ -848,7 +848,7 @@ interface Installed {
  * A child the content models admit under a parent, at its position, with the source of the
  * position: its particle's where one position names it, its model's at 0.
  */
-export type AdmittedRow = AdmittedChild & {
+type AdmittedRow = AdmittedChild & {
   readonly position: number;
   readonly source: Source;
 };

@@ -70,7 +70,7 @@ export const extendedTextKind = "qti-extended-text-interaction" satisfies Kind;
  * The interactions with a `string-identifier`, which binds a second response variable of base type
  * string (§5.48.2, §5.162.3).
  */
-export const stringBindingKinds = [
+const stringBindingKinds = [
   "qti-text-entry-interaction",
   extendedTextKind,
 ] as const satisfies readonly Kind[];

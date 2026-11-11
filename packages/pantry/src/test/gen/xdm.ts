@@ -123,7 +123,7 @@ export const searchTimeout = 300_000;
  * only through its open-class mask), namespace declarations beyond those a name needs, and the
  * doctype.
  */
-export const xdmFeatures = [
+const xdmFeatures = [
   "element",
   "wildcard",
   "text",
@@ -2229,14 +2229,14 @@ export const accumulators = ["was", "elementsWas", "attrsWas"] as const;
 /**
  * One of {@link accumulators}.
  */
-export type Accumulator = (typeof accumulators)[number];
+type Accumulator = (typeof accumulators)[number];
 
 /**
  * The copies of its parent a node's merged parent copy holds (trees.md §6): T0's `document`, the
  * `version`, and the parent's kind, start, ancestry, nearest interaction and that interaction's
  * kind.
  */
-export const parentCopies = [
+const parentCopies = [
   "document",
   "version",
   "parentKind",
@@ -2249,7 +2249,7 @@ export const parentCopies = [
 /**
  * One of {@link parentCopies}.
  */
-export type ParentCopy = (typeof parentCopies)[number];
+type ParentCopy = (typeof parentCopies)[number];
 
 /**
  * The copies of its owner an attribute row holds (AL1): the owner's kind, version and document.
@@ -2259,13 +2259,13 @@ export const ownerCopies = ["kind", "version", "document"] as const;
 /**
  * One of {@link ownerCopies}.
  */
-export type OwnerCopy = (typeof ownerCopies)[number];
+type OwnerCopy = (typeof ownerCopies)[number];
 
 /**
  * The copies of its parent the document node holds as its own fields (N1): the ones the plan's
  * first laws left unpinned (the ancestry, found by Q2.03, and the nearest kind, by Q3.02).
  */
-export const sentinelCopies = ["parentAncestry", "nearestKind"] as const;
+const sentinelCopies = ["parentAncestry", "nearestKind"] as const;
 
 /**
  * A named edit of a valid tree's rows, each with its own targets, by their numbers in document
@@ -2364,14 +2364,14 @@ export const rowVariants = [
 /**
  * A variant of {@link rowVariants}.
  */
-export type RowVariant = (typeof rowVariants)[number];
+type RowVariant = (typeof rowVariants)[number];
 
 /**
  * The variants assembly does not meet, which only the laws over folded rows do: those that edit the
  * fields the folds write, and those that give a foreign element or an open-class attribute a class
  * its stored namespace contradicts, which assembly reads as written.
  */
-export const foldVariants = [
+const foldVariants = [
   "countOffByOne",
   "slotZeroAccumulator",
   "staleWas",
@@ -2891,7 +2891,7 @@ const editsOf = (rows: FoldedRows<Composed>) => {
 /**
  * A variant of {@link rowVariants}, with its targets.
  */
-export type RowCorruption = Extract<Corruption, { readonly _tag: RowVariant }>;
+type RowCorruption = Extract<Corruption, { readonly _tag: RowVariant }>;
 
 /**
  * Test whether a corruption is a row variant, which assembly meets.

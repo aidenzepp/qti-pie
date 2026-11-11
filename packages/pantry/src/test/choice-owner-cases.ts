@@ -37,23 +37,23 @@ export const interactionKinds = [
 /**
  * An interaction of a case.
  */
-export type InteractionKind = (typeof interactionKinds)[number];
+type InteractionKind = (typeof interactionKinds)[number];
 
 /**
  * Where a case places its gap fragment, a `p` holding one `qti-gap`: in a gap-match of its own
  * (lawful), in the item body, or in no include at all. `none` writes no fragment.
  */
-export const gapPlacements = ["none", "gapMatch", "body", "unplaced"] as const;
+const gapPlacements = ["none", "gapMatch", "body", "unplaced"] as const;
 
 /**
  * A gap fragment's placement.
  */
-export type GapPlacement = (typeof gapPlacements)[number];
+type GapPlacement = (typeof gapPlacements)[number];
 
 /**
  * One interaction of a case: its kind, and whether it writes its `response-identifier`.
  */
-export interface CaseInteraction {
+interface CaseInteraction {
   readonly kind: InteractionKind;
   readonly named: boolean;
 }
@@ -227,12 +227,12 @@ export const smallScope: readonly ChoiceOwnerCase[] = interactionKinds.flatMap((
  * The features a drawn case's swarm weighs: each interaction kind, an unnamed interaction, and each
  * gap placement.
  */
-export const caseFeatures = [...interactionKinds, "unnamed", ...gapPlacements] as const;
+const caseFeatures = [...interactionKinds, "unnamed", ...gapPlacements] as const;
 
 /**
  * A feature of a drawn case.
  */
-export type CaseFeature = (typeof caseFeatures)[number];
+type CaseFeature = (typeof caseFeatures)[number];
 
 /**
  * Draw a case under a swarm: one to four interactions of the kinds it weighs, each unnamed as often

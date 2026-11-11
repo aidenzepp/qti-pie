@@ -402,7 +402,7 @@ export const elementsOf = (view: View, node: NodeId): readonly Row[] =>
  * @param met - The ids the walk is not to enter again.
  * @returns The chain, nearest first.
  */
-export const chainFrom = (
+const chainFrom = (
   view: View,
   start: Row | undefined,
   met: ReadonlySet<NodeId> = new Set(),
@@ -562,7 +562,7 @@ export interface PackageRows {
  * oracle's laws `Context variable reference`, `Feedback reference`, `Printed variable reference`
  * and `Template reference`).
  */
-export type ContentLaw =
+type ContentLaw =
   | "Context variable reference"
   | "Feedback reference"
   | "Printed variable reference"

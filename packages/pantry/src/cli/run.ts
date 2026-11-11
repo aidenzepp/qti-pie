@@ -23,7 +23,7 @@ import {
  * @param args - The command line after the program name.
  * @returns The same line with each bare `-v` before `--` spelled `--verbose`.
  */
-export const rewriteVerbose = (args: readonly string[]): readonly string[] => {
+const rewriteVerbose = (args: readonly string[]): readonly string[] => {
   const end = args.indexOf("--");
 
   return args.map((arg, index) =>

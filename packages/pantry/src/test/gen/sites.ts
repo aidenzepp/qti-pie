@@ -82,12 +82,12 @@ export const sites: Readonly<
 /**
  * The href an `absent` site writes: a path beside its document that no entry holds.
  */
-export const absentHref = "absent.xml";
+const absentHref = "absent.xml";
 
 /**
  * The href an `external` site writes: a file outside the package.
  */
-export const externalHref = "https://example.com/external.xml";
+const externalHref = "https://example.com/external.xml";
 
 /**
  * Every package of the site box, each site under each of its cases: 125 in all, so one exhaustion

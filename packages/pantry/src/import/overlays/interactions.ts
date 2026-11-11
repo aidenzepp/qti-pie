@@ -1314,7 +1314,7 @@ export const rowsOf = (view: DocumentView): InteractionRows => {
  * A package's counts of the choices each bound's node owns and of the gaps each interaction owns
  * ({@link packageChoicesOf}).
  */
-export interface PackageChoices {
+interface PackageChoices {
   /**
    * Each bound's count of choices, by its node, an interaction's the count `Interaction.choices`
    * draws.

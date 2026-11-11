@@ -55,7 +55,7 @@ export type Named = "R" | "SCORE" | "T" | "U";
 /**
  * Every {@link Named}.
  */
-export const nameds: readonly [Named, ...Named[]] = ["T", "SCORE", "R", "U"];
+const nameds: readonly [Named, ...Named[]] = ["T", "SCORE", "R", "U"];
 
 /**
  * The kind of declaration the item declares each name under, `undefined` for none.
@@ -70,7 +70,7 @@ export const declaredKinds: Readonly<Record<Named, string | undefined>> = {
 /**
  * One template default of the item ref: the template it names and its expression's base type.
  */
-export interface TemplateSpec {
+interface TemplateSpec {
   readonly held: "float" | "integer";
   readonly template: Named;
 }
@@ -84,7 +84,7 @@ export type TargetSpec = "M1" | "M2" | "M3" | "numAttempts" | "same" | "X";
  * One variable mapping of the item ref: its source, its target, and whether the test reads the
  * target through the item ref.
  */
-export interface MappingSpec {
+interface MappingSpec {
   readonly read: boolean;
   readonly source: Named;
   readonly target: TargetSpec;
@@ -114,7 +114,7 @@ export const sourceName = (source: Named): string => (source === "U" ? "MISSING"
  * @param mapping - The mapping.
  * @returns The name.
  */
-export const targetName = (mapping: MappingSpec): string =>
+const targetName = (mapping: MappingSpec): string =>
   mapping.target === "same" ? sourceName(mapping.source) : mapping.target;
 
 /**
@@ -306,7 +306,7 @@ export const itemRefPackageLiteral = (input: ItemRefPackage): string => JSON.str
 /**
  * Every template default a package may hold.
  */
-export const templateSpecs: readonly [TemplateSpec, ...TemplateSpec[]] = [
+const templateSpecs: readonly [TemplateSpec, ...TemplateSpec[]] = [
   { held: "integer", template: "T" },
   ...nameds.flatMap((template) =>
     (["integer", "float"] as const).flatMap((held) =>
@@ -318,7 +318,7 @@ export const templateSpecs: readonly [TemplateSpec, ...TemplateSpec[]] = [
 /**
  * Every mapping a package may hold.
  */
-export const mappingSpecs: readonly [MappingSpec, ...MappingSpec[]] = [
+const mappingSpecs: readonly [MappingSpec, ...MappingSpec[]] = [
   { read: false, source: "SCORE", target: "M1" },
   ...nameds.flatMap((source) =>
     (["M1", "X", "same", "numAttempts"] as const).flatMap((target) =>
@@ -349,7 +349,7 @@ export const smallItemRefPackage: Gen<ItemRefPackage> = (source) => {
 /**
  * The features a swarm turns on or off for one case.
  */
-export const itemRefFeatures = [
+const itemRefFeatures = [
   "lti link",
   "unlisted path",
   "missing file",
@@ -366,7 +366,7 @@ export const itemRefFeatures = [
 /**
  * One of {@link itemRefFeatures}.
  */
-export type ItemRefFeature = (typeof itemRefFeatures)[number];
+type ItemRefFeature = (typeof itemRefFeatures)[number];
 
 /**
  * What an item ref names, by the swarm's arm that chose it.

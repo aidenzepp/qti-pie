@@ -29,7 +29,7 @@ const digitCodes = 4;
  * @param roster - The roster.
  * @returns The width, in bits.
  */
-export const bitsWidth = (roster: RosterHandles): number =>
+const bitsWidth = (roster: RosterHandles): number =>
   Math.ceil(roster.handles.length / digitCodes) * digitCodes;
 
 /**

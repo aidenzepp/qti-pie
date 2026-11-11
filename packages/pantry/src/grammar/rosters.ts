@@ -23,7 +23,7 @@ import type { Nameless, NamespaceName } from "#pantry/vocab/namespaces.ts";
  * One kind of a vocabulary: its handle, and the local name of its element, empty for a kind that
  * is no element (character data).
  */
-export interface VocabularyKind {
+interface VocabularyKind {
   readonly handle: string;
   readonly local: string;
 }
@@ -31,7 +31,7 @@ export interface VocabularyKind {
 /**
  * A kind that names no element, as every kind of a {@link Nameless} vocabulary does.
  */
-export interface NamelessKind extends VocabularyKind {
+interface NamelessKind extends VocabularyKind {
   readonly local: "";
 }
 
@@ -74,7 +74,7 @@ export type NameOf<V extends readonly Vocabulary[]> =
 /**
  * A set over `NodeKind`: one bit per kind, set for each kind it holds.
  */
-export type KindSet<Kind extends string> = Indexed<readonly [IdField<"kind", Kind>], readonly []>;
+type KindSet<Kind extends string> = Indexed<readonly [IdField<"kind", Kind>], readonly []>;
 
 /**
  * The closed relations of kinds and attribute names one vocabulary list generates.
@@ -276,10 +276,7 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
  * The kind relations of a vocabulary list before the content grammar: every one but `resolve`,
  * which reads what each parent admits ({@link resolution}).
  */
-export type KindRosters<Kind extends string, Name extends string> = Omit<
-  Kinds<Kind, Name>,
-  "resolve"
->;
+type KindRosters<Kind extends string, Name extends string> = Omit<Kinds<Kind, Name>, "resolve">;
 
 /**
  * Add name resolution to a composition's kinds: `resolve`, from an element's expanded name and its

@@ -44,7 +44,7 @@ import { xmllintPath, xmllintRun } from "#pantry/xml/oracle.ts";
 /**
  * The command that fills the spec cache, which the errors name as the repair.
  */
-export const fetchSpecsCommand = "pnpm --filter @qti-pie/pantry run fetch-specs";
+const fetchSpecsCommand = "pnpm --filter @qti-pie/pantry run fetch-specs";
 
 /**
  * No `xmllint` runs as the spec tests run it, so nothing was fetched.
@@ -53,7 +53,7 @@ export const fetchSpecsCommand = "pnpm --filter @qti-pie/pantry run fetch-specs"
  * `PATH`; `reason` is why it did not run: what the platform said when it did not start, or the
  * status and standard error of a run of `xmllint --version` that failed.
  */
-export class SpecXmllintUnavailable extends Schema.TaggedError<SpecXmllintUnavailable>()(
+class SpecXmllintUnavailable extends Schema.TaggedError<SpecXmllintUnavailable>()(
   "SpecXmllintUnavailable",
   { executable: Schema.String, reason: Schema.String },
 ) {
@@ -91,10 +91,12 @@ const requireXmllint = Effect.fn("test.specCache.requireXmllint")(function* requ
  * `reason` says what the request ended with. `staleCopy` is whether the cache already held a file
  * at the path whose bytes differ from the pin; that file is left as it was.
  */
-export class SpecDownloadFailed extends Schema.TaggedError<SpecDownloadFailed>()(
-  "SpecDownloadFailed",
-  { path: Schema.String, reason: Schema.String, staleCopy: Schema.Boolean, url: Schema.String },
-) {
+class SpecDownloadFailed extends Schema.TaggedError<SpecDownloadFailed>()("SpecDownloadFailed", {
+  path: Schema.String,
+  reason: Schema.String,
+  staleCopy: Schema.Boolean,
+  url: Schema.String,
+}) {
   /**
    * Which file was not downloaded, from where, and why.
    */
@@ -111,7 +113,7 @@ export class SpecDownloadFailed extends Schema.TaggedError<SpecDownloadFailed>()
  * whether the cache already held a file at the path whose bytes differ from the pin; that file is
  * left as it was.
  */
-export class SpecPublishedChanged extends Schema.TaggedError<SpecPublishedChanged>()(
+class SpecPublishedChanged extends Schema.TaggedError<SpecPublishedChanged>()(
   "SpecPublishedChanged",
   {
     actual: Schema.String,
@@ -132,7 +134,7 @@ export class SpecPublishedChanged extends Schema.TaggedError<SpecPublishedChange
 /**
  * Why one source could not be settled: its download failed, or it served other bytes than its pin.
  */
-export type SpecFailure = SpecDownloadFailed | SpecPublishedChanged;
+type SpecFailure = SpecDownloadFailed | SpecPublishedChanged;
 
 /**
  * Keep a source's failure as a value, so a run attempts every pin before it fails.
@@ -149,14 +151,11 @@ const keptFailure = (failure: SpecFailure) =>
  * `failures` lists each one and why, `pinned` is how many sources the table pins, and every source
  * not among the failures is in the cache and hashes to its pin.
  */
-export class SpecFetchIncomplete extends Schema.TaggedError<SpecFetchIncomplete>()(
-  "SpecFetchIncomplete",
-  {
-    directory: Schema.String,
-    failures: Schema.Array(Schema.Union([SpecDownloadFailed, SpecPublishedChanged])),
-    pinned: Schema.Number,
-  },
-) {
+class SpecFetchIncomplete extends Schema.TaggedError<SpecFetchIncomplete>()("SpecFetchIncomplete", {
+  directory: Schema.String,
+  failures: Schema.Array(Schema.Union([SpecDownloadFailed, SpecPublishedChanged])),
+  pinned: Schema.Number,
+}) {
   /**
    * Which files are missing and why, that the rest are in place, and what settles each kind of
    * failure.
@@ -196,7 +195,7 @@ export class SpecFetchIncomplete extends Schema.TaggedError<SpecFetchIncomplete>
  * whether the cache already held a file at the path whose bytes differ from the pin; that file is
  * left as it was.
  */
-export class SpecRenderingChanged extends Schema.TaggedError<SpecRenderingChanged>()(
+class SpecRenderingChanged extends Schema.TaggedError<SpecRenderingChanged>()(
   "SpecRenderingChanged",
   {
     actual: Schema.String,
@@ -220,7 +219,7 @@ export class SpecRenderingChanged extends Schema.TaggedError<SpecRenderingChange
  *
  * `entity` is the reference and `offset` where it stands in the source.
  */
-export class SpecRenderingUndecodable extends Schema.TaggedError<SpecRenderingUndecodable>()(
+class SpecRenderingUndecodable extends Schema.TaggedError<SpecRenderingUndecodable>()(
   "SpecRenderingUndecodable",
   { entity: Schema.String, from: Schema.String, offset: Schema.Number, path: Schema.String },
 ) {
@@ -236,7 +235,7 @@ export class SpecRenderingUndecodable extends Schema.TaggedError<SpecRenderingUn
  * Why one rendering could not be put in the cache: it differs from its pin, or its source holds a
  * reference the recorded command does not decode.
  */
-export type RenderingFailure = SpecRenderingChanged | SpecRenderingUndecodable;
+type RenderingFailure = SpecRenderingChanged | SpecRenderingUndecodable;
 
 /**
  * What a run did with one rendering: `present` when the cache already held its bytes, `derived`
@@ -260,7 +259,7 @@ const keptRenderingFailure = (failure: RenderingFailure) =>
  * `failures` lists each one and why, `pinned` is how many renderings the table pins, and every
  * rendering not among the failures is in the cache and hashes to its pin.
  */
-export class SpecRenderIncomplete extends Schema.TaggedError<SpecRenderIncomplete>()(
+class SpecRenderIncomplete extends Schema.TaggedError<SpecRenderIncomplete>()(
   "SpecRenderIncomplete",
   {
     directory: Schema.String,
@@ -405,7 +404,7 @@ const derive = Effect.fn("test.specCache.deriveRendering")(function* derive(
  * and every rendering with what the run did with it. Each file named is in the cache and hashes to
  * its pin.
  */
-export interface SpecReport extends FetchReport {
+interface SpecReport extends FetchReport {
   readonly renderings: readonly { readonly outcome: Rendered; readonly path: string }[];
   readonly xsds: FetchReport;
 }
@@ -428,7 +427,7 @@ export interface SpecReport extends FetchReport {
  *   naming each rendering that could not be derived once every rendering was attempted, or the
  *   file system's failure.
  */
-export const fetchSpecs = Effect.fn("test.specCache.fetchSpecs")(function* fetchSpecs(
+const fetchSpecs = Effect.fn("test.specCache.fetchSpecs")(function* fetchSpecs(
   table: SpecPins,
   xsds: XsdPins,
 ) {

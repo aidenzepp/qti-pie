@@ -21,7 +21,7 @@ import { textOf, withText } from "#pantry/test/oracle-complete/mutation.ts";
  * The every-relation package the cases edit: its widest member counts, which write every
  * declaration site a reference, a binding or a table can name.
  */
-export const declarationBase: PackageEntries = everyRelationPackage({
+const declarationBase: PackageEntries = everyRelationPackage({
   choices: 3,
   hotspots: 2,
   hottexts: 2,
@@ -56,7 +56,7 @@ export type DeclarationKind = (typeof declarationKinds)[number];
  * One declaration of the base: its document, its start tag as written, its kind, its place among
  * its document's declarations of its kind, and its attributes' lexical forms.
  */
-export interface DeclarationSite {
+interface DeclarationSite {
   readonly attributes: ReadonlyMap<string, string>;
   readonly identifier: string;
   readonly kind: DeclarationKind;
@@ -120,7 +120,7 @@ export const declarationSites: readonly DeclarationSite[] = declaringPaths.flatM
  * the cardinality changes, every reference still resolves and types nothing, and where only the
  * base type does, no law reads a type it does not spell.
  */
-export interface DeclarationState {
+interface DeclarationState {
   readonly alone: boolean;
   readonly applies: (site: DeclarationSite) => boolean;
   readonly attribute: "base-type" | "cardinality";

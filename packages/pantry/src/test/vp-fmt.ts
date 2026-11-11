@@ -17,7 +17,7 @@ const packageRoot = path.resolve(import.meta.dirname, "..", "..");
  *
  * `stderr` is what it printed, which names the syntax it could not parse.
  */
-export class VpFmtFailed extends Schema.TaggedError<VpFmtFailed>()("VpFmtFailed", {
+class VpFmtFailed extends Schema.TaggedError<VpFmtFailed>()("VpFmtFailed", {
   code: Schema.Number,
   filepath: Schema.String,
   stderr: Schema.String,

@@ -56,7 +56,7 @@ export const fileScratchDirectory = (prefix: string): string => {
 /**
  * The environment that gives a CLI run a scratch home and a cluster state folder of its own.
  */
-export type ScratchEnv = Readonly<{
+type ScratchEnv = Readonly<{
   /**
    * An empty cluster state folder, so a step that needs the database fails with kind `config`.
    */

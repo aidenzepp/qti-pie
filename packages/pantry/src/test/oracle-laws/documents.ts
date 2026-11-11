@@ -56,7 +56,7 @@ export const documentLaws = [
 /**
  * A law of {@link documentLaws}.
  */
-export type DocumentLaw = (typeof documentLaws)[number];
+type DocumentLaw = (typeof documentLaws)[number];
 
 /**
  * A breach of one of this module's laws.

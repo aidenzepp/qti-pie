@@ -286,7 +286,7 @@ export const refusalOf = {
 /**
  * A toy case: its fault, and the facets that carry it, in composition order.
  */
-export interface ToyCase {
+interface ToyCase {
   readonly facets: readonly ReferenceFacet[];
   readonly fault: Fault;
 }

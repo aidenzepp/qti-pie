@@ -41,7 +41,7 @@ const unionOf = <A>(sets: readonly ReadonlySet<A>[]): ReadonlySet<A> =>
  * stands for every element its namespace constraint admits that no element particle of the model
  * names.
  */
-export type PositionSymbol =
+type PositionSymbol =
   | { readonly _tag: "kinds"; readonly kinds: readonly [string, ...string[]] }
   | {
       readonly _tag: "wildcard";
@@ -92,7 +92,7 @@ export interface Automaton {
  * for the start, else the position the word stands at) and the two positions one child could take.
  * A breach is a finding about a model, never repaired here.
  */
-export interface Ambiguity {
+interface Ambiguity {
   readonly positions: readonly [number, number];
   readonly state: number;
 }

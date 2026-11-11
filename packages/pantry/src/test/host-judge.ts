@@ -228,7 +228,7 @@ const DescribedSchema = Schema.Struct({
  * in SQL's three-valued logic: true, false, or unknown where a field it reads is absent and no
  * operand decides it without that field.
  */
-export interface JudgedSide {
+interface JudgedSide {
   readonly law: LawSide;
   readonly reads: readonly string[];
   readonly relation: string;
@@ -304,7 +304,7 @@ const AlternativesSchema = Schema.Struct({ kind: Schema.Literal("alternatives") 
  * named as an outcome names it, and a check's predicate is read with the fields and unread terms it
  * holds.
  */
-export type JudgedLaw =
+type JudgedLaw =
   | {
       readonly from: JudgedSide;
       readonly kind: "contained";
@@ -611,7 +611,7 @@ export const judgedOf = (
  * @param relation - The relation's name.
  * @returns Its rows; none for a name that is no closed relation of the schema.
  */
-export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
+const closedRows = (relation: string): Option.Option<readonly Row[]> =>
   Option.map(closed.factsOf(relation), ({ rows }) => rows);
 
 /**

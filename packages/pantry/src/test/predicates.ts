@@ -255,7 +255,7 @@ const [leastBigint, mostBigint] = [-(2n ** 63n), 2n ** 63n - 1n];
  * @returns The integer, none for a text of no integer form or one outside `bigint`'s range, which
  *   a predicate reads as unknown.
  */
-export const integerNamed = (text: string): bigint | undefined => {
+const integerNamed = (text: string): bigint | undefined => {
   if (!integerText.test(text)) {
     return undefined;
   }
@@ -318,7 +318,7 @@ const numericOrder = (left: Numeric, right: Numeric): number => {
  * queries here would restate what the database states (gap G5), so a statement with a side over a
  * derived relation decodes as none and goes unjudged, its law's verdict unknown on the host.
  */
-export const judgedKinds = ["relation", "closedRelation"] as const;
+const judgedKinds = ["relation", "closedRelation"] as const;
 
 /**
  * Whether the host holds a relation's rows, so a law side over it is judged: a stored or a closed

@@ -145,7 +145,7 @@ const spelledCardinalityOf = (lexical: Option.Option<string>): Option.Option<Car
 /**
  * The lexical forms of the three attributes a declaration's rows read, each none where unwritten.
  */
-export interface DeclarationLexicals {
+interface DeclarationLexicals {
   readonly baseType: Option.Option<string>;
   readonly cardinality: Option.Option<string>;
   readonly identifier: Option.Option<string>;
@@ -155,7 +155,7 @@ export interface DeclarationLexicals {
  * A declaration's name as its {@link DeclarationIdentifier} holds it: its `identifier` as written,
  * and its pieces.
  */
-export interface DeclaredName {
+interface DeclaredName {
   readonly lexical: string;
   readonly pieces: Pieces;
 }

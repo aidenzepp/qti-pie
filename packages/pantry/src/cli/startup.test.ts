@@ -69,7 +69,7 @@ const staticImports = (source: string): readonly ModuleImport[] =>
  * @param read - Reads a module's text.
  * @returns Each offending module and import, as `module: import`.
  */
-export const forbiddenImports = (
+const forbiddenImports = (
   entry: string,
   forbidden: readonly string[],
   read: (file: string) => string,

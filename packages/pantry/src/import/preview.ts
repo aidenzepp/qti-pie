@@ -16,7 +16,7 @@ import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
  * How much a package holds: the rows it would write and the relations they fall in, and that no
  * law of the database judged them.
  */
-export interface Preview {
+interface Preview {
   /**
    * Always false: a dry run opens no database, so none of its laws ran.
    */

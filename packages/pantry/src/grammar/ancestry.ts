@@ -48,12 +48,12 @@ export type Ancestry = ReadonlySet<Flag>;
 /**
  * The key of the three sets: a `NodeKind` handle, then a flag.
  */
-export type KindFlag = readonly [IdField<"kind", string>, IdField<"flag", Flag>];
+type KindFlag = readonly [IdField<"kind", string>, IdField<"flag", Flag>];
 
 /**
  * A closed set over kind × flag, one bit a cell.
  */
-export type KindFlagSet = Closed<KindFlag, readonly []>;
+type KindFlagSet = Closed<KindFlag, readonly []>;
 
 /**
  * A kind × flag set read by kind: `Enters`, which a node's ancestry steps by on every serving path
@@ -104,7 +104,7 @@ export interface AncestryFacet {
  * choice, a hottext, a rubric block, a template block, a modal feedback, or a test's rubric block
  * or feedback.
  */
-export const interactionBans = [
+const interactionBans = [
   "int",
   "choice",
   "htx",

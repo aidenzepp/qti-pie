@@ -64,7 +64,7 @@ export type Piece =
 /**
  * A quote a literal is written between.
  */
-export type Quote = '"' | "'";
+type Quote = '"' | "'";
 
 /**
  * An attribute as written: its qualified name, its quote and its value's pieces.
@@ -90,7 +90,7 @@ export interface Namespace {
  * An element as written: its qualified name, its attributes and namespace declarations in the
  * order written, interleaved as written, and its children.
  */
-export interface ElementNode {
+interface ElementNode {
   readonly _tag: "element";
   readonly attributes: readonly (Attr | Namespace)[];
   readonly children: readonly Node[];
@@ -118,20 +118,12 @@ export type Node =
 /**
  * An attribute's declared type in an attribute-list declaration.
  */
-export type AttType =
-  | "(a|b)"
-  | "CDATA"
-  | "ENTITY"
-  | "ID"
-  | "IDREF"
-  | "IDREFS"
-  | "NMTOKEN"
-  | "NMTOKENS";
+type AttType = "(a|b)" | "CDATA" | "ENTITY" | "ID" | "IDREF" | "IDREFS" | "NMTOKEN" | "NMTOKENS";
 
 /**
  * An attribute's default declaration: `#IMPLIED`, `#REQUIRED`, or a value, `#FIXED` or not.
  */
-export type AttDefault =
+type AttDefault =
   | { readonly _tag: "implied" }
   | { readonly _tag: "required" }
   | {
@@ -945,7 +937,7 @@ export const nodesOf = (
  * @param edit - Maps the node to the nodes that take its place.
  * @returns The new root.
  */
-export const replacedAt = (
+const replacedAt = (
   root: ElementNode,
   path: Path,
   edit: (node: Node) => readonly Node[],
@@ -2116,7 +2108,7 @@ const operations: Readonly<
 /**
  * A run's weight for each operator, 0 for one it leaves off.
  */
-export type Weights = ReadonlyMap<Operator, number>;
+type Weights = ReadonlyMap<Operator, number>;
 
 /**
  * How many times an edit is drawn before a mutation gives up: an edit with no site in the genome

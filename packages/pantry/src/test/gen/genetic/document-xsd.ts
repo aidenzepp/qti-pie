@@ -63,7 +63,7 @@ export const documentPath = "doc.xml";
  * a misplaced element, a repeated `xs:ID`, a root swapped for another's). A dangling href, a cycle
  * and an over-long key are a package's, which no XSD judges, so they are left out.
  */
-export const sharedOperators = [
+const sharedOperators = [
   "insert-element",
   "crossover",
   "delete-element",
@@ -92,7 +92,7 @@ export const sharedOperators = [
  * - `foreign-child`: an element of a namespace no schema declares;
  * - `swap-children`: two element children swapped, which a sequence refuses.
  */
-export const documentFaults = [
+const documentFaults = [
   "wrong-namespace",
   "unknown-attribute",
   "missing-required-child",
@@ -104,7 +104,7 @@ export const documentFaults = [
 /**
  * One operator a document genome's swarm weighs.
  */
-export type XsdOperator = (typeof sharedOperators)[number] | (typeof documentFaults)[number];
+type XsdOperator = (typeof sharedOperators)[number] | (typeof documentFaults)[number];
 
 /**
  * Every operator a document genome's swarm weighs, the shared ones first.
@@ -586,7 +586,7 @@ export const editedNamespaces = (before: Element, after: Element): ReadonlySet<s
 /**
  * The feature families: each a set whose Good–Turing residual the search reports.
  */
-export const xsdFamilies = ["domain", "edit", "law", "step", "verdict", "xsd"] as const;
+const xsdFamilies = ["domain", "edit", "law", "step", "verdict", "xsd"] as const;
 
 /**
  * A feature: its family, then what it names.

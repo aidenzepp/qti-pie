@@ -97,7 +97,7 @@ export type Ordering = (typeof orderings)[number];
  * The features a case's swarm weighs: its base, each named edit, `sameElement`, which puts an edit
  * on the element the one before it edited, so two of them break one element, and each order.
  */
-export const orderFeatures = [...bases, ...corruptions, "sameElement", ...orderings] as const;
+const orderFeatures = [...bases, ...corruptions, "sameElement", ...orderings] as const;
 
 /**
  * A feature of {@link orderFeatures}.

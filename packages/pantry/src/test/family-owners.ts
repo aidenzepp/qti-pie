@@ -33,7 +33,7 @@ const FamilySchema = Schema.Struct({
 /**
  * One family as the check reads it.
  */
-export interface FamilyAxis {
+interface FamilyAxis {
   readonly member: string;
   readonly owner: string;
   readonly ownerKey: readonly string[];
@@ -45,7 +45,7 @@ export interface FamilyAxis {
  * member is a selection fails here, since its members are the selection's rows, which this module
  * does not evaluate.
  */
-export const familyAxes: readonly FamilyAxis[] = Qti.statements.flatMap((statement) => {
+const familyAxes: readonly FamilyAxis[] = Qti.statements.flatMap((statement) => {
   const read = Schema.decodeUnknownOption(FamilySchema)(statement);
   if (read._tag === "None") {
     return [];
@@ -139,7 +139,7 @@ const keyTextOf = (fields: readonly string[]) => {
 /**
  * One member whose group key names no owner row.
  */
-export interface Orphan {
+interface Orphan {
   readonly key: string;
   readonly member: string;
   readonly owner: string;

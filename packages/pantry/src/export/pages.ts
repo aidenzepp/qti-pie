@@ -47,7 +47,7 @@ import type {
  * The open name is a family of at most one member (`openName` ≤ 1 on `Attribute`), so no key
  * proves it at most one and the scan delivers it as a list.
  */
-export interface ScannedAttribute<V extends XdmVocabulary> {
+interface ScannedAttribute<V extends XdmVocabulary> {
   readonly at: bigint;
   readonly entities: readonly Pick<AttributeEntityRow, "name" | "offset">[];
   readonly id: AttributeId;
@@ -63,7 +63,7 @@ export interface ScannedAttribute<V extends XdmVocabulary> {
  * type `XmlVersion` of `#pantry/qti/chardata.ts`, whose host type is `1.${number}`), with its
  * `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the node.
  */
-export interface ScannedDeclaration extends XmlDeclRow {
+interface ScannedDeclaration extends XmlDeclRow {
   readonly encoding: Option.Option<Pick<EncodingDeclRow, "encoding">>;
   readonly standalone: Option.Option<Pick<SdDeclRow, "standalone">>;
 }
@@ -72,7 +72,7 @@ export interface ScannedDeclaration extends XmlDeclRow {
  * A document node's `Document` row as the scan delivers it: its fields as `assemble` reads them,
  * with its `XmlDecl` row attached, none where the document writes no declaration.
  */
-export interface ScannedDocument extends DocumentRow {
+interface ScannedDocument extends DocumentRow {
   readonly declaration: Option.Option<ScannedDeclaration>;
 }
 

@@ -40,7 +40,7 @@ const baseSource = "ssml/synthesis-nonamespace.xsd" satisfies SourcePath;
  * name keeps the original, which a redefinition's base names. `redefined` names the redefined
  * types.
  */
-export interface SsmlSchema {
+interface SsmlSchema {
   readonly redefined: ReadonlySet<string>;
   readonly schema: XsdSchema;
 }

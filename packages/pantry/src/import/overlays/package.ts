@@ -129,7 +129,7 @@ const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
 /**
  * A reference's written pieces, `lexical = lead ‖ target ‖ params ‖ trail`.
  */
-export interface ReferencePieces {
+interface ReferencePieces {
   readonly lead: Space;
   readonly params: HrefPieces["params"];
   readonly target: string;
@@ -235,7 +235,7 @@ export type HrefResolution =
  * written form, the last its file's name or empty for a directory; a location outside the package;
  * or a base the importer reads no path from, under its {@link Limit}.
  */
-export type HrefBase =
+type HrefBase =
   | { readonly _tag: "package"; readonly segments: readonly string[] }
   | { readonly _tag: "external" }
   | { readonly _tag: "unresolved"; readonly limit: Limit };
@@ -539,11 +539,7 @@ export const basesOf = (rows: FlatRows<Composed>, path: string): ReadonlyMap<Nod
 /**
  * Resolve an attribute of a node of a document as an href, its value read by its whitespace class.
  */
-export type HrefResolver = (
-  node: NodeId,
-  lexical: string,
-  whiteSpace?: WhiteSpace,
-) => HrefResolution;
+type HrefResolver = (node: NodeId, lexical: string, whiteSpace?: WhiteSpace) => HrefResolution;
 
 /**
  * Build the resolver of a document's hrefs: each against its element's base ({@link basesOf}).
@@ -785,10 +781,7 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
 /**
  * A typed href as the host reads it: a resource's `ResourceHref` beside its `ResourceTyped`'s code.
  */
-export type TypedHrefRow = Pick<
-  Addition<typeof ResourceHref>,
-  "node" | "package" | "path" | "scope"
-> &
+type TypedHrefRow = Pick<Addition<typeof ResourceHref>, "node" | "package" | "path" | "scope"> &
   Pick<Addition<typeof ResourceTyped>, "type">;
 
 /**

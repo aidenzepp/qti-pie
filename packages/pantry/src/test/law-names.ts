@@ -39,7 +39,7 @@ const identifiedByBucket = Fn.memoize((schema: typeof Qti) =>
  * @param law - A law of `lawsOf(Qti)`, or one pantry's own model builds.
  * @returns Its id, or none for a law `Qti` does not state.
  */
-export const lawIdOf = (law: Law): Option.Option<string> =>
+const lawIdOf = (law: Law): Option.Option<string> =>
   Option.map(
     Arr.findFirst(identifiedByBucket(Qti)[bucketOf(law)] ?? [], (held) => sameLaw(held.law, law)),
     ({ id }) => id,

@@ -65,7 +65,7 @@ const noiseSchedule: readonly (Noise | undefined)[] = [
  * One run as its case draws it: the swarm its edits are weighed by, and the seed its every choice
  * is drawn from.
  */
-export interface RunSketch {
+interface RunSketch {
   readonly seed: number;
   readonly swarm: Swarm<Operator>;
 }
@@ -99,7 +99,7 @@ export const runLiteral = (sketch: RunSketch): string =>
  * package shows it, the edits that bred the first candidate that showed it, and the reduced
  * package, as a genome and as its text.
  */
-export interface Reduced {
+interface Reduced {
   readonly disagreement: Disagreement;
   readonly genome: Genome;
   readonly lineage: readonly string[];
@@ -115,7 +115,7 @@ export interface Reduced {
  * @param finding - The finding but its package.
  * @returns The finding.
  */
-export const reducedOf = Effect.fnUntraced(function* reducedOf(finding: Omit<Reduced, "package">) {
+const reducedOf = Effect.fnUntraced(function* reducedOf(finding: Omit<Reduced, "package">) {
   return {
     ...finding,
     package: shownEntries(yield* Effect.orDie(entriesOf(finding.genome))),
@@ -155,7 +155,7 @@ const lawsOf = (judgment: Judged): readonly string[] =>
  * candidates that raised it, whether one raised it alone, and the laws every candidate that raised
  * it raised beside it, the evidence that a law no candidate broke alone is subsumed by another.
  */
-export interface Isolation {
+interface Isolation {
   readonly alone: ReadonlySet<string>;
   readonly beside: ReadonlyMap<string, ReadonlySet<string>>;
   readonly raised: ReadonlyMap<string, number>;
@@ -165,7 +165,7 @@ export interface Isolation {
  * What one run found: the engine's report, each class of disagreement reduced, and what it learned
  * of each law's isolation.
  */
-export interface HuntReport {
+interface HuntReport {
   readonly evolved: Evolved<Genome, Feature, Disagreement, Signature>;
   readonly isolation: Isolation;
   readonly reduced: readonly Reduced[];

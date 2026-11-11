@@ -535,7 +535,7 @@ export const testDocumentsOf = (
  * @param manifest - The manifest.
  * @returns Each resolved href path's resource types.
  */
-export const resourceTypesByPath = (
+const resourceTypesByPath = (
   manifest: View,
 ): ReadonlyMap<string, readonly Option.Option<string>[]> => {
   const byPath = new Map<string, Option.Option<string>[]>();

@@ -62,7 +62,7 @@ export const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xml
  * How one `xmllint` run ended: its exit status, what it wrote to standard output as bytes, and what
  * it wrote to standard error.
  */
-export interface XmllintRun {
+interface XmllintRun {
   readonly code: ChildProcessSpawner.ExitCode;
   readonly stderr: string;
   readonly stdout: Uint8Array;

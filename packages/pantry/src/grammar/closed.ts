@@ -101,7 +101,7 @@ export interface DependentField<Name extends string> {
 /**
  * Any key field whose values are a roster's handles.
  */
-export type AnyIdField = IdField<string, string>;
+type AnyIdField = IdField<string, string>;
 
 /**
  * Any key field: a closed id, or a dependent `fin`.
@@ -116,7 +116,7 @@ export type AnyField = AnyIdField | ValueField<string, Primitive>;
 /**
  * The value a field holds: a handle of its roster, or a value of its type.
  */
-export type ValueOf<F> =
+type ValueOf<F> =
   F extends IdField<string, infer Handle>
     ? Handle
     : F extends ValueField<string, infer Value>

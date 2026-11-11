@@ -200,7 +200,7 @@ const written: Readonly<Partial<Record<BindingState, string>>> = {
 /**
  * What a state makes of the binding, as the fit laws read it.
  */
-export interface BindingExpectation {
+interface BindingExpectation {
   /**
    * The cardinality the bound declaration's `DeclarationCardinality` row holds, the one it spells;
    * none where no response declaration holds the name, or where its cardinality is unwritten or

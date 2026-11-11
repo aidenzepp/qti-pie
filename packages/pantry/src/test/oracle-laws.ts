@@ -44,18 +44,18 @@ export { addedLaws, lomNamedTypes, objectRoots } from "#pantry/test/oracle-laws/
 /**
  * Every law this module's producers raise.
  */
-export const producedLaws = [...documentLaws, ...expressionLaws, ...testLaws] as const;
+const producedLaws = [...documentLaws, ...expressionLaws, ...testLaws] as const;
 
 /**
  * A law of {@link producedLaws}.
  */
-export type ProducedLaw = (typeof producedLaws)[number];
+type ProducedLaw = (typeof producedLaws)[number];
 
 /**
  * One document the package's manifest lists, as the oracle hands it over: its path, the `type`
  * of the resource that lists it, and its own folded rows.
  */
-export interface LawDocument {
+interface LawDocument {
   readonly path: string;
   readonly resourceType: string;
   readonly rows: FoldedRows<Composed>;
@@ -66,7 +66,7 @@ export interface LawDocument {
  * in manifest order, its entries' paths, and each document's path with the paths of the documents
  * its includes splice in place (spec reading 117).
  */
-export interface LawPackage {
+interface LawPackage {
   readonly documents: readonly LawDocument[];
   readonly entries: readonly string[];
   readonly manifest: { readonly path: string; readonly rows: FoldedRows<Composed> };

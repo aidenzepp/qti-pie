@@ -210,7 +210,7 @@ const xmlSchemaOf = (world: World): Result.Result<XsdSchema, XsdReadingError> =>
  * @returns Its value type and domain, or an {@link XsdReadingError} for a version that reads no
  *   `xml.xsd`, or a name it does not declare.
  */
-export const globalAttributeOf = (
+const globalAttributeOf = (
   world: World,
   name: string,
 ): Result.Result<GlobalAttributeDeclaration, DomainError> =>
@@ -888,7 +888,7 @@ export const textTypesOf = (
  * of its declared type, and the text of each named simple type and of each such complex type with
  * simple content.
  */
-export interface GoverningRows {
+interface GoverningRows {
   readonly declarations: readonly TypeAttributeDeclaration[];
   readonly texts: readonly TypeText[];
   readonly wildcards: readonly TypeAttributeWildcard[];

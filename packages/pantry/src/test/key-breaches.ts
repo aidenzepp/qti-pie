@@ -23,7 +23,7 @@ import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
  * A key law over plain fields: its name, its relation, its fields, in order, and the rows it keys:
  * every row, or those whose one field holds one value (`where`).
  */
-export interface KeyLaw {
+interface KeyLaw {
   readonly fields: readonly string[];
   readonly law: LawName;
   readonly relation: string;
@@ -46,7 +46,7 @@ const Literal = Schema.Union([Schema.Boolean, Schema.Number, Schema.String]);
 /**
  * One key a package's rows break: the law, and the key's text, which two of its rows share.
  */
-export interface KeyBreach extends KeyLaw {
+interface KeyBreach extends KeyLaw {
   readonly key: string;
 }
 
@@ -127,7 +127,7 @@ const termOf = (field: string) => ({ field, kind: "field" as const });
  * Every key the schema states over a relation itself or over a selection that holds one field to
  * one value, with the name of its law as an outcome names it (`schemaLawNameOf`).
  */
-export const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
+const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
   Option.match(keyOf(statement), {
     onNone: () => [],
     onSome: ({ relation, terms, where }) => {

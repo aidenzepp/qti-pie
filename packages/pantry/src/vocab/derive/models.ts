@@ -111,7 +111,7 @@ export interface SchemaView {
  * Find where an element of a version's schema documents is stated: its file and the line its start
  * tag begins on.
  */
-export type SourceOf = (node: Element) => Result.Result<Source, XsdReadingError>;
+type SourceOf = (node: Element) => Result.Result<Source, XsdReadingError>;
 
 /**
  * The schemas of one version, by target namespace.
@@ -122,7 +122,7 @@ export type World = ReadonlyMap<string, SchemaView>;
  * The pinned entry document of each schema a version reads, by the version: those that differ, then
  * those both read. SSML is read apart, from its two files.
  */
-export const worldSources = {
+const worldSources = {
   "3.0.0": [
     "imsqti_asiv3p0_v1p0.xsd",
     "imsqtiv3p0_imscpv1p2_v1p0.xsd",
@@ -651,7 +651,7 @@ const isEmptyContent = (node: Element): Result.Result<boolean, XsdReadingError> 
  * @param complexType - The `xs:complexType` element.
  * @returns Its content type.
  */
-export const contentTypeOf = (
+const contentTypeOf = (
   world: World,
   view: SchemaView,
   complexType: Element,
@@ -691,7 +691,7 @@ export const contentTypeOf = (
  * A kind's model in one version, and where the version states it: its type's `xs:complexType`, or
  * its element's `xs:element` for a type with no complex definition.
  */
-export interface Modeled {
+interface Modeled {
   readonly content: ContentType;
   readonly source: Source;
   readonly type: Option.Option<ExpandedName>;
@@ -1183,7 +1183,7 @@ export const derivationsOf = (
 /**
  * One type's derivations in one version.
  */
-export interface TypeDerivationReading {
+interface TypeDerivationReading {
   readonly derived: readonly [ExpandedName, ...ExpandedName[]];
   readonly type: ExpandedName;
 }
@@ -1194,7 +1194,7 @@ export interface TypeDerivationReading {
  * @param readings - Each version's derivations, in roster order.
  * @returns The rows, by type name, then by their first version.
  */
-export const derivationRowsOf = (
+const derivationRowsOf = (
   readings: readonly (readonly [SchemaVersion, ReadonlyMap<string, TypeDerivationReading>])[],
 ): readonly TypeDerivation[] =>
   Arr.sort(
@@ -1371,7 +1371,7 @@ export const loadModels = Effect.fn("vocab.loadModels")(function* loadModels() {
 /**
  * The models leaf's rows: every kind's content model, and every type's derivations.
  */
-export interface ModelsLeaf {
+interface ModelsLeaf {
   readonly derivations: readonly TypeDerivation[];
   readonly models: readonly ContentModel[];
 }
@@ -1724,7 +1724,7 @@ const helperNames: readonly HelperName[] = Object.keys(helpers).filter((name): n
  * Writes sources into a generated leaf: each as `xsd(file, line)` or `spec(cite)`, each file once
  * as a constant named after its path.
  */
-export interface SourcesWriter {
+interface SourcesWriter {
   /**
    * Write one row's sources.
    *

@@ -92,7 +92,7 @@ export interface Found<G, D> {
  * family they showed, those shown by exactly one candidate, and the estimate, singletons over
  * candidates, the chance the next candidate shows a feature of the family no candidate showed.
  */
-export interface Residual {
+interface Residual {
   readonly candidates: number;
   readonly estimate: number;
   readonly family: string;

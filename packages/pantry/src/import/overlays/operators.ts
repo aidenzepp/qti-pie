@@ -32,7 +32,7 @@ import { equalRoundedMode, roundingKinds } from "#pantry/vocab/terms/operators.t
  * One value of a `tolerance` as its owner's family nests it: without the `node` the nesting
  * supplies, nor the `at` the family draws.
  */
-export type ToleranceTokenInsert = Omit<Addition<typeof ToleranceToken>, "node">;
+type ToleranceTokenInsert = Omit<Addition<typeof ToleranceToken>, "node">;
 
 /**
  * A `qti-equal`'s `tolerance`, with its values nested at its count field.

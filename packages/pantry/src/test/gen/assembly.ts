@@ -38,12 +38,12 @@ export type SectionPart =
 /**
  * A part of a test part: a section or a section ref, the only two a test part holds.
  */
-export type PartChild = Extract<SectionPart, { readonly kind: "ref" | "section" }>;
+type PartChild = Extract<SectionPart, { readonly kind: "ref" | "section" }>;
 
 /**
  * A test part, by its identifier, and the sections and refs it holds.
  */
-export interface GeneratedPart {
+interface GeneratedPart {
   readonly children: readonly PartChild[];
   readonly id: string;
 }
@@ -51,7 +51,7 @@ export interface GeneratedPart {
 /**
  * A section document: its root section's identifier and parts.
  */
-export interface SectionDocument {
+interface SectionDocument {
   readonly children: readonly SectionPart[];
   readonly id: string;
 }
@@ -60,7 +60,7 @@ export interface SectionDocument {
  * A branch rule, by the identifier of the element that owns it and the target it names: an
  * identifier of the package, or one of the three reserved exits.
  */
-export interface GeneratedRule {
+interface GeneratedRule {
   readonly owner: string;
   readonly target: string;
 }
@@ -255,7 +255,7 @@ export const ruleFaultOf = (
  * admitted, and otherwise refused with the faults found. A rule in a section document no test
  * places has no placement and is judged nowhere.
  */
-export type ModelVerdict =
+type ModelVerdict =
   | { readonly kind: "accepted" }
   | { readonly faults: ReadonlySet<RuleFault>; readonly kind: "refused" };
 

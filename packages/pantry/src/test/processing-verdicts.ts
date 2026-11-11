@@ -17,7 +17,7 @@ import type { Rule } from "#pantry/import/rules.ts";
 /**
  * One package's verdict: the rule it is refused under, or `accepted`, and what gives it.
  */
-export interface ProcessingVerdict {
+interface ProcessingVerdict {
   /**
    * The rule the package is refused under, or `accepted`.
    */
@@ -40,7 +40,7 @@ export interface ProcessingVerdict {
  * the document's verdict, judged under the test environment its comment names, which
  * `overlays/expressions.test.ts` writes around it.
  */
-export const codecRefusals: ReadonlyMap<string, Rule> = new Map([
+const codecRefusals: ReadonlyMap<string, Rule> = new Map([
   ["p29-test-variables-weight-integer", "unmodeled-vocabulary"],
 ]);
 

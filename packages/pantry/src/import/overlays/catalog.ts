@@ -40,7 +40,7 @@ import type { AssembledId } from "#pantry/qti/identity.ts";
  * Where a document stands in its package, as this builder reads it beside the document's view: the
  * part of the importer's `NodeIds` (Q5.15) it needs.
  */
-export interface CatalogIds {
+interface CatalogIds {
   /**
    * Whether the document is in an assembly (`Document.assembled`), so its references resolve per
    * instance (spec reading 117).

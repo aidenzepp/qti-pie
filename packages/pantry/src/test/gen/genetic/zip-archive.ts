@@ -36,7 +36,7 @@ export type Method = 0 | 8 | 12;
  * The extra field an entry's headers carry: none, one block of an id no reader knows, or the ZIP64
  * extended information block (APPNOTE 4.5.3) with the sizes the headers mark `0xFFFFFFFF`.
  */
-export type Extra = "none" | "unknown" | "zip64";
+type Extra = "none" | "unknown" | "zip64";
 
 /**
  * One entry as intended: its name and whether its bit 11 flags it UTF-8 (`utf8Flag`), its data, how
@@ -70,13 +70,13 @@ export interface EntryIntent {
  * 4.3.14, 4.3.15); the record alone, after the central directory; the locator alone; or the end
  * record's entry count marked `0xFFFF`, which says the count is in a ZIP64 record.
  */
-export type Zip64 = "none" | "record-and-locator" | "record" | "locator" | "count-marker";
+type Zip64 = "none" | "record-and-locator" | "record" | "locator" | "count-marker";
 
 /**
  * An extra central record: a second name for the local header of the entry at index `of`, so two
  * records share one entry's bytes.
  */
-export interface Alias {
+interface Alias {
   readonly name: string;
   readonly of: number;
 }
@@ -644,7 +644,7 @@ export const shownIntent = (intent: ZipIntent): string => {
 /**
  * The edits of a zip intention, each named.
  */
-export const zipOperators = [
+const zipOperators = [
   "insert-entry",
   "delete-entry",
   "swap-entries",
@@ -658,7 +658,7 @@ export const zipOperators = [
 /**
  * One edit.
  */
-export type ZipOperator = (typeof zipOperators)[number];
+type ZipOperator = (typeof zipOperators)[number];
 
 /**
  * The entry fields an `entry-field` edit draws among.

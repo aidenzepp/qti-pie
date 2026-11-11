@@ -11,12 +11,12 @@ import type { ExamplesError } from "#pantry/test/fixtures.ts";
 /**
  * The corpus packages the processing tests read, by the zip's file name without `.zip`.
  */
-export type CorpusPackageName = "ccPackage" | "maxfiles" | "svg";
+type CorpusPackageName = "ccPackage" | "maxfiles" | "svg";
 
 /**
  * A corpus package the examples tarball does not hold, named so the failure says which one.
  */
-export class CorpusPackageMissing extends Schema.TaggedError<CorpusPackageMissing>()(
+class CorpusPackageMissing extends Schema.TaggedError<CorpusPackageMissing>()(
   "CorpusPackageMissing",
   { available: Schema.Array(Schema.String), name: Schema.String },
 ) {
@@ -71,7 +71,7 @@ const templateFiles = [
  * A fix-forward that changes what any derived directory holds bumps it, so the corrected
  * directories appear beside the old ones under new names.
  */
-export const PROCESSING_FIXTURES_VERSION = "1" as const;
+const PROCESSING_FIXTURES_VERSION = "1" as const;
 
 /**
  * An edit of a derived package, as plain data so it is part of the package's hash.
@@ -95,7 +95,7 @@ export const PROCESSING_FIXTURES_VERSION = "1" as const;
  *   `qti-assessment-item` start tag, so a hand-written item is named as the manifest's LOM names
  *   it.
  */
-export type ProcessingEdit =
+type ProcessingEdit =
   | { readonly _tag: "replaceProcessing"; readonly file: string; readonly withFile: string }
   | {
       readonly _tag: "addFile";
@@ -129,7 +129,7 @@ export type ProcessingEdit =
  * A derived package's whole definition: its name, the phase-1 package it starts from and the edits
  * applied to a copy of it.
  */
-export interface ProcessingFixtureSpec {
+interface ProcessingFixtureSpec {
   readonly base: "simple";
   readonly edits: readonly ProcessingEdit[];
   readonly name: string;
@@ -138,7 +138,7 @@ export interface ProcessingFixtureSpec {
 /**
  * The failure of an edit that does not apply to the package it names, with the reason.
  */
-export class ProcessingFixtureError extends Schema.TaggedError<ProcessingFixtureError>()(
+class ProcessingFixtureError extends Schema.TaggedError<ProcessingFixtureError>()(
   "ProcessingFixtureError",
   { detail: Schema.String, fixture: Schema.String },
 ) {
@@ -221,9 +221,7 @@ export const danglingIncludeName = "dangling-include";
 /**
  * One of {@link processingFixtureNames}, or {@link danglingIncludeName}.
  */
-export type ProcessingFixtureName =
-  | (typeof processingFixtureNames)[number]
-  | typeof danglingIncludeName;
+type ProcessingFixtureName = (typeof processingFixtureNames)[number] | typeof danglingIncludeName;
 
 const brokenSet: ReadonlySet<string> = new Set(brokenNames);
 
@@ -359,7 +357,7 @@ const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
  * @param name - One of {@link processingFixtureNames}.
  * @returns The package's spec.
  */
-export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
+const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
   if (name === "processing-item") {
     return { base: "simple", edits: processingItemEdits, name };
   }

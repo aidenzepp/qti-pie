@@ -50,10 +50,10 @@ import type { XsdMessage } from "#pantry/xml/oracle.ts";
  * The validator ran, but its report is not one the oracle reads: a line it cannot attribute, or an
  * error that says a batch is not well-formed, which is the probe writer's fault, not the XSDs'.
  */
-export class XmllintUnreadable extends Schema.TaggedError<XmllintUnreadable>()(
-  "XmllintUnreadable",
-  { batch: Schema.String, line: Schema.String },
-) {
+class XmllintUnreadable extends Schema.TaggedError<XmllintUnreadable>()("XmllintUnreadable", {
+  batch: Schema.String,
+  line: Schema.String,
+}) {
   /**
    * The line the oracle could not read, and where to look.
    */
@@ -88,7 +88,7 @@ export const probePrefixes: ReadonlyMap<string, string> = new Map([
  * One type the driver gives a probe element: the probe's local name in `urn:probe`, and the type's
  * namespace and local name.
  */
-export interface ProbeType {
+interface ProbeType {
   readonly local: string;
   readonly namespace: string;
   readonly probe: string;
@@ -98,7 +98,7 @@ export interface ProbeType {
  * What one version's driver schema imports and declares: the pinned XSD each vocabulary's
  * namespace is imported from, and the probe elements of the kinds no schema declares globally.
  */
-export interface Driver {
+interface Driver {
   readonly imports: readonly (readonly [namespace: string, source: SourcePath])[];
   readonly probes: readonly ProbeType[];
   readonly version: SchemaVersion;
@@ -166,7 +166,7 @@ export interface ValidityError {
  * - `value`: a value, an identity constraint, `xsi:type` or `xsi:nil`, which the vocabulary's
  *   structure does not decide.
  */
-export type ErrorClass =
+type ErrorClass =
   | "attribute-not-allowed"
   | "attribute-required"
   | "attribute-strict"
@@ -370,7 +370,7 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
  * Where a kind's probe stands: its element itself, which a schema declares globally, or a driver
  * element of the kind's named type.
  */
-export type ProbeTarget =
+type ProbeTarget =
   | { readonly _tag: "global"; readonly local: string; readonly namespace: string }
   | { readonly _tag: "typed"; readonly probe: string };
 

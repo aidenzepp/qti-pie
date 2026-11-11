@@ -26,7 +26,7 @@ const ImportRefusedFields = Schema.Struct({
 /**
  * The fields of a failure that is a refused import, as {@link ImportRefusedFields} reads them.
  */
-export type RefusalFields = typeof ImportRefusedFields.Type;
+type RefusalFields = typeof ImportRefusedFields.Type;
 
 /**
  * Read the fields of a refused import, as {@link ImportRefusedFields} reads them, or none when the

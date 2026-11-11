@@ -34,7 +34,7 @@ export interface MathClasses {
 /**
  * A recognizer of one model's language.
  */
-export type Recognizer = (children: readonly string[], classes: MathClasses) => boolean;
+type Recognizer = (children: readonly string[], classes: MathClasses) => boolean;
 
 /**
  * The kind of `semantics-contexp`, which the RelaxNG's `ContExp` names and the XSD's drops.

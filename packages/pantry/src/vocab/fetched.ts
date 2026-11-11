@@ -24,7 +24,7 @@ import type { Kind, Name } from "#pantry/grammar/compose.ts";
  * candidates, each a URL a player fetches; the schema reads one candidate alone ("Href form"), so
  * its value is one address, as every other row's is.
  */
-export interface FetchedAttribute {
+interface FetchedAttribute {
   readonly kind: Kind;
   readonly name: Name;
 }

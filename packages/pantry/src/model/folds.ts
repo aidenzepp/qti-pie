@@ -116,7 +116,7 @@ export interface AttributeKey<V extends XdmVocabulary> {
  * Why a child has no state: its parent does not admit its kind, or its kind is one several of the
  * content model's positions name and none of them follows its predecessor's.
  */
-export type Unplaced = "unadmitted" | "unfollowed";
+type Unplaced = "unadmitted" | "unfollowed";
 
 /**
  * The closed relations the folds read, each a cell lookup the grammar's relations answer.
@@ -218,7 +218,7 @@ export type Positions = ReadonlySet<number>;
  * An `AttributeName` handle as an attribute row carries it: a closed name, or the class of an open
  * one.
  */
-export type NameHandle<V extends XdmVocabulary> = AttributeRow<V>["name"];
+type NameHandle<V extends XdmVocabulary> = AttributeRow<V>["name"];
 
 /**
  * A children family's fold after one slot: the content automaton's state, the last position a child

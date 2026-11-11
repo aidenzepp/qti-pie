@@ -24,12 +24,12 @@ import { cellKinds } from "#pantry/vocab/terms/html.ts";
  * One token of a cell's `headers` as its cell's family nests it: without the `node` the nesting
  * supplies, nor the `at` the family draws.
  */
-export type HeaderTokenInsert = Omit<Addition<typeof HeaderToken>, "node">;
+type HeaderTokenInsert = Omit<Addition<typeof HeaderToken>, "node">;
 
 /**
  * A cell's `headers`, with its tokens nested at its count field.
  */
-export type CellHeadersRow = Addition<typeof CellHeaders> & {
+type CellHeadersRow = Addition<typeof CellHeaders> & {
   readonly tokens: readonly HeaderTokenInsert[];
 };
 

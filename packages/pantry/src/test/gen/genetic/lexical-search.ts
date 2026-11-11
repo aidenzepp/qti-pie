@@ -91,7 +91,7 @@ export const lexicalOperators = [
 /**
  * One edit.
  */
-export type LexicalOperator = (typeof lexicalOperators)[number];
+type LexicalOperator = (typeof lexicalOperators)[number];
 
 /**
  * One probe site: a (kind, attribute) or simple-content kind's text, keyed `kind subject`, with
@@ -114,7 +114,7 @@ export interface LexicalGenome {
 /**
  * A feature: its family, then what it names, `|`-separated.
  */
-export type LexicalFeature = `${"edge" | "space" | "stale" | "verdict"}|${string}`;
+type LexicalFeature = `${"edge" | "space" | "stale" | "verdict"}|${string}`;
 
 /**
  * A disagreement no record classifies, with the edge classes of its value.
@@ -491,7 +491,7 @@ const spellingClasses = (value: string, core: string): readonly string[] => {
  * @param domain - The domain it is judged under, whose enumeration a case variant is read against.
  * @returns The classes, each once.
  */
-export const edgeClassesOf = (value: string, domain: ValueDomain): readonly string[] => {
+const edgeClassesOf = (value: string, domain: ValueDomain): readonly string[] => {
   const core = value.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
   if (core === "") {
     return [value === "" ? "empty" : "blank"];
@@ -541,7 +541,7 @@ const placeOf = (at: number, length: number): string => {
  * @param value - The value.
  * @returns The classes, each once.
  */
-export const spaceClassesOf = (value: string): readonly string[] => {
+const spaceClassesOf = (value: string): readonly string[] => {
   const points = pointsOf(value);
   const found = new Set<string>();
   for (const [at, point] of points.entries()) {
@@ -988,12 +988,12 @@ export const judgeAll = Effect.fn("genetic.lexical.judgeAll")(function* judgeAll
 /**
  * What judging a batch of probes fails with.
  */
-export type JudgeError = Effect.Error<ReturnType<typeof judgeAll>>;
+type JudgeError = Effect.Error<ReturnType<typeof judgeAll>>;
 
 /**
  * What judging a batch of probes requires.
  */
-export type JudgeServices = Effect.Services<ReturnType<typeof judgeAll>>;
+type JudgeServices = Effect.Services<ReturnType<typeof judgeAll>>;
 
 /**
  * Read one genome's judgments as the engine's judgment: its features, and every disagreement no
@@ -1002,7 +1002,7 @@ export type JudgeServices = Effect.Services<ReturnType<typeof judgeAll>>;
  * @param judged - The judgments of the genome's probes, one per version.
  * @returns The judgment.
  */
-export const judgmentOf = (judged: readonly Judged[]): Judgment<LexicalFeature, Finding> => {
+const judgmentOf = (judged: readonly Judged[]): Judgment<LexicalFeature, Finding> => {
   const features = new Set<LexicalFeature>();
   const findings: Finding[] = [];
   for (const { grammar, outcome, probe } of judged) {
@@ -1127,7 +1127,7 @@ export const smallerOf = (genome: LexicalGenome): readonly LexicalGenome[] => {
  * every probe asked for, and each caller reads its own. A reduction that ends says so (`done`), and
  * the round closes without it.
  */
-export interface SharedJudge {
+interface SharedJudge {
   readonly done: Effect.Effect<void, JudgeError, JudgeServices>;
   readonly judge: (
     probes: readonly Probe[],

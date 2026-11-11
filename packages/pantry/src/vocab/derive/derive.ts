@@ -760,7 +760,7 @@ const whiteSpaceFacets = ["preserve", "replace", "collapse"] as const;
  * A simple type as a declaration or a derivation refers to it: by a QName, or as an anonymous
  * definition written in place.
  */
-export type SimpleTypeRef =
+type SimpleTypeRef =
   | { readonly _tag: "Named"; readonly lexical: string }
   | { readonly _tag: "Anonymous"; readonly definition: Element };
 
@@ -994,7 +994,7 @@ export const inlineOf = (
  * @returns Its designator; a restriction's is read through nested anonymous restrictions to the
  *   named type, list or union they restrict.
  */
-export const designatorOf = (type: TypeReading): string =>
+const designatorOf = (type: TypeReading): string =>
   Match.valueTags(type, {
     list: () => "list",
     named: ({ name }) => name,
@@ -1252,7 +1252,7 @@ export const attributeRowsOf = (
  * An attribute wildcard as the IR states it: its namespace constraint as the XSD writes it, and its
  * processing.
  */
-export type AttributeWildcardReading = Pick<AttributeWildcard, "namespace" | "processing">;
+type AttributeWildcardReading = Pick<AttributeWildcard, "namespace" | "processing">;
 
 /**
  * The `namespace` values of a wildcard the reading covers: every one the pinned XSDs write. A list
@@ -1716,7 +1716,7 @@ export const soleTypeOf = (
  * A schema read from a pinned XSD and the pinned XSDs it includes: every document, by its path in
  * reading order, and the schema they make together.
  */
-export interface SchemaSet {
+interface SchemaSet {
   readonly documents: ReadonlyMap<SourcePath, XmlDocument>;
   readonly placed: ReadonlyMap<SourcePath, Placed>;
   readonly schema: XsdSchema;
@@ -1950,7 +1950,7 @@ export const arityOf = (schema: XsdSchema): Result.Result<readonly ArityRow[], X
  * @param rows - The rows.
  * @returns The text, without a final line break.
  */
-export const printArity = (rows: readonly ArityRow[]): string =>
+const printArity = (rows: readonly ArityRow[]): string =>
   rows
     .map((row) => {
       const max = Option.match(row.max, { onNone: () => "*", onSome: String });

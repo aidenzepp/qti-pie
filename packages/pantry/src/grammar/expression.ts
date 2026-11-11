@@ -22,7 +22,7 @@ import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
  * The code spaces a composition gives the four relations' fields: each roster's handles in code
  * order, so a handle's code is its position.
  */
-export interface Rosters {
+interface Rosters {
   readonly baseTypes: Roster<string>;
   readonly cardinalities: Roster<string>;
   readonly kinds: Roster<string>;
@@ -76,7 +76,7 @@ export interface ArityRow extends Arity {
  * The base types and cardinalities an interaction's typed response variable may have: every
  * pairing of one of its base types with one of its cardinalities fits.
  */
-export interface TypedFit {
+interface TypedFit {
   readonly baseTypes: Arr.NonEmptyReadonlyArray<string>;
   readonly cardinalities: Arr.NonEmptyReadonlyArray<string>;
   readonly kind: string;
@@ -731,7 +731,7 @@ export type RpTemplate = (typeof rpTemplates)[number];
 /**
  * The URI prefixes a published template's `template` URI is written under.
  */
-export const rpTemplatePrefixes = [
+const rpTemplatePrefixes = [
   "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/",
   "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
 ] as const;

@@ -67,7 +67,7 @@ export const extensionSources: Readonly<Record<SchemaVersion, SourcePath>> = {
  * One element a version's extension rules cover: its namespace and local name, the vocabulary the
  * namespace is, and the line of the first rule that names it in that version's ASI XSD.
  */
-export interface CoveredRule {
+interface CoveredRule {
   readonly line: number;
   readonly local: string;
   readonly namespace: string;

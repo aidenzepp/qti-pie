@@ -39,13 +39,13 @@ export const patternLiteral = (text: string): string =>
  * The pattern of a set no text is in that a law matches here: the empty text, which no expanded
  * name `namespace}local` and no namespace of a vocabulary is.
  */
-export const noText = "^$";
+const noText = "^$";
 
 /**
  * The pattern of every text: an empty match at the start of any text, which `Compute.matches`
  * finds, since it asks whether the text holds a match.
  */
-export const everyText = "^";
+const everyText = "^";
 
 /**
  * The pattern of a finite set of texts: their literals as one alternation, anchored at both ends,
@@ -88,7 +88,7 @@ export const expandedText = ({
  * @param names - The names, a repeat read once.
  * @returns The pattern, which matches exactly the names' texts.
  */
-export const expandedNamesPattern = (
+const expandedNamesPattern = (
   names: Iterable<{ readonly local: string; readonly namespace: string }>,
 ): string => {
   const byNamespace = new Map<string, Set<string>>();

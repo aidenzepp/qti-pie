@@ -145,7 +145,7 @@ export interface Declared {
 /**
  * The text type of one simple-content kind in some schema versions: the leaf's `TextType`.
  */
-export interface DeclaredText {
+interface DeclaredText {
   readonly domain: Domain;
   readonly kind: string;
   readonly type: ValueType;
@@ -193,7 +193,7 @@ export const governorHandle = ({
  * The text type of one named type with simple content in some schema versions: the leaf's
  * `TypeText`, keyed by the type's `TypeName` handle.
  */
-export interface DeclaredTypeText {
+interface DeclaredTypeText {
   readonly domain: Domain;
   readonly owner: string;
   readonly type: ValueType;
@@ -1136,7 +1136,7 @@ export const readingsOf = (kind: string, name: string): readonly SpecReading[] =
  * A second spelling a spec reading admits beside a declared attribute: the declared name, the
  * name admitted beside it, and the reading.
  */
-export interface ReadingSpelling {
+interface ReadingSpelling {
   readonly declared: string;
   readonly name: string;
   readonly reading: number;
@@ -1159,7 +1159,7 @@ export const readingSpellings: readonly ReadingSpelling[] = [
 /**
  * An attribute a spec reading refuses on a kind whose XSD declares it, and the reading.
  */
-export interface ReadingRefusal {
+interface ReadingRefusal {
   readonly kind: string;
   readonly name: string;
   readonly reading: number;
@@ -1190,7 +1190,7 @@ export const readingRefusals: readonly ReadingRefusal[] = [
 /**
  * An attribute a spec reading requires on a kind whose XSD declares it optional, and the reading.
  */
-export interface ReadingUse {
+interface ReadingUse {
   readonly kind: string;
   readonly name: string;
   readonly reading: number;
@@ -1290,7 +1290,7 @@ export type AttributeKey = readonly [
  * spaces multiply to about as many cells as `AttributeGrammar`'s, where (kind, type) would multiply
  * to more than one PostgreSQL bit string holds.
  */
-export type GovernedKey = readonly [
+type GovernedKey = readonly [
   IdField<"version", string>,
   IdField<"governor", string>,
   IdField<"name", string>,
@@ -1310,7 +1310,7 @@ export type AttributePayload = readonly [
  * The payload of `ValueDomain`: the primitive a typed value is derived in, and the pattern its
  * lexical forms match as written.
  */
-export type DomainPayload = readonly [
+type DomainPayload = readonly [
   IdField<"primitive", DomainPrimitive>,
   ValueField<"pattern", string>,
 ];
@@ -1319,10 +1319,7 @@ export type DomainPayload = readonly [
  * The payload of `DoubleBound`: a bounded double's or float's lower bound, its facet and its value
  * (`DoubleBound` of `#pantry/grammar/domains.ts`).
  */
-export type BoundPayload = readonly [
-  IdField<"facet", DoubleBound["facet"]>,
-  ValueField<"value", number>,
-];
+type BoundPayload = readonly [IdField<"facet", DoubleBound["facet"]>, ValueField<"value", number>];
 
 /**
  * The closed relations of the attribute grammar.
@@ -1498,7 +1495,7 @@ const attributeOf = (declared: DomainDeclaration): Option.Option<string> =>
  * A definition the attribute grammar compiles: a leaf definition with a declaration's spec readings
  * applied in their order, and how its whitespace is read, exactly where one of them says so.
  */
-export interface ReadDefinition {
+interface ReadDefinition {
   readonly definition: Domain;
   readonly whiteSpace: Reading;
 }
@@ -1507,7 +1504,7 @@ export interface ReadDefinition {
  * A compiled domain with its definition key ({@link definitionKey}), computed once with it, and
  * the read definition it compiled from.
  */
-export interface KeyedDomain {
+interface KeyedDomain {
   readonly compiled: CompiledDomain;
   readonly definition: Domain;
   readonly key: string;
@@ -1517,7 +1514,7 @@ export interface KeyedDomain {
  * One declaration's domain: the spec readings that apply to it, and its read definition compiled,
  * or why that definition does not compile.
  */
-export interface DeclarationDomain {
+interface DeclarationDomain {
   readonly compiled: Result.Result<KeyedDomain, CompileError>;
   readonly readings: readonly SpecReading[];
 }
@@ -2090,7 +2087,7 @@ export const generate = (
  * An element's governing type and where it stands: the key an element's attributes and text are
  * read under.
  */
-export interface GoverningKey {
+interface GoverningKey {
   /**
    * The element's governing type, a `TypeName` handle, where a named type governs it: none for an
    * element of an anonymous declared type, a foreign element its `xsi:type` gives no type, and a

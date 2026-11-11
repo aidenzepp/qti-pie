@@ -46,7 +46,7 @@ const indexesFor = (grammar: ComposedGrammar) => ({
 /**
  * The relations of a composed grammar no serving path reads by key, indexed.
  */
-export type GrammarIndexes = ReturnType<typeof indexesFor>;
+type GrammarIndexes = ReturnType<typeof indexesFor>;
 
 /**
  * Each composed grammar's indexes, built at its first read.

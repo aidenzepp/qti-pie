@@ -390,7 +390,7 @@ export const schemaSetOf = Effect.fn("test.schemaSetOf")(function* schemaSetOf(
  * - `identity`: an `xs:ID` repeats or an `xs:IDREF` names no `xs:ID`;
  * - `other`: a message no class above reads, which the comparison reports as it is.
  */
-export const refusalClasses = [
+const refusalClasses = [
   "vocabulary",
   "well-formed",
   "attribute-allowed",
@@ -580,7 +580,7 @@ export const classOfLaw = (law: string, rule: string): LawClass =>
  * One refusal the law oracle states of a document: the law, the rule it is named by, its class,
  * where it broke and what broke.
  */
-export interface LawRefusal {
+interface LawRefusal {
   readonly class: LawClass;
   readonly detail: string;
   readonly law: string;

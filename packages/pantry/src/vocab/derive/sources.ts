@@ -270,7 +270,7 @@ export const verifySource = Effect.fn("vocab.verifySource")(function* verifySour
  *
  * `path` is the pinned file and `reason` the line reader's message.
  */
-export class XsdLinesUnread extends Schema.TaggedError<XsdLinesUnread>()("XsdLinesUnread", {
+class XsdLinesUnread extends Schema.TaggedError<XsdLinesUnread>()("XsdLinesUnread", {
   path: Schema.String,
   reason: Schema.String,
 }) {

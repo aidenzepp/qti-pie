@@ -56,7 +56,7 @@ export interface Seed {
  * A subtree the search may graft: the element made to stand on its own, its kind, and the seed it
  * comes from.
  */
-export interface Donor {
+interface Donor {
   readonly element: Element;
   readonly kind: string;
   readonly seed: string;

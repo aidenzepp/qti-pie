@@ -12,13 +12,13 @@ import type { Kind } from "#pantry/cli/errors.ts";
  * The limit a command has when neither `--timeout` nor `QTI_TIMEOUT` names one. Provisional: the
  * phase freeze checks it against the slowest corpus round trip.
  */
-export const defaultTimeout = Duration.minutes(5);
+const defaultTimeout = Duration.minutes(5);
 
 /**
  * The `--timeout` setting: how long a command may run, as a duration such as `30 seconds` or
  * `10 minutes`.
  */
-export const timeoutSetting = GlobalFlag.Setting("timeout")({
+const timeoutSetting = GlobalFlag.Setting("timeout")({
   flag: Flag.String("timeout").pipe(
     Flag.withSchema(Schema.DurationFromString),
     Flag.filterMap(
@@ -45,7 +45,7 @@ export const timeoutGlobalFlags = [timeoutSetting] as const;
  * The stop interrupts the handler where it is, so what it had already written stays written. The
  * error never says otherwise, and never says nothing was written.
  */
-export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()("CommandTimedOut", {
+class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()("CommandTimedOut", {
   after: Schema.String,
 }) {
   /**

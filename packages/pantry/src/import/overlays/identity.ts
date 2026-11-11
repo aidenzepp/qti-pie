@@ -86,7 +86,7 @@ export type TextIdrefInsert = Omit<Addition<typeof TextIdref>, "node">;
 /**
  * An element whose text is of an identity type, with its IDREF tokens nested at its count field.
  */
-export type IdentityTextRow = Addition<typeof IdentityText> & {
+type IdentityTextRow = Addition<typeof IdentityText> & {
   readonly idrefs: readonly TextIdrefInsert[];
 };
 
