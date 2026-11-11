@@ -68,10 +68,17 @@ export const urlAttributes: readonly UrlAttribute[] = [
 ];
 
 /**
- * {@link urlAttributes} keyed by `element@attribute`.
+ * {@link urlAttributes} keyed by element, then by attribute, so a lookup builds no key.
  */
-const contextIndex: ReadonlyMap<string, UrlContext> = new Map(
-  urlAttributes.map((row) => [`${row.element}@${row.attribute}`, row.context]),
+const contextIndex: ReadonlyMap<string, ReadonlyMap<string, UrlContext>> = new Map(
+  Array.from(new Set(urlAttributes.map((row) => row.element)), (element) => [
+    element,
+    new Map(
+      urlAttributes
+        .filter((row) => row.element === element)
+        .map((row) => [row.attribute, row.context] as const),
+    ),
+  ]),
 );
 
 /**
@@ -82,7 +89,7 @@ const contextIndex: ReadonlyMap<string, UrlContext> = new Map(
  * @returns The attribute's context, or none when it is not a URL attribute of that element.
  */
 export const urlContextOf = (element: string, attribute: string): Option.Option<UrlContext> =>
-  Option.fromUndefinedOr(contextIndex.get(`${element}@${attribute}`));
+  Option.fromUndefinedOr(contextIndex.get(element)?.get(attribute));
 
 /**
  * The feature key of a URL that resolves outside the item's directory: a host-absolute path
