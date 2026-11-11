@@ -154,7 +154,6 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     const value = collapse(lexical);
     if (name === referenceName) {
       if (holdsReference(node, lexical)) {
-        // GRIZZLE-PENDING: Q20: `token` is generated from `lexical` once a family may group by it.
         references.set(id, { document, lexical, node: id, token: value });
         targets.set(headingKey([document, value]), { assembled, document, id: value });
       }

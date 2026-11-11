@@ -131,7 +131,7 @@ export const CatalogRef = relation(
     document: uuid,
     lexical: keyText,
     node: uuid,
-    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `token` is generated as collapse(lexical), and tsc names its writer.
     token: keyText,
   },
   ["node"],

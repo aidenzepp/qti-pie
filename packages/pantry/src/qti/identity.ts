@@ -334,7 +334,7 @@ export const LomLanguage = relation(
     general: uuid,
     lang: keyText,
     node: uuid,
-    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `tag` is generated as lowerAscii(lang), and tsc names its writer.
     tag: keyText,
   },
   ["node"],
@@ -386,7 +386,7 @@ export const SsmlAttribute = relation(
     name: closedId(AttributeName),
     node: uuid,
     refers: closedId(NodeKind),
-    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `value` is generated as collapse(lexical), and tsc names its writer.
     value: keyText,
   },
   ["node", "name"],
@@ -502,7 +502,7 @@ export const PlacedId = relation(
   {
     assembly: uuid,
     assemblyKind: closedId(NodeKind),
-    // GRIZZLE-PENDING: Q20, a family grouped by a generated field; then this copy is generated.
+    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `copy` is generated as cond(assemblyKind = test, document, instance), and tsc names its writer.
     copy: uuid,
     document: uuid,
     id: keyText,
