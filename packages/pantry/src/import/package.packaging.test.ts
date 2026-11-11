@@ -20,6 +20,13 @@ import { danglingIncludeName, materializeProcessing } from "#pantry/test/process
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 
+/**
+ * The packaging search's timeout, in milliseconds: a hang guard past the describe's, never a
+ * budget, which `searched` reads as its deadline. Its 12 imports took 0.3 s each in the full run at
+ * 8a6af2e6, on the lease.
+ */
+const searchTimeoutMs = 600_000;
+
 describe.skipIf(!hasLease)(
   "import/package.packaging.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
@@ -61,9 +68,7 @@ describe.skipIf(!hasLease)(
                 }),
             ),
           ),
-        // A hang guard past the describe's, which `searched` reads as its deadline: 12 imports of
-        // 0.3 s each in the full run at 8a6af2e6.
-        600_000,
+        searchTimeoutMs,
       );
 
       it.effect(`refuses ${danglingIncludeName} by the law its dangling include breaks`, () =>
