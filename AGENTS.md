@@ -127,10 +127,12 @@ named (`func-names`).
 Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
 TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
 `#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
-for committed snapshots), never relative paths. pantry's `"exports"` lists only what an install outside this workspace
-composes: the `Qti` schema built for a policy, the author role and login built over it, the connections, the import's
-read (`readPackage`) and write (`importPackage`) with the layer they run on (`ImportLive`), and the export's document
-scan and the rows-to-XML step it ends with; no package of this workspace depends on it. Nothing outside a
+for committed snapshots), never relative paths. pantry's `"exports"` lists the grizzle values an app composes, with no
+wrapper over grizzle: the `Qti` schema constant with every relation public, the `QtiMedia` level an app stacks with
+`schema.extend`, the author role and login and the import's write program, the import's read (`readPackage`) and the
+rows it becomes (`importRowsOf`, written with the app's own grizzle `Db`) or `importPackage` over them, the law-to-rule
+table, and the export's document scan and the rows-to-XML step (`documentXml`). The cluster connections and the author
+layer are private to pantry's CLI. No package of this workspace depends on it. Nothing outside a
 package reaches a file its `"exports"` map does not list. The checks that enforce it:
 
 - The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
