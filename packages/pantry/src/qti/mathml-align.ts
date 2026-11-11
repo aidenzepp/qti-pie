@@ -80,7 +80,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { integerForm, keyText } from "#pantry/qti/limits.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName } from "#pantry/qti/attributes.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -287,13 +287,13 @@ const cells = select(Node, (n) => n.eq(n.kind, "m:mtd"));
  * The `selection` attributes of an `m:maction`, the source of {@link MathAction}'s lexical form.
  */
 const selectionAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "m:maction"), a.eq(a.name, "selection")),
+  a.and(closedName(a), a.eq(a.kind, "m:maction"), a.eq(a.name, "selection")),
 );
 
 /**
  * The `dir` attributes of an element a {@link MathAlignScope} row may name.
  */
-const dirAttributes = select(Attribute, (a) => a.eq(a.name, "dir"));
+const dirAttributes = select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, "dir")));
 
 /**
  * The {@link MathAction} rows of an action that writes its `selection`.
@@ -384,7 +384,6 @@ const leafStartFold = fold(
 export const alignLaws = [
   mirrors(on(MathAction, "node"), on(actions, "id")),
   contained(on(MathAction, "node", "elements", "elementChildren"), nodeCounts),
-  key(on(selectionAttributes, "node")),
   contained(
     on(selectionAttributes, "node", "lexical"),
     on(writtenSelections, "node", "selectionLexical"),
@@ -402,7 +401,6 @@ export const alignLaws = [
     nodeRef,
   ),
   contained(on(MathAlignScope, "node", "elements", "elementChildren"), nodeCounts),
-  key(on(dirAttributes, "node")),
   contained(on(dirAttributes, "node", "lexical"), on(MathDir, "node", "lexical")),
   contained(on(MathDir, "node"), on(dirAttributes, "node")),
   contained(

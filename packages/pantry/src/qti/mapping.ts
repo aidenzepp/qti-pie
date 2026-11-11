@@ -78,7 +78,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName } from "#pantry/qti/attributes.ts";
 import {
   DeclarationBaseType,
   DeclarationCardinality,
@@ -397,21 +397,21 @@ const lookupTableKinds = [
 const lookupEntryKinds = ["qti-interpolation-table-entry", "qti-match-table-entry"] as const;
 
 /**
- * The `map-key` of each `qti-map-entry`: the source of {@link MapKey}'s copy (C18), beside a key
- * over the same selection whose UNIQUE serves the copy's reverse probe, so no index holds the
- * attribute's lexical form (the addendum's "Text in keys"). The key holds already: an element has
- * one attribute of a name (AL2).
+ * The `map-key` of each `qti-map-entry`: the source of {@link MapKey}'s copy (C18), keyed by the
+ * closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the
+ * selection's node serves the copy's reverse probe, so no index holds the attribute's lexical form
+ * (the addendum's "Text in keys").
  */
 const mapKeyAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "map-key"), a.eq(a.kind, "qti-map-entry")),
+  a.and(closedName(a), a.eq(a.name, "map-key"), a.eq(a.kind, "qti-map-entry")),
 );
 
 /**
  * The `case-sensitive` of each `qti-map-entry`, the source of {@link MapKey}'s `caseText` copy,
- * beside a key over the same selection whose UNIQUE serves the copy's reverse probe.
+ * keyed as {@link mapKeyAttributes} is.
  */
 const caseAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "case-sensitive"), a.eq(a.kind, "qti-map-entry")),
+  a.and(closedName(a), a.eq(a.name, "case-sensitive"), a.eq(a.kind, "qti-map-entry")),
 );
 
 /**
@@ -459,7 +459,9 @@ const twoItemKeys = select(MapKeyType, (k) =>
 /**
  * The lookup tables' typed attribute values: each table entry's `target-value` and each table's
  * `default-value`, the source of {@link LookupValue}'s copy, beside its key (C18; AL2 makes it
- * hold).
+ * hold). It states a key of its own: its two names lie under an `or`, so no conjunct fixes `name`,
+ * and the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys no
+ * containment into it at `node` alone.
  */
 const lookupAttributes = select(Attribute, (a) =>
   a.or(
@@ -513,11 +515,7 @@ export const mappingLawsByName = {
       ),
     ),
   ],
-  "DocumentId key": [
-    key(on(mapKeyAttributes, "node")),
-    key(on(caseAttributes, "node")),
-    key(on(lookupAttributes, "node")),
-  ],
+  "DocumentId key": [key(on(lookupAttributes, "node"))],
   "E1 derived": [
     check("E1_derived", MapKey, (k) =>
       k.or(k.eq(k.folded, false), k.not(k.in(Compute.collapse(k.caseText), booleanTrue))),

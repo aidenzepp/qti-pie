@@ -33,11 +33,15 @@
  * - **AL2** (C9): `slot` is the singleton of the name's slot, `Compute.singleton(slot)`. It is
  *   written by the host and proved by `E1_derived`, because a generated field reads the caller's
  *   fields alone and `version` and `governor` are copies. The `or` fold over the family, whose step
- *   selection leaves the open classes out, ends in `Node.attrs`, and `AL2_distinct` is `attrsWas ∩
- *   slot = ∅`. An open class is one slot for many names, and the selection keeps that slot out of
- *   every `attrsWas`, so two attributes of one class are no repeat with no mask (fin.md §16's
- *   `~open`), and C9's `in(name, openClasses)` disjunct would be redundant. grizzle emits the
- *   fold's slot-0 pin and its empty family's end.
+ *   selection leaves the open classes out, ends in `Node.attrs`, which AL3 reads. Distinctness is
+ *   the closed attributes' key over `(node, name)`: `AttributeGrammar` is keyed `(model, name)` and
+ *   its slot is injective within a model (no two names of one model share a slot, over all of its
+ *   6,167 rows), and a node has one governor, so no repeated slot among a node's closed attributes
+ *   is no repeated `(node, name)` among them. The injectivity is the grammar's, cited here, not
+ *   stated as a law: grizzle judges a closed relation by its one declared key. An open class is one
+ *   slot for many names, and the selection keeps it out of the key and out of every `attrsWas`, so
+ *   two attributes of one class are no repeat (fin.md §16's `~open`). grizzle emits the fold's
+ *   slot-0 pin and its empty family's end.
  * - **AL3** (`AL3_required`, a check on `Node`): every slot the element's governor requires is in its
  *   `attrs`.
  * - **AL5** (`AL5_attribute_count`, a check on `Node`, rule `attribute-count`): an element whose
@@ -508,6 +512,31 @@ export const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attribute
 const open = (a: AttributeRow) => a.in(a.name, openClasses);
 
 /**
+ * State that an attribute's name is closed, the attributes AL2's fold steps over: an element holds
+ * at most one of each closed name, by {@link closedAttributes}' key. Exported for every selection
+ * of closed names, which states it as its first conjunct, so that the key keys it.
+ *
+ * @param a - The row.
+ * @returns The predicate.
+ */
+export const closedName = (a: AttributeRow) => a.not(open(a));
+
+/**
+ * The attributes of a closed name. Its key over `(node, name)` is the whole of AL2's distinctness,
+ * and the only key any selection of closed names needs. grizzle keys a containment's target by a
+ * key whose conjuncts are among the target's, matched by their text (`selectsWithin`,
+ * `laws/model/plan.ts:649` at `698880a`), and whose terms are among the target's terms and the
+ * fields its selection fixes (`#fixedTarget`, `:1536-1586`; `#keyedTarget`, `:1588`). So a
+ * selection that states {@link closedName} and fixes `name` to a literal, read at `node`, and one
+ * read at `(node, name)`, are both keyed by it, and states no key of its own. A selection read at
+ * `node` alone whose `name` no conjunct fixes (`lookupAttributes`, `#pantry/qti/mapping.ts`) is
+ * keyed by neither, and keeps its own. Where a keyed selection is also a copy's source (C18), its
+ * reverse probe reads an index over the selection's `node`, and grizzle builds one index there that
+ * serves both the probe and the fixed target's UNIQUE, so `Attribute.lexical` sits in no index.
+ */
+const closedAttributes = select(Attribute, closedName);
+
+/**
  * State that an attribute's domain is of one of `identities` (`ID`, `IDREF`, `IDREFS`): its domain
  * has a `ValueIdentity` row naming one of them. A name its element's governor does not admit has no
  * domain and a domain of no identity no `ValueIdentity` row, so the statement is false of either.
@@ -617,20 +646,12 @@ export const attributeLawsByName = {
     contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
   ],
   "AL2 count": [attributeFamily],
-  "AL2 distinct": [
-    check("AL2_distinct", Attribute, (a) => a.eq(Compute.disjoint(a.attrsWas, a.slot), true)),
-  ],
+  "AL2 distinct": [key(on(closedAttributes, "node", "name"))],
   "AL2 fold": [
     fold(
       attributeFamily,
       Monoid.or,
-      on(
-        select(Attribute, (a) => a.not(open(a))),
-        "node",
-        "slot",
-        "attrsWas",
-        "attrsAfter",
-      ),
+      on(closedAttributes, "node", "slot", "attrsWas", "attrsAfter"),
       on(Node, "id", "attrs"),
     ),
   ],

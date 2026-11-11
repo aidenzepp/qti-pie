@@ -126,7 +126,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
@@ -400,8 +400,8 @@ export const ObjectTitle = relation.generated(
  * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
  * compares it, which reads it as a language where it is a tag ({@link languageTagPattern}), and
  * which the database derives. A root has a row exactly where it writes the attribute: copied from
- * it here, and back into every `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the
- * way back reads, since this selection states none of its own.
+ * it here, and back into every `xml:lang` (`#pantry/qti/identity.ts`), a selection the closed
+ * attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys at `node`.
  */
 export const ObjectLang = relation.generated(
   "ObjectLang",
@@ -624,10 +624,9 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
  * (C18). The copy's reverse probe reads an index over the selection's node alone, since grizzle
  * indexes the longest leading run of a containment's source columns whose entry is bounded
  * (`plannedReverse`) and no pattern bounds `Attribute.lexical`. Each selection but the `xml:lang`
- * one is also the target of its overlay's way back, which grizzle admits only under a key over
- * that selection (`laws/model/plan.ts` `#keyedTarget`), so it sits beside `key(on(selection,
- * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2). The
- * `xml:lang` one is no containment's target, so it states no key.
+ * one is also the target of its overlay's way back, which grizzle admits only under a key that keys
+ * it: the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), since the
+ * selection states {@link closedName} and fixes `name`.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -636,7 +635,7 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
 const attributesOf = (
   name: "baseType" | "identifier" | "lastUpdated" | "title" | "xml:lang",
   kinds: readonly (typeof NodeKind.handles)[number][],
-) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
+) => select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each item's and test's root.
@@ -657,11 +656,12 @@ const objectLangAttributes = attributesOf("xml:lang", objectKinds);
  * The `language` of each `lom:string` of a record's document: the source of
  * {@link LomStringLanguage}'s copy, and the target of its way back, since the attribute is optional
  * and its row stands only where it is written. grizzle admits that containment only under a key
- * over this selection (`laws/model/plan.ts` `#keyedTarget`), so it sits beside `key(on(selection,
- * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2).
+ * that keys this selection: the closed attributes' key (`closedAttributes`,
+ * `#pantry/qti/attributes.ts`), since it states {@link closedName} and fixes `name`.
  */
 const stringLanguageAttributes = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.name, "language"),
     a.eq(a.kind, "lom:string"),
     a.in(a.documentType, recordDocumentTypes),
@@ -759,13 +759,6 @@ const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, bas
  *   text is a lexical form of that base type ("Usage typed value").
  */
 export const metadataLawsByName = {
-  "DocumentId key": [
-    key(on(stringLanguageAttributes, "node")),
-    key(on(objectIdentifiers, "node")),
-    key(on(objectTitles, "node")),
-    key(on(lastUpdateds, "node")),
-    key(on(usageBaseTypes, "node")),
-  ],
   "E1 derived": [
     contained(
       on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),

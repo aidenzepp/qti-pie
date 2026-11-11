@@ -94,10 +94,11 @@
  * {@link statedLanguagePattern}).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
- * `select(Attribute, φ)` into the overlay, beside a key over the same selection whose UNIQUE serves
- * the copy's reverse probe, so no index holds `Attribute.lexical`. Every copied text that takes
- * part in a cross-row equality is `keyText` (`#pantry/qti/limits.ts`): a value past its bound has
- * no overlay row, so its copy's foreign key refuses it beside the schema's one limit law.
+ * `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key (`closedAttributes`,
+ * `#pantry/qti/attributes.ts`), whose index over the selection's node serves the copy's reverse
+ * probe, so no index holds `Attribute.lexical`. Every copied text that takes part in a cross-row
+ * equality is `keyText` (`#pantry/qti/limits.ts`): a value past its bound has no overlay row, so
+ * its copy's foreign key refuses it beside the schema's one limit law.
  *
  * Every check is named by its oracle law (`#pantry/test/oracle.ts` `LawName`) with spaces written
  * as underscores. The overlays' agreement with what the tree holds is "E1 derived" (rule
@@ -141,7 +142,14 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Idref, identityIn, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import {
+  Attribute,
+  closedName,
+  identityIn,
+  Idref,
+  namingPattern,
+  Space,
+} from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { ObjectLang } from "#pantry/qti/metadata.ts";
@@ -830,7 +838,7 @@ export const admittedBindings = select(IdBinding, (b) => b.eq(b.admitted, true))
 /**
  * Every element's `xml:lang`, the source of {@link XmlLang}.
  */
-const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
+const langAttributes = select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, "xml:lang")));
 
 /**
  * Every MathML `share` whose `src` is a fragment of its own document, the source of
@@ -838,6 +846,7 @@ const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
  */
 const shareSources = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.kind, "m:share"),
     a.eq(a.name, "src"),
     Compute.matches(a.lexical, shareFragmentPattern),
@@ -860,6 +869,7 @@ const unassembledTargets = select(IdrefTarget, (t) => t.eq(t.assembled, false));
  */
 const labelAttributes = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.name, "label"),
     a.or(
       a.in(a.kind, toolLabelKinds),
@@ -899,11 +909,14 @@ const lomLanguages = select(Node, (n) =>
  * The SSML attributes reading 3's laws read, the source of {@link SsmlAttribute}.
  */
 const ssmlAttributes = select(Attribute, (a) =>
-  a.or(
-    a.and(a.eq(a.kind, "ssml:mark"), a.eq(a.name, "name")),
-    a.and(a.eq(a.kind, "ssml:speak"), a.in(a.name, ["startmark", "endmark"])),
-    a.and(a.eq(a.kind, "ssml:lexicon"), a.eq(a.name, "xml:id")),
-    a.and(a.eq(a.kind, "ssml:lookup"), a.eq(a.name, "ref")),
+  a.and(
+    closedName(a),
+    a.or(
+      a.and(a.eq(a.kind, "ssml:mark"), a.eq(a.name, "name")),
+      a.and(a.eq(a.kind, "ssml:speak"), a.in(a.name, ["startmark", "endmark"])),
+      a.and(a.eq(a.kind, "ssml:lexicon"), a.eq(a.name, "xml:id")),
+      a.and(a.eq(a.kind, "ssml:lookup"), a.eq(a.name, "ref")),
+    ),
   ),
 );
 
@@ -1041,8 +1054,8 @@ export const ssmlLexiconReference = contained(
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
  *   counted family over the carriers outside every catalog, and each form carried (`E1_derived`);
  *   and each assessment object's `ObjectLang` (`#pantry/qti/metadata.ts`) an attribute's, through
- *   the key over every `xml:lang` (the one-way rule), its node an assessment object's root by its
- *   containment into `AssessmentObject`;
+ *   the closed attributes' key over every `xml:lang` (the one-way rule), its node an assessment
+ *   object's root by its containment into `AssessmentObject`;
  * - **CatalogScope:** each `XmlLang` on its scope's row, each scope on its node's {@link nodeRef}
  *   tuple, a `qti-catalog-info` its own scope, a root that is none the document's and every other
  *   element its parent's (`E1_derived`);
@@ -1085,9 +1098,6 @@ export const identityLawsByName = {
     idBindingFamily,
     key(on(admittedBindings, "document", "id")),
     key(on(AssembledId, "assembly", "id")),
-    key(on(langAttributes, "node")),
-    key(on(labelAttributes, "node")),
-    key(on(shareSources, "node")),
   ],
   "E1 derived": [
     check("E1_derived", DocumentId, (d) =>
@@ -1212,7 +1222,6 @@ export const identityLawsByName = {
       on(XmlLang, "node", "document", "lang", "scope"),
     ),
     check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
-    key(on(ssmlAttributes, "node", "name")),
     contained(
       on(ssmlAttributes, "node", "name", "kind", "lexical"),
       on(SsmlAttribute, "node", "name", "kind", "lexical"),

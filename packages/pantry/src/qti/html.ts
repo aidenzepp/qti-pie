@@ -30,12 +30,12 @@
  * half, readings 124, 125 and 129).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
- * states it: from `select(Attribute, φ)` into the overlay, beside a key over the same selection
- * whose UNIQUE serves the copy's reverse probe, but a `th`'s `id`: it lies inside the ID values
- * (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the ID-typed attributes
- * holds to one per element, and the copy back from its {@link TableHeader} meets them at the `th`
- * kind ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row equality is
- * `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
+ * states it: from `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key
+ * (`closedAttributes`, `#pantry/qti/attributes.ts`), but a `th`'s `id`: it lies inside the ID
+ * values (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the ID-typed
+ * attributes holds to one per element, and the copy back from its {@link TableHeader} meets them at
+ * the `th` kind ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row
+ * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Source | QTI 3.0 information model, §5.135 Source}
@@ -71,7 +71,7 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   DocumentId,
   idValuePattern,
@@ -251,7 +251,7 @@ const subtitleKinds = select(Attribute, (a) =>
  * A `track`'s `srclang`, one per element.
  */
 const trackSrclangs = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "track"), a.eq(a.name, "srclang")),
+  a.and(closedName(a), a.eq(a.kind, "track"), a.eq(a.name, "srclang")),
 );
 
 /**
@@ -265,7 +265,7 @@ export const subtitleTrackSrclang = contained(on(subtitleKinds, "node"), on(trac
  * A table cell's `headers`, the source of {@link CellHeaders}.
  */
 const headersAttributes = select(Attribute, (a) =>
-  a.and(a.in(a.kind, cellKinds), a.eq(a.name, "headers")),
+  a.and(closedName(a), a.in(a.kind, cellKinds), a.eq(a.name, "headers")),
 );
 
 /**
@@ -306,8 +306,9 @@ export const tableHeaders = contained(
  * Every statement over the HTML overlays, each `check` named by its oracle law:
  *
  * - **Reading 124:** {@link pictureSourceSrcset} and {@link mediaSourceSrc};
- * - **Reading 125:** {@link defaultTrackSrclang}, and {@link subtitleTrackSrclang} with the key over
- *   the `srclang` selection it is contained in;
+ * - **Reading 125:** {@link defaultTrackSrclang}, and {@link subtitleTrackSrclang}, whose target, the
+ *   `srclang` selection, is keyed by the closed attributes' key (`closedAttributes`,
+ *   `#pantry/qti/attributes.ts`);
  * - **TableScope:** each scope on its node's {@link nodeRef} tuple, a `table` its own table, a root
  *   that is no `table` the document's and every other element its parent's;
  * - **CellHeaders:** each cell's `headers` copied into its row, both ways, its table its scope's; its
@@ -321,11 +322,7 @@ export const tableHeaders = contained(
  * - **Reading 126:** a cell's tokens unique, and {@link tableHeaders}.
  */
 export const htmlLawsByName = {
-  "DocumentId key": [
-    key(on(trackSrclangs, "node")),
-    key(on(headersAttributes, "node")),
-    key(on(tabledHeaders, "table", "id")),
-  ],
+  "DocumentId key": [key(on(tabledHeaders, "table", "id"))],
   "E1 derived": [
     contained(
       on(TableScope, "node", "document", "kind", "start", "nearest", "version", "parent"),

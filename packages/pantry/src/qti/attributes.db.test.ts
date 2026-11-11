@@ -39,6 +39,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { openClasses } from "#pantry/grammar/kinds.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -306,13 +307,21 @@ const on = (element: string): Stated["fact"] => ({
   kind: element,
 });
 
+/**
+ * The selection of AL2's key over the closed attributes, `closedName` of
+ * `#pantry/qti/attributes.ts`, as grizzle's comment on the key spells it: the name in none of the
+ * open classes.
+ */
+const closedSelection = `{"arg":{"arg":{"field":"name","kind":"field"},"kind":"in","values":${JSON.stringify(openClasses)}},"kind":"not"}`;
+
 describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
   it.effect(
     "accepts a hotspot choice's admitted, distinct, rightly folded attributes by every CHECK and key, and refuses each corruption by its law",
     () =>
-      // Oracle: PostgreSQL, Attribute's CHECKs as grizzle installs them: AL1_admission, E1_derived,
-      // AL2_distinct and AL4_open_names by name, and the or fold's slot-0 pin and combine by its
-      // comment; each control is the row the fold would write.
+      // Oracle: PostgreSQL, Attribute's CHECKs and key as grizzle installs them: AL1_admission,
+      // E1_derived and AL4_open_names by name, and AL2's key over the closed attributes and the or
+      // fold's slot-0 pin and combine by their comments; each control is the row the fold would
+      // write.
       // Bound: one control per law and one corruption per named invalid variant (rules file rule
       // 8): an unadmitted name, a wrong slot, a repeated closed name, a junk accumulator at slot
       // 0, a wrong after, an open class stepping the fold (the mutant without the step selection),
@@ -366,9 +375,14 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             client,
             statedInserts([secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier])]),
           ),
-          checkConstraintOf(Qti, Attribute.name, "AL2_distinct"),
+          yield* constraintDescribed(
+            client,
+            "attribute",
+            `key Attribute(node where ${closedSelection}, name where ${closedSelection})`,
+          ),
           true,
           "identifier repeated",
+          "23505",
         );
 
         assertVerdict(

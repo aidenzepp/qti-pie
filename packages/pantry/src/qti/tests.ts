@@ -41,11 +41,12 @@
  * item ref names ({@link ItemRefHref} and {@link ItemRefDocument}, with the query `ItemRefTarget`
  * of `#pantry/qti/queries.ts`, B2 and B3).
  *
- * Every attribute value a law compares is copied from `Attribute` (C18) beside the key over its
- * selection that keeps its lexical form out of every index (the addendum's "Text in keys"), and
- * compared collapsed, as every QTI identifier type and `xs:anyURI` collapse whitespace: a
- * {@link TestToken} proves `lexical = lead ‖ value ‖ trail`, a {@link TestFlag} reads an
- * `xs:boolean`, and a selection's `select` is cast from its proved form (G-parse).
+ * Every attribute value a law compares is copied from `Attribute` (C18), over a selection the
+ * closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys, which keeps its
+ * lexical form out of every index (the addendum's "Text in keys"), and compared collapsed, as every
+ * QTI identifier type and `xs:anyURI` collapse whitespace: a {@link TestToken} proves `lexical =
+ * lead ‖ value ‖ trail`, a {@link TestFlag} reads an `xs:boolean`, and a selection's `select` is
+ * cast from its proved form (G-parse).
  *
  * Every check is named by the oracle law it states, its spaces written as underscores. The hrefs
  * this module reads resolve under `#pantry/qti/package.ts`'s stated limit `Href form`, never a law
@@ -91,7 +92,7 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nilUuid, Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
@@ -1094,15 +1095,16 @@ const standsFor = (i: InclusionRow) =>
 const nodesOf = (kind: Kind) => select(Node, (n) => n.eq(n.kind, kind));
 
 /**
- * Select the attributes of one name on elements of some kinds: the source of a copy (C18), beside
- * the key over its node that serves the copy's reverse probe.
+ * Select the attributes of one name on elements of some kinds: the source of a copy (C18), keyed by
+ * the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over
+ * the selection's node serves the copy's reverse probe.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
  * @returns The selection.
  */
 const attributesOf = (name: Name, kinds: readonly Kind[]) =>
-  select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
+  select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each test part, section, section ref and item ref ({@link namedKinds}) that
@@ -1136,12 +1138,13 @@ const tokensOf = (name: (typeof tokenNames)[number]) =>
 const flagsOf = (name: FlagName) => select(TestFlag, (f) => f.eq(f.name, name));
 
 /**
- * The copy of one attribute into {@link TestToken} (C18): the key over its selection's node, which
- * serves the copy's reverse probe, the copy of its lexical form, and each token's attribute.
+ * The copy of one attribute into {@link TestToken} (C18): the copy of its lexical form, and each
+ * token's attribute, a containment into the selection that the closed attributes' key keys (
+ * {@link attributesOf}).
  *
  * @param name - The attribute's name.
  * @param kinds - The kinds that carry it.
- * @returns The three statements.
+ * @returns The two statements.
  */
 const tokenCopy = (name: (typeof tokenNames)[number], kinds: readonly Kind[]) => {
   const source = attributesOf(name, kinds);
@@ -1151,7 +1154,6 @@ const tokenCopy = (name: (typeof tokenNames)[number], kinds: readonly Kind[]) =>
       contained(on(source, "node", "name", "lexical"), on(TestToken, "node", "name", "lexical")),
       contained(on(tokensOf(name), "node"), on(source, "node")),
     ] as const,
-    key: key(on(source, "node")),
   };
 };
 
@@ -1159,7 +1161,7 @@ const tokenCopy = (name: (typeof tokenNames)[number], kinds: readonly Kind[]) =>
  * The copy of one attribute into {@link TestFlag}, as {@link tokenCopy} copies a token.
  *
  * @param carrier - The attribute's name and the kinds that carry it.
- * @returns Its key, the "DocumentId key" law's, and its two copies, the "Test overlay" law's.
+ * @returns Its two copies, the "Test overlay" law's.
  */
 const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
   const source = attributesOf(name, kinds);
@@ -1169,7 +1171,6 @@ const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
       contained(on(source, "node", "name", "lexical"), on(TestFlag, "node", "name", "lexical")),
       contained(on(flagsOf(name), "node"), on(source, "node")),
     ] as const,
-    key: key(on(source, "node")),
   };
 };
 
@@ -1701,11 +1702,6 @@ export const testLawsByName = {
       on(sectionDocuments, "package", "path", "node"),
     ),
     contained(on(sectionRefPaths, "package", "path"), on(sectionDocuments, "package", "path")),
-  ],
-  "DocumentId key": [
-    ...tokenCopies.map((copy) => copy.key),
-    ...flagCopies.map((copy) => copy.key),
-    key(on(attributesOf("select", [selectionKind]), "node")),
   ],
   "E1 derived": [
     check("E1_derived", TestToken, (t) =>

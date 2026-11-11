@@ -138,7 +138,7 @@ import {
   versions,
 } from "#pantry/grammar/install.ts";
 import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
@@ -713,7 +713,7 @@ const customKind = "qti-custom-interaction" satisfies Kind;
  * The `module` attribute of a portable custom interaction: the attribute form of its module.
  */
 const moduleAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, pciKind), a.eq(a.name, "module")),
+  a.and(closedName(a), a.eq(a.kind, pciKind), a.eq(a.name, "module")),
 );
 
 /**
@@ -1514,14 +1514,18 @@ export const itemBuiltInNames: readonly string[] = [
 
 /**
  * Select the attributes O3 reads: each name of {@link readAttributes} on its kinds, and the ARIA
- * range attributes on every kind. It is the one copy source over `Attribute`, so `Attribute`
- * carries one UNIQUE for O3, `(node, name)` over this selection, which serves the copy's reverse
- * probe and keeps `Attribute.lexical` out of every index.
+ * range attributes on every kind. It is the one copy source over `Attribute` for O3, keyed at
+ * `(node, name)` by the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`),
+ * whose index over the selection serves the copy's reverse probe and keeps `Attribute.lexical` out
+ * of every index.
  */
 const read = select(Attribute, (a) =>
-  a.or(
-    a.in(a.name, ariaNames),
-    ...[...readAttributes].map(([name, kinds]) => a.and(a.eq(a.name, name), a.in(a.kind, kinds))),
+  a.and(
+    closedName(a),
+    a.or(
+      a.in(a.name, ariaNames),
+      ...[...readAttributes].map(([name, kinds]) => a.and(a.eq(a.name, name), a.in(a.kind, kinds))),
+    ),
   ),
 );
 
@@ -2495,9 +2499,7 @@ export const interactionLawsByName = {
       i.or(i.ne(i.kind, customKind), i.ne(i.version, "3.0.0")),
     ),
   ],
-  "DocumentId key": [key(on(moduleAttributes, "node"))],
   "E1 derived": [
-    key(on(read, "node", "name")),
     contained(
       on(read, "node", "name", "kind", "document", "lexical"),
       on(InteractionAttribute, "node", "name", "kind", "document", "lexical"),

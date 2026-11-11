@@ -3,8 +3,9 @@
  * and D entry for Q5.08; the tier-1 addendum's G-match, G-parse and "Text in keys").
  *
  * Each overlay is a flat row keyed by its element's node. It copies its node's `nodeRef` tuple and
- * takes each attribute value it compares from `Attribute`, beside the key over that attribute's
- * selection that keeps its lexical form out of every index (C18):
+ * takes each attribute value it compares from `Attribute`, over a selection the closed attributes'
+ * key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys, which keeps its lexical form out of
+ * every index (C18):
  *
  * - {@link Declaration}, one per `qti-{response,outcome,template,context}-declaration`: its kind as a
  *   `DeclarationKind`, and its counts of the typed rows below. Every row that hangs from a
@@ -95,7 +96,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   BaseTypePattern,
   unjudgedBaseTypes,
@@ -715,9 +716,9 @@ const normalMaximumFamily = counted(on(NormalMaximum, "node"), fin(Declaration, 
 
 /**
  * Select the attributes of one name on elements of some kinds: the source of an overlay's copy
- * (C18), with the key over it that serves the copy's reverse probe, so no index holds
- * `Attribute.lexical` (the tier-1 addendum's "Text in keys"). The key holds already, since an
- * element has one attribute of a name (AL2).
+ * (C18), keyed by the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`),
+ * whose index over the selection's node serves the copy's reverse probe, so no index holds
+ * `Attribute.lexical` (the tier-1 addendum's "Text in keys").
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -732,7 +733,7 @@ const attributesOf = (
     | "normal-maximum"
     | "normal-minimum",
   kinds: readonly (typeof NodeKind.handles)[number][],
-) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
+) => select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each declaration that names something once collapsed ({@link namingPattern}):
@@ -742,6 +743,7 @@ const attributesOf = (
  */
 const identifiers = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.name, "identifier"),
     a.in(a.kind, declarationKinds),
     Compute.matches(a.lexical, namingPattern),
@@ -1358,16 +1360,6 @@ export const declarationLawsByName = {
     ),
     contained(on(MasteryCeiling, "node", "masteryValue"), on(MasteryValue, "node", "lexical")),
     contained(on(MasteryCeiling, "node", "normalMaximum"), on(NormalMaximum, "node", "lexical")),
-  ],
-  "DocumentId key": [
-    key(on(identifiers, "node")),
-    key(on(cardinalities, "node")),
-    key(on(baseTypes, "node")),
-    key(on(fieldIdentifiers, "node")),
-    key(on(fieldBaseTypes, "node")),
-    key(on(masteryValues, "node")),
-    key(on(normalMinimums, "node")),
-    key(on(normalMaximums, "node")),
   ],
   "E1 derived": [
     contained(on(Declaration, "kind", "declarationKind"), on(Declares, "kind", "declaration")),

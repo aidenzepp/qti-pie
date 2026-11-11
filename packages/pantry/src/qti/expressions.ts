@@ -105,7 +105,7 @@ import {
   SchemaVersion,
   VariableReference,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
@@ -1065,6 +1065,7 @@ const referringKinds = [...new Set(processingReferences.map(({ kind }) => kind))
  */
 const references = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.in(a.kind, referringKinds),
     a.eq(Compute.subset(Compute.singleton(a.name), VariableReference.row(a.kind)), true),
     a.or(
@@ -1088,10 +1089,13 @@ const references = select(Attribute, (a) =>
  * The attributes an expression's type follows from, `ExpressionAttribute`'s source.
  */
 const typingAttributes = select(Attribute, (a) =>
-  a.or(
-    a.and(a.eq(a.kind, "qti-base-value"), a.eq(a.name, "base-type")),
-    a.and(a.eq(a.kind, "qti-test-variables"), a.in(a.name, ["base-type", "weight-identifier"])),
-    a.and(a.eq(a.kind, "qti-math-operator"), a.eq(a.name, "name")),
+  a.and(
+    closedName(a),
+    a.or(
+      a.and(a.eq(a.kind, "qti-base-value"), a.eq(a.name, "base-type")),
+      a.and(a.eq(a.kind, "qti-test-variables"), a.in(a.name, ["base-type", "weight-identifier"])),
+      a.and(a.eq(a.kind, "qti-math-operator"), a.eq(a.name, "name")),
+    ),
   ),
 );
 
@@ -1099,7 +1103,7 @@ const typingAttributes = select(Attribute, (a) =>
  * The `template` of each response processing, `ProcessingTemplate`'s source.
  */
 const templateAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-response-processing"), a.eq(a.name, "template")),
+  a.and(closedName(a), a.eq(a.kind, "qti-response-processing"), a.eq(a.name, "template")),
 );
 
 /**
@@ -1740,7 +1744,9 @@ const digitSegments = select(ReferenceSegment, (s) => s.eq(s.digit, true));
 /**
  * The `section-identifier` attributes, `SectionIdentifier`'s source.
  */
-const sectionIdentifierAttributes = select(Attribute, (a) => a.eq(a.name, "section-identifier"));
+const sectionIdentifierAttributes = select(Attribute, (a) =>
+  a.and(closedName(a), a.eq(a.name, "section-identifier")),
+);
 
 /**
  * The one expression each template default holds (TemplateDefaultDType's content), whose type its
@@ -1754,7 +1760,7 @@ const templateDefaultExpressions = select(Expression, (e) =>
  * The `template-identifier` of each template default, `TemplateDefault`'s source.
  */
 const templateIdentifiers = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-template-default"), a.eq(a.name, "template-identifier")),
+  a.and(closedName(a), a.eq(a.kind, "qti-template-default"), a.eq(a.name, "template-identifier")),
 );
 
 /**
@@ -1842,16 +1848,6 @@ const readingFamily = counted(
  *   declaration has one), and a `section-identifier` a section's (`Section_identifier_target`).
  */
 export const referenceLawsByName = {
-  "DocumentId key": [
-    // TemplateDefault: its template-identifier.
-    key(on(templateIdentifiers, "node")),
-    // SectionIdentifier: its copy, its document, and the name it spells. The copy is the forward
-    // containment: each attribute's row holds its name, kind and lexical form. The reverse only
-    // needs the attribute to exist, by the selection's key: both sides are keyed by `node`, so the
-    // forward containment's row for that attribute is this row. Its UNIQUE is that key's, and
-    // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
-    key(on(sectionIdentifierAttributes, "node")),
-  ],
   "E1 derived": [
     // TemplateDefault: its template-identifier, written exactly where its element writes one (AL3
     // requires it), and its item ref; its target's copy of both, and its expression's type.
@@ -2437,10 +2433,6 @@ export const expressionLawsByName = {
       ),
     ),
   ],
-  "DocumentId key": [
-    // ProcessingTemplate: the published template a response processing's URI names.
-    key(on(templateAttributes, "node")),
-  ],
   "E1 derived": [
     fold(
       operandFamily,
@@ -2575,7 +2567,6 @@ export const expressionLawsByName = {
       ),
     ),
     // VariableRef: its copy, its element, its document, its declaration and its laws.
-    key(on(references, "node", "name")),
     contained(
       on(references, "node", "name", "kind", "lexical"),
       on(VariableRef, "node", "attribute", "kind", "lexical"),
@@ -2749,7 +2740,6 @@ export const expressionLawsByName = {
       on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
     ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
-    key(on(typingAttributes, "node", "name")),
     contained(
       on(typingAttributes, "node", "name", "kind", "lexical"),
       on(ExpressionAttribute, "node", "attribute", "kind", "lexical"),
@@ -2758,10 +2748,10 @@ export const expressionLawsByName = {
       on(ExpressionAttribute, "node", "parent", "kind", "language", "baseType", "cardinality"),
       exprRef,
     ),
-    // A written row's attribute exists, by the selection's key `(node, name)`. Its kind and lexical
-    // form are the forward containment's: both sides are keyed by node and name, so that
-    // containment's row for the attribute is this row. Its UNIQUE is that key's, and
-    // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
+    // A written row's attribute exists, by the closed attributes' key `(node, name)`
+    // (`closedAttributes`, `#pantry/qti/attributes.ts`). Its kind and lexical form are the forward
+    // containment's: both sides are keyed by node and name, so that containment's row for the
+    // attribute is this row. `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
     contained(on(writtenAttributes, "node", "attribute"), on(typingAttributes, "node", "name")),
     key(on(typeAttributes, "node")),
     contained(

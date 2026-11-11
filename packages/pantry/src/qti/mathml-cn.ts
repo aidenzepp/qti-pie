@@ -56,7 +56,6 @@ import {
   counted,
   drawn,
   fin,
-  key,
   natural,
   on,
   relation,
@@ -74,7 +73,7 @@ import {
   CnType,
 } from "#pantry/grammar/install.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName } from "#pantry/qti/attributes.ts";
 import { Node } from "#pantry/qti/node.ts";
 
 /**
@@ -231,7 +230,7 @@ const cnNodes = select(Node, (n) => n.eq(n.kind, "m:cn"));
  * The `type` and `base` attributes of an `m:cn`.
  */
 const cnAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "m:cn"), a.in(a.name, ["type", "base"])),
+  a.and(closedName(a), a.eq(a.kind, "m:cn"), a.in(a.name, ["type", "base"])),
 );
 
 /**
@@ -296,7 +295,6 @@ export const cnCountLaws = {
  */
 export const cnLaws = [
   contained(on(MathCn, "node"), on(cnNodes, "id")),
-  key(on(cnAttributes, "node", "name")),
   contained(
     on(cnAttributes, "node", "name", "lexical"),
     on(CnAttribute, "node", "name", "lexical"),

@@ -35,8 +35,9 @@
  *
  * The card overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the
  * node's parent, are the parent the tree holds, and both copy their attribute as `identity.ts`
- * states a copy (C18): from `select(Attribute, φ)` into the overlay, beside a key over the same
- * selection whose UNIQUE serves the copy's reverse probe. Every copied text that takes part in a
+ * states a copy (C18): from `select(Attribute, φ)` into the overlay, keyed by the closed
+ * attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the
+ * selection's node serves the copy's reverse probe. Every copied text that takes part in a
  * cross-row equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores; the overlays' agreement
  * with what the tree holds is "E1 derived" (rule `derived`).
@@ -70,7 +71,7 @@ import {
   SchemaVersion,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, namingPattern } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, namingPattern } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -227,7 +228,7 @@ const placedCatalogFamily = counted(
  * Every card's `support`, the source of {@link CardSupport}.
  */
 const supportAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-card"), a.eq(a.name, "support")),
+  a.and(closedName(a), a.eq(a.kind, "qti-card"), a.eq(a.name, "support")),
 );
 
 /**
@@ -236,6 +237,7 @@ const supportAttributes = select(Attribute, (a) =>
  */
 const designatingDefaults = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.kind, "qti-card-entry"),
     a.eq(a.name, "default"),
     a.or(
@@ -271,6 +273,7 @@ const identityOf = (a: AttributeRow) => {
  */
 const referenceAttributes = select(Attribute, (a) =>
   a.and(
+    closedName(a),
     a.eq(a.name, "data-catalog-idref"),
     a.in(identityOf(a), ["IDREF", "IDREFS"]),
     a.ne(Compute.collapse(a.lexical), ""),
@@ -283,7 +286,12 @@ const referenceAttributes = select(Attribute, (a) =>
  * as it has no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const catalogIdAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
+  a.and(
+    closedName(a),
+    a.eq(a.kind, "qti-catalog"),
+    a.eq(a.name, "id"),
+    Compute.matches(a.lexical, namingPattern),
+  ),
 );
 
 /**
@@ -307,10 +315,10 @@ const assembledTargets = select(CatalogTarget, (t) => t.eq(t.assembled, true));
  *   reference being a `data-catalog-idref` that holds an IDREF token, as "Idref target" reads one:
  *   a document in no assembly has it among its own catalogs, one in an assembly under each
  *   instance, among its assembly's catalogs;
- * - **DocumentId key:** one `support` per card, one designating `default` per entry, one
- *   `data-catalog-idref` and one catalog `id` per element, the keys over the attribute selections
- *   the copies read, and {@link CatalogId}'s `(document, id)`, which an ID held twice in a document
- *   already breaks and which the containment of "Catalog reference" needs of its target;
+ * - **DocumentId key:** {@link CatalogId}'s `(document, id)`, which an ID held twice in a document
+ *   already breaks and which the containment of "Catalog reference" needs of its target; the
+ *   attribute selections the copies read are keyed by the closed attributes' key
+ *   (`closedAttributes`, `#pantry/qti/attributes.ts`);
  * - **E1 derived:** each card overlay's node tuple, each overlay's attribute copied into its row both
  *   ways, a collapsed value the lexical form collapsed (a designating one `true` or `1`), and a
  *   catalog's `id` its {@link DocumentId}'s, owned by the catalog itself; and the tokens'
@@ -326,13 +334,7 @@ export const catalogLawsByName = {
     contained(on(unassembledTargets, "document", "id"), on(CatalogId, "document", "id")),
     contained(on(PlacedCatalogRef, "assembly", "id"), on(AssembledCatalog, "assembly", "id")),
   ],
-  "DocumentId key": [
-    key(on(supportAttributes, "node")),
-    key(on(designatingDefaults, "node")),
-    key(on(referenceAttributes, "node")),
-    key(on(catalogIdAttributes, "node")),
-    key(on(CatalogId, "document", "id")),
-  ],
+  "DocumentId key": [key(on(CatalogId, "document", "id"))],
   "E1 derived": [
     contained(
       on(CardSupport, "node", "document", "kind", "start", "nearest", "version", "catalog"),

@@ -87,7 +87,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
@@ -551,18 +551,17 @@ const resourceFileFamily = counted(
  * attribute's lexical form the overlay's field and its existence the overlay row's. Its reverse
  * probe reads an index over the selection's node alone: grizzle indexes the longest leading run of
  * a containment's source columns whose entry is bounded (`plannedReverse`), and no pattern bounds
- * `Attribute.lexical`. An element holds one attribute of a closed name (AL2), and every name here
- * is closed, so a key over `node` states that again, and grizzle asks one only of a containment's
- * target (`laws/model/plan.ts` `#keyedTarget`). The `type`, the `cp:file` `href` and the
- * `identifierref` are required (AL3), so the copy alone makes the row's field the attribute's: a
- * `type`'s into its {@link ResourceTyped}, where it spells a handle ({@link spelledTypes}), and the
- * others' into their node's own row; those selections are no target and state no key. A resource's
- * `href` is optional, and its {@link ResourceHref} stands only where it is written, a containment
- * back into `resourceHrefs`, which sits beside its key for it. An `identifier` is an `xs:ID`, so
- * its selection lies inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds every
- * element to one ID-typed attribute, and the copy back from its overlay, stated there under
- * "Manifest overlay", meets `idAttributes` at the selection's kind and the manifest's type,
- * `manifest`.
+ * `Attribute.lexical`. A containment's target is keyed by the closed attributes' key
+ * (`closedAttributes`, `#pantry/qti/attributes.ts`), since every selection here states
+ * {@link closedName} and fixes `name`. The `type`, the `cp:file` `href` and the `identifierref` are
+ * required (AL3), so the copy alone makes the row's field the attribute's: a `type`'s into its
+ * {@link ResourceTyped}, where it spells a handle ({@link spelledTypes}), and the others' into
+ * their node's own row; those selections are no target. A resource's `href` is optional, and its
+ * {@link ResourceHref} stands only where it is written, a containment back into `resourceHrefs`,
+ * which the closed attributes' key keys. An `identifier` is an `xs:ID`, so its selection lies
+ * inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds every element to one ID-typed
+ * attribute, and the copy back from its overlay, stated there under "Manifest overlay", meets
+ * `idAttributes` at the selection's kind and the manifest's type, `manifest`.
  *
  * @param kind - The element's kind.
  * @param name - The attribute's name.
@@ -573,7 +572,7 @@ const attributesOf = (
   name: "href" | "identifier" | "identifierref" | "type",
 ) =>
   select(Attribute, (a) =>
-    a.and(a.eq(a.name, name), a.eq(a.kind, kind), a.eq(a.documentType, "manifest")),
+    a.and(closedName(a), a.eq(a.name, name), a.eq(a.kind, kind), a.eq(a.documentType, "manifest")),
   );
 
 /**
@@ -663,12 +662,14 @@ const listedEntries = select(Entry, (e) => e.ne(e.path, manifestPath));
  * The attributes of the reference census (`ReferenceAttribute`, spec reading 103): each an
  * attribute by which an element of its kind names a file under its version, of either form. Each is
  * a {@link Reference}'s copy (C18), and every {@link Reference} is one's, a containment into this
- * selection that grizzle admits only under a key over it (`laws/model/plan.ts` `#keyedTarget`): the
- * key over its `(node, name)`, which holds already, since an element holds one attribute of a
- * closed name (AL2).
+ * selection at `(node, name)`, which grizzle admits only under a key that keys it: the closed
+ * attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`).
  */
 const censusAttributes = select(Attribute, (a) =>
-  a.in(ReferenceAttribute.at("form", a.version, a.kind, a.name), ["uri", "srcset"]),
+  a.and(
+    closedName(a),
+    a.in(ReferenceAttribute.at("form", a.version, a.kind, a.name), ["uri", "srcset"]),
+  ),
 );
 
 /**
@@ -783,7 +784,7 @@ export const packageLawsByName = {
     contained(on(Document, "package", "path"), on(Entry, "package", "path")),
     key(on(ResourceDocument, "package", "path")),
   ],
-  "DocumentId key": [key(on(ResourceId, "package", "identifier")), key(on(resourceHrefs, "node"))],
+  "DocumentId key": [key(on(ResourceId, "package", "identifier"))],
   "E1 derived": [
     contained(
       on(ResourceDocument, "node", "package", "path", "rootKind", "documentType"),
@@ -804,7 +805,6 @@ export const packageLawsByName = {
     check("E1_derived", File, (f) =>
       f.or(f.ne(f.scope, "entry"), Compute.matches(f.path, resolvedPathPattern)),
     ),
-    key(on(censusAttributes, "node", "name")),
     check("E1_derived", Reference, (r) =>
       r.and(
         r.eq(

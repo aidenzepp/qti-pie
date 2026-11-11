@@ -2727,9 +2727,11 @@ const attributeBreaches = (
       const compiled = compiledOf(laws, attribute);
       const before = owned[slot - 1];
       const x: Positions = new Set(Option.toArray(admitted).map(({ position }) => position));
-      const repeated = attribute.attrsWas
-        .intersection(x)
-        .difference(laws.open(attribute.version, attribute.kind, attribute.governs));
+      // AL2's distinctness is the closed attributes' key, (node, name): an earlier attribute of the
+      // element of the same closed name repeats it.
+      const repeated =
+        !isOpenClass(attribute.name) &&
+        owned.slice(0, slot).some((earlier) => earlier.name === attribute.name);
 
       return [
         Option.isSome(admitted) ? [] : [breach("AL1 admission")],
@@ -2743,9 +2745,7 @@ const attributeBreaches = (
                 ownerVersion: node?.version ?? "",
               }),
             ],
-        repeated.size === 0
-          ? []
-          : [breach("AL2 distinct", { attrsWas: spaced(attribute.attrsWas), position: spaced(x) })],
+        repeated ? [breach("AL2 distinct")] : [],
         attribute.at > 0n || attribute.attrsWas.size === 0
           ? []
           : [breach("N5 first slot", { attrsWas: spaced(attribute.attrsWas) })],
@@ -7086,7 +7086,7 @@ const ownLaws = {
   },
   "AL2 distinct": {
     explain: (keys) =>
-      `${field(keys, "name")} takes position ${field(keys, "position")}, which attrs ${inBraces(membersOf(keys["attrsWas"]))} already holds, and no open class does`,
+      `${field(keys, "name")} is written again on an element that already holds it, and it is no open class`,
   },
   "AL2 fold": {
     explain: (keys) =>

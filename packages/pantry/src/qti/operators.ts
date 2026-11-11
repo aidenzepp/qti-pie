@@ -31,10 +31,11 @@
  * whitespace.
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
- * states it: from `select(Attribute, φ)` into the overlay, beside a key over the same selection
- * whose UNIQUE serves the copy's reverse probe. Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
- * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
+ * states it: from `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key
+ * (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the selection's node serves
+ * the copy's reverse probe. Every copied text that takes part in a cross-row equality is `keyText`
+ * (`#pantry/qti/limits.ts`). Every check is named by its oracle law (`#pantry/test/oracle.ts`
+ * `LawName`) with spaces written as underscores.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_EqualRounded | QTI 3.0 information model, §5.47 EqualRounded}
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_RoundTo | QTI 3.0 information model, §5.119 RoundTo}
@@ -52,7 +53,6 @@ import {
   fin,
   fold,
   generated,
-  key,
   mirrors,
   Monoid,
   natural,
@@ -64,7 +64,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
 import { idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
 import { integerForm, keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
@@ -253,14 +253,14 @@ const roundingNodes = select(Node, (n) => n.in(n.kind, roundingKinds));
  * A rounding operator's `figures`, the source of {@link RoundingFigures}.
  */
 const figuresAttributes = select(Attribute, (a) =>
-  a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "figures")),
+  a.and(closedName(a), a.in(a.kind, roundingKinds), a.eq(a.name, "figures")),
 );
 
 /**
  * A rounding operator's `rounding-mode`, the source of a written {@link RoundingMode}.
  */
 const modeAttributes = select(Attribute, (a) =>
-  a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "rounding-mode")),
+  a.and(closedName(a), a.in(a.kind, roundingKinds), a.eq(a.name, "rounding-mode")),
 );
 
 /**
@@ -287,7 +287,7 @@ const modedRoundings = select(Rounding, (r) => r.in(r.holds, ["mode", "both"]));
  * A `qti-equal`'s `tolerance`, the source of {@link Tolerance}.
  */
 const toleranceAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-equal"), a.eq(a.name, "tolerance")),
+  a.and(closedName(a), a.eq(a.kind, "qti-equal"), a.eq(a.name, "tolerance")),
 );
 
 /**
@@ -372,11 +372,6 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
  * - **Reading 121:** {@link toleranceRequired}, {@link toleranceCount} and {@link tolerancePositive}.
  */
 export const operatorLawsByName = {
-  "DocumentId key": [
-    key(on(figuresAttributes, "node")),
-    key(on(modeAttributes, "node")),
-    key(on(toleranceAttributes, "node")),
-  ],
   "E1 derived": [
     contained(
       on(Rounding, "node", "document", "kind", "start", "nearest", "version", "parent"),

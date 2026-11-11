@@ -31,14 +31,13 @@ import {
   check,
   Compute,
   contained,
-  key,
   natural,
   on,
   relation,
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, closedName } from "#pantry/qti/attributes.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { dataSsmlMembers } from "#pantry/vocab/data-ssml.ts";
 
@@ -89,7 +88,9 @@ export const dataSsmlRelations = { DataSsml, DataSsmlMember, DataSsmlProperty };
 /**
  * Every closed `data-ssml` attribute, by its element's node: an element holds one.
  */
-const dataSsmlAttributes = select(Attribute, (a) => a.eq(a.name, "data-ssml"));
+const dataSsmlAttributes = select(Attribute, (a) =>
+  a.and(closedName(a), a.eq(a.name, "data-ssml")),
+);
 
 /**
  * The (member, property) pairs of one kind of property domain, from the schema's table.
@@ -152,7 +153,6 @@ export const dataSsmlLawsByName = {
     ),
   ],
   "E1 derived": [
-    key(on(dataSsmlAttributes, "node")),
     contained(on(DataSsml, "node"), on(dataSsmlAttributes, "node")),
     contained(on(DataSsmlMember, "node"), on(DataSsml, "node")),
     contained(

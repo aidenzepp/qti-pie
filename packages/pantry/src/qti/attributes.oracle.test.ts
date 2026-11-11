@@ -173,26 +173,18 @@ const alphabet = (() => {
 type Letter = (typeof alphabet)[number];
 
 /**
- * Judge a list of attributes by the database's statements over them, stated over the slots: the
- * `or` fold's step (`attrsAfter = attrsWas | slot`, the open classes stepped over when the step
- * selects), then `AL2_distinct`, `attrsWas ∩ slot = ∅`.
+ * Judge a list of attributes by the database's statement over them: AL2's key, `(node, name)` over
+ * the attributes of a closed name, the open classes left out when the key's selection selects.
  *
- * @param letters - The attributes, in source order.
- * @param selects - Whether the fold's step selection leaves the open classes out: the statement as
+ * @param letters - The attributes of one element, in source order.
+ * @param selects - Whether the key's selection leaves the open classes out: the statement as
  *   written; `false` is the mutant that drops it.
- * @returns Whether a row breaks `AL2_distinct`.
+ * @returns Whether two rows break the key.
  */
 const refused = (letters: readonly Letter[], selects: boolean): boolean => {
-  let was = new Set<number>();
-  for (const { name, slot } of letters) {
-    if (was.has(slot)) {
-      return true;
-    }
+  const keyed = letters.filter(({ name }) => !(selects && isOpen(name))).map(({ name }) => name);
 
-    was = selects && isOpen(name) ? was : new Set([...was, slot]);
-  }
-
-  return false;
+  return new Set(keyed).size < keyed.length;
 };
 
 /**
@@ -202,13 +194,13 @@ const lists: Gen<readonly Letter[]> = array(element<Letter>(alphabet), { max: 4,
 
 /**
  * A situation the distinctness box must reach: each kind of list, and a list that tells the
- * mutant without the step selection apart from the statement as written.
+ * mutant without the key's selection apart from the statement as written.
  */
 type DistinctSituation = "closed repeat" | "open repeat" | "distinct" | "mutant killed";
 
 describe("qti/attributes.ts, AL2's distinctness", () => {
   it.effect(
-    "refuses exactly a repeated closed name, and the mutant without the step selection refuses two attributes of one open class",
+    "refuses exactly a repeated closed name, and the mutant without the key's selection refuses two attributes of one open class",
     (ctx) =>
       // Oracle: the specification as a checker, XML 1.0 §3.1's Unique Att Spec by name: a list is
       // refused exactly when a closed name repeats, since two open names of one class are two
