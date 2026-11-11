@@ -11,8 +11,7 @@ strong points. Treat observability as part of implementation, not optional polis
 Cover meaningful application and internal operations comprehensively; avoid duplicate
 telemetry and events that add volume without diagnostic value.
 Use this repository's `effect-design`, `document-code`, and `error-messages` skills
-where applicable. Read `docs/alchemy/cloudflare/observability.md` for runtime wiring
-and exporter limitations; preserve the native Cloudflare telemetry integration.
+where applicable.
 
 Before implementation or review, read [references/examples.md](references/examples.md).
 Its POSITIVE and NEGATIVE pairs define the decision boundaries for nested spans,
