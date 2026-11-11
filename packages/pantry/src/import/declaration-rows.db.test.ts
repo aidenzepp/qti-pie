@@ -41,10 +41,12 @@ const kinds = [...new Set(declarationSites.map(({ kind }) => kind))];
 
 /**
  * Each state once, at the first site it applies to of a kind that turns with the state's place, so
- * the box meets every state and every declaration kind: built, not drawn.
+ * the box meets every state and every declaration kind: built, not drawn. Only the first
+ * declaration of each kind in each document is a site (`ordinal` 0), the scope
+ * `src/test/declaration-rows.oracle.test.ts` exhausts on the host, which so holds every case here.
  */
 const cases = declarationStates.flatMap((state, at) => {
-  const applicable = declarationSites.filter((site) => state.applies(site));
+  const applicable = declarationSites.filter((site) => site.ordinal === 0 && state.applies(site));
   const site = applicable.find(({ kind }) => kind === kinds[at % kinds.length]) ?? applicable[0];
 
   return site === undefined ? [] : [{ site, state }];
