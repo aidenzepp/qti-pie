@@ -423,7 +423,8 @@ const isKept = (table: Option.Option<SecuringContent>, attribute: SourceAttribut
  * @param governing The table that governs each element the structural walk checked.
  * @param marks Where E3's marks are collected.
  * @param drops Where each dropped URL's feature is collected, by element path.
- * @returns The attributes that stay, each kept URL in its parsed form.
+ * @returns The attributes that stay, each kept URL in its parsed form: the element's own array
+ *   when every attribute stays as written.
  */
 const secureAttributes = (
   visit: Visit,
@@ -462,11 +463,15 @@ const secureAttributes = (
         drops.set(path, [...features, url.feature]);
       }
     } else {
-      kept.push({ ...attribute, value: formatUrl(url) });
+      const formatted = formatUrl(url);
+      kept.push(formatted === attribute.value ? attribute : { ...attribute, value: formatted });
     }
   }
 
-  return kept;
+  return kept.length === element.attributes.length &&
+    kept.every((attribute, index) => attribute === element.attributes[index])
+    ? element.attributes
+    : kept;
 };
 
 /**
@@ -483,8 +488,10 @@ const isXsiType = (attribute: SourceAttribute): boolean =>
  * Secure a source before the item is built from it.
  *
  * Each element is rebuilt after its descendants, from the walk in reverse, so the work needs no
- * call stack however deep the document. Element paths do not change: they depend only on element
- * names and their order.
+ * call stack however deep the document; an element whose attributes all stay as written and none
+ * of whose element children was rebuilt is kept as it is, so securing copies only the elements on
+ * the way to a change. Element paths do not change: they depend only on element names and their
+ * order.
  *
  * It reads only the fields of {@link SecuringTables}, so the full tables and the securing tables'
  * projection of them secure a document alike.
@@ -518,13 +525,24 @@ const secure = (
   );
   const rebuilt = new Map<SourceElement, SourceElement>();
   for (const { element } of visits.toReversed()) {
-    rebuilt.set(element, {
-      ...element,
-      attributes: attributes.get(element) ?? element.attributes,
-      children: element.children.map((child): SourceChild =>
-        child.kind === "element" ? (rebuilt.get(child) ?? child) : child,
-      ),
-    });
+    const secured = attributes.get(element) ?? element.attributes;
+    const kept =
+      secured === element.attributes &&
+      element.children.every(
+        (child) => child.kind !== "element" || (rebuilt.get(child) ?? child) === child,
+      );
+    rebuilt.set(
+      element,
+      kept
+        ? element
+        : {
+            ...element,
+            attributes: secured,
+            children: element.children.map((child): SourceChild =>
+              child.kind === "element" ? (rebuilt.get(child) ?? child) : child,
+            ),
+          },
+    );
   }
 
   return {
