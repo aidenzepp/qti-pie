@@ -303,7 +303,9 @@ export const Attribute = relation.generated(
     version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
   ["node", "id"],
+  // GRIZZLE-PENDING: a level's row check over a lower relation's text
   (a) => ({
+    // GRIZZLE-PENDING: Compute.holds(p) as a boolean term
     dataScheme: generated(
       pg.boolean,
       Compute.cond(

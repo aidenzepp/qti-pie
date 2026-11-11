@@ -83,7 +83,6 @@
 import {
   check,
   Compute,
-  contained,
   derived,
   generated,
   key,
@@ -294,24 +293,19 @@ const MediaAttribute = derived(
 );
 
 /**
- * Every attribute fetched under a governor of a kind that fetches it, by its element and name: the
- * attributes Media path holds to a {@link Reference}.
+ * Every attribute no {@link Reference} is of, by its element and name, with its governor: Media
+ * path holds each to be no fetched attribute, since the import writes a reference for every
+ * attribute the reference census resolves.
  */
-const FetchedAttribute = derived(
-  "FetchedAttribute",
+const UnreferencedAttribute = derived(
+  "UnreferencedAttribute",
   query(Qti).rule((r) => {
     const { governor, name, node } = v(Attribute, "attribute");
 
     return r
       .match(Attribute, { governor, name, node })
-      .where(
-        Compute.or(
-          ...fetchedNames.map(({ governors, name: fetched }) =>
-            Compute.and(Compute.eq(name, fetched), Compute.in(governor, governors)),
-          ),
-        ),
-      )
-      .find({ name, node });
+      .where(r.not(Reference, { name, node }))
+      .find({ governor, name, node });
   }),
 );
 
@@ -358,74 +352,69 @@ const MediaNode = derived(
 );
 
 /**
- * The resolved path of every fetched reference, by its element and name.
+ * The resolved paths, by the reference's element and name, whose extension a {@link MediaType} row
+ * lists: a path with an extension ({@link extensionPattern}) that ends with the row's suffix.
  */
-const FetchedPath = derived(
-  "FetchedPath",
-  query(Qti).rule((r) => {
-    const { kind, name, node, path } = v(ReferencePath, "path");
+const servedPaths = query(QtiMediaPolicy).rule((r) => {
+  const { name, node, path } = v(ReferencePath, "path");
+  const { suffix } = v(MediaType, "media");
 
-    return r
-      .match(ReferencePath, { kind, name, node, path })
-      .where(
-        Compute.or(
-          ...fetchedAttributes.map((fetched) =>
-            Compute.and(Compute.eq(kind, fetched.kind), Compute.eq(name, fetched.name)),
-          ),
-        ),
-      )
-      .find({ name, node, path });
-  }),
-);
-
-/**
- * The resolved path of every fetched reference whose extension a {@link MediaType} row lists.
- */
-const ServedPath = derived(
-  "ServedPath",
-  query(QtiMediaPolicy).rule((r) => {
-    const { name, node, path } = v(ReferencePath, "path");
-    const { suffix } = v(MediaType, "media");
-
-    return r
+  return (
+    r
       .match(ReferencePath, { name, node, path })
       .match(MediaType, { suffix })
       .where(Compute.matches(path, extensionPattern))
+      // GRIZZLE-PENDING: a boolean term as a predicate
       .where(Compute.eq(Compute.endsWith(path, suffix), true))
-      .find({ name, node, path });
-  }),
-);
+      .find({ name, node })
+  );
+});
 
 /**
- * The resolved path of every fetched text reference, by its element.
+ * Every resolved path no {@link MediaType} row serves, by the reference's element and name, with
+ * the reference's kind: Media type holds each to be no fetched reference's.
  */
-const FetchedTextPath = derived(
-  "FetchedTextPath",
-  query(Qti).rule((r) => {
-    const { kind, node, path } = v(TextReferencePath, "path");
-
-    return r
-      .match(TextReferencePath, { kind, node, path })
-      .where(Compute.in(kind, fetchedTexts))
-      .find({ node, path });
-  }),
-);
-
-/**
- * The resolved path of every fetched text reference whose extension a {@link MediaType} row lists.
- */
-const ServedTextPath = derived(
-  "ServedTextPath",
+const UnservedPath = derived(
+  "UnservedPath",
   query(QtiMediaPolicy).rule((r) => {
-    const { node, path } = v(TextReferencePath, "path");
-    const { suffix } = v(MediaType, "media");
+    const { kind, name, node } = v(ReferencePath, "path");
 
     return r
-      .match(TextReferencePath, { node, path })
-      .match(MediaType, { suffix })
-      .where(Compute.matches(path, extensionPattern))
-      .where(Compute.eq(Compute.endsWith(path, suffix), true))
-      .find({ node, path });
+      .match(ReferencePath, { kind, name, node })
+      .where(r.not(servedPaths, { name, node }))
+      .find({ kind, name, node });
+  }),
+);
+
+/**
+ * The resolved text paths, by the text reference's element, whose extension a {@link MediaType} row
+ * lists.
+ */
+const servedTextPaths = query(QtiMediaPolicy).rule((r) => {
+  const { node, path } = v(TextReferencePath, "path");
+  const { suffix } = v(MediaType, "media");
+
+  return r
+    .match(TextReferencePath, { node, path })
+    .match(MediaType, { suffix })
+    .where(Compute.matches(path, extensionPattern))
+    .where(Compute.eq(Compute.endsWith(path, suffix), true))
+    .find({ node });
+});
+
+/**
+ * Every resolved text path no {@link MediaType} row serves, by the text reference's element, with
+ * its kind: Media type holds each to be no fetched text's.
+ */
+const UnservedTextPath = derived(
+  "UnservedTextPath",
+  query(QtiMediaPolicy).rule((r) => {
+    const { kind, node } = v(TextReferencePath, "path");
+
+    return r
+      .match(TextReferencePath, { kind, node })
+      .where(r.not(servedTextPaths, { node }))
+      .find({ kind, node });
   }),
 );
 
@@ -499,7 +488,15 @@ export const mediaLawsByName = {
     check("Media_foreign", MediaNode, (n) => n.not(n.in(n.kind, Object.values(foreignKinds)))),
   ],
   "Media path": [
-    contained(on(FetchedAttribute, "node", "name"), on(Reference, "node", "name")),
+    check("Media_path", UnreferencedAttribute, (a) =>
+      a.not(
+        a.or(
+          ...fetchedNames.map(({ governors, name }) =>
+            a.and(a.eq(a.name, name), a.in(a.governor, governors)),
+          ),
+        ),
+      ),
+    ),
     check("Media_path", MediaReference, (r) =>
       r.or(
         r.not(
@@ -528,8 +525,16 @@ export const mediaLawsByName = {
     ),
   ],
   "Media type": [
-    contained(on(FetchedPath, "node", "name", "path"), on(ServedPath, "node", "name", "path")),
-    contained(on(FetchedTextPath, "node", "path"), on(ServedTextPath, "node", "path")),
+    check("Media_type", UnservedPath, (p) =>
+      p.not(
+        p.or(
+          ...fetchedAttributes.map(({ kind, name }) =>
+            p.and(p.eq(p.kind, kind), p.eq(p.name, name)),
+          ),
+        ),
+      ),
+    ),
+    check("Media_type", UnservedTextPath, (p) => p.not(p.in(p.kind, fetchedTexts))),
   ],
 } as const;
 
@@ -543,15 +548,13 @@ export const QtiMedia = schema.extend(
   QtiMediaPolicy,
   "QtiMedia",
   {
-    FetchedAttribute,
-    FetchedPath,
-    FetchedTextPath,
     MediaAttribute,
     MediaNode,
     MediaReference,
     MediaTextReference,
-    ServedPath,
-    ServedTextPath,
+    UnreferencedAttribute,
+    UnservedPath,
+    UnservedTextPath,
     UnusedEntry,
   },
   Object.values(mediaLawsByName).flat(),

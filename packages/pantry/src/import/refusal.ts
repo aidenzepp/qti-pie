@@ -146,17 +146,26 @@ export interface LawNamer {
 /**
  * Build the namer of a law-name dictionary. A check is named by its own name ({@link lawOfCheck}),
  * since grizzle names a check by the name its statement declares; every other law by the
- * dictionary's entry of its id, which the outcome carries. Nothing reads the schema.
+ * dictionary's entry of its id, which the outcome carries; and a law of a level above the login's,
+ * such as a package-media law (`QtiMedia` of `#pantry/qti/media.ts`) refusing a write of a login
+ * over `Qti`, as the law it wraps. Nothing reads the schema.
  *
  * @param file - The dictionary.
  * @returns Its namer.
  */
-export const namerFrom = (file: LawNamesFile): LawNamer => ({
-  nameOf: ({ id, law }) =>
-    law.kind === "check"
+export const namerFrom = (file: LawNamesFile): LawNamer => {
+  const nameOf = ({ id, law }: Pick<RefusalLaw, "id" | "law">): Option.Option<LawName> => {
+    if (law.kind === "above") {
+      return nameOf({ id, law: law.law });
+    }
+
+    return law.kind === "check"
       ? lawOfCheck(law.name)
-      : Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name)),
-});
+      : Option.flatMap(Option.fromUndefinedOr(file.laws[id]), ({ name }) => lawNamed(name));
+  };
+
+  return { nameOf };
+};
 
 /**
  * The namer of the committed dictionary, `#pantry/vocab/law-names.json`, built once, when this
