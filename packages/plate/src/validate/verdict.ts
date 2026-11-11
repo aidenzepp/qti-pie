@@ -768,7 +768,8 @@ const placeNode = (
  * @param entries The item's own features, then E3's marks, then the dropped URLs'.
  * @param visits The document's walk, which gives each element's order; securing keeps every
  *   element and its path, so the walk of the source before securing serves. Only the features'
- *   own paths are indexed.
+ *   own paths are indexed, and only when there are two or more features to order: hashing a path
+ *   reads every character of it, so indexing costs a pass over the whole document's paths.
  * @returns The features ordered by their element, keeping the given order within one element.
  */
 const inDocumentOrder = (
@@ -783,6 +784,10 @@ const inDocumentOrder = (
 
     return fresh;
   });
+  if (unique.length < 2) {
+    return unique;
+  }
+
   const paths = new Set(unique.map((entry) => entry.path));
   const order = new Map<string, number>();
   for (const [index, visit] of visits.entries()) {
