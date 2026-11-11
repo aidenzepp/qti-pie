@@ -12,7 +12,7 @@
  * every document of a test or a section is one some instance places, by rules over the queries
  * `HeadDocument` and `InstanceDocument` (`#pantry/qti/queries.ts`), which the host does not judge:
  * PostgreSQL alone does, the importer's every-relation package accepted and the unplaced cycles
- * refused (`#pantry/import/inclusion-cycles.db.test.ts`).
+ * refused.
  *
  * A law the host cannot judge reads a value it does not restore, and {@link unjudged} names each
  * such value with why. That list is exact: a value the host comes to hold fails the test until its

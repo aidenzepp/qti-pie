@@ -10,8 +10,7 @@
  * reference still resolves to it by name, reading no cardinality of it (spec reading 159;
  * `#pantry/import/overlays/declarations.ts` `typedDeclarationOf`): its own law, AL3's required
  * attribute or the attribute's value domain, refuses it. `src/test/declaration-rows.oracle.test.ts`
- * holds the oracle and the rows to that, and `src/import/declaration-rows.db.test.ts` the
- * database.
+ * holds the oracle and the rows to that.
  */
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";

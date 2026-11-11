@@ -3,8 +3,7 @@
  * importer's law table: one law, the attribute's value domain, refuses a date outside xs:date's
  * lexical space, the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9,
  * Day-of-month Representations), and the database's restatement of it on `StatisticDate.day` is
- * that law under its rule, `attribute-lexical` (the orchestrator's ruling of 2026-11-06). The
- * database's side is `import/statistic-dates.db.test.ts`.
+ * that law under its rule, `attribute-lexical` (the orchestrator's ruling of 2026-11-06).
  *
  * Oracle: the platform's proleptic Gregorian calendar (`Date`), which says whether a year, month
  * and day name a day, so no expected verdict is computed by the domain compiler or the oracle.

@@ -2,8 +2,7 @@
  * The LOM records of `simple`'s resource and of its image file, judged by the law oracle: the
  * resource's own record names the item's identifier and title or breaks `LomObjectIdentifier` and
  * `LomObjectTitle` (spec reading 62), and the file's record, which describes the file, breaks
- * nothing whatever it names (`lom-records.ts`). The database's side is
- * `import/lom-records.db.test.ts`.
+ * nothing whatever it names (`lom-records.ts`).
  *
  * Oracle: the case as written, which says which record names what, so no expected verdict is
  * computed by the oracle's own selection of records.

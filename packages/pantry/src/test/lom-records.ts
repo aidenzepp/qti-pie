@@ -1,7 +1,6 @@
 /**
  * Packages of `simple` whose resource's own LOM record and whose image file's LOM record each name
- * the item's identifier and title or another, for the oracle's box (`lom-records.oracle.test.ts`)
- * and the database's (`import/lom-records.db.test.ts`).
+ * the item's identifier and title or another, for the oracle's box (`lom-records.oracle.test.ts`).
  *
  * Spec reading 62 binds the resource's own record, a `lom:lom` of the resource's `cp:metadata`: its
  * identifier entries and its title name the item. A `cp:file`'s record describes the file: "The

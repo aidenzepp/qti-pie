@@ -32,8 +32,6 @@
  *   cardinality row beside its bindings, so no law reads a cardinality it does not have (spec
  *   readings 158 and 159: a missing value is a row of its own relation, never a sentinel).
  *
- * The database's own verdict over the same scope is `src/import/binding-fit.db.test.ts`'s.
- *
  * A gap match interaction with two or more gaps binds a response of multiple cardinality (spec
  * reading 169, information model §5.57): the law oracle and the schema's laws over the import's
  * rows (`#pantry/test/host-judge.ts`) break "Binding cardinality" together exactly where a gap

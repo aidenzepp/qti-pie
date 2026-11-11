@@ -23,8 +23,6 @@
  *   for a base type;
  * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`), so
  *   no row of a relation grizzle writes before `Node` breaks a CHECK.
- *
- * The database's own verdict over the same scope is `src/import/declaration-rows.db.test.ts`'s.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";

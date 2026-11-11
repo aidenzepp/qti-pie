@@ -3,8 +3,7 @@
  * section document's rubric carrying an ID or not, the test placing that section document once or
  * twice, and the test's own first section carrying the same ID or not.
  *
- * `src/test/placed-id-copy.oracle.test.ts` holds the oracle and the importer's rows to each case,
- * and `src/import/placed-id-copy.db.test.ts` the database.
+ * `src/test/placed-id-copy.oracle.test.ts` holds the oracle and the importer's rows to each case.
  */
 import { assert } from "@effect/vitest";
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";

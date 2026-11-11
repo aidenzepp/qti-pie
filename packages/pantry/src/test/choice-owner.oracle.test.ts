@@ -24,8 +24,6 @@
  *   placed fragment's among them, as `Interaction.choices` draws it;
  * - A choice with no `ChoiceInteraction`, the existence law's breach ("N8 nearest"), is only ever in
  *   a case the oracle refuses under N6, which the database meets first.
- *
- * The database's own verdict over the same scope is `src/import/choice-owner.db.test.ts`'s.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";

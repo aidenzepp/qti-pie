@@ -13,8 +13,7 @@
  * a row of its own relation, never a sentinel).
  *
  * Each case says what the law oracle names it by ({@link expectedRules}); `src/test/choice-
- * owner.oracle.test.ts` holds the oracle and the importer's rows to it, and `src/import/
- * choice-owner.db.test.ts` the database.
+ * owner.oracle.test.ts` holds the oracle and the importer's rows to it.
  */
 import { Array as Arr } from "effect";
 import { array, int } from "@grizzle/testing/gen";

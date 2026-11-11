@@ -6,8 +6,7 @@
  * (a binding per response, a hottext per identifier) before the cycle's law. A cycle no item
  * places, and a fragment only that cycle places, are in no assembly at all, which the containment
  * of every `TestDocument` into the query `InstanceDocument` refuses under the same law (spec
- * readings 85 and 117), a rule over a query that the database alone judges. The database's side is
- * `import/inclusion-cycles.db.test.ts`.
+ * readings 85 and 117), a rule over a query that the database alone judges.
  *
  * Oracle: the inclusion graph as each case writes it, a cycle or none, so no expected verdict is
  * computed by the import's walk or the oracle's.

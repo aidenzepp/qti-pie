@@ -1,6 +1,6 @@
 /**
  * Packages of inclusion cycles through `rtest01`'s fragment, for the oracle's box
- * (`inclusion-cycles.oracle.test.ts`) and the database's (`import/inclusion-cycles.db.test.ts`).
+ * (`inclusion-cycles.oracle.test.ts`).
  *
  * `rtest01`'s three set items each include `rtest01-fragment.xml`, a `div` holding a hottext
  * interaction bound to `RESPONSE`. A case keeps the include in the first `includers` items and

@@ -2,8 +2,7 @@
  * The bindings the fit laws judge, as cases over the every-relation package
  * (`#pantry/test/gen/every-relation.ts`): an interaction's binding attribute at a site, and the
  * state of the response declaration it names, drawn from the small scope
- * `src/test/binding-fit.oracle.test.ts` exhausts against the law oracle and the importer's rows,
- * and `src/import/binding-fit.db.test.ts` against the database.
+ * `src/test/binding-fit.oracle.test.ts` exhausts against the law oracle and the importer's rows.
  *
  * A binding whose name a response declaration of its item holds has its `BindingDeclaration` (or
  * `PlacedBindingDeclaration`) row, whatever the declaration's cardinality spells, and one whose
