@@ -140,6 +140,14 @@ const catalogs: Readonly<Record<Locale, Readonly<Record<MessageKey, string>>>> =
 const placeholder = /\{(?<name>[A-Za-z]+)\}/gu;
 
 /**
+ * The number format of every locale, built once: a format is a constant of its locale, and
+ * building one is far dearer than formatting with it.
+ */
+const numberFormats: Readonly<Record<Locale, Intl.NumberFormat>> = {
+  en: new Intl.NumberFormat("en"),
+};
+
+/**
  * Write a count or a position as a locale writes numbers: the form a number takes in
  * {@link MessageParams}, already formatted for the locale.
  *
@@ -151,7 +159,7 @@ const placeholder = /\{(?<name>[A-Za-z]+)\}/gu;
  * @returns The number, formatted for `locale`.
  */
 export const numeral = (locale: Locale, n: bigint | number): string =>
-  new Intl.NumberFormat(locale).format(n);
+  numberFormats[locale].format(n);
 
 /**
  * Write the renderer's text for a key in a locale.
