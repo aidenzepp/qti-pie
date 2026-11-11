@@ -114,14 +114,17 @@ export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
 
 /**
  * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
- * file system's, a refused import's, an import's unsettled commit and an absent package's.
+ * file system's, a refused import's (`ImportRefused`, or `RefusedAbove` of
+ * `#pantry/import/above.ts` when a level above `Qti` refused it), an import's unsettled commit and
+ * an absent package's.
  */
 type KindedTag =
   | (typeof grizzleTags)[number]
   | "CommitUnresolved"
   | "ImportRefused"
   | "PackageNotFound"
-  | "PlatformError";
+  | "PlatformError"
+  | "RefusedAbove";
 
 /**
  * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
@@ -380,7 +383,7 @@ const kindOf = (failure: unknown): Kind => {
 
   const tag = tagOf(failure);
 
-  if (tag === "ImportRefused") {
+  if (tag === "ImportRefused" || tag === "RefusedAbove") {
     return "import-refused";
   }
 
@@ -447,15 +450,17 @@ const helpOf = (failure: unknown, kind: Kind): string => {
 /**
  * The kind of a failure.
  *
- * An error this program defines names its own kind through {@link cliKind}. Every other failure is
- * mapped by what it is, without importing the module that defines it, so the program starts
- * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
- * `import-refused`, a `PackageNotFound` is `not-found`, an import's `CommitUnresolved` is
- * `database`, a `PlatformError` is `io`, a missing or unreadable local set-up is `config`, a
- * program grizzle refused to compile before sending any SQL is `internal`, and grizzle's other
- * errors are `database`. Anything else, a defect included, is
- * `internal`; the export's and the import's defects that {@link namedFailureOf} names keep that
- * kind, with a help of their own.
+ * An error this program defines names its own kind through {@link cliKind}, as `RefusedByLevel`
+ * (`#pantry/cli/verdict.ts`), a package a level above `Qti` refused, names `import-refused`. Every
+ * other failure is mapped by what it is, without importing the module that defines it, so the
+ * program starts without loading the engine: Effect's CLI errors are `cli-usage`, an
+ * `ImportRefused` is `import-refused`, and so is a `RefusedAbove`, a package a level above `Qti`
+ * refused (decisions 483 and 499), a `PackageNotFound` is `not-found`, an import's
+ * `CommitUnresolved` is `database`, a `PlatformError` is `io`, a missing or unreadable local set-up
+ * is `config`, a program grizzle refused to compile before sending any SQL is `internal`, and
+ * grizzle's other errors are `database`. Anything else, a defect included, is `internal`; the
+ * export's and the import's defects that {@link namedFailureOf} names keep that kind, with a help
+ * of their own.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind, the exit code of that kind, and what to do next.

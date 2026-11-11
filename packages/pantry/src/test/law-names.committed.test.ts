@@ -11,7 +11,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Schema } from "effect";
 import { lawNames, LawNamesFileSchema, namerFrom } from "#pantry/import/refusal.ts";
 import type { LawNamer } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 import { lawNamesOf, lawNamesPath, refusedOf } from "#pantry/test/law-names.ts";
 
@@ -56,7 +56,7 @@ describe("the law-name dictionary", () => {
       assert.deepStrictEqual(
         committed,
         lawNamesOf(),
-        "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry, with GR8DES_QTI_INSTALL unset, and commit src/vocab/law-names.json.",
+        "The committed law-name dictionary is stale: run `node src/test/law-names.ts` in packages/pantry and commit src/vocab/law-names.json.",
       );
     },
     lawModelTimeoutMs,

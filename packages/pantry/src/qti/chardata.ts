@@ -172,7 +172,7 @@ const charNoDash =
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-Comment | XML 1.0, Comment}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const CommentText = str.regex(`^(?:[${charNoDash}]|-[${charNoDash}])*$`);
 
@@ -185,7 +185,7 @@ export const CommentText = str.regex(`^(?:[${charNoDash}]|-[${charNoDash}])*$`);
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-PITarget | XML 1.0, PITarget}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const PiTarget = str.regex(
   `^(?:[${ncStart}][${ncChar}]?|[A-WYZ_a-wyz${nameStartWide}][${ncChar}]{2}|[Xx](?:[\\-.0-9A-LN-Z_a-ln-z${nameStartWide}${nameCharWide}][${ncChar}]|[Mm][\\-.0-9A-KM-Z_a-km-z${nameStartWide}${nameCharWide}])|[${ncStart}][${ncChar}]{3}[${ncChar}]*)$`,
@@ -219,7 +219,7 @@ const piDataRest = `(?:[${charNoQuestion}]|\\?+[${charNoClose}])*\\?*`;
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-PI | XML 1.0, PI}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const PiData = str.regex(
   `^(?:[\\u{21}-\\u{3E}\\u{40}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]${piDataRest}|\\?+(?:[${charNoClose}]${piDataRest})?)?$`,
@@ -231,7 +231,7 @@ export const PiData = str.regex(
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-doctypedecl | XML 1.0, doctypedecl}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const DoctypeText = str.regex(`^<!DOCTYPE[ \\t\\n\\r][${xmlChar}]*>$`);
 
@@ -240,7 +240,7 @@ export const DoctypeText = str.regex(`^<!DOCTYPE[ \\t\\n\\r][${xmlChar}]*>$`);
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-EncName | XML 1.0, EncName}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const EncName = str.regex("^[A-Za-z][A-Za-z0-9._\\-]*$");
 
@@ -252,7 +252,7 @@ export const EncName = str.regex("^[A-Za-z][A-Za-z0-9._\\-]*$");
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-VersionNum | XML 1.0, VersionNum}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const XmlVersion = str.regex("^1\\.[0-9]+$");
 
@@ -284,7 +284,7 @@ export const EntryPath = str.bytes(keyTextBytes, str.regex("^[^/].*$", "su"));
  *
  * @see {@link https://www.w3.org/TR/xml-names/#ns-decl | Namespaces in XML 1.0, §3 Declaring Namespaces}
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const NamespacePrefix = str.bytes(prefixBytes, str.regex(`^(?:[${ncStart}][${ncChar}]*)?$`));
 
@@ -304,7 +304,7 @@ export const NamespacePrefix = str.bytes(prefixBytes, str.regex(`^(?:[${ncStart}
  * against the law oracle's own recogniser of Appendix A's grammar
  * (`#pantry/test/uri-reference.ts`).
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  *
  * @see {@link https://www.w3.org/TR/xml-names/#ns-decl | Namespaces in XML 1.0, §3 Declaring Namespaces}
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-4.1 | RFC 3986, §4.1 URI Reference}
@@ -318,14 +318,14 @@ export const NamespaceUri = str.regex(`^${uriReference}$`);
  * through a containment into `OpenElementName(node, namespace)`, and an open attribute's element
  * namespace through another.
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const ForeignNamespace = str.bytes(namespaceBytes, Chars);
 
 /**
  * An NCName: a foreign element's local name.
  *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const NcName = str.regex(`^${ncName}$`);
 

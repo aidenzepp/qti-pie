@@ -119,7 +119,13 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
-import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
+import {
+  keyTextBytes,
+  localNameBytes,
+  namespaceBytes,
+  regexTextBytes,
+  utf8Length,
+} from "#pantry/qti/limits.ts";
 import {
   admittedOf as admittedChildrenOf,
   contentEnds,
@@ -170,10 +176,6 @@ import { dataName, typeAvailable } from "#pantry/vocab/open.ts";
  * - `derived`: a field PostgreSQL derives (E1) that the host computed otherwise;
  * - `selection-bounds`: a section selects more parts than it holds (O7), a law of the test
  *   vocabulary, which today's model does not read.
- *
- * It holds the rules of a single-CDN install's policy too (`#pantry/qti/cdn.ts`), which a refusal
- * of such an install names, and which the oracle, judging a package as this package's own install
- * does, never raises.
  */
 export const oracleRules = [
   "adaptive-feedback",
@@ -187,10 +189,6 @@ export const oracleRules = [
   "binding-fit",
   "binding-unique",
   "body-empty",
-  "cdn-data",
-  "cdn-foreign",
-  "cdn-origin",
-  "cdn-style",
   "branch-forward",
   "branch-target",
   "card-default",
@@ -258,6 +256,7 @@ export const oracleRules = [
   "reachability",
   "reader-refusal",
   "record-binding-fit",
+  "regex-text-bound",
   "remote-section",
   "required-attribute",
   "reserved-type",
@@ -2781,6 +2780,24 @@ const attributeBreaches = (
 };
 
 /**
+ * The UTF-8 bytes of a text that may be past {@link regexTextBytes}, the most PostgreSQL's regular
+ * expressions read: none for a text too short to pass it, since one UTF-16 unit is at most three
+ * UTF-8 bytes, so only a longer text is encoded to be counted.
+ *
+ * @param value - The text.
+ * @returns Its bytes where they pass the bound, none where they do not.
+ */
+const pastRegexText = (value: string): Option.Option<number> => {
+  if (value.length * 3 <= regexTextBytes) {
+    return Option.none();
+  }
+
+  const bytes = utf8Length(value);
+
+  return bytes > regexTextBytes ? Option.some(bytes) : Option.none();
+};
+
+/**
  * Whether a text is past the most a key text holds (`keyText`): a value the schema copies into a
  * key, a containment or a family's hidden columns refused by its type before any law of the
  * specification reads it.
@@ -3029,6 +3046,47 @@ const keyTexts = (
 };
 
 /**
+ * Evaluate reading 178's stated limit, "Regex text bound", over a document's attributes: each
+ * lexical form holds at most {@link regexTextBytes} UTF-8 bytes, the most PostgreSQL's regular
+ * expressions read, which `Attribute.lexical`'s domain CHECK runs on every write.
+ *
+ * @param view - The document.
+ * @returns A breach per attribute past the bound, keyed by its node, its field, its bytes and the
+ *   bound.
+ */
+const regexTextBreachesIn = (view: View): readonly Breach[] =>
+  view.rows.attributes.flatMap(({ lexical, name, node }) =>
+    Option.toArray(pastRegexText(lexical)).map((bytes): Breach => ({
+      document: view.path,
+      keys: {
+        bound: String(regexTextBytes),
+        bytes: String(bytes),
+        field: "Attribute.lexical",
+        name,
+        node: pathOf(view, node),
+      },
+      law: "Regex text bound",
+    })),
+  );
+
+/**
+ * Evaluate "Regex text bound" alone over one folded document, as {@link documentBreaches} does
+ * among every law: the seam a test judges an attribute near the bound at, since the oracle's other
+ * attribute laws read a lexical form with JavaScript regular expressions whose backtracking stack
+ * overflows on a value that long.
+ *
+ * @param path - The document's path in its package.
+ * @param rows - Its folded rows.
+ * @param laws - The grammar's tables.
+ * @returns The breaches.
+ */
+export const regexTextBreaches = (
+  path: string,
+  rows: FoldedRows<Composed>,
+  laws: Laws,
+): readonly Breach[] => regexTextBreachesIn(viewOf(path, rows, typedReadingOf(laws)));
+
+/**
  * Evaluate the laws over a document as a whole: one document node, the children family's key,
  * each character-data arm both ways, the `Document` row, the owners of the attribute, entity
  * reference, open name and foreign name rows, the open names' key, and `TextDomain` over each
@@ -3274,6 +3332,7 @@ const wholeBreaches = (
           node: node === undefined ? "" : pathOf(view, node),
         }),
       ),
+    ...regexTextBreachesIn(view),
     // Reading 131: a namespace declaration's normalized value is an RFC 3986 URI reference
     // (Namespaces in XML 1.0 §3, §2.1), judged by the oracle's own reading of Appendix A's grammar.
     ...rows.namespaces
@@ -7690,6 +7749,10 @@ const ownLaws = {
   "Reference type": {
     explain: (keys) =>
       `${field(keys, "kind")}'s ${field(keys, "attribute")} names ${field(keys, "identifier")}, which is no ${field(keys, "base")} single template or outcome variable`,
+  },
+  "Regex text bound": {
+    explain: (keys) =>
+      `the attribute ${field(keys, "name")}'s lexical form holds ${field(keys, "bytes")} UTF-8 bytes, past the ${field(keys, "bound")} PostgreSQL's regular expressions read (#pantry/qti/limits.ts regexTextBytes), a limit of the representation (reading 178)`,
   },
   "Remote section ref": {
     explain: (keys) =>

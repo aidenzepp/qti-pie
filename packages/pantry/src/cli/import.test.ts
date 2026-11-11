@@ -92,7 +92,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
   );
 
   it.effect(
-    "--json prints the codec's refusal as one error object, its one rule and no law",
+    "--json prints the codec's refusal as one error object, its one rule as rule and rules, and no law",
     () =>
       Effect.gen(function* refusedJson() {
         yield* makeScratch(env);
@@ -108,6 +108,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
         assert.isTrue(matchesCommitted("error")(stderr), stderr);
         assert.strictEqual(error.kind, "import-refused");
         assert.deepStrictEqual(error.rules, ["not-qti3"]);
+        assert.strictEqual(error.rule, "not-qti3");
         assert.strictEqual(error.command, "import");
         assert.notProperty(error, "refused_kind");
         assert.notProperty(error, "laws");

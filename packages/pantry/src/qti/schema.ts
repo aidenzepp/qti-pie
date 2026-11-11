@@ -1,64 +1,115 @@
 /**
- * The `Qti` schema: its stored level, `QtiBase` (`#pantry/qti/base.ts`), every roster, closed
- * relation and stored relation with the laws over them, and over it the level that names the
- * queries its rules read, with those rules (`#pantry/qti/queries.ts`). The two levels are one
- * installation, under the stored level's name: grizzle installs each level in a PostgreSQL schema
- * of its own, the stored level's holding every table, and judges a rule over a query by deferred
- * triggers on the tables below it (README, "Levels").
+ * The `Qti` schema's builder, {@link qti}: its stored level, `QtiBase` (`#pantry/qti/base.ts`),
+ * every roster, closed relation and stored relation with the laws over them, and over it the level
+ * that names the queries its rules read, with those rules (`#pantry/qti/queries.ts`). The two
+ * levels are one installation, under the stored level's name: grizzle installs each level in a
+ * PostgreSQL schema of its own, the stored level's holding every table, and judges a rule over a
+ * query by deferred triggers on the tables below it (README, "Levels").
  *
- * Every reader of the schema, the author role, its login and the importer among them, reads `Qti`,
- * the top level, so a refusal by a rule over a query is its own law, never a law of a level above.
+ * Every reader of the schema, the author role, its login and the importer among them, reads the top
+ * level, so a refusal by a rule over a query is its own law, never a law of a level above.
  *
- * Loading this module builds no schema: it exports the builders, and each call builds its own,
- * which its caller holds. This package's own install holds its one in `#pantry/qti/own.ts`, and an
- * install outside it builds and holds its own for its policy.
+ * Loading this module builds no schema and reads no environment: the first call of {@link qti}
+ * builds both levels once, and every later call returns them.
  */
 import { schema } from "@bjornpagen/grizzle";
-import type { Option } from "effect";
-import type { CdnPolicy } from "#pantry/db/install.ts";
+import { Option } from "effect";
 import { qtiBaseOf } from "#pantry/qti/base.ts";
-import { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { queriesOf } from "#pantry/qti/queries.ts";
 
 /**
- * Build the QTI 3.0 schema's levels for an install's policy, or none for this package's own
- * install: the stored level, every module's relations and laws and the policy's single-CDN laws
- * (`#pantry/qti/cdn.ts`); over it the level `QtiQueries`, every query and every rule over one, each
- * defined over that stored level; and the groups of the statements this call built, the policy's
- * and the queries', by the law each states, which the schema's own naming of its laws reads
- * (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed law-name dictionary),
- * since it knows a statement by its identity.
+ * Build the QTI 3.0 schema's levels: the stored level with every module's relations and laws; over
+ * it the level `QtiQueries`, every query and every rule over one, each defined over that stored
+ * level; and the groups of the queries' statements by the law each states, which the schema's own
+ * naming of its laws reads (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed
+ * law-name dictionary), since it knows a statement by its identity.
  *
- * Each call builds its own schema, statements and queries: one install builds once and holds the
- * result.
- *
- * @param policy - The install's policy, none for this package's own install.
  * @returns The stored level (`base`), the schema (`qti`) and the groups of the statements built
  *   with it (`lawsByName`).
  */
-export const qtiLevelsOf = (policy: Option.Option<CdnPolicy>) => {
-  const cdn = cdnLawsByName(policy);
-  const base = qtiBaseOf(Object.values(cdn).flat());
+const buildLevels = () => {
+  const base = qtiBaseOf();
   const queries = queriesOf(base);
 
   return {
     base,
-    lawsByName: [cdn, ...queries.lawsByName] as const,
+    lawsByName: queries.lawsByName,
     qti: schema.extend(base, "QtiQueries", queries.relations, queries.laws),
   };
 };
 
 /**
- * Build the QTI 3.0 schema for an install's policy, or none for this package's own install
- * ({@link qtiLevelsOf}): each call its own, which the install holds.
- *
- * @param policy - The install's policy, none for this package's own install.
- * @returns The schema.
+ * The QTI 3.0 schema's levels, as {@link qtiLevels} returns them.
  */
-export const qtiSchema = (policy: Option.Option<CdnPolicy>) => qtiLevelsOf(policy).qti;
+type QtiLevels = ReturnType<typeof buildLevels>;
 
 /**
- * The QTI 3.0 schema, whatever policy built it: what the author role, its login and the export's
- * reads are built over.
+ * The composed QTI 3.0 schema, as {@link qti} returns it: the top level, which the author role, its
+ * login and the export's reads are built over.
  */
-export type QtiSchema = ReturnType<typeof qtiSchema>;
+export type QtiSchema = QtiLevels["qti"];
+
+/**
+ * The options {@link qti} builds the schema with. Phase 1 holds none: every call gives the one
+ * schema.
+ */
+export type QtiOptions = Readonly<Record<never, never>>;
+
+/**
+ * The levels {@link qtiLevels} built on its first call, or nothing before it.
+ */
+let built: Option.Option<QtiLevels> = Option.none();
+
+/**
+ * Build the QTI 3.0 schema's levels on the first call and return that one value on every call, so
+ * loading this module composes nothing and {@link qti} returns the top level of this one build.
+ *
+ * It exists for the test fixture (`#pantry/test/qti.ts`) and the schema's naming of its laws
+ * (`#pantry/test/law-namer.ts`), which read the stored level and the statements' groups. It is
+ * never exported from the package entry.
+ *
+ * @returns The stored level (`base`), the schema (`qti`) and the groups of the queries' statements
+ *   by the law each states (`lawsByName`).
+ */
+export const qtiLevels = (): QtiLevels => {
+  if (Option.isSome(built)) {
+    return built.value;
+  }
+
+  const levels = buildLevels();
+  built = Option.some(levels);
+
+  return levels;
+};
+
+/**
+ * Pantry's own levels, the stored level `Qti` and the level `QtiQueries` over it: the two levels of
+ * {@link qtiLevels}' one build, installed in the PostgreSQL schemas `qti` and `qti_queries`. A law
+ * either one states is `Qti`'s, so a refusal by it names the level `Qti` (decision 499), never a
+ * level above; a level is matched by its `name`, as grizzle reports the level of an `above` law.
+ *
+ * @returns The stored level and the top level, in that order.
+ */
+export const qtiOwnLevels = (): readonly [QtiLevels["base"], QtiSchema] => {
+  const { base, qti: top } = qtiLevels();
+
+  return [base, top];
+};
+
+/**
+ * Build the QTI 3.0 schema on the first call and return that one value on every call, so loading
+ * this module composes nothing and a caller pays for the composition only when it asks. The value
+ * is the top level of {@link qtiLevels}' one build.
+ *
+ * @param _options - The schema's options, empty in phase 1: every call returns the same schema.
+ * @returns The composed `Qti` schema.
+ */
+export const qti = (_options: QtiOptions = {}): QtiSchema => qtiLevels().qti;
+
+/**
+ * Decide whether {@link qti} has built the schema yet: a probe for the tests that hold loading a
+ * module to composing nothing. It is never exported from the package entry.
+ *
+ * @returns Whether the schema has been built.
+ */
+export const qtiBuilt = (): boolean => Option.isSome(built);

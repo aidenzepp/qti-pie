@@ -12,6 +12,7 @@ import {
 import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { RoundtripDiffers } from "#pantry/cli/errors.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
+import { failRefused } from "#pantry/cli/verdict.ts";
 import type { Outcome } from "#pantry/export/compare.ts";
 
 /**
@@ -97,6 +98,11 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  * would replace one, and writes nothing. Every refusal of the real run before its first write is
  * raised too: an earlier export without `--yes`, and a protected target.
  *
+ * The import and the export are pantry's own programs (`#pantry/api/import.ts`,
+ * `#pantry/api/export.ts`): the dry run's `previewPackage`, and the run's `importPackage`, then
+ * `exportPackage`, whose entries the exporter's `writeEntries` writes. A refused verdict fails the
+ * run (`failRefused`) as it fails `import`.
+ *
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
  * importer and the exporter load inside the database's pool (`withAuthorApp`), so neither does a
  * run that cannot reach the database. The import, the export and the comparison share that one
@@ -117,8 +123,12 @@ export const roundtripCommand = Command.make(
     const action = yield* requireReplaceable(exportDir, yes);
 
     if (dryRun) {
-      const { previewPackage } = yield* Effect.promise(() => import("#pantry/import/preview.ts"));
-      const { relations, rows } = yield* previewPackage(dir);
+      const { previewPackage } = yield* Effect.promise(() => import("#pantry/api/import.ts"));
+      const { relations, rows } = yield* previewPackage(dir).pipe(
+        Effect.flatMap((preview) =>
+          preview.verdict === "refused" ? failRefused(preview.refusal) : Effect.succeed(preview),
+        ),
+      );
 
       yield* emitSuccess(mode, {
         command: "roundtrip",
@@ -140,14 +150,24 @@ export const roundtripCommand = Command.make(
     }
 
     const { packageId, report } = yield* withAuthorApp(
-      () => Promise.all([import("#pantry/import/package.ts"), import("#pantry/export/package.ts")]),
-      ([{ importPackage }, { compareExported, exportPackage }]) =>
+      () =>
+        Promise.all([
+          import("#pantry/api/import.ts"),
+          import("#pantry/api/export.ts"),
+          import("#pantry/export/package.ts"),
+        ]),
+      ([{ importPackage }, { exportPackage }, { compareExported, writeEntries }]) =>
         Effect.gen(function* roundtripOnPool() {
-          const stored = yield* importPackage(dir);
+          const verdict = yield* importPackage(dir);
+          const stored =
+            verdict.verdict === "refused" ? yield* failRefused(verdict.refusal) : verdict.packageId;
           const compared = yield* replaceWith(exportDir, (written) =>
-            Effect.flatMap(exportPackage(stored, written), (entries) =>
-              compareExported(stored, entries),
-            ),
+            Effect.gen(function* exportAndCompare() {
+              const entries = yield* exportPackage(stored);
+              yield* writeEntries(entries, written);
+
+              return yield* compareExported(stored, entries);
+            }),
           );
 
           return { packageId: stored, report: compared };

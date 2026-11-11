@@ -32,19 +32,19 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 
 import type { MapKey, MappingCardinality } from "#pantry/qti/mapping.ts";
 import { MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   assertVerdict,
   judged,
   loginSession,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   statedInserts,
   tableOf,
 } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { importFacts } from "#pantry/test/import-facts.ts";
 import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
@@ -201,7 +201,7 @@ const typedKeyRule = (client: Parameters<typeof rowsOf>[0], table: string, side:
     `SELECT t.tgname FROM pg_catalog.pg_trigger t
       WHERE t.tgrelid = pg_catalog.to_regclass($1)
         AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
-    [`${qtiSchema}.${tableOf(table)}`, `trigger of rule key ${side}%`],
+    [`${qtiSchemaName}.${tableOf(table)}`, `trigger of rule key ${side}%`],
   ).pipe(
     Effect.map((rows) => {
       assert.lengthOf(rows, 1, `the key over ${side}`);
@@ -306,7 +306,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
         // record's mapping, which has no base type.
         Effect.gen(function* unmappable() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const baseType of ["file", "duration"] as const) {
             const outcome = yield* db.workload.importWrite.apply(
               importFacts({
@@ -340,7 +340,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // qti-map-entry elements do.
         // Bound: two entries, each spelling once identical and once a lone repeat among three.
         Effect.gen(function* lexicalRepeat() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const rows of [
             [mapKeyRow(0, "York"), mapKeyRow(1, "York")],
             [mapKeyRow(0, "A"), mapKeyRow(1, "B"), mapKeyRow(2, "A")],
@@ -467,7 +467,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // point rows, which the host tier holds (`test/record-declarations.oracle.test.ts`).
         // Bound: a record's area mapping.
         Effect.gen(function* areaBaseType() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const record = yield* db.workload.importWrite.apply(
             importFacts({ AreaMappingCardinality: [besideCardinality("record")] }),
             {},
@@ -489,7 +489,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // one row stands for both.
         // Bound: a table under a multiple, an ordered and a record outcome.
         Effect.gen(function* lookupCardinality() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const cardinality of ["multiple", "ordered", "record"] as const) {
             const table = yield* db.workload.importWrite.apply(
               importFacts({ LookupTableCardinality: [besideCardinality(cardinality)] }),
@@ -514,7 +514,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // integer and a float with a comma, as map keys; a target of no integer, a padded one and
         // an identifier that starts with a digit, as lookup values.
         Effect.gen(function* typedAttributes() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           for (const [baseType, key] of [
             ["integer", "abc"],
             ["integer", " 1"],
@@ -564,7 +564,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         // Bound: a second run that is not the key's, a run holding the space between, and the
         // lawful split of `A B`.
         Effect.gen(function* splits() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const unspelled = yield* db.workload.importWrite.apply(
             importFacts({
               MapKeyItems: [{ ...at(0), first: "A", gap: " ", key: "A B", second: "C" }],

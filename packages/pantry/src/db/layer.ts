@@ -1,15 +1,9 @@
 import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { Effect, FileSystem, Layer, Schema } from "effect";
 import { connectionServices, primedLoginConnection } from "#pantry/db/connection.ts";
-import { installed, servedPathOf } from "#pantry/db/install.ts";
-import {
-  AuthorLogin,
-  ServedLoadError,
-  ServedText,
-  servedPath as committedServed,
-} from "#pantry/db/served.ts";
-import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
+import { ServedAuthorLogin, ServedLoadError, ServedText, servedPath } from "#pantry/db/served.ts";
+import type { AuthorLogin } from "#pantry/qti/logins.ts";
 
 /**
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
@@ -30,26 +24,16 @@ import type { AuthorAppLogin } from "#pantry/qti/logins.ts";
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
- * The served file the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names
- * an install, the install's own (`#pantry/db/install.ts` `servedPathOf`), which the install's
- * grizzle config generated with its migrations, so the file and the database it was migrated to are
- * one installation's.
- */
-const servedFilePath = Option.match(installed, {
-  onNone: () => committedServed,
-  onSome: servedPathOf,
-});
-
-/**
  * The author application's pool on the local cluster: the login's connection
  * (`#pantry/db/connection.ts` `primedLoginConnection`), with the password of the role grizzle
- * installs for the login, its pool, and its install's served workload, read from disk and served as
- * the login's type (grizzle's `served`), with no schema module evaluated: the login's type is an
- * `import type`.
+ * installs for the login, its pool, and the login's committed served workload,
+ * `migrations/qti/served/author_app.json` (`#pantry/db/served.ts` `servedPath`), read from disk
+ * and served as the login's type (grizzle's `served`), with no schema module evaluated: the login's
+ * type is an `import type`.
  *
- * It provides the login's `DbLayer`, for the author role, and {@link AuthorLogin}, the served login
- * itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of the
- * served login its layer was built over.
+ * It provides the login's `DbLayer`, for the author role, and {@link ServedAuthorLogin}, the served
+ * login itself, whose `roles.author` every `Db.open` takes: grizzle opens a `Db` only on a role of
+ * the served login its layer was built over.
  *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
  * `ClusterConfigError` (`#pantry/db/connection.ts`) when the CA is unreadable, with a
@@ -63,16 +47,16 @@ export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
     const connectionOf = yield* primedLoginConnection;
-    const file = yield* fs.readFileString(servedFilePath).pipe(
+    const file = yield* fs.readFileString(servedPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(ServedText)),
-      Effect.mapError((reason) => new ServedLoadError({ path: servedFilePath, reason })),
+      Effect.mapError((reason) => new ServedLoadError({ path: servedPath, reason })),
     );
-    const login = served<AuthorAppLogin>(file, "author_app");
+    const login = served<AuthorLogin>(file, "author_app");
     const connection = yield* connectionOf(roleNameOf(login));
 
     return Layer.merge(
       DbLayer.make({ ...connection, login, pool: authorAppPool }),
-      Layer.succeed(AuthorLogin, login),
+      Layer.succeed(ServedAuthorLogin, login),
     );
   }),
 ).pipe(Layer.provide(connectionServices));

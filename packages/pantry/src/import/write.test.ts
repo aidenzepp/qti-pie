@@ -80,7 +80,7 @@ import type { Node } from "#pantry/qti/node.ts";
 import type { Entry } from "#pantry/qti/package.ts";
 import type { TextIdrefInsert } from "#pantry/import/overlays/identity.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import {
   caseHang,

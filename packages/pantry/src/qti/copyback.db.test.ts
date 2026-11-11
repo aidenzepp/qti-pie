@@ -12,13 +12,16 @@
  * at all by the reverse alone.
  *
  * Every case is a direct SQL writer's (grizzle's README, "Direct SQL access"), through the one
- * direct writer (`#pantry/test/direct-sql.ts`): the author login, `SET ROLE` to the author role, at
- * SERIALIZABLE, every deferrable foreign key deferred. It reads a stored copy of the every-relation
- * package, removes it unless the variant is an orphan beside it, writes one variant of it, sets
- * exactly one of the two containments' foreign keys `IMMEDIATE`, and rolls back. So the server
- * judges the variant by that one law and no other, as if the other containment were dropped. A
- * copy is a value the program fills itself, so its variant is the stored row by column, every
- * written column the stored one's but the ones the variant overrides.
+ * direct writer (`#pantry/test/direct-sql.ts`), at SERIALIZABLE, every deferrable foreign key
+ * deferred. It reads a stored copy of the every-relation package as the author role, writes one
+ * variant of it, sets exactly one of the two containments' foreign keys `IMMEDIATE`, and rolls
+ * back. An orphan stands beside the stored copy and is written by the author login, `SET ROLE` to
+ * the author role. Every other variant replaces it, which the author role, holding no DELETE,
+ * cannot: the database owner removes the stored copy and writes the variant in its place
+ * (`judgedReplacement`). So the server judges the variant by that one law and no other, as if the
+ * other containment were dropped. A copy is a value the program fills itself, so its variant is
+ * the stored row by column, every written column the stored one's but the ones the variant
+ * overrides.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -35,8 +38,10 @@ import { ValueBase } from "#pantry/qti/expression-types.ts";
 import {
   constraintDescribed,
   judgedCase,
+  judgedReplacement,
   loginSession,
-  qtiSchema,
+  ownerSession,
+  qtiSchemaName,
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -128,9 +133,9 @@ const copies = {
       starts: "foreign key ExpressionAttribute(node where ",
     },
     // A written copy of a `base-type`; the stored one reads `float`.
-    stored: `SELECT c.* FROM ${qtiSchema}.expression_attribute c
-       JOIN ${qtiSchema}.node n ON n.id = c.node
-       JOIN ${qtiSchema}.document d ON d.node = n.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.expression_attribute c
+       JOIN ${qtiSchemaName}.node n ON n.id = c.node
+       JOIN ${qtiSchemaName}.document d ON d.node = n.document
       WHERE d.package = $1 AND c.written AND c.lexical = 'float'
       ORDER BY c.node LIMIT 1`,
     table: "expression_attribute",
@@ -142,8 +147,8 @@ const copies = {
     },
     key: ["node"],
     reverse: { holds: "", starts: "foreign key SectionIdentifier(node) to Attribute(node where " },
-    stored: `SELECT c.* FROM ${qtiSchema}.section_identifier c
-       JOIN ${qtiSchema}.document d ON d.node = c.document
+    stored: `SELECT c.* FROM ${qtiSchemaName}.section_identifier c
+       JOIN ${qtiSchemaName}.document d ON d.node = c.document
       WHERE d.package = $1
       ORDER BY c.node LIMIT 1`,
     table: "section_identifier",
@@ -247,6 +252,7 @@ describe.skipIf(!hasLease)(
             );
             const id = yield* importPackage(dir);
             const client = yield* loginSession;
+            const owner = yield* ownerSession;
 
             return yield* searched(
               ctx,
@@ -288,7 +294,7 @@ describe.skipIf(!hasLease)(
                       of.direction === "forward" ? "attribute" : table,
                       patternOf(copies[of.copy][of.direction]),
                     );
-                    const { refused } = yield* judgedCase(client, {
+                    const variant = {
                       immediate: [constraint],
                       inserts: [
                         {
@@ -301,18 +307,20 @@ describe.skipIf(!hasLease)(
                           table,
                         },
                       ],
-                      removed:
-                        of.variant === "orphan"
-                          ? []
-                          : [
-                              {
-                                key: Object.fromEntries(
-                                  key.map((name) => [name, columnOf(stored, name)]),
-                                ),
-                                table,
-                              },
-                            ],
-                    });
+                    };
+                    const { refused } = yield* of.variant === "orphan"
+                      ? judgedCase(client, variant)
+                      : judgedReplacement(owner, {
+                          ...variant,
+                          removed: [
+                            {
+                              key: Object.fromEntries(
+                                key.map((name) => [name, columnOf(stored, name)]),
+                              ),
+                              table,
+                            },
+                          ],
+                        });
                     const error = Option.getOrUndefined(refused);
                     const label = `${JSON.stringify(of)}: ${error?.code ?? "accepted"} ${error?.constraint ?? ""} ${error?.message ?? ""}`;
 

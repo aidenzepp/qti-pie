@@ -29,7 +29,7 @@ import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";

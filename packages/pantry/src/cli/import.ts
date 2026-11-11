@@ -3,6 +3,7 @@ import { Argument, Command } from "effect/cli";
 import { databaseNotChecked, dryRunFlag, requirePackage } from "#pantry/cli/args.ts";
 import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
+import { failRefused } from "#pantry/cli/verdict.ts";
 
 /**
  * What `import` returns under `--output json` when it stored a package: its id.
@@ -31,18 +32,22 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
  * Import the package in `dir`, a directory or a `.zip` file, then print its id. Under `--dry-run`
  * it reads and checks the package, prints how much it holds and stores nothing.
  *
- * A dry run is the import's own read (`previewPackage`): the package read, its documents shredded
- * and every row built, and nothing written. It does not open the database, so the database's laws
- * do not judge the rows: a package it accepts can still be refused by the real import.
+ * Both run pantry's own programs (`#pantry/api/import.ts`), which return a verdict: the import's
+ * `importPackage` and the dry run's `previewPackage`, the import's own read: the package read, its
+ * documents shredded and every row built, and nothing written. A dry run does not open the
+ * database, so the database's laws do not judge the rows: a package it accepts can still be
+ * refused by the real import.
  *
- * A refusal prints its rule and explanation, and, when the database gave it, where each of its laws
- * is stated (`#pantry/cli/present.ts`), and the key of the row that broke them where grizzle's
- * witness names one; where it names none, as for a foreign key, the refusal says so.
+ * A refused verdict fails the run (`failRefused`): a refusal of `Qti` prints its rule and
+ * explanation, and, when the database gave it, where each of its laws is stated
+ * (`#pantry/cli/present.ts`), and the key of the row that broke them where grizzle's witness names
+ * one; where it names none, as for a foreign key, the refusal says so. A refusal of a level above
+ * `Qti` prints that level and its rule.
  *
- * `importPackage` and the dry run read through `readPackage`, which reads a zip as it reads a
- * directory. The engine loads when the handler runs, so `--help` and a usage error never pay for
- * it, and the importer loads inside the database's pool (`withAuthorApp`), so neither does a run
- * that cannot reach the database.
+ * Both programs read through `readPackage`, which reads a zip as it reads a directory. The engine
+ * loads when the handler runs, so `--help` and a usage error never pay for it, and the importer
+ * loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot reach the
+ * database.
  */
 export const importCommand = Command.make(
   "import",
@@ -53,8 +58,12 @@ export const importCommand = Command.make(
     yield* requirePackage(dir);
 
     if (dryRun) {
-      const { previewPackage } = yield* Effect.promise(() => import("#pantry/import/preview.ts"));
-      const { relations, rows } = yield* previewPackage(dir);
+      const { previewPackage } = yield* Effect.promise(() => import("#pantry/api/import.ts"));
+      const { relations, rows } = yield* previewPackage(dir).pipe(
+        Effect.flatMap((preview) =>
+          preview.verdict === "refused" ? failRefused(preview.refusal) : Effect.succeed(preview),
+        ),
+      );
 
       yield* emitSuccess(mode, {
         command: "import",
@@ -67,9 +76,13 @@ export const importCommand = Command.make(
       return;
     }
 
-    const packageId = yield* withAuthorApp(
-      () => import("#pantry/import/package.ts"),
+    const { packageId } = yield* withAuthorApp(
+      () => import("#pantry/api/import.ts"),
       ({ importPackage }) => importPackage(dir),
+    ).pipe(
+      Effect.flatMap((verdict) =>
+        verdict.verdict === "refused" ? failRefused(verdict.refusal) : Effect.succeed(verdict),
+      ),
     );
 
     yield* emitSuccess(mode, {

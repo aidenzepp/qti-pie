@@ -13,7 +13,7 @@ import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**

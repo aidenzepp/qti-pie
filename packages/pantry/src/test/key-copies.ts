@@ -41,7 +41,7 @@ import {
 } from "#pantry/test/predicates.ts";
 import type { Datum, Row, StoredSide, StoredStatement, Term } from "#pantry/test/predicates.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 /**
  * The fields of an `Attribute` row the oracle knows before the database writes it: its owner's
@@ -594,14 +594,14 @@ export const keyCopies: readonly KeyCopy[] = Result.getOrThrowWith(
  * reads a field the row does not hold, a closed read at a key no row holds, or a term the host does
  * not read (`#pantry/test/predicates.ts`).
  *
- * @param statements - The schema's statements.
+ * @param statements - A schema's statements: `Qti`'s, or a level's built over it.
  * @param relation - The check's relation.
  * @param name - The check's name.
  * @returns The predicate's value over a row; none where the schema states no such check, or states
  *   it in a shape this module does not read.
  */
 export const checkValueOf = (
-  statements: typeof Qti.statements,
+  statements: readonly unknown[],
   relation: string,
   name: string,
 ): Option.Option<(row: Readonly<Record<string, Datum>>) => Datum | undefined> =>
@@ -622,14 +622,14 @@ export const checkValueOf = (
  * predicate is false and kept where it is true or unknown, a field the row does not hold being
  * unknown.
  *
- * @param statements - The schema's statements.
+ * @param statements - A schema's statements: `Qti`'s, or a level's built over it.
  * @param relation - The check's relation.
  * @param name - The check's name.
  * @returns Whether a row passes the check; none where the schema states no such check, or states
  *   it in a shape this module does not read.
  */
 export const checkOf = (
-  statements: typeof Qti.statements,
+  statements: readonly unknown[],
   relation: string,
   name: string,
 ): Option.Option<(row: Readonly<Record<string, Datum>>) => boolean> =>

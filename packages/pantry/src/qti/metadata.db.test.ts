@@ -53,7 +53,7 @@ import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { StatisticDate, UsageValueBaseType } from "#pantry/qti/metadata.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import {
   assertVerdict,
   authorViews,

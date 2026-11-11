@@ -4,7 +4,7 @@
  * `schemaLawsOf` of `#pantry/test/law-namer.ts`, the one compile per process) and the relations'
  * typed `kind` and `name`, never off grizzle's statement shapes.
  */
-import type { Qti } from "#pantry/qti/own.ts";
+import type { Qti } from "#pantry/test/qti.ts";
 import { schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**

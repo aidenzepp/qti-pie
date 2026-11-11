@@ -20,7 +20,7 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { identityLaws, identityRelations, idValuePattern } from "#pantry/qti/identity.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 

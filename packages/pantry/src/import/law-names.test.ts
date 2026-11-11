@@ -10,7 +10,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
 import { checkNameOf, lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { namedLaws, schemaLawNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 describe("the laws each module names where it states them", () => {

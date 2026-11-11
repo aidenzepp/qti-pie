@@ -110,7 +110,7 @@ const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]*)?$`;
 
 /**
  * The text type of an element's prefix: {@link prefixPattern} at `prefixBytes` UTF-8 bytes.
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const Prefix = str.bytes(prefixBytes, str.regex(prefixPattern));
 
@@ -123,11 +123,9 @@ export const charsPattern =
   "^[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*$";
 
 /**
- * The text type of a node's characters, and of an attribute's lexical form, the record (U1,
- * `#pantry/qti/attributes.ts`): the value as attribute-value normalization leaves it, each
- * unexpanded entity reference kept as `&name;`, so any run of XML `Char`s. One declaration, so
- * grizzle analyzes the pattern once. Exported for `src/import/refusal.ts`, which names its pattern
- * law.
+ * The text type of a node's characters: any run of XML `Char`s ({@link charsPattern}). An
+ * attribute's lexical form reads the same pattern under a bound (`#pantry/qti/attributes.ts`
+ * `Lexical`). Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const Chars = str.regex(charsPattern);
 
@@ -136,7 +134,7 @@ export const Chars = str.regex(charsPattern);
  * node holds no characters. A law can read a text's end only on the text's own row, since `chars`
  * is unbounded and fits no key; one code point fits every key, so the ends are what a law over a
  * node's neighbours compares (`#pantry/qti/quotation.ts`, spec reading 127). Exported for
- * `src/import/refusal.ts`, which names its pattern law.
+ * `src/test/law-namer.ts`, which names its pattern law.
  */
 export const EndCharacter = str.regex("^.?$", "su");
 

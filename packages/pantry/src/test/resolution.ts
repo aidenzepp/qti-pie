@@ -50,52 +50,65 @@ export type OracleResolution =
 const xmlSpace: ReadonlySet<string> = new Set([" ", "\t", "\n", "\r"]);
 
 /**
+ * The runs of XML whitespace inside a value, which `collapse` writes as one space each.
+ */
+const xmlSpaceRuns = /[ \t\n\r]+/gu;
+
+/**
+ * The characters `replace` writes as a space: each XML whitespace character but the space itself.
+ */
+const xmlSpaceMarks = /[\t\n\r]/gu;
+
+/**
+ * Set aside the XML whitespace at both ends of a value, and only that: a space, a tab, a line feed
+ * and a carriage return, never the no-break space or the other characters JavaScript's own `trim`
+ * strips. Two scans from the ends over the characters the ends hold, then one slice, which shares
+ * the value's memory.
+ *
+ * A pattern anchored at the end (`/[ \t\n\r]+$/u`) is not used: the engine tries it at every
+ * position, so a long run of whitespace inside the value is scanned again from each of its
+ * characters, quadratic in the run.
+ *
+ * @param value - The value.
+ * @returns The value without its leading and trailing XML whitespace.
+ */
+const trimmedOfXmlSpace = (value: string): string => {
+  let first = 0;
+  let last = value.length;
+  while (first < last && xmlSpace.has(value.charAt(first))) {
+    first += 1;
+  }
+  while (last > first && xmlSpace.has(value.charAt(last - 1))) {
+    last -= 1;
+  }
+
+  return value.slice(first, last);
+};
+
+/**
  * Read a value by its whitespace class and set aside the spaces around it: `collapse` joins its
  * runs of non-whitespace with one space each, `replace` writes each tab, line feed and carriage
  * return as a space, and `preserve` keeps the inside as written.
  *
+ * The value is read whole, by string operations and never as one array element per character, so a
+ * value of the ZIP reader's largest entry (`entryBytes` of `#pantry/package/zip.ts`, 64 MiB) is
+ * judged within Node's default heap. The four XML whitespace characters are single UTF-16 code
+ * units, so the operations agree with a walk over code points on every value, a surrogate pair
+ * included.
+ *
  * @param lexical - The attribute's lexical form.
  * @param whiteSpace - The class.
  * @returns The value.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
  */
 export const oracleValueOf = (lexical: string, whiteSpace: OracleWhiteSpace): string => {
-  // oxlint-disable-next-line typescript/no-misused-spread -- XML Schema's whitespace step reads a value character by character (Part 2, 4.3.6), its code points, which spreading the string yields.
-  const characters = [...lexical];
   if (whiteSpace === "collapse") {
-    const words: string[] = [];
-    let word = "";
-    for (const character of characters) {
-      if (xmlSpace.has(character)) {
-        if (word !== "") {
-          words.push(word);
-        }
-
-        word = "";
-      } else {
-        word += character;
-      }
-    }
-    if (word !== "") {
-      words.push(word);
-    }
-
-    return words.join(" ");
+    return trimmedOfXmlSpace(lexical).replaceAll(xmlSpaceRuns, " ");
   }
 
-  const read =
-    whiteSpace === "replace"
-      ? characters.map((character) => (xmlSpace.has(character) ? " " : character))
-      : characters;
-  let first = 0;
-  let last = read.length;
-  while (first < last && xmlSpace.has(read[first] ?? "")) {
-    first += 1;
-  }
-  while (last > first && xmlSpace.has(read[last - 1] ?? "")) {
-    last -= 1;
-  }
-
-  return read.slice(first, last).join("");
+  return trimmedOfXmlSpace(
+    whiteSpace === "replace" ? lexical.replaceAll(xmlSpaceMarks, " ") : lexical,
+  );
 };
 
 /**

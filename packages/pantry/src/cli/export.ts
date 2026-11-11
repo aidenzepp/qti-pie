@@ -52,10 +52,12 @@ export const ExportData = Schema.Union([ExportPlanned, ExportWritten]);
  * is written beside the target first and takes its place only once it is complete, so an export
  * that fails leaves the old target as it was. A symlink target is replaced, never followed.
  *
+ * Both run pantry's own export program (`#pantry/api/export.ts`): `exportPackage` gives the
+ * package's entries and writes nothing, and the run writes them with the exporter's `writeEntries`.
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
- * exporter loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
- * reach the database. `exportPackage` returns nothing, so under `--output json` the entries are
- * read back from what it wrote; text mode prints nothing and does not read them.
+ * export loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
+ * reach the database. Under `--output json` the entries are read back from the target once it is in
+ * place; text mode prints nothing and does not read them.
  *
  * Under `--dry-run` nothing is written and the target is not touched: the entries the export would
  * write are listed with their sizes, and whether the target would be created or replaced. A dry run
@@ -80,8 +82,8 @@ export const exportCommand = Command.make(
 
     if (dryRun) {
       const planned = yield* withAuthorApp(
-        () => import("#pantry/export/package.ts"),
-        ({ exportEntries }) => exportEntries(id),
+        () => import("#pantry/api/export.ts"),
+        ({ exportPackage }) => exportPackage(id),
       );
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
@@ -105,8 +107,9 @@ export const exportCommand = Command.make(
 
     yield* replaceWith(target, (written) =>
       withAuthorApp(
-        () => import("#pantry/export/package.ts"),
-        ({ exportPackage }) => exportPackage(id, written),
+        () => Promise.all([import("#pantry/api/export.ts"), import("#pantry/export/package.ts")]),
+        ([{ exportPackage }, { writeEntries }]) =>
+          Effect.flatMap(exportPackage(id), (entries) => writeEntries(entries, written)),
       ),
     );
 

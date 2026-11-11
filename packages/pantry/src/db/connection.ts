@@ -162,14 +162,20 @@ const database = Config.schema(DatabaseName, "GR8DES_PG_DATABASE").pipe(
 );
 
 /**
+ * The local cluster's state folder, which `GRIZZLE_PG_STATE` names (`~/.local/var/grizzle/pg19rc1`
+ * by default, where grizzle's `pnpm pg:init` makes it): it holds the cluster's CA, `tls/ca.crt`,
+ * and the migration identity's password, `<role>.password`, which scripts/db.sh reads.
+ */
+export const clusterState = underHome("GRIZZLE_PG_STATE", ".local/var/grizzle/pg19rc1");
+
+/**
  * The CA file a connection verifies the server against, and the setting that named it: the file
- * `GR8DES_PG_CA` names, else `tls/ca.crt` in the local cluster's state folder, which
- * `GRIZZLE_PG_STATE` names (`~/.local/var/grizzle/pg19rc1` by default, where grizzle's `pnpm
- * pg:init` makes it).
+ * `GR8DES_PG_CA` names, else `tls/ca.crt` in the local cluster's state folder
+ * ({@link clusterState}).
  */
 const caFile = Config.all({
   set: Config.option(Config.String("GR8DES_PG_CA")),
-  state: underHome("GRIZZLE_PG_STATE", ".local/var/grizzle/pg19rc1"),
+  state: clusterState,
 }).pipe(
   Config.map(({ set, state }) =>
     Option.match(set, {
@@ -263,7 +269,7 @@ interface PasswordCommand {
  * scripts/db.sh puts none on its own runs: it runs the command before it starts psql, so no
  * connect timeout covers it there.
  */
-const passwordCommandSetting: Config.Config<Option.Option<PasswordCommand>> = Config.all({
+export const passwordCommandSetting: Config.Config<Option.Option<PasswordCommand>> = Config.all({
   command: Config.option(Config.String("GR8DES_PG_PASSWORD_COMMAND")),
   timeout: Config.schema(PasswordCommandTimeout, "GR8DES_PG_PASSWORD_COMMAND_TIMEOUT").pipe(
     Config.withDefault(Duration.seconds(60)),

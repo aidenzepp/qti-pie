@@ -2,8 +2,9 @@
  * The export's last step, with no database: one document's XML written from the rows its scan
  * delivered (`#pantry/export/scan.ts` `documentScan`), assembled with one stack and written by
  * `unshred` in its export charset. The export runs it for each document of a package
- * (`#pantry/export/package.ts`), and an app outside this package runs it over the rows its own
- * workload's scan read, paged by `scannedRows` of `#pantry/export/pages.ts` as the export pages it.
+ * (`#pantry/export/package.ts`), and an app outside this package runs `documentXml` over the rows
+ * its own role's scan read, paged by `scannedRows` of `#pantry/export/pages.ts` as the export pages
+ * it. The rows' shape is pantry's internal one and changes with pantry.
  */
 import { Array as Arr, Effect } from "effect";
 import { addRow, assembleScan, emptyScan } from "#pantry/export/pages.ts";
@@ -12,6 +13,11 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { names } from "#pantry/model/names.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
+
+/**
+ * Every row one document's scan delivered, in any order and from any pages.
+ */
+export type DocumentRows = Iterable<ScanRow<Composed>>;
 
 /**
  * Write a document from the rows its whole scan folded.
@@ -33,11 +39,11 @@ export const scanXml = Effect.fn("export.scanXml")(function* scanXml(
 
 /**
  * Write a document from every row of its scan, in any order and cut into any pages, since each row
- * is folded by its own key (`#pantry/export/pages.ts`).
+ * is folded by its own key (`#pantry/export/pages.ts` `addRow`).
  *
  * @param document - The id of the document's node, which its scan was filtered by.
  * @param rows - Every row the scan delivered.
  * @returns The document's bytes in its export charset, failing as {@link scanXml} does.
  */
-export const documentXml = (document: NodeId, rows: Iterable<ScanRow<Composed>>) =>
+export const documentXml = (document: NodeId, rows: DocumentRows) =>
   scanXml(document, Arr.reduce(rows, emptyScan<Composed>(), addRow));

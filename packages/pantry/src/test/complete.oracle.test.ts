@@ -16,8 +16,7 @@
  *   folded rows of one document instead, and judged by `documentBreaches`.
  * - **Every stated law is declared.** Each law of `lawTable` is the oracle's, or the oracle states it
  *   in parts (`statedInParts`), or no host predicate can judge it, with the reason
- *   (`hostlessLaws`), or only a single-CDN install's policy states it, with the reason
- *   (`policyLaws`).
+ *   (`hostlessLaws`).
  *
  * A law no mutation can break alone is a row of {@link owed} with why, a list that only shrinks: a
  * law both owed and mutated fails, and so does a law neither owed nor mutated, so a law that joins
@@ -57,7 +56,7 @@ import { rowEdits } from "#pantry/test/oracle-complete/row-edits.ts";
 import { nodeEdits } from "#pantry/test/oracle-complete/row-edits-nodes.ts";
 import { packageMutations } from "#pantry/test/oracle-complete/packages.ts";
 import { testMutations } from "#pantry/test/oracle-complete/tests.ts";
-import { hostlessLaws, policyLaws, statedInParts } from "#pantry/test/oracle-laws.ts";
+import { hostlessLaws, statedInParts } from "#pantry/test/oracle-laws.ts";
 import {
   documentBreaches,
   judge,
@@ -124,6 +123,8 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
   "PCI module source": "its mutation is not written yet",
+  "Regex text bound":
+    "breaking it takes an attribute of more than 268,435,454 UTF-8 bytes, and a package carrying one through the oracle's parse does not fit a test's memory; regex-text-bound.oracle.test.ts holds the oracle's predicate at the bound and one byte past it",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
 };
@@ -451,14 +452,13 @@ describe("a declaration that writes no cardinality", () => {
 });
 
 describe("every law the schema states", () => {
-  it("is the oracle's, stated by it in parts, judged by no host predicate, stated by a single-CDN policy alone, or owed, each with why", () => {
+  it("is the oracle's, stated by it in parts, judged by no host predicate, or owed, each with why", () => {
     const declared = new Set<string>(lawNames);
     for (const law of statedLawNames) {
       const ways = [
         declared.has(law) ? "declared" : "",
         Object.hasOwn(statedInParts, law) ? "in parts" : "",
         Object.hasOwn(hostlessLaws, law) ? "hostless" : "",
-        Object.hasOwn(policyLaws, law) ? "policy" : "",
         Object.hasOwn(owedStatements, law) ? "owed" : "",
       ].filter((way) => way !== "");
 
@@ -485,14 +485,6 @@ describe("every law the schema states", () => {
         `${law} is hostless and the schema states no such law`,
       );
       assert.isAbove(reason.length, 0, `${law} is hostless without a reason`);
-    }
-
-    for (const [law, reason] of Object.entries(policyLaws)) {
-      assert.isTrue(
-        statedLawNames.some((name) => name === law),
-        `${law} is a policy's and the law table holds no such law`,
-      );
-      assert.isAbove(reason.length, 0, `${law} is a policy's without a reason`);
     }
   });
 });

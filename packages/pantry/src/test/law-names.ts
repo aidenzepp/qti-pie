@@ -4,8 +4,7 @@
  * each installed law under its LawId, the key a refused law carries. `law-names.committed.test.ts`
  * holds the committed file to it.
  *
- * Run it with this package's own install, `GR8DES_QTI_INSTALL` unset, from the package's folder:
- * `node src/test/law-names.ts` writes the file.
+ * Run it from the package's folder: `node src/test/law-names.ts` writes the file.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,7 +12,7 @@ import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Schema } from "effect";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { bucketOf, schemaLawNameOf, schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**

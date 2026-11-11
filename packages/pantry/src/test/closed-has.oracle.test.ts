@@ -45,7 +45,7 @@ import {
   ValueDomain,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { checkValueOf } from "#pantry/test/key-copies.ts";
 import { admittedOf, indexesOf } from "#pantry/test/indexes.ts";

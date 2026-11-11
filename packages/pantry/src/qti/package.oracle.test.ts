@@ -31,7 +31,7 @@ import {
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge, judgedLaws } from "#pantry/test/host-judge.ts";

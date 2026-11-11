@@ -21,7 +21,7 @@ import {
   leafStartFold,
 } from "#pantry/qti/mathml-align.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/test/qti.ts";
 import { schemaLawNameOf, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**

@@ -16,7 +16,7 @@
 import { Option, Schema } from "effect";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**
@@ -143,7 +143,7 @@ export const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
                 kind: "compare" as const,
                 left: termOf(field),
                 op: "eq" as const,
-                right: { kind: "literal" as const, type: undefined, value },
+                right: { kind: "literal" as const, value },
               })),
             },
             terms: [termOf(first), ...rest.map(termOf)],

@@ -128,8 +128,8 @@ import { namingText } from "#pantry/grammar/domains.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
-import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
-import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
+import { keyText, localNameBytes, namespaceText, regexTextBytes } from "#pantry/qti/limits.ts";
+import { charsPattern, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
@@ -171,9 +171,26 @@ const ncStart =
 const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
 
 /**
+ * An attribute's lexical form, the record (U1): the value as attribute-value normalization leaves
+ * it, each unexpanded entity reference kept as `&name;`, so any run of XML `Char`s, character
+ * references to tabs and line breaks included. Its domain's pattern, not its type, judges it (AL1).
+ * It is free text, in no key: a law that compares it across rows reads a bounded copy.
+ *
+ * It holds at most {@link regexTextBytes} UTF-8 bytes, the stated limit "Regex text bound"
+ * (reading 178): the ceiling the domain's `~` already held every write to, since PostgreSQL's
+ * regular expressions read no longer text, now refused by name. The bound is a refinement, no part
+ * of the text's type (`#pantry/qti/limits.ts`), so a bounded lexical form still meets its unbounded
+ * and key-text copies in a containment. A rule over a query that reads it with `Compute.matches`
+ * compiles only because of it. A node's characters (`Node.chars`, `#pantry/qti/node.ts` `Chars`)
+ * share its pattern and stay unbounded.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
+ */
+export const Lexical = str.bytes(regexTextBytes, str.regex(charsPattern));
+
+/**
  * XML whitespace `S`, possibly none: what a lexical form holds around its token or value, an
  * `Idref` piece's and every other lead and trail of the schema, each typed by this one type.
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
@@ -191,14 +208,14 @@ const nonSpacePattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
  * (`#pantry/qti/limits.ts`), the bound `(node, uri, local)` reads it at. Its pattern is read under
  * `su`, which reads an NCName exactly as `u` does (it holds no `.`), so its law, the byte bound's,
  * is no other type's: {@link EntityName} writes the same NCName under `u`, and a refusal names each
- * by its pattern. Exported for `src/import/refusal.ts`, which names its pattern law.
+ * by its pattern. Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${ncChar}]*$`, "su"));
 
 /**
  * An entity's name inside an attribute's lexical form: an NCName, since no entity name holds a
  * colon (Namespaces in XML 1.0, §7).
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * Exported for `src/test/law-namer.ts`, which names its pattern law.
  */
 export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
 
@@ -238,7 +255,7 @@ export const Attribute = relation(
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: accumulated(closedId(NodeKind), "document"),
-    lexical: Chars,
+    lexical: Lexical,
     name: closedId(AttributeName),
     node: uuid,
     openName: drawn(natural),
@@ -401,23 +418,21 @@ const slotOf = (a: NamedRow) => AttributeGrammar.at("slot", attributeModelOf(a),
 /**
  * State that an attribute's name is one its element's governor admits: the singleton of the name
  * inside `AttributeGrammar`'s row of names for the governor's model. It reads no NULL where the
- * name is unadmitted, so it is the admission law itself, not a closed read's absence. Exported for
- * `#pantry/qti/cdn.ts`, whose laws read an admitted attribute's domain.
+ * name is unadmitted, so it is the admission law itself, not a closed read's absence.
  *
  * @param a - The row.
  * @returns The predicate.
  */
-export const admitted = (a: AttributeRow) =>
+const admitted = (a: AttributeRow) =>
   a.eq(Compute.subset(Compute.singleton(a.name), AttributeGrammar.row(attributeModelOf(a))), true);
 
 /**
- * Read an admitted attribute's value domain under its element's governor. Exported for
- * `#pantry/qti/cdn.ts`, whose laws read it.
+ * Read an admitted attribute's value domain under its element's governor.
  *
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-export const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attributeModelOf(a), a.name);
+const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attributeModelOf(a), a.name);
 
 /**
  * State that an attribute's name is an open class's.

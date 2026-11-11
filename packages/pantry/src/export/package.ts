@@ -13,7 +13,7 @@ import type { CursorError, Uuid } from "@bjornpagen/grizzle";
 import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Array as Arr, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
 import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
@@ -88,10 +88,10 @@ type EntriesError =
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
   packageId: Uuid,
   size: number = pageSize,
-): Effect.fn.Return<readonly ZipEntry[], EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
+): Effect.fn.Return<readonly ZipEntry[], EntriesError, ServedAuthorLogin | DbLayer<AuthorRole>> {
   yield* Effect.annotateCurrentSpan({ packageId, pageSize: size });
 
-  const login = yield* AuthorLogin;
+  const login = yield* ServedAuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
   if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
     return yield* new PackageNotFound({ packageId });
@@ -146,8 +146,8 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
 export const compareExported = Effect.fn("export.compareExported")(function* compareExported(
   packageId: Uuid,
   exported: readonly ZipEntry[],
-): Effect.fn.Return<Report, OpenError | ReadError, AuthorLogin | DbLayer<AuthorRole>> {
-  const login = yield* AuthorLogin;
+): Effect.fn.Return<Report, OpenError | ReadError, ServedAuthorLogin | DbLayer<AuthorRole>> {
+  const login = yield* ServedAuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
 
@@ -167,17 +167,51 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
  */
 export const compareWithRecord = Effect.fn("export.compareWithRecord")(function* compareWithRecord(
   packageId: Uuid,
-): Effect.fn.Return<Report, EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
+): Effect.fn.Return<Report, EntriesError, ServedAuthorLogin | DbLayer<AuthorRole>> {
   return yield* compareExported(packageId, yield* exportEntries(packageId));
+});
+
+/**
+ * Write entries to `target`: a directory holding each entry as a file at its path, or, when
+ * `target` ends `.zip`, one zip file holding the entries at those paths, written by `writeZip`.
+ *
+ * The directory, or the zip file's directory, and every directory an entry's path names are
+ * created when absent.
+ *
+ * @param entries - The entries to write, as {@link exportEntries} gives them.
+ * @param target - The directory to write under, or the `.zip` file to write.
+ * @returns Completes once every entry is written. Fails with the file system's error.
+ */
+export const writeEntries = Effect.fn("export.writeEntries")(function* writeEntries(
+  entries: readonly ZipEntry[],
+  target: string,
+): Effect.fn.Return<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> {
+  yield* Effect.annotateCurrentSpan({ entries: entries.length, target });
+
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  if (target.endsWith(".zip")) {
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+    yield* fs.writeFile(target, writeZip(entries));
+
+    return;
+  }
+
+  for (const entry of entries) {
+    const file = path.join(target, entry.path);
+
+    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+    yield* fs.writeFile(file, entry.bytes);
+  }
 });
 
 /**
  * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
  * when `target` ends `.zip`, one zip file holding the same entries.
  *
- * The entries are those of {@link exportEntries}, all read, assembled and encoded before anything
- * is written, so an export that cannot be made writes nothing. A zip target holds those entries at
- * those paths, written by `writeZip`, and its directory is created when absent.
+ * The entries are those of {@link exportEntries}, all read, assembled and encoded before
+ * {@link writeEntries} writes anything, so an export that cannot be made writes nothing.
  *
  * @param packageId - The id of the imported package.
  * @param target - The directory to write under, or the `.zip` file to write, created when absent.
@@ -190,27 +224,12 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
 ): Effect.fn.Return<
   readonly ZipEntry[],
   EntriesError | PlatformError.PlatformError,
-  AuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
+  ServedAuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
 > {
   yield* Effect.annotateCurrentSpan({ packageId, target });
 
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const entries = yield* exportEntries(packageId);
-
-  if (target.endsWith(".zip")) {
-    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-    yield* fs.writeFile(target, writeZip(entries));
-
-    return entries;
-  }
-
-  for (const entry of entries) {
-    const file = path.join(target, entry.path);
-
-    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-    yield* fs.writeFile(file, entry.bytes);
-  }
+  yield* writeEntries(entries, target);
 
   return entries;
 });

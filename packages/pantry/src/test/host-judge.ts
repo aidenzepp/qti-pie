@@ -70,7 +70,7 @@ import {
 } from "#pantry/test/predicates.ts";
 import type { Datum, Row, Source, StoredSide } from "#pantry/test/predicates.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**

@@ -24,12 +24,12 @@ import { piecesOf } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 
 import { materialize } from "#pantry/test/fixtures.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
 
 /**
@@ -111,7 +111,7 @@ describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the leas
               "the package holds a selection",
             );
 
-            const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+            const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
             const outcome = yield* db.workload.importWrite.apply(
               { insert: packageFactsOf(withSelect(program.inputs, form)) },
               {},
@@ -146,7 +146,7 @@ describe.skipIf(!hasLease)("import/overlays/select-forms.db.test.ts, on the leas
             "the builder writes the selection whose select is 2.5",
           );
 
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
           const outcome = yield* db.workload.importWrite.apply(
             { insert: packageFactsOf(program.inputs) },
             {},

@@ -10,7 +10,13 @@
 import { constraintNamesOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, RegexText, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Function as Fn, Match, Option, pipe, Schema } from "effect";
-import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
+import {
+  attributeLawsByName,
+  EntityName,
+  Lexical,
+  OpenLocal,
+  Space,
+} from "#pantry/qti/attributes.ts";
 import {
   Affix,
   expressionLawsByName,
@@ -48,7 +54,7 @@ import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
-import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
+import { builtLawsByName, Qti } from "#pantry/test/qti.ts";
 import {
   contractNames,
   generatedNames,
@@ -380,9 +386,12 @@ export const patternNameIn = (
  *   §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
  *   refuses an absolute name;
- * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
- *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
- *   refuses before any row exists;
+ * - The bound on an attribute's lexical form is "Regex text bound", a stated limit: `Lexical` is
+ *   `Char`s, which crust refuses a break of before any row exists, so its pattern law breaks only
+ *   on the bound, as the bounded names' rows reason above;
+ * - An unbounded XML production (a node's `Char*`, a comment, an instruction, a doctype, an encoding
+ *   name, a version number, an NCName) is "XML production", which crust refuses before any row
+ *   exists;
  * - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
  *   which crust does not check, so the domain is the law;
  * - The whitespace around an IDREF token is the host's own split, "E1 derived", as is every other
@@ -406,6 +415,7 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [EntryPath, "Key text bound"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
+  [Lexical, "Regex text bound"],
   [CommentText, "XML production"],
   [PiTarget, "XML production"],
   [PiData, "XML production"],
@@ -444,8 +454,8 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
 
 /**
  * The modules that name their laws where they state them, each a {@link LawsByName}: the stored
- * level's, then the groups built with `Qti` (`#pantry/qti/own.ts` `builtLawsByName`), its policy's
- * and each domain's rules over the queries (`#pantry/qti/queries.ts`).
+ * level's, then the groups built with `Qti` (`#pantry/test/qti.ts` `builtLawsByName`), each
+ * domain's rules over the queries (`#pantry/qti/queries.ts`).
  */
 export const namedLaws: readonly LawsByName[] = [
   nodeLawsByName,
@@ -690,11 +700,11 @@ const constraintNameLookupOf = Fn.memoize(constraintNamesOf);
  * relation's triggers by a digest (grizzle `b34dfbf9`).
  *
  * Grizzle's lookup throws for a law that is no check of the schema, and a refusal may name one: a
- * CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`), so a
- * refusal read against another schema than the one the database installed names a check this one
- * lacks. Such a check has no installed name here, so the refusal still prints, with its text and
- * the name and rule the table gives it. Only a check the schema states is asked for, so a refusal
- * that names none compiles nothing.
+ * level above `Qti`, such as the single-CDN level (`singleCdn`, `#pantry/levels/cdn.ts`), states
+ * checks `Qti` does not, so a refusal read against another schema than the one the database
+ * installed names a check this one lacks. Such a check has no installed name here, so the refusal
+ * still prints, with its text and the name and rule the table gives it. Only a check the schema
+ * states is asked for, so a refusal that names none compiles nothing.
  *
  * @param schema - The schema the import ran against, `Qti`.
  * @param law - A check law a refusal names.

@@ -7,8 +7,9 @@
  *   names the handle of its code in `NodeKind`.
  *
  * That `Author` holds every relation whole (G6) and that no relation is `mutable` are facts of the
- * declarations, checked in `schema.test.ts`. The installation's lack of a policy and of an UPDATE
- * grant follows from them in grizzle, which tests that derivation itself.
+ * declarations, checked in `schema.test.ts`. The installation's lack of a policy, and of an UPDATE
+ * or a DELETE grant, follows from them and from the role's insert list (`#pantry/qti/roles.ts`) in
+ * grizzle, which tests that derivation itself.
  */
 import { Db } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
@@ -19,13 +20,13 @@ import { NodeKind } from "#pantry/grammar/install.ts";
 
 import { authorRole, authorViews, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { hasLease } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { ServedAuthorLogin } from "#pantry/db/served.ts";
 
 describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer)("the installed Qti, read as the author login", (it) => {
     it.effect("opens the author role through the login's layer", () =>
       Effect.gen(function* opensTheAuthorRole() {
-        const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+        const db = yield* Db.open((yield* ServedAuthorLogin).roles.author, {});
 
         assert.isDefined(db);
       }),

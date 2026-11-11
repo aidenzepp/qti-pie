@@ -67,7 +67,7 @@ import {
   universalDomains,
   vocabularyTermKinds,
 } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,
@@ -78,7 +78,7 @@ import {
   judged,
   loginSession,
   pinned,
-  qtiSchema,
+  qtiSchemaName,
   rowsOf,
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
@@ -435,7 +435,7 @@ const constraintsOf = (client: Client, table = "node") =>
                     JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
        FROM pg_catalog.pg_constraint c
       WHERE c.conrelid = pg_catalog.to_regclass($1)`,
-    [`${qtiSchema}.${table}`],
+    [`${qtiSchemaName}.${table}`],
   ).pipe(
     Effect.map((constraints) =>
       constraints.map((constraint): Constraint => ({
@@ -664,7 +664,7 @@ const documentOrderIndexes = (client: Client) =>
        JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
        JOIN pg_catalog.pg_attribute d ON d.attrelid = i.indrelid AND d.attnum = i.indkey[0]
        JOIN pg_catalog.pg_attribute s ON s.attrelid = i.indrelid AND s.attnum = i.indkey[1]
-      WHERE i.indrelid = '${qtiSchema}.node'::regclass AND i.indnkeyatts >= 2
+      WHERE i.indrelid = '${qtiSchemaName}.node'::regclass AND i.indnkeyatts >= 2
         AND d.attname = 'document' AND s.attname = 'start'`,
   ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
@@ -1568,7 +1568,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             const constraints = yield* constraintsOf(client);
             const foreign = constraints.filter(({ kind }) => kind === "f");
-            const intoNode = foreign.filter(({ target }) => target === `${qtiSchema}.node`);
+            const intoNode = foreign.filter(({ target }) => target === `${qtiSchemaName}.node`);
 
             assert.sameMembers(intoNode.map(roleOf), [
               "owner axis",
@@ -1578,7 +1578,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             assert.deepStrictEqual(
               countPerName(
                 foreign
-                  .filter(({ target }) => target !== `${qtiSchema}.node`)
+                  .filter(({ target }) => target !== `${qtiSchemaName}.node`)
                   .map(targetRelationOf),
               ),
               outOfNode(Qti),

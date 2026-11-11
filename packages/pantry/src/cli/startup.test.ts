@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { moduleImports } from "#pantry/test/module-imports.ts";
-import type { ModuleImport } from "#pantry/test/module-imports.ts";
+import { forbiddenImports, moduleImports, valueImports } from "#pantry/test/module-imports.ts";
 
 /**
  * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
@@ -11,9 +10,11 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * The prefixes and package that a module the command line starts with must never import, so that
- * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
+ * `--help` does not pay for the database, pantry's public programs, the importer, the exporter or
+ * grizzle (spec D7).
  */
 const startupForbidden = [
+  "#pantry/api/",
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",
@@ -22,11 +23,13 @@ const startupForbidden = [
 ];
 
 /**
- * This package's own install's author login, test support whose workloads grizzle's builders build
- * when the module is evaluated (`#pantry/qti/own-login.ts`): the database layer serves the login's
- * committed file instead, and the dry run needs no login, so neither may reach it statically.
+ * The built author login: its builder, whose workloads (the export's reads and the import's write
+ * program) grizzle builds on `authorLogin`'s first call, and the test fixture, which builds it when
+ * the module is evaluated. The dry run needs no login, and the database layer serves the login's
+ * committed file instead, without evaluating a schema module, so neither may reach either module
+ * statically.
  */
-const loginForbidden = ["#pantry/qti/own-login.ts"];
+const loginForbidden = ["#pantry/qti/logins.ts", "#pantry/test/author.ts"];
 
 /**
  * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648
@@ -51,59 +54,10 @@ const productionEntries = [
 const readSource = (file: string): string => readFileSync(file, "utf-8");
 
 /**
- * Read the imports of a module that bring a value in when it loads: its static imports and
- * re-exports, not a statement that is wholly `import type` or `export type`, nor an `import(…)`.
- *
- * @param source - The text of a TypeScript module.
- * @returns The imports, in source order.
- */
-const staticImports = (source: string): readonly ModuleImport[] =>
-  moduleImports(source).filter(({ form }) => form === "value");
-
-/**
- * The modules a module reaches through static `#pantry/` imports, and the first import that names a
- * forbidden module.
- *
- * @param entry - The absolute path of the module to start from.
- * @param forbidden - The specifier prefixes no module of the graph may import.
- * @param read - Reads a module's text.
- * @returns Each offending module and import, as `module: import`.
- */
-export const forbiddenImports = (
-  entry: string,
-  forbidden: readonly string[],
-  read: (file: string) => string,
-): readonly string[] => {
-  const seen = new Set<string>();
-  const offences: string[] = [];
-  const pending = [entry];
-
-  while (pending.length > 0) {
-    const file = pending.pop() ?? entry;
-
-    if (seen.has(file)) {
-      continue;
-    }
-
-    seen.add(file);
-
-    for (const { specifier, text } of staticImports(read(file))) {
-      if (forbidden.some((prefix) => specifier.startsWith(prefix))) {
-        offences.push(`${path.relative(sourceRoot, file)}: ${text}`);
-      } else if (specifier.startsWith("#pantry/")) {
-        pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
-      }
-    }
-  }
-
-  return offences;
-};
-
-/**
  * Every module a set of entries reaches: through each static, non-type import, and through each
- * dynamic `import("#pantry/…")`, which is how the command handlers load the engine and the
- * database layer. A type written `import("#pantry/…")` is followed too, so the set errs toward more
- * modules, never fewer.
+ * dynamic `import("#pantry/…")`, which is how the command handlers load the public programs and
+ * the database layer. A type written `import("#pantry/…")` is followed too, so the set errs toward
+ * more modules, never fewer.
  *
  * @param entries - The absolute paths of the modules to start from.
  * @param read - Reads a module's text.
@@ -149,7 +103,7 @@ const importsOf = (
   read: (file: string) => string,
 ): readonly string[] =>
   [...modules].flatMap((file) =>
-    staticImports(read(file))
+    valueImports(read(file))
       .filter((found) => found.specifier === specifier)
       .map(({ text }) => `${path.relative(sourceRoot, file)}: ${text}`),
   );
@@ -169,6 +123,29 @@ describe("forbiddenImports", () => {
     assert.strictEqual(offences.length, 1);
     assert.include(offences[0], "b.ts");
     assert.include(offences[0], "@bjornpagen/grizzle");
+  });
+
+  it("neither follows nor reports a type import, a dynamic import or an import in a comment", () => {
+    const files = {
+      [path.join(sourceRoot, "a.ts")]: [
+        'import type {\n  B,\n} from "#pantry/b.ts";',
+        'export type { C } from "@bjornpagen/grizzle";',
+        'const load = () => import("#pantry/c.ts");',
+        '// import "@bjornpagen/grizzle";',
+        'import { type D, e } from "#pantry/d.ts";',
+        "",
+      ].join("\n"),
+      [path.join(sourceRoot, "b.ts")]: 'import "@bjornpagen/grizzle";\n',
+      [path.join(sourceRoot, "c.ts")]: 'import "@bjornpagen/grizzle";\n',
+      [path.join(sourceRoot, "d.ts")]: 'export { f } from "@bjornpagen/grizzle";\n',
+    };
+    const offences = forbiddenImports(
+      path.join(sourceRoot, "a.ts"),
+      ["@bjornpagen/grizzle"],
+      (file) => Object.entries(files).find(([name]) => name === file)?.[1] ?? "",
+    );
+
+    assert.deepStrictEqual(offences, ['d.ts: export { f } from "@bjornpagen/grizzle"']);
   });
 });
 

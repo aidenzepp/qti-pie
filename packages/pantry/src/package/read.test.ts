@@ -2,8 +2,9 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { listPackage, PackageReadError, readEntry } from "#pantry/package/read.ts";
-import { materialize } from "#pantry/test/fixtures.ts";
+import { listPackage, PackageReadError, readEntry, readPackage } from "#pantry/package/read.ts";
+import { ZipRefusal } from "#pantry/package/zip.ts";
+import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 
 /**
  * What every test here runs on: the file system `listPackage`, `readEntry` and the fixture
@@ -111,6 +112,48 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts", (it) => {
   it.effect("readEntry refuses a file reached through a link that leaves the package", () =>
     Effect.gen(function* refuseDirectoryLink() {
       yield* assertEntryRefused(yield* makeLinkedPackage(), "up/outside.txt");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("a corpus zip read from its bytes gives the entries its path gives", () =>
+    Effect.gen(function* readZipBytes() {
+      const fs = yield* FileSystem.FileSystem;
+      const file = yield* materializeZip("simple");
+      const source = { bytes: yield* fs.readFile(file), name: "simple.zip" };
+      const fromPath = yield* readPackage(file);
+
+      assert.isAbove(fromPath.length, 1);
+      assert.deepStrictEqual(yield* readPackage(source), fromPath);
+      assert.deepStrictEqual(yield* listPackage(source), yield* listPackage(file));
+
+      for (const entry of fromPath) {
+        assert.deepStrictEqual(yield* readEntry(source, entry.path), entry.bytes);
+      }
+    }),
+  );
+
+  it.effect("bytes that are not a zip are refused under the rule a path to them is", () =>
+    Effect.gen(function* refuseNotZipBytes() {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* fs.makeDirectory(workDirectory, { recursive: true });
+
+      const dir = yield* fs.makeTempDirectoryScoped({
+        directory: workDirectory,
+        prefix: "package-read-test-",
+      });
+      const bytes = new TextEncoder().encode("<manifest/> is not a zip archive");
+      const file = `${dir}/broken.zip`;
+
+      yield* fs.writeFile(file, bytes);
+
+      const fromPath = yield* Effect.flip(readPackage(file));
+      const fromBytes = yield* Effect.flip(readPackage({ bytes, name: "broken.zip" }));
+
+      assert.instanceOf(fromPath, ZipRefusal);
+      assert.instanceOf(fromBytes, ZipRefusal);
+      assert.strictEqual(fromBytes._tag, fromPath._tag);
+      assert.strictEqual(fromBytes.rule, fromPath.rule);
     }).pipe(Effect.scoped),
   );
 });

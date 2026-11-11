@@ -296,7 +296,7 @@ const refusing = Command.make(
       () => import("#pantry/import/refusal.ts"),
     );
     const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-    const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+    const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
     const [first, second] = refusedLaws(checkNameOf("AL1 admission"));
 
     return yield* refusalOf(
@@ -375,7 +375,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       // committed schema of the error object.
       Effect.gen(function* json() {
         const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
         const [first] = refusedLaws(checkNameOf("AL1 admission"));
         const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
         const error = errorLine(stderr);
@@ -386,6 +386,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         assert.strictEqual(error.kind, "import-refused");
         assert.strictEqual(error.command, "import");
         assert.deepStrictEqual(error.rules, ["attribute-admission"]);
+        assert.strictEqual(error.rule, "attribute-admission");
         assert.strictEqual(error.refused_kind, "some");
         assert.deepStrictEqual(error.laws, [
           {
@@ -438,6 +439,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
               kind: error.kind,
               laws: error.laws,
               refused: error.refused_kind,
+              rule: error.rule,
               rules: error.rules,
               sources: error.sources,
             },
@@ -445,6 +447,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
               kind: "import-refused",
               laws: [{ name, rule, text: Formatter.format(law) }],
               refused: "every",
+              rule,
               rules: [rule],
               sources: [source],
             },
@@ -452,6 +455,43 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
           );
         }
       }),
+  );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("a refusal of a level above Qti", (it) => {
+  it.effect("under --json prints one error object with the level, its rule and its rules", () =>
+    // Oracle: the refusal's own fields, the level, the rule and the rules it was built with, and
+    // the committed schema of the error object. A level's refusal names no law of `Qti`, so no
+    // laws or sources.
+    Effect.gen(function* level() {
+      const byLevel = ending(
+        "import",
+        () =>
+          import("#pantry/cli/verdict.ts").then(
+            ({ RefusedByLevel }) =>
+              new RefusedByLevel({
+                detail: "the item has no reviewer",
+                level: "Review",
+                rule: "item-reviewed",
+                rules: ["item-reviewed", "item-dated"],
+              }),
+          ),
+        false,
+      );
+      const { exit, stderr, stdout } = yield* captureCli(["--json"], { command: byLevel });
+      const error = errorLine(stderr);
+
+      assert.strictEqual(stdout, "");
+      assert.strictEqual(stderr.split("\n").length, 1);
+      assert.strictEqual(exitCodeOf(exit), 1);
+      assert.isTrue(matchesCommittedError(stderr), stderr);
+      assert.strictEqual(error.kind, "import-refused");
+      assert.strictEqual(error.level, "Review");
+      assert.strictEqual(error.rule, "item-reviewed");
+      assert.deepStrictEqual(error.rules, ["item-reviewed", "item-dated"]);
+      assert.notProperty(error, "laws");
+      assert.notProperty(error, "sources");
+    }),
   );
 });
 
@@ -498,7 +538,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
         );
         const { ImportRefused } = yield* Effect.promise(() => import("#pantry/import/rules.ts"));
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/test/qti.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
           kind: "check",
@@ -561,6 +601,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           assert.isTrue(matchesCommittedError(json.stderr), `${label}: ${json.stderr}`);
           assert.strictEqual(error.kind, "import-refused", label);
           assert.deepStrictEqual(error.rules, refusal.rules, label);
+          assert.strictEqual(error.rule, refusal.rules[0], label);
           assert.deepStrictEqual(
             Object.fromEntries(
               Object.entries({ laws, refused_kind: refusedKind, sources, witness }).filter(

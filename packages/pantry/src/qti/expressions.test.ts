@@ -75,7 +75,7 @@ import {
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/test/qti.ts";
 import { contentEnds } from "#pantry/test/indexes.ts";
 import {
   expressionKinds,

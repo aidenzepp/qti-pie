@@ -6,7 +6,7 @@ import { describeFailure, kindExitCode, kindHelp, namedFailureOf } from "#pantry
 import type { FailureDescription } from "#pantry/cli/errors.ts";
 import { ErrorObject } from "#pantry/cli/output.ts";
 import type { LawFact, OutputMode } from "#pantry/cli/output.ts";
-import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
+import { databaseRefusalOf, levelRefusalFieldsOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 
 /**
@@ -145,22 +145,25 @@ const encodeErrorObject = Schema.encodeSync(Schema.fromJsonString(ErrorObject));
 
 /**
  * What a failure carries besides its kind and message, read from its fields: the tag of a named
- * `internal` failure, and the rules of a refused import, with how grizzle decided its laws, the
- * laws, their sources and the kind of its witness when the database refused it.
+ * `internal` failure, and the rules of a refused import and the first of them, with how grizzle
+ * decided its laws, the laws, their sources and the kind of its witness when the database refused
+ * it, or the level when a level above `Qti` refused it.
  */
 interface Facts {
   readonly failure?: string;
   readonly laws?: readonly LawFact[];
+  readonly level?: string;
   readonly refused_kind?: DatabaseRefusal["kind"];
+  readonly rule?: string;
   readonly rules?: readonly string[];
   readonly sources?: readonly string[];
   readonly witness?: DatabaseRefusal["witness"];
 }
 
 /**
- * Read the facts of a failure: its tag when {@link namedFailureOf} names it, and a refused
- * import's rules, decision, laws, sources and witness kind from the refusal's fields, never from
- * its message.
+ * Read the facts of a failure: its tag when {@link namedFailureOf} names it, a refused import's
+ * rules, its first rule, decision, laws, sources and witness kind, and a level's refusal's level,
+ * rule and rules, each from the refusal's fields, never from its message.
  *
  * @param failure - What a run failed or died with.
  * @returns The facts; none of them for any other failure.
@@ -175,9 +178,23 @@ const factsOf = (
     facts.failure = named.value;
   }
 
+  const level = levelRefusalFieldsOf(failure);
+  if (Option.isSome(level)) {
+    facts.level = level.value.level;
+    facts.rule = level.value.rule;
+    facts.rules = level.value.rules;
+
+    return facts;
+  }
+
   const fields = refusalFieldsOf(failure);
   if (Option.isNone(fields)) {
     return facts;
+  }
+
+  const [rule] = fields.value.rules;
+  if (rule !== undefined) {
+    facts.rule = rule;
   }
 
   facts.rules = fields.value.rules;
@@ -204,8 +221,8 @@ const refusedKindText = {
 
 /**
  * Text mode's lines for a failure's facts: the named failure's tag, how grizzle decided a refused
- * import's laws, and each of their sources. The rules and the laws are in the refusal's message
- * already.
+ * import's laws, and each of their sources. The rules, the laws and a refusing level are in the
+ * refusal's message already.
  *
  * @param facts - The failure's facts.
  * @returns The labelled lines.
@@ -338,8 +355,9 @@ const renderDefect = (shown: Presentation, defect: unknown): string => {
  *
  * A failure prints as `error[<kind>]:` with its message and `= help:` with what to do next, or as
  * one error object under `json` and `jsonl`; `Command.run` has already presented a usage error. A
- * refused import adds where each of its laws is stated, and a named `internal` failure its tag
- * (`factsOf`). A defect prints as {@link renderDefect} lays it out.
+ * refused import adds where each of its laws is stated, a level's refusal its level, rule and
+ * rules under `json`, and a named `internal` failure its tag (`factsOf`). A defect prints as
+ * {@link renderDefect} lays it out.
  *
  * @param shown - The mode and the command's name.
  * @returns A function from a run to the same run, printing its failure to standard error on the

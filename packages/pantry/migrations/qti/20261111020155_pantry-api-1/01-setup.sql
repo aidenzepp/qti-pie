@@ -1,0 +1,1 @@
+CREATE DOMAIN "qti"."__text_tfkvgtjblt" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR ("pg_catalog"."octet_length"(VALUE) <= 268435454 AND VALUE ~ '\A[\u0009\u000A\u000D -\uFFFD\U00010000-\U0010FFFF]*\Z'::"pg_catalog"."text") IS TRUE);
