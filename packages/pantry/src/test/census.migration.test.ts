@@ -75,13 +75,13 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration", () => {
   it.effect(
-    "is one _init folder, its snapshot's two files and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
+    "is one _sterling-standard folder, its snapshot's two files and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
       // migration's census; the schema's own members for the counts that follow from them (a table
       // per stored relation, a names constant per roster). The chain's later migrations (GEN-S3 to
-      // GEN-S8) fold into the one `_init` drafted from zero, so their data steps, which moved rows
+      // GEN-S8) fold into the one `_sterling-standard` drafted from zero, so their data steps, which moved rows
       // already stored, have none to move, and the zero target for inserts holds.
       // Bound: the one committed migration.
       Effect.gen(function* committedCensus() {
@@ -91,7 +91,7 @@ describe("the committed migration", () => {
         const held = yield* censusOf(qtiMigrations);
 
         assert.lengthOf(entries, 4, entries.join(", "));
-        assert.match(entries[0] ?? "", /^\d{14}_init$/u);
+        assert.match(entries[0] ?? "", /^\d{14}_sterling-standard$/u);
         assert.strictEqual(entries[1], "manifest.json");
         assert.strictEqual(entries[2], "served");
         assert.strictEqual(entries[3], "snapshot.json");
