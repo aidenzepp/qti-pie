@@ -6,8 +6,8 @@
  *
  * Each relation is fixed when the schema compiles. The rosters and the two sets erase to the
  * constants the document layer reads (`Node.elements` and `Node.parentIsInteraction` derive from
- * the sets, plan §1.3). The names are the host's, for shredding an element into its kind and
- * rendering a kind back into its name; no law reads them, so they are not installed.
+ * the sets, plan §1.3). The names are the host's, for shredding an element into its kind; no law
+ * reads them, so they are not installed.
  */
 import { Array as Arr } from "effect";
 import type { Option } from "effect";
@@ -230,8 +230,9 @@ const namesIn = <V extends readonly Vocabulary[]>(
  * Read the element kinds of a vocabulary list with the names they are written with: each kind with
  * a local name of a namespaced vocabulary, its local name and its namespace as crust's tree spells
  * it (`spelledNamespace`). A nameless vocabulary's kinds name no element. `ElementName`'s rows are
- * these, and the names a document is written under (`#pantry/model/names.ts`) are read off them
- * with no composition.
+ * these. A document is written under the names its kinds' handles spell instead
+ * (`elementNameOf` of `#pantry/model/names.ts`), which loads no vocabulary, and its test holds
+ * every roster kind's handle to the row read here.
  *
  * @param vocabularies - The vocabularies, in composition order.
  * @returns Each element kind and its name, in the vocabularies' order.

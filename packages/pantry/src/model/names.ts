@@ -2,18 +2,16 @@
  * The names a document is written under (`unshred`'s `XdmNames`): each element kind's expanded
  * name and each closed attribute handle's spelling.
  *
- * They are read off the vocabulary rosters alone, as the composition's `ElementName` is
- * (`elementsOf` of `#pantry/grammar/kinds.ts`), so a reader that only writes documents, the
- * export's render among them, composes no grammar and loads no schema.
+ * Both are read off the handle alone, which spells the name it stands for, so a reader that only
+ * writes documents, the export's render among them, loads no vocabulary roster, composes no
+ * grammar and builds no table when it loads.
  */
 import { Array as Arr, Option } from "effect";
-import { elementsOf } from "#pantry/grammar/kinds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { XdmNames } from "#pantry/model/unshred.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import type { ExpandedName } from "#pantry/model/xdm.ts";
-import { vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
-import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
+import { vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 
 /**
  * Name the attribute a closed handle spells: a handle that begins with a prefix of
@@ -35,25 +33,38 @@ export const attributeNameOf = (handle: string): ExpandedName =>
   );
 
 /**
- * Each element kind's expanded name, read off the vocabulary rosters, each roster's namespace as
- * the composition reads it (`namespaceNameOf`).
+ * Name the elements of a kind off its handle, as the vocabularies spell it
+ * (`#pantry/vocab/namespaces.ts`): up to its colon, the handle prefix of the vocabulary the kind is
+ * in, which names that vocabulary's namespace (`vocabularyNamespaces`), and the ASI vocabulary's
+ * handles have none; after it, the element's local name, up to the dot that a kind of an element
+ * declared with several types puts before its type (`#pantry/vocab/derive/naming.ts`). A local
+ * name holds no colon, an NCName's, and no vocabulary's holds a dot, so the handle splits one way;
+ * `#pantry/model/names.test.ts` holds every roster kind to the name its roster gives it, the
+ * composition's `ElementName` row.
+ *
+ * @param kind - The element kind's handle.
+ * @returns The local name and namespace name of every element of the kind. A prefix no vocabulary
+ *   carries is a defect of the caller, since every element kind is a roster's.
  */
-const elements: ReadonlyMap<string, ExpandedName> = new Map(
-  elementsOf(
-    rosters.map(({ kinds, namespace }) => ({ kinds, namespace: namespaceNameOf(namespace) })),
-  ).map(({ handle, row }) => [handle, row]),
-);
+export const elementNameOf = (kind: string): ExpandedName => {
+  const colon = kind.indexOf(":");
+  const prefix = kind.slice(0, colon + 1);
+  const named = kind.slice(colon + 1);
+  const dot = named.indexOf(".");
+
+  return {
+    local: dot === -1 ? named : named.slice(0, dot),
+    namespace: Option.getOrThrowWith(
+      Arr.findFirst(Object.values(vocabularyNamespaces), (held) => held.prefix === prefix),
+      () => new Error(`No vocabulary carries the handle prefix of the element kind ${kind}.`),
+    ).namespace,
+  };
+};
 
 /**
- * The names every document is written under. Naming a kind no roster gives a local name is a
- * defect of its caller: the element kinds are exactly the rosters' named kinds, `ElementName`'s key
- * set.
+ * The names every document is written under.
  */
 export const names: XdmNames<Composed> = {
   attribute: attributeNameOf,
-  element: (kind) =>
-    Option.getOrThrowWith(
-      Option.fromNullishOr(elements.get(kind)),
-      () => new Error(`No vocabulary roster names the element kind ${kind}.`),
-    ),
+  element: elementNameOf,
 };

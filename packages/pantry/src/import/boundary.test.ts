@@ -255,7 +255,6 @@ const crossings: ByStep = [
       "model/composed.ts: #pantry/grammar/xsi.ts",
       "model/folds.ts: #pantry/grammar/ancestry.ts",
       "model/folds.ts: #pantry/grammar/kinds.ts",
-      "model/names.ts: #pantry/grammar/kinds.ts",
       "model/shred.ts: #pantry/grammar/domains.ts",
       "model/shred.ts: #pantry/grammar/kinds.ts",
       "model/shred.ts: #pantry/vocab/open.ts",
