@@ -1887,6 +1887,52 @@ describe("buildItem", () => {
       }),
   );
 
+  it.effect(
+    "leaves out a rubric block exactly when its view leaves out candidate, over every view list",
+    () =>
+      Effect.gen(function* rubricViews() {
+        const views = ["author", "candidate", "proctor", "scorer", "testConstructor", "tutor"];
+        const sets: (readonly string[])[] = [[]];
+        for (const view of views) {
+          sets.push(...sets.map((set) => [...set, view]));
+        }
+        // Every nonempty set of the XSD's six views (View.Type), each written as a list: the
+        // block is a notice when the set holds candidate, and in no node or verdict otherwise.
+        for (const listed of sets.filter((set) => set.length > 0)) {
+          const built = yield* Effect.fromResult(
+            buildItem(
+              item({
+                body: [
+                  el("p", [], [text("Before")]),
+                  el(
+                    "qti-rubric-block",
+                    [attr("use", "ext:criteria"), attr("view", ` ${listed.join("\t")} `)],
+                    [el("qti-content-body", [], [el("p", [], [text("Model answer")])])],
+                  ),
+                  el("p", [], [text("After")]),
+                ],
+                declarations: [],
+              }),
+            ),
+          );
+          const path = `${body}/qti-rubric-block`;
+          const shown = listed.includes("candidate");
+
+          assert.deepStrictEqual(
+            built.body.map((node) => node.kind),
+            shown ? ["element", "unsupported", "element"] : ["element", "element"],
+            listed.join(" "),
+          );
+          assert.deepStrictEqual(
+            built.unsupported,
+            shown ? [{ feature: "qti-rubric-block", path, shown: "notice" }] : [],
+            listed.join(" "),
+          );
+          assert.notInclude(JSON.stringify(built), "Model answer", listed.join(" "));
+        }
+      }),
+  );
+
   it.effect("[I-7] shows a hotspot interaction as a notice and keeps the rest of the body", () =>
     Effect.gen(function* hotspotIsNotice() {
       const built = yield* Effect.fromResult(

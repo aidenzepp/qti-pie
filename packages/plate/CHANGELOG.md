@@ -10,6 +10,16 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and each of its entry points is unstable until
 M3.
 
+### A rubric block outside the candidate's view is left out, not a notice (2026-11-11)
+
+- An item's `qti-rubric-block` whose `view` leaves out `candidate`, such as `view="scorer"`, is no
+  longer shown as the notice "Not supported here: qti-rubric-block", nor listed in the verdict's
+  `unsupported`: the information model shows a rubric block only in the views its `view` lists,
+  and every page plate writes is the candidate's, so the block is in none of them. Its content
+  still never reaches the item or the HTML. A rubric block whose `view` lists `candidate` is still
+  a notice. Of the 21 Scroll course packages, 4,155 AI-graded items carry a scorer's rubric and
+  move from that notice to no node.
+
 ### Package files addressed through `assets` (2026-11-09)
 
 - `Configuration.assetBase` and `render`'s `assetBase` option are gone, with nothing in their

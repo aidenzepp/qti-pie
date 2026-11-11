@@ -285,7 +285,8 @@ export interface Renders {
   /**
    * The features shown as a notice in place of their interaction. Beyond these, a `qti-*` element
    * in the item body outside `elements` is a notice keyed by its own name, which covers the custom
-   * interactions (Q-31, Q-32): accepted, not launched.
+   * interactions (Q-31, Q-32): accepted, not launched. A `qti-rubric-block` whose `view` leaves out
+   * `candidate` is none: no view plate writes holds it, so the body leaves it out.
    */
   readonly notices: readonly FeatureRule[];
   /**

@@ -1885,7 +1885,27 @@ const bodyAttributes = (element: SourceElement): readonly BodyAttribute[] =>
   );
 
 /**
- * Read the children of a body element, the item body included.
+ * Report whether a body child belongs in the candidate's view, the only view plate writes: in
+ * `answering`, `review` and `solution` alike the page is the candidate's. A `qti-rubric-block` is
+ * shown only in "The views in which the rubric block's content are to be shown" (QTI 3.0
+ * information model, RubricBlock `view`), a list the XSD requires, so one whose `view` leaves out
+ * `candidate`, a scorer's grading rubric among them, is in no page plate writes: it is no feature
+ * plate fails to render, so it is neither a node nor a notice, and its content never reaches the
+ * item. Every other child belongs.
+ *
+ * @param child The child.
+ * @returns Whether the candidate's view holds it.
+ */
+const inCandidateView = (child: SourceChild): boolean =>
+  child.kind !== "element" ||
+  !isQti(child, "qti-rubric-block") ||
+  Option.exists(valueOf(child, "view"), (views) =>
+    views.split(/[\t\n\r ]+/u).includes("candidate"),
+  );
+
+/**
+ * Read the children of a body element, the item body included, that the candidate's view holds
+ * ({@link inCandidateView}).
  *
  * @param build The build.
  * @param parent The element.
@@ -1897,7 +1917,7 @@ const bodyNodes = (
 ): Result.Result<readonly BodyNode[], Refusal> =>
   Result.gen(function* readBodyNodes() {
     const nodes: BodyNode[] = [];
-    for (const child of parent.children) {
+    for (const child of parent.children.filter(inCandidateView)) {
       // oxlint-disable-next-line eslint/no-use-before-define -- `bodyNodes` and `bodyNode` are mutually recursive, as body elements nest; the call runs only after both are defined.
       nodes.push(yield* bodyNode(build, parent, child));
     }
