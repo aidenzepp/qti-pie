@@ -1,6 +1,6 @@
 # Valid processing fixtures
 
-Four hand-written trees that together use every M3 kind: table A's 64 expression kinds, table B's 26 rule and processing kinds (`qti-response-processing` included), `xi:include` and `xi:fallback` (`docs/goals/qti/phase-3.md` 3.3). No corpus bytes are copied. `response.xml`, `outcome.xml` and `template.xml` validate against `imsqti_asiv3p0p1_v1p0.xsd`; `response-mapped.xml` validates except `qti-match-table-entry/@target-value`, which the XSD wrongly restricts to base-type names (GOAL.md open question 4.1 settles it as a value of the outcome's base-type).
+Four hand-written trees that together use every M3 kind: table A's 64 expression kinds, table B's 26 rule and processing kinds (`qti-response-processing` included), `xi:include` and `xi:fallback`. No corpus bytes are copied. `response.xml`, `outcome.xml` and `template.xml` validate against `imsqti_asiv3p0p1_v1p0.xsd`; `response-mapped.xml` validates except `qti-match-table-entry/@target-value`, which the XSD wrongly restricts to base-type names (pantry reads it as a value of the outcome's base-type).
 
 Below, per file, the M3 kinds it carries (the census `p3-11` asserts), then the kinds of the union.
 
