@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { defineConfig } from "@bjornpagen/grizzle";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
-import { Console, Effect, FileSystem, PlatformError } from "effect";
+import { Effect, FileSystem, PlatformError } from "effect";
 import { migrationConnection } from "#pantry/cli/connection.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -35,20 +35,14 @@ const synchronousFiles = FileSystem.layerNoop({
  * run where no cluster's state folder is. Only `migrate` and `drift` read the password, at each
  * connection attempt, running `GR8DES_PG_PASSWORD_COMMAND` where it is set.
  *
- * Grizzle calls it synchronously and refuses one that throws without quoting what it threw (its
- * `ConnectionRefused`, "connection threw"), so a setting or a CA this cannot read is written to
- * standard error first: the message names the variable or the file, and the repair.
+ * Grizzle calls it synchronously. A setting or a CA this cannot read throws, and grizzle refuses
+ * the throw as `ConnectionThrew`, printing its message, which names the variable or the file and
+ * the repair.
  *
  * @returns The connection. Throws where a setting is missing or malformed or the CA is unreadable.
- * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/packages/grizzle/src/cli/connection.ts#L41-L59
  */
 const connection = (): MigrationConnectionConfig =>
-  Effect.runSync(
-    migrationConnection.pipe(
-      Effect.provide(synchronousFiles),
-      Effect.tapError((failure) => Console.error(failure.message)),
-    ),
-  );
+  Effect.runSync(migrationConnection.pipe(Effect.provide(synchronousFiles)));
 
 /**
  * The grizzle configuration every `grizzle` command of this package names: `Qti` alone, with no
