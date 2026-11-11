@@ -16,14 +16,15 @@
  * - **The containers.** An export of `simple` and of `svg` to a directory and to a zip compare with
  *   the source package byte for byte where the record is written back, and canonically where a
  *   document is rebuilt.
- * - **One flight per page.** Every document's scan explains to the same statements, one for the
- *   scan's rows and one for each attachment, whatever the document: a page's cost does not grow
- *   with the rows it holds.
- * - **The plan audit.** The scan's own statement reads `Node` through an index of the derived key
- *   `(document, start)`, by an index scan or a bitmap index scan, never a sequential scan, and no
- *   statement of it recurses. Which of the two index scans, and whether a small document's rows are
- *   sorted after a bitmap one, is PostgreSQL's cost model's choice, not the contract. The
- *   contract's order is the scan's output: every document's rows come back in `start` order.
+ * - **One statement per page.** Every document's scan explains to one statement, its attachments
+ *   lowered into it, whatever the document: a page's cost does not grow with the rows it holds.
+ * - **The plan audit.** The scan reads `Node` through an index of the derived key `(document,
+ *   start)`, by an index scan, an index-only scan or a bitmap index scan, and never by a sequential
+ *   scan, and no statement of it recurses. Only `Node`'s reads are held to an index: the
+ *   attachments' tables are read however PostgreSQL's cost model plans them, and a sequential scan
+ *   of a small one is its choice, as is which of the indexes over `(document, start)` reads `Node`
+ *   and whether a small document's rows are sorted after a bitmap scan. The contract's order is the
+ *   scan's output: every document's rows come back in `start` order.
  * - **The export charset.** A document is written in its `Document` row's export charset: `latin1`'s
  *   `choice.xml` in ISO-8859-1, a character that charset lacks as a character reference, and
  *   `windows-1252`'s, which no encoder writes, in UTF-8, its declaration naming it.
@@ -33,7 +34,8 @@ import { Db } from "@bjornpagen/grizzle";
 import type { Plan, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Context, Effect, FileSystem, Layer, Option } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect";
+import type { Client } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
@@ -42,10 +44,10 @@ import { compareWithRecord, exportEntries, exportPackage } from "#pantry/export/
 
 import { importDir } from "#pantry/test/import-dir.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
+import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-import { AuthorLogin } from "#pantry/db/served.ts";
+import { AuthorLogin, servedPath } from "#pantry/db/served.ts";
 import { explainMember } from "@bjornpagen/grizzle/compile";
 
 /**
@@ -88,23 +90,186 @@ const scanStatements = 1;
 const recursive: ReadonlySet<string> = new Set(["Recursive Union", "WorkTable Scan"]);
 
 /**
- * The plan node types that read a relation through an index: in the index's order, or as a bitmap
- * of its matches.
+ * The plan node types that read a relation through an index: in the index's order, from the index
+ * alone, or as the heap scan over a bitmap of the index's matches.
  */
-const indexScans: ReadonlySet<string> = new Set([
-  "Bitmap Index Scan",
+const indexReads: ReadonlySet<string> = new Set([
+  "Bitmap Heap Scan",
   "Index Only Scan",
   "Index Scan",
 ]);
 
 /**
- * Whether a statement's plan reads its relation through an index and never by a sequential scan.
- *
- * @param types - The plan's node types ({@link nodeTypesOf}).
- * @returns Whether it does.
+ * One node of PostgreSQL's `EXPLAIN (FORMAT JSON, VERBOSE)` plan, read for what the plan audit
+ * reads: its type, the relation it scans and that relation's schema, the index it reads, and its
+ * children. grizzle's `Plan` (`explainMember`) keeps each node's type and estimates and drops the
+ * relation and the index (grizzle's `adapter/explain/plan.ts`), so the audit plans the scan's
+ * statement again to see which relation each scan reads.
  */
-const readsByIndex = (types: readonly string[]): boolean =>
-  types.some((type) => indexScans.has(type)) && !types.includes("Seq Scan");
+interface ShownPlan {
+  readonly "Index Name"?: string;
+  readonly "Node Type": string;
+  readonly Plans?: readonly ShownPlan[];
+  readonly "Relation Name"?: string;
+  readonly Schema?: string;
+}
+
+/**
+ * The schema of a {@link ShownPlan}.
+ */
+const ShownPlanSchema: Schema.Codec<ShownPlan> = Schema.Struct({
+  "Index Name": Schema.optionalKey(Schema.String),
+  "Node Type": Schema.String,
+  Plans: Schema.optionalKey(
+    Schema.Array(Schema.suspend((): Schema.Codec<ShownPlan> => ShownPlanSchema)),
+  ),
+  "Relation Name": Schema.optionalKey(Schema.String),
+  Schema: Schema.optionalKey(Schema.String),
+});
+
+/**
+ * The schema of an `EXPLAIN (FORMAT JSON)` answer's one value: one object holding the root node.
+ */
+const ExplainedSchema = Schema.Tuple([Schema.Struct({ Plan: ShownPlanSchema })]);
+
+/**
+ * The schema of the author login's served file, read for the SQL text of each read member's
+ * statement, as `grizzle generate` compiled it for the author role: the text `explainMember` plans
+ * for a read or a paged member (its `read`), which the audit plans again with its relations and
+ * indexes shown.
+ */
+const ServedReadsSchema = Schema.fromJsonString(
+  Schema.Struct({
+    roles: Schema.Struct({
+      "~a": Schema.Array(
+        Schema.Struct({
+          members: Schema.Struct({
+            "~a": Schema.Array(
+              Schema.Struct({
+                name: Schema.String,
+                read: Schema.optionalKey(
+                  Schema.Struct({
+                    source: Schema.Struct({
+                      statement: Schema.Struct({
+                        spec: Schema.Struct({ text: Schema.Struct({ sql: Schema.String }) }),
+                      }),
+                    }),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        }),
+      ),
+    }),
+  }),
+);
+
+/**
+ * Read the SQL text of the statement the author role's served `documentScan` runs.
+ *
+ * @returns The text, none where the served file holds no such read member.
+ */
+const scanTextOf = Effect.gen(function* scanText() {
+  const fs = yield* FileSystem.FileSystem;
+  const file = yield* Schema.decodeUnknownEffect(ServedReadsSchema)(
+    yield* fs.readFileString(servedPath),
+  );
+
+  return Option.fromNullishOr(
+    file.roles["~a"]
+      .flatMap(({ members }) => members["~a"])
+      .find(({ name }) => name === "documentScan")?.read?.source.statement.spec.text.sql,
+  );
+});
+
+/**
+ * Plan one statement as the author role, in a read-only transaction that is rolled back, and read
+ * the plan with each scan's relation, schema and index.
+ *
+ * @param client - A session of the author login.
+ * @param text - The statement's SQL text, its one parameter the document.
+ * @param document - The document's node.
+ * @returns The plan's root node.
+ */
+const shownPlanOf = (client: Client, text: string, document: string) =>
+  Effect.gen(function* shownPlan() {
+    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY");
+    yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+
+    const rows = yield* rowsOf<{ readonly "QUERY PLAN": unknown }>(
+      client,
+      `EXPLAIN (FORMAT JSON, VERBOSE) ${text}`,
+      [document],
+    );
+    const [{ Plan: root }] = yield* Schema.decodeUnknownEffect(ExplainedSchema)(
+      rows[0]?.["QUERY PLAN"],
+    );
+
+    return root;
+  }).pipe(Effect.ensuring(Effect.ignore(rowsOf(client, "ROLLBACK"))));
+
+/**
+ * List the index of each bitmap index scan below a node of a shown plan.
+ *
+ * @param plan - The node, a bitmap heap scan.
+ * @returns The indexes, in plan order.
+ */
+const bitmapIndexesOf = (plan: ShownPlan): readonly string[] =>
+  (plan.Plans ?? []).flatMap((child) => [
+    ...(child["Node Type"] === "Bitmap Index Scan" && child["Index Name"] !== undefined
+      ? [child["Index Name"]]
+      : []),
+    ...bitmapIndexesOf(child),
+  ]);
+
+/**
+ * One scan of `Node` in a shown plan: its node type, and the indexes it reads, its own or, for a
+ * bitmap heap scan, its bitmap index scans'.
+ */
+interface NodeRead {
+  readonly indexes: readonly string[];
+  readonly type: string;
+}
+
+/**
+ * List every scan of `Qti`'s `Node` table in a shown plan, the node's own first, then each
+ * child's in order.
+ *
+ * @param plan - The shown plan.
+ * @returns The scans.
+ */
+const nodeReadsOf = (plan: ShownPlan): readonly NodeRead[] => [
+  ...(plan["Relation Name"] === "node" && plan.Schema === qtiSchema
+    ? [
+        {
+          indexes:
+            plan["Node Type"] === "Bitmap Heap Scan"
+              ? bitmapIndexesOf(plan)
+              : Option.toArray(Option.fromNullishOr(plan["Index Name"])),
+          type: plan["Node Type"],
+        },
+      ]
+    : []),
+  ...(plan.Plans ?? []).flatMap(nodeReadsOf),
+];
+
+/**
+ * Whether a plan's scans of `Node` all read it through an index of `ordered`, an index scan, an
+ * index-only scan or a bitmap heap scan over bitmap index scans of it, and at least one does: a
+ * sequential scan of `Node`, or a read through any other index, fails it. Scans of other tables
+ * are not read.
+ *
+ * @param reads - The plan's scans of `Node` ({@link nodeReadsOf}).
+ * @param ordered - The indexes of `Node` that lead with `(document, start)`.
+ * @returns Whether they do.
+ */
+const readsNodeInOrder = (reads: readonly NodeRead[], ordered: ReadonlySet<string>): boolean =>
+  reads.length > 0 &&
+  reads.every(
+    ({ indexes, type }) =>
+      indexReads.has(type) && indexes.length > 0 && indexes.every((name) => ordered.has(name)),
+  );
 
 /**
  * List a plan's node types, the plan's own first, then each child's in order.
@@ -256,16 +421,21 @@ describe.skipIf(!hasLease)(
         );
 
         it.effect(
-          "scans every document in one flight of the same statements, through the (document, start) key's index, in start order, with no recursion",
+          "scans every document in one statement, reading Node through the (document, start) key's index, in start order, with no recursion",
           () =>
             // Oracle: PostgreSQL's planner and the scan's own output. The catalogue names the key
             // by grizzle's comment on it, and every index of Node that leads with `document`
-            // continues with `start`, so an index access of the scan's one relation reads the
-            // key's order; `db.explain`'s plans carry each node's type, not its index.
+            // continues with `start`, so a read of Node through one of them reads the key's order.
+            // grizzle's plans count the scan's statements and show no recursion; the same
+            // statement, planned again with its relations and indexes shown, shows how it reads
+            // Node, and only Node: its attachments' tables are the cost model's to plan.
             // Bound: every document of the accepted packages.
             Effect.gen(function* planAudit() {
               const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
               const client = yield* loginSession;
+              const scanText = Option.getOrUndefined(yield* scanTextOf);
+              assert.isDefined(scanText, "the served documentScan's statement");
+
               const key = yield* rowsOf<{ readonly name: string }>(
                 client,
                 `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
@@ -298,6 +468,8 @@ describe.skipIf(!hasLease)(
                 assert.strictEqual(columns[1], "start", `${name} continues with start`);
               }
 
+              const ordered = new Set(byDocument.map(({ name }) => name));
+
               for (const { id, name } of yield* Imported) {
                 const documents = (yield* (yield* db.workload.entriesOf.execute({ package: id }))
                   .collect).flatMap(({ document, path: entry }) =>
@@ -312,15 +484,16 @@ describe.skipIf(!hasLease)(
                     { kind: "params", params: { document: node } },
                     {},
                   );
-                  const [scan] = plans;
                   const where = `${name} ${entry}`;
 
                   assert.strictEqual(plans.length, scanStatements, where);
-                  assert.isDefined(scan, where);
-                  if (scan !== undefined) {
-                    const types = nodeTypesOf(scan);
+                  if (scanText !== undefined) {
+                    const reads = nodeReadsOf(yield* shownPlanOf(client, scanText, node));
 
-                    assert.isTrue(readsByIndex(types), `${where}: ${types.join(" > ")}`);
+                    assert.isTrue(
+                      readsNodeInOrder(reads, ordered),
+                      `${where}: Node read by ${reads.map(({ indexes, type }) => `${type} on ${indexes.join(", ") || "no index"}`).join("; ") || "no scan"}, not by an index of ${[...ordered].join(", ")}`,
+                    );
                   }
 
                   const starts = (yield* (yield* db.workload.documentScan.execute({
