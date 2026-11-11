@@ -524,7 +524,7 @@ const keyNumberOf = (key: readonly AnyKeyField[], row: AnyRow): Option.Option<nu
  * relation's constant says so: grizzle refuses a closed id outside its roster and two rows of one
  * key when `install.ts` declares the relation (`closed.relation`, `closedRows` in grizzle's
  * `schema/relation.ts`), and a slot past its owner's count when it packs the relation
- * (`plannedRelation` in `physical/ddl/constants.ts`); {@link faultOf} is the same check for the
+ * (`outsideFin` in `physical/ddl/constants.ts`); {@link faultOf} is the same check for the
  * tests over a composition, a relation grizzle never sees among them, and no load runs it.
  *
  * @param key - The relation's key fields.

@@ -9,7 +9,7 @@
  * holds `namingIdAttributes` too). Each is now stated into a target whose conditions are the wider
  * selection's and whose key is the wider selection's, the target fixing what the narrower selection
  * read beyond it to a value outside its terms (grizzle's fixed target, `#fixedTarget` of
- * `laws/model/plan.ts:1394-1444` at `3cc8fbd`):
+ * `packages/engine/src/laws/model/plan.ts:1526-1582` at `698880ac`):
  *
  * - **ManifestId:** `ManifestId(node) ⊆ manifestIdentifiers(node)`, the `cp:manifest` `identifier`s
  *   of the manifest (type `none`), is now `ManifestId(node) ⊆ manifestIdAttributes("cp:manifest")

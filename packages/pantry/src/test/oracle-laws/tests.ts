@@ -4,34 +4,34 @@
  * `lawSources` and the schema's statement of it in `src/qti/tests.ts` and `src/qti/expressions.ts`,
  * over the assembled test `#pantry/test/oracle-laws/assembly.ts` builds.
  *
- * - **One document** (`tests.ts` `testOverlayLaws`): `Structure identifier`, the key `(document,
- *   identifier)` over its names (reading 86); `Selection required`, a section selects at least its
- *   required parts (§4.2.2); `Stimulus ref key`, no two stimulus refs of one item share an
- *   identifier (§7.6.2); `Variable mapping target`, the key `(item ref, target)` and no session
- *   variable as a target (reading 97).
- * - **The items an item ref names** (`itemRefLaws`, `MappingSourceDeclaration`,
+ * - **One document** ({@link documentLawsOf}, {@link stimulusRefKeyOf}): `Structure identifier`, the
+ *   key `(document, identifier)` over its names (reading 86); `Selection required`, a section
+ *   selects at least its required parts (§4.2.2); `Stimulus ref key`, no two stimulus refs of one
+ *   item share an identifier (§7.6.2); `Variable mapping target`, the key `(item ref, target)` and
+ *   no session variable as a target (reading 97).
+ * - **The items an item ref names** ({@link itemRefLawsOf}, `MappingSourceDeclaration`,
  *   `TemplateDefaultTarget`): `Item ref target`, its href names an item or an LTI link of the
  *   package (B2, B3); `Variable mapping source`, a mapping's source is an outcome its item declares
  *   (A34); the declared half of `Variable mapping target`, no target is another variable its item
  *   declares (reading 97); `Template default target`, a template default names a template its item
  *   declares (A37).
- * - **The assembly** (`testNameLaws`, `branchLaws`, the readings of `expressions.ts`): `Test name
- *   key`, no two written elements of one test's assembly share an identifier (reading 86); `Branch
- *   target` and `Branch forward` over each instance's resolution of each branch rule (reading 87);
- *   `Section identifier target`, a `section-identifier` names one section or section ref the test
- *   places once (A61); `Prefixed reference`, exactly one reading of a variable reference a test's
- *   processing makes resolves, through a name the test places once (readings 48 and 88, M3), with
- *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
- *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
- *   (reading R15-k); `Variable kind` over each resolving reading by `identifier`; `Reference type`
- *   over each resolving reading in place of a literal (P24); `Mapped response`, a prefixed map
- *   response or map response point of a response reads a mapping or an area mapping its declaration
- *   holds (reading 166, §7.22 and §7.23); and the content references, each resolving in the test's
- *   declarations or its built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`,
- *   `Printed variable reference`, `Template reference`, `Context variable reference`), with a
- *   section document's feedback naming a built-in variable judged by the type its name has
- *   (`Feedback outcome type`). Each is judged over every document the test places and every
- *   fragment those documents splice in place (spec reading 117).
+ * - **The assembly** ({@link testNameKeyOf}, {@link branchLawsOf}, the readings of `expressions.ts`):
+ *   `Test name key`, no two written elements of one test's assembly share an identifier (reading
+ *   86); `Branch target` and `Branch forward` over each instance's resolution of each branch rule
+ *   (reading 87); `Section identifier target`, a `section-identifier` names one section or section
+ *   ref the test places once (A61); `Prefixed reference`, exactly one reading of a variable
+ *   reference a test's processing makes resolves, through a name the test places once (readings 48
+ *   and 88, M3), with `Variable declared` for an unprefixed one that resolves nowhere (P8 on
+ *   `Reading`); a braced one (a string attribute's) that resolves nowhere is a string value, with
+ *   two readings still refused (reading R15-k); `Variable kind` over each resolving reading by
+ *   `identifier`; `Reference type` over each resolving reading in place of a literal (P24); `Mapped
+ *   response`, a prefixed map response or map response point of a response reads a mapping or an
+ *   area mapping its declaration holds (reading 166, §7.22 and §7.23); and the content references,
+ *   each resolving in the test's declarations or its built-ins (A43 to A45: `Feedback reference`,
+ *   `Feedback outcome type`, `Printed variable reference`, `Template reference`, `Context variable
+ *   reference`), with a section document's feedback naming a built-in variable judged by the type
+ *   its name has (`Feedback outcome type`). Each is judged over every document the test places and
+ *   every fragment those documents splice in place (spec reading 117).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -634,7 +634,8 @@ const forwardHolds = (instance: Instance, rule: Rule, owner: Name, placed: Place
 
 /**
  * Judge reading 87 over each branch rule of each instance of a test's assembly, as `Branch_target`
- * and `Branch_forward` judge its resolution (`tests.ts` `branchLaws`): a rule that resolves to
+ * and `Branch_forward` judge its resolution (`#pantry/qti/tests.ts` `testLawsByName`): a rule
+ * that resolves to
  * no element an instance holding its own places breaks `Branch target`, and so does one whose
  * target {@link targetHolds} refuses; one {@link forwardHolds} refuses breaks `Branch forward`.
  *

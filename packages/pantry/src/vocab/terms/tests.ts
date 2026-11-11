@@ -90,7 +90,7 @@ export const assembledRoots = [testKind, sectionKind] as const satisfies readonl
  * include stands for an item ref, a section or a section ref alone (`IncludeRoot`), and no other
  * parent's include stands for any of them.
  *
- * The schema's heads (`inclusionLaws`, `#pantry/qti/tests.ts`) and the import's
+ * The schema's heads (the query `HeadDocument`, `#pantry/qti/queries.ts`) and the import's
  * (`#pantry/import/overlays/tests.ts` `assembledRowsOf`) read this list and `IncludeRoot`, through
  * `Inclusion.splices`, and nothing else of them decides a head. The law oracle, the second
  * implementation, states its own from the grammar (`#pantry/test/oracle.ts` `splicingParentsOf` and

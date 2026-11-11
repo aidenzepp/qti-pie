@@ -142,10 +142,10 @@ const unsided: ByStep = [];
  * crossing fails the test, and so does an entry whose import is gone, until the entry goes too.
  */
 const crossings: ByStep = [
-  // S3 drops the NCName gate of declarations.ts:219 (B1).
+  // S3 drops the NCName gate of declarations.ts `namedPiecesOf` (B1).
   ["S3", ["import/overlays/declarations.ts: #pantry/grammar/domains.ts"]],
-  // S6 makes generated fields of operators.ts:228's collapse (B3) and tests.ts:466's boolean read
-  // (B4), each the last read of `grammar/domains.ts` in its overlay.
+  // S6 makes generated fields of operators.ts `rowsOf`'s collapse (B3) and tests.ts `flagsOf`'s
+  // boolean read (B4), each the last read of `grammar/domains.ts` in its overlay.
   [
     "S6",
     [

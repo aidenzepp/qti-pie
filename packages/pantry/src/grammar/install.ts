@@ -427,7 +427,7 @@ export const BoundZero = closed(
 
 /**
  * The `ContentModel` roster: every distinct content automaton, named by its first family's parent
- * kind, `FollowSetOf` and `Last` keyed by it (the content grammar's own key, `content.ts`).
+ * kind, `FollowSetOf` keyed by it (the content grammar's own key, `content.ts`).
  */
 export const ContentModel = closed(
   "ContentModel",
@@ -484,8 +484,8 @@ export const ContentModelOf = closed.relation(
 
 /**
  * `ModelPositions`: model → positions, the number of content positions of each automaton, its start
- * 0 included, so the model of a family with no model, or an empty one, has 1. `FollowSetOf`'s and
- * `Last`'s slots are its counts (README, "Closed relations").
+ * 0 included, so the model of a family with no model, or an empty one, has 1. `FollowSetOf`'s
+ * slots are its counts (README, "Closed relations").
  */
 export const ModelPositions = closed.relation(
   "ModelPositions",
@@ -545,7 +545,7 @@ export const FollowSet = closed(
  * and whether a family may end at `from` (the content grammar's `Last`). N5 reads
  * `FollowMember.row(FollowSetOf.at("set", model, was))`, which holds exactly the positions the
  * automaton's transitions from `was` reach, and N7 `FollowSetOf.at("ends", model, lastState)`,
- * which holds exactly where `Last` held `(model, lastState)`.
+ * which holds exactly where the content grammar's `Last` holds `(model, lastState)`.
  */
 export const FollowSetOf = closed.relation(
   "FollowSetOf",
@@ -713,8 +713,8 @@ export const CountedOf = closed.relation(
  * caps). A family may hold several, so they are no total function of the family as {@link CountedOf}
  * is: `node.ts` holds them by a key over each family's children at a capped position, `(parent,
  * state)`, which no count fold needs. It is keyed by the family, not by its {@link ContentModel} as
- * {@link Last} is: a model is an automaton, whose positions name no kind, so families of other kinds
- * share a LOM category's model, and a cap keyed by model would cap them too.
+ * {@link FollowSetOf} is: a model is an automaton, whose positions name no kind, so families of
+ * other kinds share a LOM category's model, and a cap keyed by model would cap them too.
  */
 export const Capped = closed.relation(
   "Capped",

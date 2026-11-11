@@ -10,7 +10,7 @@
  *   or through a character reference, padded or not, and repeated past the binding's cap where the
  *   swarm draws it. Beside them stand the decoys the law must not read: a term in another namespace
  *   inside the type, and a `value` of another LOM vocabulary.
- * - **The specification's verdict** ({@link sketchRefusals}): a type is refused where its value is
+ * - **The specification's verdict** ({@link typeRefused}): a type is refused where its value is
  *   `exam` or `self assessment` and its source is the LOM vocabulary's, `LOMv1.0`, empty or not
  *   written, each compared collapsed. It is written from the sentence, apart from the module's
  *   constants and the law oracle's.

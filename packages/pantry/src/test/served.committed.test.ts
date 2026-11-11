@@ -21,8 +21,8 @@
  * the cluster's CA (`#pantry/db/connection.ts`), and this witness needs neither the cluster nor
  * its state folder.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/b927d9995ecf254230da725c65357a420b392b91/packages/grizzle/src/adapter/public/compile.ts#L30-L61
- * @see https://github.com/bjornpagen/grizzle/blob/b927d9995ecf254230da725c65357a420b392b91/packages/grizzle/src/cli/check.ts#L274-L320
+ * @see https://github.com/bjornpagen/grizzle/blob/698880ac5644ea918b7ca5c56b0d800da2cf43e9/packages/grizzle/src/adapter/public/compile.ts#L29-L60
+ * @see https://github.com/bjornpagen/grizzle/blob/698880ac5644ea918b7ca5c56b0d800da2cf43e9/packages/grizzle/src/cli/check.ts#L274-L320
  */
 import path from "node:path";
 import type { AnyLogin } from "@bjornpagen/grizzle";
