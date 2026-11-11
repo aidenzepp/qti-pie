@@ -14,7 +14,7 @@
  * exactly one candidate, over the candidates judged. It measures the generator and its features,
  * never the program, so it is residual risk, not proof.
  */
-import { generate, randomChooser } from "@grizzle/testing/source";
+import { generate, randomChooser, recorder } from "@grizzle/testing/source";
 import type { Source } from "@grizzle/testing/source";
 import { wordsOf } from "@grizzle/testing/random";
 import { Array as Arr, Effect, Option } from "effect";
@@ -274,7 +274,8 @@ export const evolve = Effect.fnUntraced(function* evolve<G, F extends string, D,
   seed: number,
 ): Effect.fn.Return<Evolved<G, F, D, K>, E, R> {
   const chooser = randomChooser(wordsOf(seed));
-  const draw = <A>(generator: Gen<A>): A => generate(generator, chooser).value;
+  const recorded = recorder();
+  const draw = <A>(generator: Gen<A>): A => generate(recorded, generator, chooser).value;
   const counts = new Map<F, number>();
   const found = new Map<K, Found<G, D>>();
   const members: Member<G, F>[] = [];

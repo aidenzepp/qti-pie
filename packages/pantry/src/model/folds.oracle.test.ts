@@ -6,7 +6,7 @@ import type { Pending } from "@grizzle/testing/features";
 import { element, int, shuffled } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
-import { forcedChooser, generate } from "@grizzle/testing/source";
+import { forcedChooser, generate, recorder } from "@grizzle/testing/source";
 import { valuesFromToken } from "@grizzle/testing/tape";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
@@ -921,7 +921,7 @@ const unconstructedCase = (
     draws: "",
     note,
     reaches: [`${law} refuses`],
-    sketch: generate(documents, forcedChooser(tape, tape.length)).value,
+    sketch: generate(recorder(), documents, forcedChooser(tape, tape.length)).value,
   };
 };
 

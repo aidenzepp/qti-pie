@@ -18,14 +18,14 @@
  *   document is rebuilt.
  * - **One statement per page.** Every document's scan explains to one statement, its attachments
  *   lowered into it, whatever the document: a page's cost does not grow with the rows it holds.
- * - **The plan audit.** The scan reads `Node` only through an index the workload's access earned, one
- *   whose reasons in the committed snapshot include `access` (grizzle's `indexReasonsOf`), by an
- *   index scan, an index-only scan or a bitmap index scan, and never by a sequential scan, and no
- *   statement of it recurses. Only `Node`'s reads are held to an index: the attachments' tables are
- *   read however PostgreSQL's cost model plans them, and a sequential scan of a small one is its
- *   choice, as is which of those indexes reads `Node` and whether a small document's rows are
- *   sorted after a bitmap scan. The contract's order is the scan's output: every document's rows
- *   come back in `start` order.
+ * - **The plan audit.** The scan reads `Node` only through an index whose key columns in the
+ *   committed snapshot lead with `(document, start)` (grizzle's `indexesOf`), by an index scan, an
+ *   index-only scan or a bitmap index scan, and never by a sequential scan, and no statement of it
+ *   recurses. Only `Node`'s reads are held to an index: the attachments' tables are read however
+ *   PostgreSQL's cost model plans them, and a sequential scan of a small one is its choice, as is
+ *   which of those indexes reads `Node` and whether a small document's rows are sorted after a
+ *   bitmap scan. The contract's order is the scan's output: every document's rows come back in
+ *   `start` order.
  * - **The export charset.** A document is written in its `Document` row's export charset: `latin1`'s
  *   `choice.xml` in ISO-8859-1, a character that charset lacks as a character reference, and
  *   `windows-1252`'s, which no encoder writes, in UTF-8, its declaration naming it.
@@ -33,7 +33,7 @@
 import path from "node:path";
 import { Db } from "@bjornpagen/grizzle";
 import type { Plan, Uuid } from "@bjornpagen/grizzle";
-import { indexReasonsOf } from "@bjornpagen/grizzle/compile";
+import { indexesOf } from "@bjornpagen/grizzle/compile";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Option } from "effect";
@@ -105,22 +105,27 @@ const nodeReadsOf = (plan: Plan): readonly Plan[] => [
 ];
 
 /**
- * The indexes of `Node` the workload's access earned: each one whose reasons in the committed
- * snapshot include `access`, as grizzle's `indexReasonsOf` reads them. Each leads with `(document,
- * start)` at this snapshot, the key's UNIQUE and the scan's own access index, but nothing grizzle
- * gives says so.
- *
- * GRIZZLE-PENDING: an index's key columns. The reasons (`IndexReason`), the served file's `tables`
- * and a plan's `on.index` name an index and why it exists, never its columns, so the audit cannot
- * hold a read of `Node` to an index that leads with `(document, start)`; the scan's output order
- * holds what that would.
+ * The key columns an index of `Node` leads with to serve the scan, in order: `(document, start)`,
+ * each ascending.
+ */
+const documentStart = ["document", "start"] as const;
+
+/**
+ * The indexes of `Node` that lead with `(document, start)`, by name, read from the committed
+ * snapshot's index key columns (grizzle's `indexesOf`).
  */
 const accessIndexesOfNode = Effect.map(
-  Effect.fromResult(indexReasonsOf(snapshot)),
-  (reasons): ReadonlySet<string> =>
+  Effect.fromResult(indexesOf(snapshot)),
+  (indexes): ReadonlySet<string> =>
     new Set(
-      [...(reasons.get("Node") ?? [])].flatMap(([name, why]) =>
-        why.some(({ kind }) => kind === "access") ? [name] : [],
+      [...(indexes.get("Node") ?? [])].flatMap(([name, { columns }]) =>
+        documentStart.every((field, at) => {
+          const column = columns[at];
+
+          return column?.kind === "field" && column.field === field && column.direction === "asc";
+        })
+          ? [name]
+          : [],
       ),
     ),
 );
