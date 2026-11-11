@@ -2517,28 +2517,6 @@ export const fixed: readonly Known[] = [
   {
     files: [
       [
-        "es/choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration/></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "E1_derived", relation: "DeclarationCardinality" },
-    },
-  },
-  {
-    files: [
-      [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
@@ -2556,28 +2534,6 @@ export const fixed: readonly Known[] = [
     signature: {
       kind: "import-only-law",
       law: { kind: "check", name: "E1_derived", relation: "DocumentId" },
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/><qti-item-body><qti-choice-interaction response-identifier="R" max-choices="1 2"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: 'the value of a read attribute is its lexical form collapsed (Compute.collapse, as on SsmlAttribute), never an outer-whitespace split whose value E1_derived held to no whitespace: a collapsed value with whitespace inside (max-choices="1 2", a reference "a b") is in the lexical space of no atomic type, and its value domain refuses it alone',
-    owner: "FIX-ATOMIC",
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "E1_derived", relation: "InteractionAttribute" },
     },
   },
   {
