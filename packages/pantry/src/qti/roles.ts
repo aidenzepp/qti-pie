@@ -5,7 +5,6 @@
  */
 import { role, wholeEntriesOf, writableNamesOf } from "@bjornpagen/grizzle";
 import { Qti } from "#pantry/qti/schema.ts";
-import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * The author role over `Qti`: a full role, holding every stored relation and every roster whole and
@@ -27,12 +26,3 @@ export const Author = role(Qti, "author", wholeEntriesOf(Qti), { insert: writabl
  * The author role, the type of {@link Author}.
  */
 export type AuthorRole = typeof Author;
-
-/**
- * {@link Author}, under the name earlier installs called to build it over their `Qti`: `Qti` is one
- * schema now, so there is one author role over it.
- *
- * @param _qti - `Qti`.
- * @returns {@link Author} .
- */
-export const authorRoleOf = (_qti: QtiSchema): AuthorRole => Author;

@@ -1,9 +1,7 @@
 /**
  * Every law of the catalog (`lawTable` of `#pantry/vocab/laws.ts`) is stated somewhere: by a module
- * that names its statements (`namedLaws`), by a package-media install's policy (the groups a
- * policy's build of `Qti` holds, `qtiLevelsOf` of `#pantry/qti/schema.ts`: `mediaLawsByName` and
- * `mediaQueriesOf` of `#pantry/qti/media.ts`, which state nothing for this package's own install,
- * so a probe policy's laws stand for every install's), by a law the importer writes out
+ * that names its statements (`namedLaws`), by the package-media level an install stacks over
+ * `Qti` (`mediaLawsByName` of `#pantry/qti/media.ts`), by a law the importer writes out
  * (`statedLaws`: primary keys, patterns and generated fields, among them the stated limits'
  * bounds), by a part of a statement the oracle states in parts (`statedInParts`), or by a statement
  * grizzle gives its own structure, listed below with why. A law the catalog names that none of

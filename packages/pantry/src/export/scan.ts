@@ -35,7 +35,6 @@ import {
 import { ElementType, Node } from "#pantry/qti/node.ts";
 import { Entry } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * A parent variable of type `uuid`: the term `attach` mints from a parent's head, which each arm
@@ -373,12 +372,3 @@ export const entriesOf = query(Qti)
     "option",
   )
   .orderBy(["at", "asc"]);
-
-/**
- * The export's two reads, {@link documentScan} and {@link entriesOf}, under the name earlier installs
- * called to build them over their `Qti`: `Qti` is one schema now, so they are its two queries.
- *
- * @param _qti - `Qti`.
- * @returns The scan of one document, and a package's record with each entry's document.
- */
-export const exportQueriesOf = (_qti: QtiSchema) => ({ documentScan, entriesOf });
