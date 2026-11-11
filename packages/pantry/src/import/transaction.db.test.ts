@@ -8,13 +8,15 @@
  *
  * The oracles are PostgreSQL's own: the catalog and the system columns of every table of the
  * installation, read as the author role by a direct SQL reader (grizzle's README, "Direct SQL
- * access"). A row's `xmin` is the transaction that inserted it and its `cmin` the command within
- * that transaction, so one transaction id over every row an import adds is one transaction, and the
+ * access"), but for the injected case's lock holder, which is the database owner's session. A
+ * row's `xmin` is the transaction that inserted it and its `cmin` the command within that
+ * transaction, so one transaction id over every row an import adds is one transaction, and the
  * commands order the tables it writes.
  *
  * Written to run at N1 on the lease, never by a hand.
  *
  * @see {@link https://www.postgresql.org/docs/19/ddl-system-columns.html | PostgreSQL 19, §5.6 System Columns}
+ * @see {@link https://github.com/postgres/postgres/blob/REL_19_RC1/src/backend/commands/lockcmds.c#L280-L296 | PostgreSQL 19rc1, lockcmds.c LockTableAclCheck: MAINTAIN, UPDATE, DELETE or TRUNCATE permit any lock mode, INSERT only ROW EXCLUSIVE and below}
  */
 import { CommitUnknown, writableNamesOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -37,6 +39,7 @@ import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
 import {
   authorRole,
   loginSession,
+  ownerSession,
   qtiSchema,
   rowsOf as sessionRows,
 } from "#pantry/test/direct-sql.ts";
@@ -297,12 +300,15 @@ describe.skipIf(!hasLease)(
           // transaction wrote every relation of the package; a second transaction of the import
           // would leave that one short of a table. Then a second session holds one table the
           // import writes in SHARE mode, which blocks the import's INSERT into it and nothing else,
-          // so the import's one transaction stops there with every statement before it run. The
-          // failure injected through `WrapApply` then interrupts the apply (grizzle cancels the
-          // statement and destroys its session, README "Transactions and concurrency") and fails it
-          // as `CommitUnknown`, whose read-back finds no package. No table then holds a row of the
-          // import's transaction: none whose `xmin` is a transaction id its session held while it
-          // waited.
+          // so the import's one transaction stops there with every statement before it run. That
+          // session is the database owner's, not the author role's: SHARE mode needs UPDATE, DELETE,
+          // TRUNCATE or MAINTAIN on the table, and the author role holds SELECT and INSERT alone
+          // (`#pantry/qti/roles.ts`), so its own LOCK TABLE is refused with 42501. The import under
+          // test still runs as the author login. The failure injected through `WrapApply` then
+          // interrupts the apply (grizzle cancels the statement and destroys its session, README
+          // "Transactions and concurrency") and fails it as `CommitUnknown`, whose read-back finds
+          // no package. No table then holds a row of the import's transaction: none whose `xmin` is
+          // a transaction id its session held while it waited.
           // Bound: the package of 2 choices, 1 hottext and 1 hotspot, the least drawn, imported
           // once (one transaction over every relation does not turn on a member count); then the
           // table held the first and the last of the tables that import writes, by command, 2
@@ -354,7 +360,7 @@ describe.skipIf(!hasLease)(
                 (at, c) =>
                   Effect.gen(function* noRow() {
                     const table = heldAt(at);
-                    const holder = yield* authorSession;
+                    const holder = yield* ownerSession;
                     const waiter = yield* Ref.make(Option.none<Waiter>());
                     const held = <A, E, R>(
                       apply: Effect.Effect<A, E, R>,
