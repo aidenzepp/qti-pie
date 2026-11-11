@@ -76,9 +76,10 @@ as_owner() {
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# The installation's roles, comma-joined for an array literal: '{<roles>}'.
+# The installation's roles, comma-joined for an array literal: '{<roles>}'. grizzle roles connects as the migration
+# identity, so it runs through as_migration.
 installation_roles() {
-	pnpm exec grizzle roles "$config" | paste -sd , -
+	as_migration roles | paste -sd , -
 }
 
 # Exits 1 where the database is missing; stops the script where the cluster cannot be read.
@@ -88,7 +89,7 @@ exists() {
 	[[ -n "$found" ]]
 }
 
-# Usage: as_migration migrate|uninstall. Only this is given the migration identity's password, unless
+# Usage: as_migration migrate|roles|uninstall. Only this is given the migration identity's password, unless
 # GR8DES_PG_PASSWORD_COMMAND gives every role its own.
 as_migration() {
 	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
