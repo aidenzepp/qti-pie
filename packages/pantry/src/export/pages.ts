@@ -37,7 +37,6 @@ import type {
   XdmDocument,
   XdmVocabulary,
   XmlDeclRow,
-  XmlVersion,
 } from "#pantry/model/xdm.ts";
 
 /**
@@ -60,13 +59,13 @@ export interface ScannedAttribute<V extends XdmVocabulary> {
 
 /**
  * A document's `XmlDecl` row as the scan delivers it under the `Document` row: its fields as
- * `assemble` reads them, but for the version, which is the text `XmlDecl.version` holds, and with
- * its `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the node.
+ * `assemble` reads them, its version the `VersionNum` grizzle types `XmlDecl.version` as (the text
+ * type `XmlVersion` of `#pantry/qti/chardata.ts`, whose host type is `1.${number}`), with its
+ * `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the node.
  */
-export interface ScannedDeclaration extends Omit<XmlDeclRow, "version"> {
+export interface ScannedDeclaration extends XmlDeclRow {
   readonly encoding: Option.Option<Pick<EncodingDeclRow, "encoding">>;
   readonly standalone: Option.Option<Pick<SdDeclRow, "standalone">>;
-  readonly version: string;
 }
 
 /**
@@ -95,7 +94,7 @@ export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "gove
   readonly doctype: Option.Option<Pick<CharacterRow, "value">>;
   /**
    * The document node's `Document` row; none on every other node. Its declaration's version is the
-   * text the `XmlDecl` row holds, which {@link assembleScan} reads.
+   * `VersionNum` the `XmlDecl` row holds, which {@link assembleScan} reads.
    */
   readonly documentRow: Option.Option<ScannedDocument>;
   /**
@@ -137,7 +136,7 @@ export interface Scan<V extends XdmVocabulary> {
   readonly sdDecls: SdDeclRow[];
   readonly texts: CharacterRow[];
   readonly whitespace: CharacterRow[];
-  readonly xmlDecls: Omit<ScannedDeclaration, "encoding" | "standalone">[];
+  readonly xmlDecls: XmlDeclRow[];
 }
 
 /**
@@ -278,27 +277,11 @@ export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("Do
 }
 
 /**
- * Read an `XmlDecl` row as the read takes it, its version a `VersionNum`.
- *
- * @param row - The row as the scan delivered it.
- * @returns The row, its version typed as the `VersionNum` it is.
- * @see {@link https://www.w3.org/TR/xml/#NT-VersionNum | XML 1.0, VersionNum}
- */
-const xmlDeclOf = ({ node, version }: Scan<XdmVocabulary>["xmlDecls"][number]): XmlDeclRow => ({
-  node,
-  // SAFETY: `XmlDecl.version` is of the text type `XmlVersion` (`#pantry/qti/chardata.ts`,
-  // `str.regex("^1\\.[0-9]+$")`), whose pattern law, "XML production", the database holds on every
-  // row it stores, so every version a scan reads is `1.` and digits.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  version: version as XmlVersion,
-});
-
-/**
  * Assemble a document from the rows its scan folded.
  *
  * Each row is as the database holds it, every law the schema states held of it, so no law is read
  * again here: the rows are read into the tree (`readDocument`), never held to `flatten`'s image of
- * it, and an `XmlDecl` row's version is a `VersionNum` by its pattern law ({@link xmlDeclOf}).
+ * it, and an `XmlDecl` row's version is a `VersionNum` by its type, which its pattern law holds.
  * Only the scan's own paging is checked, its one `Document` row.
  *
  * @param document - The id of the document's node, which its scan was filtered by.
@@ -331,7 +314,7 @@ export const assembleScan = <V extends XdmVocabulary>(
     sdDecls: scan.sdDecls,
     texts: scan.texts,
     whitespace: scan.whitespace,
-    xmlDecls: scan.xmlDecls.map(xmlDeclOf),
+    xmlDecls: scan.xmlDecls,
   });
 };
 
