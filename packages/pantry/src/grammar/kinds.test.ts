@@ -8,14 +8,9 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { faultOf, repeatOf } from "#pantry/grammar/closed.ts";
-import {
-  fixedKinds,
-  generate,
-  isForeignKind,
-  openClasses,
-  resolution,
-} from "#pantry/grammar/kinds.ts";
-import type { Vocabulary } from "#pantry/grammar/kinds.ts";
+import { fixedKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { generate, resolution } from "#pantry/grammar/rosters.ts";
+import type { Vocabulary } from "#pantry/grammar/rosters.ts";
 import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 
 /**

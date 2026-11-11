@@ -24,7 +24,8 @@ import type { ComposeError, Grammar, Vocabulary } from "#pantry/grammar/compose.
 import { noFacets } from "#pantry/grammar/facets.ts";
 import type { Facets } from "#pantry/grammar/facets.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
-import type { KindOf, NameOf, SchemaVersion } from "#pantry/grammar/kinds.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import type { KindOf, NameOf } from "#pantry/grammar/rosters.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { readSource, sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";

@@ -171,7 +171,7 @@ export interface ShredGrammar<V extends XdmVocabulary> {
    */
   readonly named: (namespace: string, local: string) => boolean;
   /**
-   * Find the kind an element is: `resolve` of `src/grammar/kinds.ts`.
+   * Find the kind an element is: `resolve` of `#pantry/grammar/rosters.ts`.
    *
    * @param namespace - The element's namespace name, empty when it has none.
    * @param local - The element's local name.

@@ -1,10 +1,10 @@
 /**
  * The names a document is written under (`#pantry/model/names.ts`), read off each kind's handle,
  * against the names the vocabulary rosters give the kinds, the rows the composition's
- * `ElementName` holds (`elementsOf` of `#pantry/grammar/kinds.ts`).
+ * `ElementName` holds (`elementsOf` of `#pantry/grammar/rosters.ts`).
  */
 import { assert, describe, it } from "@effect/vitest";
-import { elementsOf } from "#pantry/grammar/kinds.ts";
+import { elementsOf } from "#pantry/grammar/rosters.ts";
 import { elementNameOf } from "#pantry/model/names.ts";
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
 import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";

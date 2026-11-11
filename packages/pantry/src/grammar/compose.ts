@@ -70,19 +70,14 @@ import type {
 } from "#pantry/grammar/expression.ts";
 import * as facets from "#pantry/grammar/facets.ts";
 import type { Facets } from "#pantry/grammar/facets.ts";
-import {
-  foreignKinds,
-  isForeignKind,
-  generate as generateKinds,
-  resolution,
-  schemaVersions,
-} from "#pantry/grammar/kinds.ts";
+import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { generate as generateKinds, resolution } from "#pantry/grammar/rosters.ts";
 import type {
   KindOf,
   Kinds,
   NameOf,
   Vocabulary as KindsVocabulary,
-} from "#pantry/grammar/kinds.ts";
+} from "#pantry/grammar/rosters.ts";
 import { characterKinds, contentOf } from "#pantry/grammar/content.ts";
 import type { ContentError, ContentGrammar } from "#pantry/grammar/content.ts";
 import { includeAlternativesOf, includeGrammar } from "#pantry/grammar/include.ts";

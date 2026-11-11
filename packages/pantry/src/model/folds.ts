@@ -149,12 +149,12 @@ export interface FoldGrammar<V extends XdmVocabulary> {
    */
   readonly attributePosition: (key: AttributeKey<V>) => Option.Option<number>;
   /**
-   * `Interaction`, from `#pantry/grammar/kinds.ts`: a node whose parent is one takes the parent
+   * `Interaction`, from `#pantry/grammar/rosters.ts`: a node whose parent is one takes the parent
    * as its `nearest`.
    */
   readonly interaction: Lookup<{ readonly kind: XdmKind<V> }, unknown>;
   /**
-   * `IsElement`, from `#pantry/grammar/kinds.ts`: each element child adds one to `elements`.
+   * `IsElement`, from `#pantry/grammar/rosters.ts`: each element child adds one to `elements`.
    */
   readonly isElement: Lookup<{ readonly kind: XdmKind<V> }, unknown>;
 }
