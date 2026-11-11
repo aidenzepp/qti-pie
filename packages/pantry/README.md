@@ -8,10 +8,35 @@ Store QTI 3.0 packages in a strict PostgreSQL model, and export them unchanged.
 
 pantry imports a QTI 3.0 package, a directory or a `.zip` file, into a local PostgreSQL database, and exports it back
 to files. It exists first to put [grizzle](../../vendor/README.md) through a large, real data model, so delivery is
-out of scope. It is pre-release, and it reads XML through [crust](../crust/README.md). Its `package.json` exports only
-what an install outside this workspace composes: the `Qti` schema built for a policy, the author role and login, the
-connections, the import's read and write with the layer they run on, and the export's document scan with its rows-to-XML
-step.
+out of scope. It is pre-release, and it reads XML through [crust](../crust/README.md).
+
+## As a library
+
+Its `package.json` exports plain grizzle values an application composes into its own grizzle config, and the steps
+around them. There is no pantry runtime: the application opens its own connections and `Db`.
+
+| Module | Values |
+| --- | --- |
+| `qti/schema.ts` | `Qti`, the one schema constant, every relation public and typed on `Qti.relations` |
+| `qti/media.ts` | `QtiMedia`, the package-media level to stack with `schema.extend`; its policy is `MediaType` rows |
+| `qti/roles.ts`, `qti/logins.ts` | `Author`, `AuthorApp`, and `importWrite`, the import's write program |
+| `import/read.ts` | `readPackage`: one read, bytes to documents, files by path and referenced paths |
+| `import/program.ts` | `importRowsOf`: the rows a read package is written as, for `importWrite` |
+| `import/package.ts` | `importPackage`: `importRowsOf` applied through `AuthorLogin` (`db/served.ts`), with retries |
+| `import/refusal.ts`, `vocab/laws.ts` | `lawNameOf`, `rulesOf` and `lawTable`: a refused law's QTI rule |
+| `export/scan.ts`, `export/render.ts` | `documentScan` and `entriesOf` (grizzle queries), and `documentXml(rows)` |
+| `db/install.ts` | `MediaPolicySchema`, which parses `policy.json`, `{ "media": { "<extension>": "<type>" } }` |
+
+An application imports a package in its own transaction:
+
+```ts
+const pkg = yield* readPackage(dir)
+const { insert, packageId } = yield* importRowsOf(pkg)
+const db = yield* Db.open(AuthorServed.roles.author, {})
+const outcome = yield* db.workload.importWrite.apply({ insert }, {})
+```
+
+A refusal is grizzle's `invariant-rejected` outcome; `rulesOf(outcome.refused.laws)` names its QTI rules.
 
 ## Install
 
@@ -59,15 +84,13 @@ item-prefixed names that pass through it, because the package declares nothing t
 - `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
   without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
   password files.
-- `GR8DES_QTI_INSTALL` names a package-media install's folder: its `policy.json`, exactly
-  `{ "media": { "svg": "image/svg+xml", ... } }`, each lowercase extension a player may fetch with the one media type
-  it is served as, and the `migrations/qti/snapshot.json` its own grizzle config generated. `import` and `export` then
-  build `Qti` with the policy, whose laws the database alone judges: every address a player fetches is a path to a
-  file of the package, with an extension the policy lists; no address is a `data:` one; no `style` holds `url(`,
-  `@import`, `image-set(`, `src(` or a CSS escape; and no foreign markup is kept. A reference that names a document,
-  such as a manifest's or an item ref's `href`, is held only to name a file of the package. Each entry's `digest`,
-  the SHA-256 of its bytes that PostgreSQL computes, is what such an install serves the file by.
-  `grizzle.config.ts` installs this package's own `Qti` whatever the setting says.
+
+Package-media mode is no setting of pantry's: an application lists `QtiMedia` (or a level of its own over it) in its
+grizzle config and writes its policy as `MediaType` rows, one per entry of its `policy.json`. The database alone
+judges its laws: every address a player fetches is a path to a file of the package, with an extension a `MediaType`
+row lists; no address is a `data:` one; no `style` holds `url(`, `@import`, `image-set(`, `src(` or a CSS escape; no
+foreign markup is kept; and every entry is used. Each entry's `digest`, the SHA-256 of its bytes that PostgreSQL
+computes, is what such an application serves the file by.
 
 ## Development
 
