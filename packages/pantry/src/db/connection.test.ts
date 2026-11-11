@@ -212,18 +212,22 @@ const ports = [
 const longestInstalled = "a".repeat(63 - "__".length - roleNameOf(rootLogin, {}).length);
 
 /**
- * `GR8DES_PG_DATABASE`: unset or empty is `gr8des_qti`, and a name is kept exactly when it is 1 to
- * 63 lowercase letters, digits or underscores, not starting with a digit. A name past
- * {@link longestInstalled} grizzle refuses at the role's name.
+ * `GR8DES_PG_DATABASE`: unset or empty is `gr8des_qti`, and a name is kept exactly when it is a
+ * lowercase letter, then at most 62 lowercase letters, digits or underscores, with no `__` and not
+ * starting with `pg_`. Every kept name is a role prefix grizzle accepts, its roles within 63 bytes
+ * as far as {@link longestInstalled}, so the scratch folders name each one's role by `roleNameOf`.
  */
 const databases = [
   unset("gr8des_qti"),
   kept("empty", "", "gr8des_qti"),
   kept("the swarm's", "gr8des_qti_swarm", "gr8des_qti_swarm"),
-  kept("one underscore", "_", "_"),
+  kept("one letter", "a", "a"),
   kept("the longest installed", longestInstalled, longestInstalled),
   refused<string>("an uppercase letter", "Gr8des_qti"),
   refused<string>("a leading digit", "8des"),
+  refused<string>("a leading underscore", "_gr8des_qti"),
+  refused<string>("a doubled underscore", "gr8des__qti"),
+  refused<string>("PostgreSQL's reserved pg_", "pg_qti"),
   refused<string>("64 bytes", "a".repeat(64)),
   refused<string>("a hyphen", "gr8-des"),
 ] as const;
@@ -281,7 +285,8 @@ type Reached = "built" | "malformed" | "no CA";
 
 /**
  * The scratch folders a run reads: `HOME`, with the default CA and a password file for every
- * database name the script keeps, and the folders `GRIZZLE_PG_STATE` and `GR8DES_PG_SECRETS` name.
+ * database name the script keeps, and the folders `GRIZZLE_PG_STATE` and `GR8DES_PG_SECRETS` name,
+ * the latter with the login's password file in each kept database's installation.
  */
 interface Scratch {
   readonly caFile: string;
@@ -343,17 +348,18 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
   yield* fs.makeDirectory(scratch.stateWithout, { recursive: true });
   yield* fs.writeFileString(scratch.caFile, namedCa);
   yield* fs.makeDirectory(scratch.secrets, { recursive: true });
-  yield* fs.writeFileString(`${scratch.secrets}/${loginRole}.password`, `  ${secretsPassword}  \n`);
 
   for (const database of databases) {
     if (Option.isSome(database.value)) {
       const folder = `${scratch.home}/.local/var/gr8des/${database.value.value}`;
+      const role = roleNameOf(rootLogin, { rolePrefix: database.value.value });
 
       yield* fs.makeDirectory(folder, { recursive: true });
       yield* fs.writeFileString(
-        `${folder}/${roleNameOf(rootLogin, { rolePrefix: database.value.value })}.password`,
+        `${folder}/${role}.password`,
         `${homePassword(database.value.value)}\n`,
       );
+      yield* fs.writeFileString(`${scratch.secrets}/${role}.password`, `  ${secretsPassword}  \n`);
     }
   }
 
@@ -597,11 +603,11 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
           ctx,
           exhaust(
             {
-              box: "the 9 database variants under 3 CA folders and 2 secrets folders, the 10 port variants under 3 CA folders, and the 4 host variants, each other setting unset",
+              box: "the 12 database variants under 3 CA folders and 2 secrets folders, the 10 port variants under 3 CA folders, and the 4 host variants, each other setting unset",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<Reached>(["built", "malformed", "no CA"]),
               generator: settingsOf,
-              limit: 88,
+              limit: 106,
               literal: Formatter.format,
               oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
               suite: "db/connection/settings",

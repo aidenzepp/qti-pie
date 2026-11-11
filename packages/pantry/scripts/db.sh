@@ -9,7 +9,9 @@
 #                              exit 1 if any, 2 if it cannot list them, else 0
 #
 # The database's name is its installation's role prefix (src/db/connection.ts), so grizzle names every role here.
-# GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
+# GR8DES_PG_DATABASE must be a lowercase letter, then at most 62 lowercase letters, digits or underscores, with no __
+# and not starting with pg_ (DatabaseName in src/db/connection.ts), or every command exits 2. grizzle refuses a role
+# the prefix takes past 63 bytes where it names the role.
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
 # src/db/connection.ts does. A run that exits otherwise than 0, whatever it printed, or prints nothing gives no
@@ -34,8 +36,8 @@ cd "$(dirname "$0")/.."
 export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS GR8DES_PG_MIGRATION_ROLE
 config="${GR8DES_GRIZZLE_CONFIG:-grizzle.config.ts}"
 
-if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
-	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use 1 to 63 lowercase letters, digits or underscores, not starting with a digit (create folds an unquoted name to lowercase, but migrate connects as written)." >&2
+if [[ ! $GR8DES_PG_DATABASE =~ ^[a-z][a-z0-9_]{0,62}$ || $GR8DES_PG_DATABASE == *__* || $GR8DES_PG_DATABASE == pg_* ]]; then
+	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use a lowercase letter, then at most 62 lowercase letters, digits or underscores, with no __ and not starting with pg_ (create folds an unquoted name to lowercase, but migrate connects as written, and the name is the role prefix of every role grizzle installs here, which __ parts from each role's stem and PostgreSQL refuses to start with pg_)." >&2
 	exit 2
 fi
 

@@ -125,19 +125,26 @@ export type PasswordCommandError =
   | PasswordCommandTimedOut;
 
 /**
- * A database name scripts/db.sh accepts: 1 to 63 lowercase letters, digits or underscores, not
- * starting with a digit, the rule at the top of that script.
+ * A database name scripts/db.sh accepts, which is also its installation's role prefix: a lowercase
+ * letter, then at most 62 lowercase letters, digits or underscores, with no `__` and not starting
+ * with `pg_`, the rule at the top of that script.
  *
- * PostgreSQL folds an unquoted name to lowercase and truncates one past 63 bytes, so `db.sh
- * create`, which writes the name unquoted, would make another database than the one a connection
- * names as written.
+ * - The name leads every cluster role grizzle installs for the database, `<prefix>__<stem>`, so it
+ *   holds no `__`, which parts the prefix from the stem; it starts with a letter, as grizzle's
+ *   prefix must; and it does not start with `pg_`, which PostgreSQL reserves for roles. A role the
+ *   prefix takes past PostgreSQL's 63 bytes is refused where the role is named, by grizzle's
+ *   `roleNameOf` ({@link installedRoleOf}), since only a login's stem fixes its length.
+ * - PostgreSQL folds an unquoted name to lowercase and truncates one past 63 bytes, so `db.sh
+ *   create`, which writes the name unquoted, would make another database than the one a connection
+ *   names as written.
  *
  * @see https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+ * @see https://www.postgresql.org/docs/current/sql-createrole.html
  */
 const DatabaseName = Schema.String.check(
-  Schema.isPattern(/^[a-z_][a-z0-9_]{0,62}$/u, {
+  Schema.isPattern(/^(?!pg_)(?!.*__)[a-z][a-z0-9_]{0,62}$/u, {
     message:
-      "Use 1 to 63 lowercase letters, digits or underscores, not starting with a digit, so that scripts/db.sh creates the database this connection names",
+      "Use a lowercase letter, then at most 62 lowercase letters, digits or underscores, with no __ and not starting with pg_, so that scripts/db.sh creates the database this connection names and grizzle accepts the name as the installation's role prefix",
   }),
 );
 
