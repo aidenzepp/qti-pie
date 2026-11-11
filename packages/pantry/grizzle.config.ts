@@ -30,9 +30,9 @@ const synchronousFiles = FileSystem.layerNoop({
 
 /**
  * Build the migration identity's connection to the cluster from its settings and CA
- * (`#pantry/db/connection.ts`), each time grizzle asks for it. Only `grizzle migrate` and `grizzle
- * drift` ask, so `generate`, `check` and `names` read no setting of the cluster's and no CA, and
- * run where no cluster's state folder is. Only `migrate` and `drift` read the password, at each
+ * (`#pantry/db/connection.ts`), each time grizzle asks for it. Only the commands that reach an
+ * installation ask, so `generate`, `check` and `names` read no setting of the cluster's and no CA,
+ * and run where no cluster's state folder is. Only those that connect read the password, at each
  * connection attempt, running `GR8DES_PG_PASSWORD_COMMAND` where it is set.
  *
  * Grizzle calls it synchronously. A setting or a CA this cannot read throws, and grizzle refuses

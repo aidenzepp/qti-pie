@@ -144,7 +144,7 @@ describe.skipIf(!hasLease)("qti/roles.db.test.ts, on the lease", () => {
       // Bound: one stored table, the four statements, one case.
       Effect.gen(function* authorPrivileges() {
         const client = yield* loginSession;
-        const verdicts = yield* privilegesOf(client, [`SET LOCAL ROLE ${authorRole}`]);
+        const verdicts = yield* privilegesOf(client, [`SET LOCAL ROLE ${yield* authorRole}`]);
 
         assert.deepStrictEqual(verdicts, {
           delete: { code: "42501", rows: 0 },

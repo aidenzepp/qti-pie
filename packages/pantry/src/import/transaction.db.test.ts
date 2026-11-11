@@ -59,10 +59,13 @@ const boxTimeoutMs = 900_000;
  * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
  * author role, closed with its scope: a direct reader of the catalog and the tables.
  */
-const authorSession = loginSession.pipe(
-  Effect.tap((client) => sessionRows(client, `SET ROLE ${authorRole}`)),
-  Effect.orDie,
-);
+const authorSession = Effect.gen(function* authorSession() {
+  const client = yield* loginSession;
+
+  yield* sessionRows(client, `SET ROLE ${yield* authorRole}`);
+
+  return client;
+}).pipe(Effect.orDie);
 
 /**
  * Run one statement on a session and return its rows; a failure is the test's defect.

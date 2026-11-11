@@ -9,12 +9,12 @@ import {
   login,
   relation,
   role as worldRole,
-  roleNameOf,
   schema,
   uuid,
   wholeEntriesOf,
 } from "@bjornpagen/grizzle";
-import type { AnyLogin, DbConnection } from "@bjornpagen/grizzle";
+import type { DbConnection } from "@bjornpagen/grizzle";
+import { roleNameOf } from "@bjornpagen/grizzle/runtime";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -61,58 +61,34 @@ const testTimeoutMs = 60_000;
 const work = fileURLToPath(new URL("../../work/", import.meta.url));
 
 /**
- * The one relation of a scratch installation, which its root holds and every role reads.
+ * A scratch installation, as small as grizzle builds one: one relation, read by one role.
  */
-const Probe = relation("Probe", { id: uuid }, ["id"]);
+const ProbeRoot = schema("ConnectionProbe", { Probe: relation("Probe", { id: uuid }, ["id"]) }, []);
 
 /**
- * A scratch installation's root.
- */
-const ProbeRoot = schema("ConnectionProbe", { Probe }, []);
-
-/**
- * A level over the scratch root, with nothing of its own.
- */
-const ProbeLevel = schema.extend(ProbeRoot, "ConnectionLevel", {}, []);
-
-/**
- * The scratch installation's login over its root, the one whose connection the settings' cases
- * build.
+ * The scratch installation's login, whose connection the cases build.
  */
 const rootLogin = login(ProbeRoot, "app", [
   worldRole(ProbeRoot, "reader", wholeEntriesOf(ProbeRoot)),
 ]);
 
 /**
- * Two logins of one name, by the level each is over: the scratch root's, and one over the level
- * above it. grizzle names a login's PostgreSQL role by the level it is over (README, "Levels"), so
- * the two roles differ, and the level's spells nothing of the root's name.
- *
- * @see https://github.com/bjornpagen/grizzle/blob/eb56d58bb3191b6645f1334dc55f63c7a73c2dc4/README.md#levels
+ * The scratch login's installed role on the default database, which names the password file its
+ * connection reads.
  */
-const loginsByLevel: Readonly<Record<"level" | "root", AnyLogin>> = {
-  level: login(ProbeLevel, "app", [worldRole(ProbeLevel, "reader", wholeEntriesOf(ProbeRoot))]),
-  root: rootLogin,
-};
+const loginRole = roleNameOf(rootLogin, { rolePrefix: "gr8des_qti" });
 
 /**
- * The root login's installed role, which names the password file its connection reads.
+ * The scratch login's connection, built from the settings a case provides.
  */
-const loginRole = roleNameOf(rootLogin);
+const rootConnection = loginConnection.pipe(Effect.map((connectionOf) => connectionOf(rootLogin)));
 
 /**
- * The root login's connection, built from the settings a case provides.
- */
-const rootConnection = loginConnection.pipe(
-  Effect.map((connectionOf) => connectionOf(roleNameOf(rootLogin))),
-);
-
-/**
- * The root login's connection as the runtime's layer builds it, running the password command
+ * The scratch login's connection as the runtime's layer builds it, running the password command
  * before any attempt where one is set.
  */
 const primedRootConnection = primedLoginConnection.pipe(
-  Effect.flatMap((connectionOf) => connectionOf(roleNameOf(rootLogin))),
+  Effect.flatMap((connectionOf) => connectionOf(rootLogin)),
 );
 
 /**
@@ -230,15 +206,22 @@ const ports = [
 ] as const;
 
 /**
+ * The longest database whose name, as its role prefix, leaves the scratch login's role within 63
+ * bytes.
+ */
+const longestInstalled = "a".repeat(63 - "__".length - roleNameOf(rootLogin, {}).length);
+
+/**
  * `GR8DES_PG_DATABASE`: unset or empty is `gr8des_qti`, and a name is kept exactly when it is 1 to
- * 63 lowercase letters, digits or underscores, not starting with a digit.
+ * 63 lowercase letters, digits or underscores, not starting with a digit. A name past
+ * {@link longestInstalled} grizzle refuses at the role's name.
  */
 const databases = [
   unset("gr8des_qti"),
   kept("empty", "", "gr8des_qti"),
   kept("the swarm's", "gr8des_qti_swarm", "gr8des_qti_swarm"),
   kept("one underscore", "_", "_"),
-  kept("63 bytes", "a".repeat(63), "a".repeat(63)),
+  kept("the longest installed", longestInstalled, longestInstalled),
   refused<string>("an uppercase letter", "Gr8des_qti"),
   refused<string>("a leading digit", "8des"),
   refused<string>("64 bytes", "a".repeat(64)),
@@ -368,7 +351,7 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
 
       yield* fs.makeDirectory(folder, { recursive: true });
       yield* fs.writeFileString(
-        `${folder}/${loginRole}.password`,
+        `${folder}/${roleNameOf(rootLogin, { rolePrefix: database.value.value })}.password`,
         `${homePassword(database.value.value)}\n`,
       );
     }
@@ -683,6 +666,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                 for (const connection of [loginSide, migration]) {
                   assert.strictEqual(connection.driver, pg);
                   assert.strictEqual(connection.database, database);
+                  assert.strictEqual(connection.rolePrefix, database);
                   assert.strictEqual(connection.transport.kind, "sslRequest");
                   assert.strictEqual(connection.transport.host, host);
                   assert.strictEqual(connection.transport.servername, host);
@@ -1147,69 +1131,6 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   Result.isSuccess(built) ? built.success.connectTimeoutMs : undefined,
                   networkTimeoutMs + timeout.value.value,
                 );
-              }),
-          ),
-        );
-      }),
-  );
-
-  it.effect(
-    "reads a login's password, from its file or from the password command, for the role grizzle installs for the login: a login over the root and one of the same name over a level, each by file and by command, exhausted",
-    (ctx) =>
-      Effect.gen(function* passwordsByRole() {
-        const fs = yield* FileSystem.FileSystem;
-        const scratch = yield* scratchFolders;
-        const [, printing] = commandScripts;
-
-        yield* fs.writeFileString(`${scratch.secrets}/${printing.file}`, printing.text);
-        yield* fs.chmod(`${scratch.secrets}/${printing.file}`, 0o755);
-        for (const each of Object.values(loginsByLevel)) {
-          const role = roleNameOf(each);
-
-          yield* fs.writeFileString(`${scratch.secrets}/${role}.password`, `password of ${role}\n`);
-        }
-
-        return yield* searched(
-          ctx,
-          exhaust(
-            {
-              box: "a login over the root and one of the same name over a level, each by its password file and by the password command",
-              caseHang: Duration.seconds(10),
-              coverage: requiredInSpace<"command" | "file">(["command", "file"]),
-              generator: (source) => ({
-                at: source.draw(element(["root", "level"] as const)),
-                from: source.draw(element(["file", "command"] as const)),
-              }),
-              limit: 4,
-              literal: Formatter.format,
-              oracle: {
-                kind: "specification",
-                name: "grizzle's roleNameOf, the role scripts/db.sh migrate gives each login its password for",
-              },
-              suite: "db/connection/login-roles",
-            },
-            ({ at, from }, c) =>
-              Effect.gen(function* oneCase() {
-                const each = loginsByLevel[at];
-                const role = roleNameOf(each);
-                const environment: Environment = {
-                  GR8DES_PG_SECRETS: scratch.secrets,
-                  HOME: scratch.home,
-                };
-                if (from === "command") {
-                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/${printing.file}`;
-                }
-
-                c.note(from);
-
-                const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
-                const connectionOf = yield* loginConnection.pipe(Effect.provide(provider));
-                const read = yield* passwordText(connectionOf(roleNameOf(each)).password).pipe(
-                  Effect.result,
-                  Effect.provide(provider),
-                );
-
-                assert.deepStrictEqual(read, Result.succeed(`password of ${role}`), role);
               }),
           ),
         );

@@ -13,7 +13,8 @@
  * stored row before it writes, a replacement, is the database owner's: the migration identity's
  * session, which owns every table and deletes there ({@link judgedReplacement}).
  */
-import { roleNameOf, schemaNameOf } from "@bjornpagen/grizzle";
+import { schemaNameOf } from "@bjornpagen/grizzle";
+import { roleNameOf } from "@bjornpagen/grizzle/runtime";
 import type { AnyRelation, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert } from "@effect/vitest";
@@ -41,16 +42,15 @@ import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
 
 /**
- * The author login's PostgreSQL role, the one its session logs in as.
+ * The author role's PostgreSQL role in the lease's installation, the one a direct writer's `SET
+ * ROLE` names, which holds SELECT and INSERT on every table of `Qti` it writes whole, every stored
+ * relation's, and no UPDATE or DELETE, since it writes by its insert list (grizzle's README,
+ * "Exactly what a role holds").
  */
-const authorAppRole = roleNameOf(AuthorApp);
-
-/**
- * The author role's PostgreSQL role, the one a direct writer's `SET ROLE` names, which holds SELECT
- * and INSERT on every table of `Qti` it writes whole, every stored relation's, and no UPDATE or
- * DELETE, since it writes by its insert list (grizzle's README, "Exactly what a role holds").
- */
-export const authorRole = roleNameOf(Author);
+export const authorRole = migrationConnection.pipe(
+  Effect.flatMap((connection) => Effect.try(() => roleNameOf(Author, connection))),
+  Effect.provide(NodeFileSystem.layer),
+);
 
 /**
  * The author role's own PostgreSQL schema, which holds a view of each of its relations.
@@ -104,9 +104,10 @@ const sessionOf = (connection: DbConnection, user: string, password: string) => 
  * with its scope: a direct SQL writer.
  */
 export const loginSession = Effect.gen(function* loginSession() {
-  const connection = (yield* loginConnection)(authorAppRole);
+  const connection = (yield* loginConnection)(AuthorApp);
+  const role = yield* Effect.try(() => roleNameOf(AuthorApp, connection));
 
-  return yield* sessionOf(connection, authorAppRole, yield* passwordText(connection.password));
+  return yield* sessionOf(connection, role, yield* passwordText(connection.password));
 }).pipe(Effect.provide(NodeFileSystem.layer));
 
 /**
@@ -479,7 +480,9 @@ const judgedAfter = (
  *   read's rows, none where the server refused; fails with any other failure.
  */
 export const judgedCase = (client: Client, of: Case) =>
-  judgedAfter(client, [{ text: `SET ROLE ${authorRole}`, values: [] }], of);
+  authorRole.pipe(
+    Effect.flatMap((role) => judgedAfter(client, [{ text: `SET ROLE ${role}`, values: [] }], of)),
+  );
 
 /**
  * Judge a replacement as the database owner, on the migration identity's session

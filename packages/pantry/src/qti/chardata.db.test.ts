@@ -93,7 +93,7 @@ const castTo = (client: Client, domain: string, text: string) =>
     yield* rowsOf(client, "BEGIN");
 
     const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+      yield* rowsOf(client, `SET LOCAL ROLE ${yield* authorRole}`);
       yield* rowsOf(client, `SELECT $1::${domain} AS value`, [text]);
     }).pipe(
       Effect.as(Option.none<DatabaseError>()),
@@ -118,7 +118,7 @@ const castTo = (client: Client, domain: string, text: string) =>
 const admittedBy = (client: Client, domain: string, texts: readonly string[]) =>
   Effect.gen(function* admitted() {
     yield* rowsOf(client, "BEGIN");
-    yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+    yield* rowsOf(client, `SET LOCAL ROLE ${yield* authorRole}`);
 
     const rows = yield* rowsOf<{ readonly admitted: boolean; readonly text: string }>(
       client,

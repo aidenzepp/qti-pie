@@ -12,7 +12,7 @@
  */
 import type { AnyLogin } from "@bjornpagen/grizzle";
 import { compileServed } from "@bjornpagen/grizzle/compile";
-import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import { DbLayer, served } from "@bjornpagen/grizzle/runtime";
 import type { ServedLogin } from "@bjornpagen/grizzle/runtime";
 import { Context, Effect, Layer } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
@@ -54,7 +54,7 @@ export const servedProbe = <const L extends AnyLogin>(probe: L) => {
       const connectionOf = yield* loginConnection;
 
       return Layer.mergeAll(
-        DbLayer.make({ ...connectionOf(roleNameOf(asAuthor)), login: asAuthor, pool: probePool }),
+        DbLayer.make({ ...connectionOf(asAuthor), login: asAuthor, pool: probePool }),
         Layer.succeed(AuthorLogin, asAuthor),
         Layer.succeed(ProbeLogin, served<L>(file, probe.name)),
       );

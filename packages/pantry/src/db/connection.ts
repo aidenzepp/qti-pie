@@ -5,9 +5,9 @@
  * src/db/layer.ts).
  */
 import net from "node:net";
-import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
-import { CredentialError } from "@bjornpagen/grizzle/runtime";
-import type { DbConnection, Transport } from "@bjornpagen/grizzle/runtime";
+import type { AnyLogin, MigrationConnectionConfig } from "@bjornpagen/grizzle";
+import { CredentialError, roleNameOf } from "@bjornpagen/grizzle/runtime";
+import type { DbConnection, ServedLogin, Transport } from "@bjornpagen/grizzle/runtime";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -459,7 +459,8 @@ const primedPassword = Effect.fnUntraced(function* primedPassword(
  * Read the cluster's settings and its CA, as every connection to it is built from them: TCP to the
  * host and port, verify-full TLS against the CA file, whose server certificate must name the host
  * (grizzle's development CA names `localhost`, `127.0.0.1` and `::1`), node-postgres as the driver,
- * and the connect timeout {@link connectTimeoutMsOf} gives the settings' password command.
+ * the database's name as the role prefix, so each database is an installation of its own, and the
+ * connect timeout {@link connectTimeoutMsOf} gives the settings' password command.
  *
  * The CA is read through Effect's `FileSystem`, whichever the caller provides: Node's
  * (`NodeFileSystem.layer`) for a login's connection, and for the migration identity's a
@@ -493,6 +494,7 @@ const clusterConnection = Effect.gen(function* clusterConnection() {
       connectTimeoutMs: connectTimeoutMsOf(command),
       database: cluster.database,
       driver: pg,
+      rolePrefix: cluster.database,
       transport,
     },
     migrationRole: cluster.migrationRole,
@@ -554,17 +556,32 @@ const filePassword = (
   );
 
 /**
+ * Name the PostgreSQL role an installation installs for a login, as grizzle's `roleNameOf` names
+ * it, in the error channel: grizzle throws its `CompileError` for a role prefix it refuses and for
+ * a role the prefix takes past PostgreSQL's 63 bytes, and no password names a role it cannot name,
+ * so either is the connection attempt's `CredentialError`, with grizzle's error as its cause.
+ *
+ * @param login - The login, an authoring one or a served one.
+ * @param installation - The connection, whose `rolePrefix` names the installation.
+ * @returns The role.
+ */
+const installedRoleOf = <L>(
+  login: AnyLogin | ServedLogin<L>,
+  installation: Parameters<typeof roleNameOf>[1],
+): Effect.Effect<string, CredentialError> =>
+  Effect.try({
+    catch: (cause) => new CredentialError({ cause }),
+    try: () => roleNameOf(login, installation),
+  });
+
+/**
  * Read the cluster's settings and its CA, and give from them each login's connection to the
  * cluster, for its `DbLayer`: the cluster's connection with the login's password at each
  * connection attempt, from the password command where `GR8DES_PG_PASSWORD_COMMAND` names one, run
  * for the login's role, else the one scripts/db.sh gave the login, read from
  * `<GR8DES_PG_SECRETS>/<role>.password`. `<role>` is the PostgreSQL role grizzle installs for the
- * login (`roleNameOf`), the one `scripts/db.sh migrate` sets the password on and names the file
- * after.
- *
- * The caller names the login by its role, `roleNameOf(login)`: the served login's
- * (`@bjornpagen/grizzle/runtime`, read from its served file) or an authoring login's for a test,
- * so this module reads no login of grizzle's.
+ * login in this connection's installation, the one `scripts/db.sh migrate` sets the password on
+ * and names the file after: `roleNameOf(login, connection)`.
  *
  * A missing password, a password file absent or a command that fails, is not found here: it fails
  * each connection attempt with grizzle's `CredentialError`, whose cause is the command's
@@ -580,12 +597,14 @@ export const loginConnection = Effect.gen(function* loginConnection() {
   const fs = yield* FileSystem.FileSystem;
   const { command, connection, secrets } = yield* clusterConnection;
 
-  return (role: string): DbConnection => ({
+  return <L>(login: AnyLogin | ServedLogin<L>): DbConnection => ({
     ...connection,
-    password: Option.match(command, {
-      onNone: () => filePassword(fs, secrets, role),
-      onSome: (passwordCommand) => attemptPassword(passwordCommand, role),
-    }),
+    password: Effect.flatMap(installedRoleOf(login, connection), (role) =>
+      Option.match(command, {
+        onNone: () => filePassword(fs, secrets, role),
+        onSome: (passwordCommand) => attemptPassword(passwordCommand, role),
+      }),
+    ),
   });
 }).pipe(Effect.withSpan("db.loginConnection"));
 
@@ -604,12 +623,16 @@ export const primedLoginConnection = Effect.gen(function* primedLoginConnection(
   const fs = yield* FileSystem.FileSystem;
   const { command, connection, secrets } = yield* clusterConnection;
 
-  return (role: string): Effect.Effect<DbConnection, PasswordCommandError> =>
-    Option.match(command, {
-      onNone: () => Effect.succeed({ ...connection, password: filePassword(fs, secrets, role) }),
-      onSome: (passwordCommand) =>
-        primedPassword(passwordCommand, role).pipe(
-          Effect.map((password): DbConnection => ({ ...connection, password })),
-        ),
-    });
+  return <L>(
+    login: AnyLogin | ServedLogin<L>,
+  ): Effect.Effect<DbConnection, PasswordCommandError | CredentialError> =>
+    Effect.flatMap(installedRoleOf(login, connection), (role) =>
+      Option.match(command, {
+        onNone: () => Effect.succeed({ ...connection, password: filePassword(fs, secrets, role) }),
+        onSome: (passwordCommand) =>
+          primedPassword(passwordCommand, role).pipe(
+            Effect.map((password): DbConnection => ({ ...connection, password })),
+          ),
+      }),
+    );
 }).pipe(Effect.withSpan("db.primedLoginConnection"));

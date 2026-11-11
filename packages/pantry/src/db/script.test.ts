@@ -137,7 +137,7 @@ const runScript = Effect.fn("test.dbScript.run")(function* runScript(
  * printed, as src/db/connection.ts's `PasswordCommandFailed` refuses it, and one that exits 0 with
  * nothing but whitespace as its `PasswordCommandSilent` does. Every subcommand refuses through the
  * same `as_owner`, so each command is run through `create`, which loads no config, and the first
- * through `check-clear` too, whose refusal exits 2 after loading the config's roles.
+ * through `check-clear` too, whose refusal exits 2 after `grizzle roles` lists the installation's.
  */
 const refusedCommands = [
   {

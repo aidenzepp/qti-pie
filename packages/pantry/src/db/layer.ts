@@ -1,5 +1,5 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { DbLayer, roleNameOf, served } from "@bjornpagen/grizzle/runtime";
+import { DbLayer, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { primedLoginConnection } from "#pantry/db/connection.ts";
@@ -52,7 +52,7 @@ export const AuthorAppLayer = Layer.unwrap(
       Effect.mapError((reason) => new ServedLoadError({ path: servedPath, reason })),
     );
     const login = served<AuthorAppLogin>(file, "author_app");
-    const connection = yield* connectionOf(roleNameOf(login));
+    const connection = yield* connectionOf(login);
 
     return Layer.merge(
       DbLayer.make({ ...connection, login, pool: authorAppPool }),

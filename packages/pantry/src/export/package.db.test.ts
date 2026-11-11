@@ -195,7 +195,7 @@ const scanTextOf = Effect.gen(function* scanText() {
 const shownPlanOf = (client: Client, text: string, document: string) =>
   Effect.gen(function* shownPlan() {
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY");
-    yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+    yield* rowsOf(client, `SET LOCAL ROLE ${yield* authorRole}`);
 
     const rows = yield* rowsOf<{ readonly "QUERY PLAN": unknown }>(
       client,

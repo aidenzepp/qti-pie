@@ -40,12 +40,16 @@ verify-full TLS only. Build and start it from the grizzle clone (`pnpm pg:build`
 ```sh
 scripts/db.sh create    # database gr8des_qti from grizzle_template, owned by grizzle_dev
 scripts/db.sh migrate   # grizzle migrate, then give each login its local password
-scripts/db.sh reset     # drop the database and this package's roles, then create and migrate
+scripts/db.sh reset     # grizzle uninstall (or create, where the database is missing), then migrate
+scripts/db.sh drop      # grizzle uninstall, then drop the database and its password folder
+scripts/db.sh check-clear  # list this installation's roles (grizzle roles) and database left on the cluster
 ```
 
-Login passwords live outside the repo in `~/.local/var/gr8des/<database>/<role>.password`. PostgreSQL roles are
-cluster-wide, so a grizzle schema name is one installation per cluster: the cluster holds at most one installation of
-the Qti schema at a time, and no schema name is one grizzle's own tests use.
+Login passwords live outside the repo in `~/.local/var/gr8des/<database>/<role>.password`. Each database is an
+installation of its own: its `rolePrefix` is the database's name (`packages/pantry/src/db/connection.ts`), so every
+cluster role grizzle installs there is `<database>__<stem>`, and two databases hold the Qti schema at once without
+sharing a role. `grizzle roles` lists an installation's roles and `grizzle uninstall` drops its schemas, roles and
+data; `scripts/db.sh` names no role itself. No schema name is one grizzle's own tests use.
 
 ## grizzle
 
@@ -215,8 +219,8 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
 
 The shared machine resource rules below bind every stage:
 
-- Every delivery spec has a `Resources` part: which units need the database, how they avoid the cluster-wide role
-  collision, and the cleanup its phase ends with.
+- Every delivery spec has a `Resources` part: which units need the database, which database each uses, and the
+  cleanup its phase ends with.
 - Every slice states whether it needs a database.
 - `factory` ends every phase with the cleanup and the size report, and records both in the ledger.
 
@@ -271,8 +275,7 @@ after every step, but never leave it for someone else.
 - Parallel work uses git worktrees under `.worktrees/<slice>` in this repo, or under `.claude/worktrees/` when Claude
   Code's subagent isolation creates them. Both are ignored by git, and both count toward the limit. Never create a
   worktree anywhere else, `/tmp` included.
-- At most 10 exist at once in each checkout, slice and merge worktrees together. Only one seat holds the database at a time (see below),
-  so worktrees that need no database are the ones that run in parallel.
+- At most 10 exist at once in each checkout, slice and merge worktrees together.
 - A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
   orchestrator runs `git worktree prune` and confirms `git worktree list` shows only active slices at the end of every
   phase.
@@ -285,10 +288,10 @@ after every step, but never leave it for someone else.
   `initdb` outside grizzle's `scripts/pg/init.sh`, open another port, or use Docker.
 - At most one database per active worktree, named `gr8des_qti_<slice>`, created from `grizzle_template` and dropped when
   its worktree is removed. The orchestrator lists `gr8des_%` databases at the end of every phase and drops any without
-  an active worktree.
-- Roles are cluster-wide: two worktrees cannot install the same grizzle schema at the same time, because the second
-  collides on its role names. So one seat at a time holds a database. The plan must still say how parallel slices that
-  need the database avoid the collision (one lease at a time) before any of them run.
+  an active worktree with `scripts/db.sh drop`, so its roles go with it.
+- Each database is its own installation, its role prefix its own name, so slices that need the database run in
+  parallel, each on its own `gr8des_qti_<slice>`. After a drop, `scripts/db.sh check-clear` shows none of its roles
+  left.
 
 **Disk.**
 

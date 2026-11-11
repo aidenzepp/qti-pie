@@ -825,7 +825,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               `SELECT id, at FROM ${authorViews}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
             ];
             yield* rowsOf(client, "BEGIN");
-            yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+            yield* rowsOf(client, `SET LOCAL ROLE ${yield* authorRole}`);
             yield* rowsOf(client, "SET LOCAL enable_seqscan = off");
             yield* rowsOf(client, "SET LOCAL enable_bitmapscan = off");
 

@@ -3,16 +3,12 @@
 #
 #   scripts/db.sh create    create the database from grizzle_template, owned by the migration identity
 #   scripts/db.sh migrate   grizzle migrate, then give each of this package's logins its local password
-#   scripts/db.sh reset     drop, then create and migrate again
-#   scripts/db.sh drop      drop the database, the PostgreSQL roles the config installs and the password directory
-#   scripts/db.sh check-clear  list the config's roles left on the cluster and gr8des_qti databases other than this
-#                              one; exit 1 if any, 2 if it cannot list them, else 0
+#   scripts/db.sh reset     grizzle uninstall where the database exists, then create and migrate
+#   scripts/db.sh drop      grizzle uninstall where the database exists, then drop it and the password directory
+#   scripts/db.sh check-clear  list the installation's roles (grizzle roles) and the database left on the cluster;
+#                              exit 1 if any, 2 if it cannot list them, else 0
 #
-# Roles are cluster-wide, so drop removes the config's roles along with the database. Each role is named by grizzle's
-# roleNameOf over the config's logins and their roles, the installer's own naming, which names a login by the level of
-# the installation it is over: one name per role the config installs, never a pattern over a schema's name. A role an
-# earlier installation made for a login the config no longer names (one renamed or removed while the migrations were
-# regenerated from zero) is not found: grizzle lists no installation's roles on the cluster.
+# The database's name is its installation's role prefix (src/db/connection.ts), so grizzle names every role here.
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
@@ -20,8 +16,7 @@
 # password, and the command stops before psql starts. It then replaces the migration identity's password file, and
 # migrate gives no login a local password, since every login's comes from the command too. This script runs it before
 # psql starts, with no bound; grizzle migrate runs it with GR8DES_PG_PASSWORD_COMMAND_TIMEOUT's.
-# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose logins name every
-# role the other commands find.
+# GR8DES_GRIZZLE_CONFIG names the grizzle config every grizzle command runs (grizzle.config.ts by default).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -81,32 +76,32 @@ as_owner() {
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# Prints the PostgreSQL role of each login the config installs, one per line, and with "all" each role a login reaches
-# as well: the names grizzle's roleNameOf gives them, read from the config's own logins, as `grizzle migrate` reads
-# them. Loading the config reads no state of the cluster's and connects nowhere: grizzle builds the config's connection
-# only for migrate and drift.
-# Usage: installed_roles logins|all
-installed_roles() {
-	node --input-type=module -e '
-		import { pathToFileURL } from "node:url";
-		import { roleNameOf } from "@bjornpagen/grizzle";
-		const [file, which] = process.argv.slice(1);
-		const { default: config } = await import(pathToFileURL(file).href);
-		for (const login of config.logins) {
-			console.log(roleNameOf(login));
-			if (which === "all") {
-				for (const { role } of Object.values(login.roles)) {
-					console.log(roleNameOf(role));
-				}
-			}
-		}
-	' "$(realpath "$config")" "$1"
+# The installation's roles, comma-joined for an array literal: '{<roles>}'.
+installation_roles() {
+	pnpm exec grizzle roles "$config" | paste -sd , -
+}
+
+# Exits 1 where the database is missing; stops the script where the cluster cannot be read.
+exists() {
+	local found
+	found="$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")" || exit
+	[[ -n "$found" ]]
+}
+
+# Usage: as_migration migrate|uninstall. Only this is given the migration identity's password, unless
+# GR8DES_PG_PASSWORD_COMMAND gives every role its own.
+as_migration() {
+	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
+		pnpm exec grizzle "$1" "$config"
+		return
+	fi
+	local password
+	password="$(owner_password)"
+	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle "$1" "$config"
 }
 
 create() {
-	local exists
-	exists="$(as_owner postgres -c "SELECT 1 FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE'")"
-	if [[ -n "$exists" ]]; then
+	if exists; then
 		echo "$GR8DES_PG_DATABASE: exists"
 		return
 	fi
@@ -115,20 +110,15 @@ create() {
 }
 
 # grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
-# the settings exported above and the migration identity's password, which only this command is given, or runs
-# GR8DES_PG_PASSWORD_COMMAND for it, which also gives every login its password, so no login gets a local one.
+# the settings exported above. A password command gives every login its password, so no login gets a local one.
 migrate() {
-	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
-		pnpm exec grizzle migrate "$config"
-		return
-	fi
-	local password
-	password="$(owner_password)"
-	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle migrate "$config"
+	as_migration migrate
+	[[ -z "${GR8DES_PG_PASSWORD_COMMAND:-}" ]] || return 0
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
-	local logins login file
-	logins="$(installed_roles logins)"
+	local roles logins login file
+	roles="$(installation_roles)"
+	logins="$(as_owner postgres -c "SELECT rolname FROM pg_roles WHERE rolcanlogin AND rolname = ANY ('{$roles}')")"
 	for login in $logins; do
 		file="$GR8DES_PG_SECRETS/$login.password"
 		[[ -f "$file" ]] || (umask 077 && openssl rand -hex 24 > "$file")
@@ -138,33 +128,24 @@ migrate() {
 }
 
 drop() {
-	local roles role
-	roles="$(installed_roles all)"
+	! exists || as_migration uninstall
 	as_owner postgres -c "DROP DATABASE IF EXISTS $GR8DES_PG_DATABASE WITH (FORCE)"
-	for role in $roles; do
-		as_owner postgres -c "DROP ROLE IF EXISTS $role"
-	done
 	rm -rf "$GR8DES_PG_SECRETS"
 }
 
+# Keeps the password files, which migrate sets on the new login roles.
 reset() {
-	drop
+	! exists || as_migration uninstall
 	create
 	migrate
 }
 
 # Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
 check_clear() {
-	local roles role names=""
-	roles="$(installed_roles all)" || return 2
-	for role in $roles; do
-		names="${names:+$names, }'$role'"
-	done
-	local found
-	found="$(
-		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname IN ($names) ORDER BY rolname" &&
-			as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
-	)" || return 2
+	local roles found
+	roles="$(installation_roles)" || return 2
+	found="$(as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname = ANY ('{$roles}')
+		UNION ALL SELECT 'database: ' || datname FROM pg_database WHERE datname = '$GR8DES_PG_DATABASE' ORDER BY 1")" || return 2
 	if [[ -n "$found" ]]; then
 		echo "$found"
 		return 1
