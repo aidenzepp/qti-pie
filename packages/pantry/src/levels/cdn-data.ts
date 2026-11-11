@@ -1,7 +1,10 @@
 /**
- * The single-CDN level's data rule, `CdnData`: no address uses the `data:` scheme, so no value
- * carries a payload. It reads three sets of values, each a relation the level derives from `Qti`
- * and a check named `CdnData` over it:
+ * The data rule, `<Level>Data`, which the single-CDN level states as `CdnData` and the
+ * package-media level as `MediaData`: no address uses the `data:` scheme, so no value carries a
+ * payload. It is stated once, here, and each level states it under its own name ({@link dataRule}),
+ * so the two levels share one rule and neither carries a copy. It reads three sets of values, each
+ * a relation the level derives from `Qti` and a check named for the level over it (the names below
+ * are the `Cdn` level's; the `Media` level's start `Media`):
  *
  * - `CdnDataUriAttribute`: every attribute whose domain under its element's governor is an
  *   `xs:anyURI`'s, links and identifiers included, judged whole by {@link dataScheme}. An attribute
@@ -20,16 +23,19 @@
  * `CdnData` check that no row of it meets.
  *
  * A `srcset`'s candidates and a media URL are fetched fields, typed `URLDType` rather than
- * `xs:anyURI`, which `CdnOrigin` holds to the origin (`#pantry/levels/cdn-origin.ts`).
+ * `xs:anyURI`, which `CdnOrigin` holds to the origin (`#pantry/levels/cdn-origin.ts`) and
+ * `MediaPath` to a relative path to a file of the package (`#pantry/levels/media-path.ts`).
  *
- * The rule is stated at the `Cdn` level (`singleCdn`, `#pantry/levels/cdn.ts`) as derived
- * relations over `Qti` and checks over them, never as a law of `Qti` itself: a check on `Attribute`
- * or `Node` at a level above `Qti` is `LevelRefused`, and a check over a derived relation is a
- * deferred trigger on the tables its query reads (GOAL L3, G4).
+ * The rule is stated at a level above `Qti` (`singleCdn`, `#pantry/levels/cdn.ts`, and
+ * `packageMedia`, `#pantry/levels/media.ts`) as derived relations over `Qti` and checks over them,
+ * never as a law of `Qti` itself: a check on `Attribute` or `Node` at a level above `Qti` is
+ * `LevelRefused`, and a check over a derived relation is a deferred trigger on the tables its query
+ * reads (GOAL L3, G4).
  *
  * @see {@link https://url.spec.whatwg.org/#concept-basic-url-parser | URL Standard, the basic URL parser}
  */
 import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
+import { Record as Rec } from "effect";
 import {
   AttributeGrammar,
   AttributeModelOf,
@@ -128,20 +134,21 @@ const addressListsOf = (base: QtiSchema) =>
   });
 
 /**
- * Build the data rule for one base level: the relations it derives from the base, by name, and a
- * `CdnData` check over each. The rule reads no origin: a `data:` address is refused whatever the
- * CDN.
+ * Build the data rule for one base level and one level's name: the relations it derives from the
+ * base, each named for the level, and a check named `<level>Data` over each. The rule reads no
+ * origin and no policy: a `data:` address is refused whatever the level serves.
  *
  * @param base - The level the derived relations read, pantry's `Qti`.
- * @param _origin - The origin the CDN serves, as the level's options hold it.
- * @returns The relations and statements the rule adds to the `Cdn` level.
+ * @param level - The name of the level that states the rule, `Cdn` or `Media`, which starts the
+ *   name of each relation and of the check.
+ * @returns The relations and statements the rule adds to that level.
  */
-export const cdnDataRule = (base: QtiSchema, _origin: string) => {
-  const CdnDataUriAttribute = derived("CdnDataUriAttribute", uriAttributesOf(base));
-  const CdnDataAddressList = derived("CdnDataAddressList", addressListsOf(base));
+export const dataRule = <const Level extends string>(base: QtiSchema, level: Level) => {
+  const uriAttribute = derived(`${level}DataUriAttribute`, uriAttributesOf(base));
+  const addressList = derived(`${level}DataAddressList`, addressListsOf(base));
 
-  const CdnDataUriText = derived(
-    "CdnDataUriText",
+  const uriText = derived(
+    `${level}DataUriText`,
     query(base).rule((r) => {
       const { governor, id, stringValue, version } = v(Node, "node");
 
@@ -152,8 +159,8 @@ export const cdnDataRule = (base: QtiSchema, _origin: string) => {
     }),
   );
 
-  const CdnDataUriTextEntity = derived(
-    "CdnDataUriTextEntity",
+  const uriTextEntity = derived(
+    `${level}DataUriTextEntity`,
     query(base).rule((r) => {
       const { id, kind, parentGovernor, version } = v(Node, "node");
 
@@ -169,19 +176,24 @@ export const cdnDataRule = (base: QtiSchema, _origin: string) => {
     }),
   );
 
+  const name = `${level}Data` as const;
+
   return {
-    relations: { CdnDataAddressList, CdnDataUriAttribute, CdnDataUriText, CdnDataUriTextEntity },
+    relations: {
+      ...Rec.singleton(addressList.name, addressList),
+      ...Rec.singleton(uriAttribute.name, uriAttribute),
+      ...Rec.singleton(uriText.name, uriText),
+      ...Rec.singleton(uriTextEntity.name, uriTextEntity),
+    },
     statements: [
-      check("CdnData", CdnDataUriAttribute, (a) =>
+      check(name, uriAttribute, (a) =>
         a.and(a.eq(a.entities, 0n), a.not(Compute.matches(a.lexical, dataSchemeMatch))),
       ),
-      check("CdnData", CdnDataAddressList, (a) =>
+      check(name, addressList, (a) =>
         a.and(a.eq(a.entities, 0n), a.not(Compute.matches(a.lexical, dataTokenMatch))),
       ),
-      check("CdnData", CdnDataUriText, (n) =>
-        n.not(Compute.matches(n.stringValue, dataSchemeMatch)),
-      ),
-      check("CdnData", CdnDataUriTextEntity, (n) => n.ne(n.kind, "entityRef")),
+      check(name, uriText, (n) => n.not(Compute.matches(n.stringValue, dataSchemeMatch))),
+      check(name, uriTextEntity, (n) => n.ne(n.kind, "entityRef")),
     ] as const,
   };
 };

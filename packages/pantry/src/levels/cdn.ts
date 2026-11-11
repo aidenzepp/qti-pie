@@ -6,15 +6,18 @@
  * and takes none of the base's away, so a package the level accepts is one `Qti` accepts (GOAL G4).
  * Its four rules are policy, not QTI: they live outside `docs/spec-readings.md` and pantry's law
  * table, each in a module of its own, stated as derived relations over `Qti` and checks over them
- * (GOAL L3). A refusal by one of them names level `Cdn` and the check's name: `CdnOrigin`,
- * `CdnData`, `CdnStyle` or `CdnForeign`.
+ * (GOAL L3). Three of them, the data, style and foreign-markup rules, are stated once for any level
+ * and named for it, so the package-media level (`packageMedia`, `#pantry/levels/media.ts`) states
+ * the same three as `MediaData`, `MediaStyle` and `MediaForeign` rather than a copy of each. A
+ * refusal by one of them names level `Cdn` and the check's name: `CdnOrigin`, `CdnData`, `CdnStyle`
+ * or `CdnForeign`.
  */
 import { schema } from "@bjornpagen/grizzle";
 import { Schema } from "effect";
-import { cdnDataRule } from "#pantry/levels/cdn-data.ts";
-import { cdnForeignRule } from "#pantry/levels/cdn-foreign.ts";
+import { dataRule } from "#pantry/levels/cdn-data.ts";
+import { foreignRule } from "#pantry/levels/cdn-foreign.ts";
 import { cdnOriginRule } from "#pantry/levels/cdn-origin.ts";
-import { cdnStyleRule } from "#pantry/levels/cdn-style.ts";
+import { styleRule } from "#pantry/levels/cdn-style.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
@@ -55,10 +58,10 @@ export const CdnOptions = Schema.Struct({ origin: CdnOrigin });
  */
 const buildCdn = (base: QtiSchema, origin: string) => {
   const rules = {
-    data: cdnDataRule(base, origin),
-    foreign: cdnForeignRule(base, origin),
+    data: dataRule(base, "Cdn"),
+    foreign: foreignRule(base, "Cdn"),
     origin: cdnOriginRule(base, origin),
-    style: cdnStyleRule(base, origin),
+    style: styleRule(base, "Cdn"),
   };
 
   return schema.extend(

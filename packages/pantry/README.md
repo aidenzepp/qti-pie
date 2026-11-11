@@ -52,6 +52,9 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `singleCdn` | function | The refuse-only `Cdn` level over a base level, for one CDN origin |
 | `CdnOptions` | schema | Decodes `singleCdn`'s options, `{ origin }`. Its type is `typeof CdnOptions.Type` |
 | `CdnLevel` | type | The `Cdn` level's type, which an app's own level extends |
+| `packageMedia` | function | The refuse-only `Media` level over a base level, for a package that serves its own media |
+| `MediaOptions` | schema | Decodes `packageMedia`'s options, `{ media: { <extension>: <media type> } }`. Its type is `typeof MediaOptions.Type` |
+| `MediaLevel` | type | The `Media` level's type, which an app's own level extends |
 | `parsePackage` | program | Reads and parses a package once, without a database, and succeeds with a `ParseVerdict` |
 | `importPackage` | program | Stores a package, and succeeds with an `ImportVerdict` |
 | `previewPackage` | program | Reads and checks a package without a database, and succeeds with a `PreviewVerdict` |

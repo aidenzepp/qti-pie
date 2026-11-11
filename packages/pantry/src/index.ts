@@ -7,7 +7,9 @@
  * Schema and access: `qti` builds pantry's `Qti` level on its first call and returns that one value
  * after, `authorRole` and `authorLogin` give the author role and the `author_app` login over it,
  * and `singleCdn` builds the refuse-only `Cdn` level over a base, its options decoded with the
- * `CdnOptions` schema (there is no `CdnOptions` type: read it as `typeof CdnOptions.Type`). The
+ * `CdnOptions` schema (there is no `CdnOptions` type: read it as `typeof CdnOptions.Type`), and
+ * `packageMedia` builds the refuse-only `Media` level over a base, its options decoded with the
+ * `MediaOptions` schema (read as `typeof MediaOptions.Type`). The
  * published relations (`Package`, `Entry`, `Document`, `TestDocument`, `Named`, `Section`,
  * `TestFlag`, `SectionSelection`, `SectionMember`, `ItemRefDocument`, `DeclarationIdentifier`,
  * `ReferencePath` and the `BaseType` roster) are the ones an app's own level references, and
@@ -91,6 +93,10 @@ export type { PackageSource, ParsedPackage } from "#pantry/import/parsed.ts";
 export type { CdnLevel } from "#pantry/levels/cdn.ts";
 
 export { CdnOptions, singleCdn } from "#pantry/levels/cdn.ts";
+
+export type { MediaLevel } from "#pantry/levels/media.ts";
+
+export { MediaOptions, packageMedia } from "#pantry/levels/media.ts";
 
 export type { AssembleError } from "#pantry/model/assemble.ts";
 

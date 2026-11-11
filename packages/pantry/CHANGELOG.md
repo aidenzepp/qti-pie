@@ -92,6 +92,30 @@ point](#moving-an-app-to-the-entry-point) says what replaces each.
   and `CdnForeign`, each a `kind: "above"` refusal at level `Cdn`. `CdnOrigin`, `CdnData` and `CdnStyle` also refuse
   a value they read that keeps an entity reference, since a player may expand it to an address they never saw.
 
+- `packageMedia(base, options)` builds the refuse-only `Media` level over a base level, for one roster of media
+  extensions. `MediaOptions` decodes its options, `{ media: { <extension>: <media type> } }`: at least one lowercase
+  extension, each with one lowercase media type and no parameter, and each media type under one extension, such as
+  `{ "media": { "svg": "image/svg+xml", "png": "image/png" } }`. Its type is `typeof MediaOptions.Type`. `MediaLevel`
+  is the level's type. The roster's media types state no law: they are what the app serves each extension's files
+  with, so two rosters of the same extensions give one level. The level refuses a package that makes a player fetch
+  anything but a file of the package with a listed extension, or that holds a file nothing names, each a
+  `kind: "above"` refusal at level `Media`, under the rules:
+  - `MediaPath`: every fetched address resolves to an entry of the package (its `ReferencePath` or
+    `TextReferencePath`), is written as a relative path (no scheme, no leading `/` or `\`), and keeps no entity
+    reference.
+  - `MediaType`: the entry each fetched address resolves to has an extension the roster lists, matched
+    case-sensitively.
+  - `MediaEntryUsed`: every entry is the manifest, a document, or a path a reference resolves to.
+  - `MediaData`, `MediaStyle` and `MediaForeign`: the `Cdn` level's `CdnData`, `CdnStyle` and `CdnForeign`, one rule
+    each, stated for this level under its own names. Each also refuses a value it reads that keeps an entity
+    reference.
+
+  The level replaces the package-media install of the policy mode (`policy.json`, `MediaPolicySchema` and
+  `qtiSchema(Option.some(policy))`). An app decodes its policy with `MediaOptions` instead, builds
+  `packageMedia(qti(), options)`, and reads a refusal's level `Media` and its rule names where it read `media-path`,
+  `media-type`, `media-data`, `media-style`, `media-foreign` and `entry-used`. A level is a PostgreSQL schema of its
+  own, so the app regenerates its migration and served file.
+
 ### The published relations
 
 These relations, their keys and their published fields are new, and are the contract `publishedRelations` records

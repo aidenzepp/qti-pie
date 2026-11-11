@@ -2,7 +2,8 @@
  * Grizzle's own check run in a child process, and the configuration files it reads, as the free
  * suite's compile witnesses use them: `src/test/compile.test.ts` over `grizzle.config.ts`, each CDN
  * rule's test (`src/levels/cdn-*.test.ts`) over an installation whose top level is the `Cdn` level,
- * and `src/qti/limits.test.ts` over a probe schema of its own.
+ * the package-media level's (`src/levels/media.test.ts`) over one whose top level is the `Media`
+ * level, and `src/qti/limits.test.ts` over a probe schema of its own.
  *
  * The witnesses spawn `grizzle check` because grizzle exports no compile function to this package:
  * the engine's compiler is no declared dependency of pantry, and the CLI is the supported way in.
@@ -114,6 +115,39 @@ export default defineConfig({
   logins: [authorLogin(qti())],
   migrations: ${JSON.stringify(path.join(packageDirectory, "migrations"))},
   schemas: [singleCdn(qti(), { origin: ${JSON.stringify(origin)} })],
+});
+`,
+  );
+
+/**
+ * Write the configuration of an installation whose top level is the `Media` level over `Qti` for
+ * one roster, with the author's login and the committed migrations, as `grizzle.config.ts`
+ * configures `Qti`, through {@link writtenConfig}.
+ *
+ * @param folder - The folder's name under `work/`, one per test file, so files running at once
+ *   never share one.
+ * @param media - The roster the level is built for, each extension with its media type.
+ * @returns The configuration file's path.
+ */
+export const writtenMediaConfig = (folder: string, media: Readonly<Record<string, string>>) =>
+  writtenConfig(
+    folder,
+    () => `import { defineConfig } from "@bjornpagen/grizzle";
+import { Effect } from "effect";
+import { connectionServices, migrationConnection } from "#pantry/db/connection.ts";
+import { packageMedia } from "#pantry/levels/media.ts";
+import { authorLogin } from "#pantry/qti/logins.ts";
+import { qti } from "#pantry/qti/schema.ts";
+
+const connection = await Effect.runPromise(
+  migrationConnection.pipe(Effect.provide(connectionServices)),
+);
+
+export default defineConfig({
+  connection: () => connection,
+  logins: [authorLogin(qti())],
+  migrations: ${JSON.stringify(path.join(packageDirectory, "migrations"))},
+  schemas: [packageMedia(qti(), { media: ${JSON.stringify(media)} })],
 });
 `,
   );

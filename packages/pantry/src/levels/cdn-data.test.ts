@@ -33,7 +33,7 @@ import {
   TextDomain,
   ValueDomainOf,
 } from "#pantry/grammar/install.ts";
-import { cdnDataRule, dataScheme, dataToken, uriDomains } from "#pantry/levels/cdn-data.ts";
+import { dataRule, dataScheme, dataToken, uriDomains } from "#pantry/levels/cdn-data.ts";
 import { singleCdn } from "#pantry/levels/cdn.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
@@ -129,7 +129,7 @@ const cdnDataRelations = (laws: readonly Law[]): readonly string[] =>
     .flatMap((law) => (law.kind === "check" && law.name === "CdnData" ? [law.relation] : []))
     .toSorted();
 
-describe("cdnDataRule", () => {
+describe("dataRule", () => {
   it(
     "states CdnData over each of the level's own derived relations, and no law over a Qti relation",
     () => {
@@ -233,7 +233,7 @@ describe("an entity reference in a judged value", () => {
     // Oracle: decision 488 and the case above. Evidence without a database: the patterns admit the
     // kept form, so each check must judge the row's count of kept references, which each relation
     // of attributes then carries.
-    const { relations } = cdnDataRule(Qti, origin);
+    const { relations } = dataRule(Qti, "Cdn");
 
     for (const relation of [relations.CdnDataUriAttribute, relations.CdnDataAddressList]) {
       assert.include(
@@ -349,7 +349,7 @@ const relationsOfForm = {
   none: [],
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
-describe("cdnDataRule, #55's fields", () => {
+describe("dataRule, #55's fields", () => {
   it("selects each of #55's xs:anyURI attributes and texts by its domain, its address list by name, and none of its other values", () => {
     // Oracle: #55's CDN data case (`src/qti/cdn.test.ts` at `b340be09`), which judged each of these
     // fields under the reading its form states and left a `none` value free. Here against what the

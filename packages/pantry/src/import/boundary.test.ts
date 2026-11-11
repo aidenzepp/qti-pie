@@ -70,7 +70,7 @@ const xmlSide = [
  * report with its law catalog and the committed law-name dictionary (`vocab/law-names.json`). The
  * listing queries and the published relations (`api/list.ts`, `api/published.ts`,
  * `export/listing.ts`), the reading of a refusal by a level above Qti (`import/above.ts`) and the
- * single-CDN level (`levels/`) read only this side.
+ * single-CDN and package-media levels (`levels/`) read only this side.
  *
  * `xml/oracle.ts` is the grammar's own `xmllint` harness, which only tests reach and which imports
  * no module of pantry's.
@@ -227,7 +227,7 @@ const crossings: ByStep = [
   // single entry (decision 495's D3), re-exports the PostgreSQL side's public parts beside the XML
   // side's, pantry-api's goal 1: the author role and login builders (D1), the served login
   // (decision 496's M2), the listing queries and the published relations (decision 503), the
-  // export's row counts and the single-CDN level (D2). At S11 it splits with filling, and filling's
+  // export's row counts, the single-CDN level (D2) and the package-media level. At S11 it splits with filling, and filling's
   // part reads pantry through its `exports`.
   [
     "S11",
@@ -287,6 +287,7 @@ const crossings: ByStep = [
       "index.ts: #pantry/db/served.ts",
       "index.ts: #pantry/export/pages.ts",
       "index.ts: #pantry/levels/cdn.ts",
+      "index.ts: #pantry/levels/media.ts",
       "index.ts: #pantry/qti/logins.ts",
       "index.ts: #pantry/qti/roles.ts",
       "model/assemble.ts: #pantry/grammar/kinds.ts",

@@ -1,13 +1,16 @@
 /**
- * The single-CDN level's style rule, `CdnStyle`: no `style` attribute holds CSS that makes the
+ * The style rule, `<Level>Style`, which the single-CDN level states as `CdnStyle` and the
+ * package-media level as `MediaStyle`, stated once, here, under each level's name
+ * ({@link styleRule}): no `style` attribute holds CSS that makes the
  * player fetch ({@link styleFetch}), in any case, or a backslash, which begins a CSS escape. A
  * style that keeps an entity reference is refused too: crust keeps one only where its declaration
  * may sit in the external subset, which it never reads, while a player that reads the subset
  * expands it, so the kept form may hide a `url(` the pattern never sees.
  *
- * The rule is stated at the `Cdn` level (`singleCdn`, `#pantry/levels/cdn.ts`), never as a law of
- * `Qti`: a derived relation over `Qti` selects the `style` attributes, each with its lexical form,
- * and a `CdnStyle` check over it judges that form. A check over a derived relation is a deferred
+ * The rule is stated at a level above `Qti` (`singleCdn`, `#pantry/levels/cdn.ts`, and
+ * `packageMedia`, `#pantry/levels/media.ts`), never as a law of `Qti`: a derived relation over
+ * `Qti` selects the `style` attributes, each with its lexical form, and a check named for the level
+ * over it judges that form. A check over a derived relation is a deferred
  * trigger on each table its query reads, so a `Qti` write meets it at commit and a process over
  * `Qti` alone compiles none of it.
  *
@@ -15,6 +18,7 @@
  * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/README.md#L1866-L1950
  */
 import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
+import { Record as Rec } from "effect";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
@@ -56,11 +60,11 @@ const stylesOf = (base: QtiSchema) =>
   });
 
 /**
- * Build the style rule for one base level: the derived relation over the base it judges, by name,
- * and a `CdnStyle` check over it.
+ * Build the style rule for one base level and one level's name: the derived relation over the base
+ * it judges, named for the level, and a check named `<level>Style` over it.
  *
- * - `CdnStyleAttribute`: the `style` attributes, each held to keep no entity reference and to hold no
- *   text {@link styleFetch} matches.
+ * - `<level>StyleAttribute`: the `style` attributes, each held to keep no entity reference and to
+ *   hold no text {@link styleFetch} matches.
  *
  * The check is a trigger's violation query, and grizzle compiles a match in a query only over a
  * text whose type bounds its bytes within what PostgreSQL's regular expressions read: an
@@ -68,17 +72,18 @@ const stylesOf = (base: QtiSchema) =>
  * pattern is #55's, matched as it stands.
  *
  * @param base - The level the derived relation reads, pantry's `Qti`.
- * @param _origin - The origin the CDN serves, as the level's options hold it; the rule reads none.
- * @returns The relations and statements the rule adds to the `Cdn` level.
+ * @param level - The name of the level that states the rule, `Cdn` or `Media`, which starts the
+ *   name of the relation and of the check.
+ * @returns The relations and statements the rule adds to that level.
  */
-export const cdnStyleRule = (base: QtiSchema, _origin: string) => {
+export const styleRule = <const Level extends string>(base: QtiSchema, level: Level) => {
   const fetch = Compute.pattern(styleFetch);
-  const CdnStyleAttribute = derived("CdnStyleAttribute", stylesOf(base));
+  const styleAttribute = derived(`${level}StyleAttribute`, stylesOf(base));
 
   return {
-    relations: { CdnStyleAttribute },
+    relations: Rec.singleton(styleAttribute.name, styleAttribute),
     statements: [
-      check("CdnStyle", CdnStyleAttribute, (f) =>
+      check(`${level}Style`, styleAttribute, (f) =>
         f.and(f.eq(f.entities, 0n), f.not(Compute.matches(f.value, fetch))),
       ),
     ] as const,

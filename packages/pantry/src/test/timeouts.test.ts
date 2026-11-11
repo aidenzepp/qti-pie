@@ -168,6 +168,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its lawsOf case ran 79.6 s, 102.8 s, 115.8 s and 265.7 s, the slowest at a load average of 31 to 63, and its installation compile ran 53.7 s to 136.6 s, the slowest at a load average of 24 to 59, in pa1-16's runs of 2026-11-10, after which the load average fell to 12 to 13 and stayed there; its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/levels/media.test.ts",
+    "measurement owed: its lawsOf case and its installation compile follow cdn-data.test.ts's, over a level of six rules rather than four, and have not run; its 600_000 and 360_000 stay in place until they are remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/index.startup.test.ts",
     "measurement owed: its fresh-process case ran past cliProcessTestTimeoutMs's 10 s at a load average of 40 to 58, and ran 2.1 s alone, in the pa1-tidy merge's runs of 2026-11-10 (decision 497), then 1.3 s, 2.7 s and 1.5 s alone at 42 to 54 and 8.9 s in the free suite at 57.0 to 58.9 in pa1-r12's runs of 2026-11-10, never at 60 or more throughout (decision 490); its 30_000 stays in place until it is remeasured at a load average of at least 60",
   ],

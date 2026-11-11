@@ -1,13 +1,16 @@
 /**
- * The single-CDN level's foreign-markup rule, `CdnForeign`: no markup pantry keeps but cannot
+ * The foreign-markup rule, `<Level>Foreign`, which the single-CDN level states as `CdnForeign` and
+ * the package-media level as `MediaForeign`, stated once, here, under each level's name
+ * ({@link foreignRule}): no markup pantry keeps but cannot
  * interpret, which could carry an address no other rule reads. No foreign element, of any of the
  * three namespace classes (`foreignKinds` of `#pantry/grammar/kinds.ts`), and no attribute of an
  * open class but `data-*`, so no `foreign`, `no-namespace` or `own-namespace` attribute. A `data-*`
  * attribute is kept: HTML gives it no meaning and no user agent fetches from it.
  *
- * The rule is stated at the `Cdn` level (`singleCdn`, `#pantry/levels/cdn.ts`), never as a law of
- * `Qti`: two derived relations over `Qti` select the markup it refuses, each with the class or kind
- * that makes it so, and a `CdnForeign` check over each holds of no row they select. A check over a
+ * The rule is stated at a level above `Qti` (`singleCdn`, `#pantry/levels/cdn.ts`, and
+ * `packageMedia`, `#pantry/levels/media.ts`), never as a law of `Qti`: two derived relations over
+ * `Qti` select the markup it refuses, each with the class or kind that makes it so, and a check
+ * named for the level over each holds of no row they select. A check over a
  * derived relation is a deferred trigger on each table its query reads, so a `Qti` write meets it
  * at commit and a process over `Qti` alone compiles none of it.
  *
@@ -15,6 +18,7 @@
  * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/README.md#L1866-L1950
  */
 import { check, derived, query, v } from "@bjornpagen/grizzle";
+import { Record as Rec } from "effect";
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Node } from "#pantry/qti/node.ts";
@@ -61,26 +65,32 @@ const foreignElementsOf = (base: QtiSchema) =>
   });
 
 /**
- * Build the foreign-markup rule for one base level: the derived relations over the base it judges,
- * by name, and a `CdnForeign` check over each, whose condition, that the row's class or kind is not
- * one the rule refuses, no row the relation selects meets, so every such row is refused.
+ * Build the foreign-markup rule for one base level and one level's name: the derived relations over
+ * the base it judges, each named for the level, and a check named `<level>Foreign` over each, whose
+ * condition, that the row's class or kind is not one the rule refuses, no row the relation selects
+ * meets, so every such row is refused.
  *
- * - `CdnForeignAttribute`: the attributes of an open class but `data-*`;
- * - `CdnForeignElement`: the foreign elements.
+ * - `<level>ForeignAttribute`: the attributes of an open class but `data-*`;
+ * - `<level>ForeignElement`: the foreign elements.
  *
  * @param base - The level the derived relations read, pantry's `Qti`.
- * @param _origin - The origin the CDN serves, as the level's options hold it; the rule reads none.
- * @returns The relations and statements the rule adds to the `Cdn` level.
+ * @param level - The name of the level that states the rule, `Cdn` or `Media`, which starts the
+ *   name of each relation and of the check.
+ * @returns The relations and statements the rule adds to that level.
  */
-export const cdnForeignRule = (base: QtiSchema, _origin: string) => {
-  const CdnForeignAttribute = derived("CdnForeignAttribute", foreignAttributesOf(base));
-  const CdnForeignElement = derived("CdnForeignElement", foreignElementsOf(base));
+export const foreignRule = <const Level extends string>(base: QtiSchema, level: Level) => {
+  const foreignAttribute = derived(`${level}ForeignAttribute`, foreignAttributesOf(base));
+  const foreignElement = derived(`${level}ForeignElement`, foreignElementsOf(base));
+  const name = `${level}Foreign` as const;
 
   return {
-    relations: { CdnForeignAttribute, CdnForeignElement },
+    relations: {
+      ...Rec.singleton(foreignAttribute.name, foreignAttribute),
+      ...Rec.singleton(foreignElement.name, foreignElement),
+    },
     statements: [
-      check("CdnForeign", CdnForeignAttribute, (f) => f.not(f.in(f.name, uninterpretedClasses))),
-      check("CdnForeign", CdnForeignElement, (f) => f.not(f.in(f.kind, foreignElementKinds))),
+      check(name, foreignAttribute, (f) => f.not(f.in(f.name, uninterpretedClasses))),
+      check(name, foreignElement, (f) => f.not(f.in(f.kind, foreignElementKinds))),
     ] as const,
   };
 };

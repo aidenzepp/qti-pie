@@ -30,7 +30,7 @@ import { singleCdn } from "#pantry/levels/cdn.ts";
 import { uriDomains } from "#pantry/levels/cdn-data.ts";
 import { uninterpretedClasses } from "#pantry/levels/cdn-foreign.ts";
 import { fetchedNames } from "#pantry/levels/cdn-origin.ts";
-import { cdnStyleRule, styleFetch, styleName } from "#pantry/levels/cdn-style.ts";
+import { styleFetch, styleName, styleRule } from "#pantry/levels/cdn-style.ts";
 import { qti } from "#pantry/qti/schema.ts";
 import { grizzleCheck, writtenCdnConfig } from "#pantry/test/grizzle-check.ts";
 import { addedLaws } from "#pantry/test/level-laws.ts";
@@ -233,7 +233,7 @@ describe("levels/cdn-style.ts, the entity bypass", () => {
     // for its check.
     const kept = "color: red; background: &far;";
     const expanded = kept.replace("&far;", "url(https://elsewhere.example.test/a.png)");
-    const { relations } = cdnStyleRule(qti(), origin);
+    const { relations } = styleRule(qti(), "Cdn");
 
     assert.isFalse(new RegExp(styleFetch, "u").test(kept), `the pattern matches ${kept}`);
     assert.isTrue(
