@@ -423,8 +423,8 @@ CREATE VIEW "qti_queries__author"."manifest_id" ("document", "kind", "kind_name"
 SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."identifier"
 FROM "qti"."manifest_id" AS "r1";
 
-CREATE VIEW "qti_queries__author"."map_key" ("base_types", "case_text", "document", "folded", "key", "kind", "kind_name", "mapping", "matched", "nearest", "node", "start", "version", "version_name") AS
-SELECT "r1"."base_types", "r1"."case_text", "r1"."document", "r1"."folded", "r1"."key", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."mapping", "r1"."matched", "r1"."nearest", "r1"."node", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti_queries__author"."map_key" ("base_types", "case_text", "document", "folded", "key", "kind", "kind_name", "mapping", "nearest", "node", "start", "version", "version_name", "matched") AS
+SELECT "r1"."base_types", "r1"."case_text", "r1"."document", "r1"."folded", "r1"."key", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."mapping", "r1"."nearest", "r1"."node", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text", "r1"."matched"
 FROM "qti"."map_key" AS "r1";
 
 CREATE VIEW "qti_queries__author"."map_key_items" ("first", "gap", "key", "mapping", "node", "second", "ordered", "unordered") AS
@@ -735,8 +735,8 @@ CREATE VIEW "qti_queries__author"."rounding" ("document", "holds", "holds_name",
 SELECT "r1"."document", "r1"."holds", ("qti"."__rounding_holds_names_6j2zaayymp"())["r1"."holds" + 1]::"pg_catalog"."text", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."mode_written", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."rounding" AS "r1";
 
-CREATE VIEW "qti_queries__author"."rounding_figures" ("figures", "figures_lexical", "node") AS
-SELECT "r1"."figures", "r1"."figures_lexical", "r1"."node"
+CREATE VIEW "qti_queries__author"."rounding_figures" ("figures_lexical", "node", "figures") AS
+SELECT "r1"."figures_lexical", "r1"."node", "r1"."figures"
 FROM "qti"."rounding_figures" AS "r1";
 
 CREATE VIEW "qti_queries__author"."rounding_mode" ("kind", "kind_name", "mode", "mode_written", "node") AS
