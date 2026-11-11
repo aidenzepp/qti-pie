@@ -14,7 +14,7 @@
  *
  * {@link readPackage} judges no law: what it refuses is what the reader, the container and the codec
  * refuse, and every law is the database's, met when `importPackage` (`#pantry/import/package.ts`)
- * writes the package. Nothing here reaches the author login (`#pantry/qti/own-login.ts`), whose
+ * writes the package. Nothing here reaches the author login (`#pantry/qti/logins.ts`), whose
  * workload grizzle builds when that module is evaluated.
  */
 import { Array as Arr, Brand, Effect, Option, Order } from "effect";
