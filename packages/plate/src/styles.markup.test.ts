@@ -1128,6 +1128,31 @@ const magnifiedTrees = Effect.fnUntraced(function* magnifiedTrees(configuration:
 });
 
 /**
+ * The supports of a candidate who asks for keyword emphasis (A-23), every other support off.
+ */
+const emphasising: Supports = {
+  ...noSupports,
+  display: { ...noSupports.display, keywordEmphasis: true },
+};
+
+/**
+ * Render {@link choiceItem} in every state with keyword emphasis on, as a host does for a candidate
+ * who asks: the support-driven witness of the keyword-emphasis block (issue m5-11), whose rule
+ * keys on the Root's `data-keyword-emphasis` marker, which the Root hook writes under
+ * `supports.display.keywordEmphasis`, over text of the class `qti-keyword-emphasis`, which the
+ * item's body carries with every other body class. The redaction takes the same supports as the
+ * render, as the render contract asks.
+ *
+ * @param configuration The configuration.
+ * @returns The renders' trees.
+ */
+const emphasisedTrees = Effect.fnUntraced(function* emphasisedTrees(configuration: Configuration) {
+  const { trees } = yield* rendersOf(choiceItem, configuration, emphasising);
+
+  return trees;
+});
+
+/**
  * The text preferences with nothing set, which each display witness changes in one place.
  */
 const noText: TextPreferences = {
@@ -1230,7 +1255,8 @@ const readSheet = Effect.tryPromise(() =>
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
  * the navigation, the navigation of a timed test, a Choice with answer masking on, a Choice with a
- * magnification on and a Choice for each of the display witnesses.
+ * magnification on, a Choice with keyword emphasis on and a Choice for each of the display
+ * witnesses.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -1254,6 +1280,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...(yield* timedNavigationTrees(configuration)),
       ...(yield* maskedTrees(configuration)),
       ...(yield* magnifiedTrees(configuration)),
+      ...(yield* emphasisedTrees(configuration)),
       ...(yield* displayTrees(configuration)),
     ],
   };
