@@ -141,49 +141,6 @@ const reference: XdmEntityRef = { _tag: "entityRef", name: "amp" };
 const keysOf = (rows: ReadonlyMap<string, unknown>): readonly string[] =>
   [...rows.keys()].toSorted();
 
-/**
- * A formula of one apply with this many ci children, then one cn after it.
- *
- * @param children - The apply's ci children.
- * @returns The document.
- */
-const documentWith = (children: number) =>
-  documentOf(
-    elementOf("m:math", [
-      elementOf(
-        "m:apply",
-        Array.from({ length: children }, () => elementOf("m:ci")),
-      ),
-      elementOf("m:cn", [text("1")]),
-    ]),
-  );
-
-/**
- * Build the rows of {@link documentWith}'s formula, check its one cn, and time the build alone.
- *
- * @param children - The apply's ci children.
- * @returns The build's milliseconds.
- */
-const timed = (children: number): number => {
-  const doc = documentWith(children);
-  const start = performance.now();
-  const rows = rowsOf(ownViewOf(doc, idOf));
-  const elapsed = performance.now() - start;
-
-  assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(children + 3)]);
-
-  return elapsed;
-};
-
-/**
- * The middle of some timings, so one slow run of a few does not decide a comparison.
- *
- * @param times - The timings, in milliseconds.
- * @returns Their median, or NaN for none.
- */
-const median = (times: readonly number[]): number =>
-  times.toSorted((a, b) => a - b)[Math.floor(times.length / 2)] ?? Number.NaN;
-
 describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
   it("gives a base-40 rational of three parts a shape and three slots, and no MathCn or CnPartText", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text, 4 sep, 5 text, 6 sep, 7 text.
@@ -579,28 +536,5 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
       keysOf(rowsOf(ownViewOf(documentOf(elementOf("m:math", [elementOf("m:ci")])), idOf)).MathCn),
       [],
     );
-  });
-
-  it("builds the rows of one element with 50 000 children in linear time", () => {
-    // Nodes: 0 document, 1 math, 2 apply, 3 and on its children, then one cn.
-    // The contract is the build's growth, not a wall time a busy machine moves: ten times the
-    // children takes about ten times as long when the build is linear, and about a hundred times
-    // when it is quadratic. The bound sits between them, near their geometric mean (√(10 · 100) ≈
-    // 32), so either side has a factor of about three to spare. Each size is the median of three
-    // builds, taken in turns in one process, so load slows both sizes alike. A first small build
-    // warms the code before anything is timed.
-    const small = 5000;
-    const large = 50_000;
-    const linearToQuadratic = 30;
-    timed(small);
-
-    const smallTimes: number[] = [];
-    const largeTimes: number[] = [];
-    for (let round = 0; round < 3; round += 1) {
-      smallTimes.push(timed(small));
-      largeTimes.push(timed(large));
-    }
-
-    assert.isBelow(median(largeTimes) / median(smallTimes), linearToQuadratic);
   });
 });

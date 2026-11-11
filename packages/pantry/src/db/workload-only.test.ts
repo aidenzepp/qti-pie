@@ -24,9 +24,7 @@ const adHocOperations = ["apply", "compile", "execute", "explain", "get", "page"
 
 /**
  * Blank out a module's comments, keeping its strings whole, so a call a comment names counts for
- * nothing. The pattern writes its quotation marks and backtick as `\u0022`, `\u0027` and
- * `\u0060`, so `src/test/timeouts.test.ts`, which reads a regular expression literal as code,
- * reads this file to its end.
+ * nothing.
  *
  * @param source - The text of a TypeScript module.
  * @returns The text with every comment removed.

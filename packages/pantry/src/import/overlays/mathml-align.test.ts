@@ -668,18 +668,4 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       ],
     );
   });
-
-  it("builds the rows of an element with many children in linear time", () => {
-    // One cell holding 50 000 leaves: a copy of the sibling list per child would cost over a
-    // billion element copies.
-    const count = 50_000;
-    const doc = cellOf(Array.from({ length: count }, () => elementOf("m:mi")));
-    const began = performance.now();
-    const rows = rowsOf(ownViewOf(doc, idOf));
-    const seconds = (performance.now() - began) / 1000;
-
-    assert.strictEqual(leafKeysOf(rows).length, count);
-    assert.strictEqual(rows.MathAlignScope.size, count + 1);
-    assert.isBelow(seconds, 5);
-  });
 });

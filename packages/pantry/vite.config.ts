@@ -14,9 +14,7 @@ const databaseFiles = globSync("src/**/*.test.ts", { cwd: import.meta.dirname })
   )
   .toSorted();
 
-// Each project's testTimeout and hookTimeout is a hang guard, never a budget: the slowest test that
-// takes it ran 12.2 s at a load average of 83 on 2026-11-07, and every test slower than half of it
-// states its own (src/test/timeouts.test.ts holds both).
+// Each project's testTimeout and hookTimeout is a hang guard, never a budget.
 export default defineConfig({
   test: {
     // @grizzle/testing's setup draws the run seed every searched() test reads, or replays a given one.
