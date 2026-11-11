@@ -40,7 +40,12 @@ import type { OutcomeView } from "#plate/vocabulary.ts";
  * The author's inputs to one {@link renderTestContent}, each optional.
  *
  * `instance` is the token that scopes the block's id (`checkInstance` says what it may hold), drawn
- * as a lowercase UUID when absent. `assetBase` overrides the configuration's, and `parts` replaces
+ * as a lowercase UUID when absent, and the kit hands it to each module's `render` too, so a module
+ * confines a rule to the item's Root when the host passes the instance the item was rendered under.
+ * `files` is the host's reader of package-relative paths, none when the host holds no such file:
+ * plate reads no file itself, so a module that needs one (issue `m5-06`'s stylesheet) reads it
+ * through the kit's `files`, and with no `files` every path reads as none. `assetBase` overrides
+ * the configuration's, and `parts` replaces
  * the `test-content` Root through the swap invariant. `supports` and `view` are what each module's
  * `render` decides by, `noSupports` and the candidate's when absent. `outcomes` are the session's
  * outcome values, `session.outcomes`, which a printed variable in the content prints; with none, a
@@ -51,6 +56,7 @@ import type { OutcomeView } from "#plate/vocabulary.ts";
 export interface TestContentOptions {
   readonly assetBase?: string;
   readonly features?: TestFeatureTable;
+  readonly files?: (path: string) => Option.Option<string>;
   readonly instance?: string;
   readonly outcomes?: TestSession["outcomes"];
   readonly parts?: PartOverrides;
@@ -132,8 +138,17 @@ const payloadOf = (
 });
 
 /**
+ * The reader of package files a render uses when the host passed none: it holds no file, so every
+ * path reads as none.
+ *
+ * @returns None.
+ */
+const noFiles: TestContentRenderKit["files"] = () => Option.none();
+
+/**
  * Build the kit a module's `render` is handed: the emission of body nodes by the session's
- * outcomes, and the supports and the view the content is shown to.
+ * outcomes, the supports and the view the content is shown to, the host's reader of package files
+ * and the instance.
  *
  * `nodes` prints the body nodes through the item body's printer (`printNodes`), held to the
  * configuration's output budget, with a record that holds the outcomes and no template value, so a
@@ -145,6 +160,7 @@ const payloadOf = (
  * @param configuration The configuration, which gives the output budget and the locale.
  * @param instance The instance token.
  * @param outcomes The session's outcome values.
+ * @param files The host's reader of package-relative paths, or {@link noFiles}.
  * @returns The kit.
  */
 const kitOf = (
@@ -152,7 +168,10 @@ const kitOf = (
   configuration: Configuration,
   instance: string,
   outcomes: TestSession["outcomes"],
+  files: TestContentRenderKit["files"],
 ): TestContentRenderKit => ({
+  files,
+  instance,
   nodes: (nodes) => {
     const printed = printNodes(nodes, Option.some({ outcomes, templates: {} }), configuration);
     const copied = copyBodyNodes(printed, instance);
@@ -229,7 +248,13 @@ export const renderTestContent = (
       supports: options.supports ?? noSupports,
       view: options.view ?? defaultView,
     };
-    const kit = kitOf(state, configuration, instance, options.outcomes ?? {});
+    const kit = kitOf(
+      state,
+      configuration,
+      instance,
+      options.outcomes ?? {},
+      options.files ?? noFiles,
+    );
     const features = options.features ?? testFeatures;
     const elements = yield* Result.all(
       content.flatMap(({ key, node }) => {

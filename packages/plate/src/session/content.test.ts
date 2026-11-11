@@ -6,6 +6,7 @@ import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { BodyNode, PrintedVariable, TextEntryInteraction } from "#plate/model/item.ts";
+import { redact, render as renderItem } from "#plate/render.ts";
 import { renderTestContent } from "#plate/session/content.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { current, itemViews, startTest } from "#plate/session/start.ts";
@@ -543,6 +544,96 @@ describe("a test-feature module's content", () => {
           ).map((element) => element.tag),
           ["section", "h3"],
         );
+      }),
+  );
+});
+
+/**
+ * The model node of {@link landedStylesheet}: the package path its element names.
+ */
+interface StyleNode {
+  readonly href: string;
+}
+
+/**
+ * A test-level Stylesheet module as `m5-06` will land it, reduced to what the host's reader and the
+ * item's instance reach: it renders the rule the host's text for its path makes under the item
+ * Root's id, `#<scopedId(instance, "item")> <text>`, carried as the `data-rule` of a childless
+ * `style` element, since the serialiser refuses any child of one (`RawTextChildren`).
+ */
+const landedStylesheet: TestFeatureModule<"qti-stylesheet", StyleNode> = {
+  ...stub({
+    element: "qti-stylesheet",
+    feature: ["T-3"],
+    issue: "m5-06",
+    key: "qti-stylesheet",
+    namespace: qtiNamespace,
+  }),
+  implemented: true,
+  render: (node, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files(node.href), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
+};
+
+/**
+ * The host's reader of package files here: it holds the one file the landed module asks for.
+ *
+ * @param path A package-relative path.
+ * @returns The file's text, none for any other path.
+ */
+const holdsStyle = (path: string): Option.Option<string> =>
+  path === "style/test.css" ? Option.some("p { color: red }") : Option.none();
+
+/**
+ * Read the rules the `style` elements of a render carry, in document order.
+ *
+ * @param html The rendered HTML.
+ * @returns Each `style` element's `data-rule`.
+ */
+const rulesIn = (html: string): readonly string[] =>
+  [...html.matchAll(/<style data-rule="(?<rule>[^"]*)"><\/style>/gu)].map(
+    ({ groups }) => groups?.["rule"] ?? "",
+  );
+
+describe("renderTestContent, the host's files", () => {
+  it.effect(
+    "[W0-BH] hands a module's render the host's files and the item's instance, so its rule is confined to that item's Root",
+    () =>
+      Effect.gen(function* handsFiles() {
+        const configuration = yield* configure({});
+        const opened = yield* open("items/i1.xml", new TextEncoder().encode(itemXml("i1")));
+        const accepted = Option.getOrElse(acceptedItem(opened), () =>
+          assert.fail(`the item is ${opened.verdict}`),
+        );
+        const instance = "sitting.1";
+        const content: readonly TestContent[] = [
+          { key: "qti-stylesheet", node: { href: "style/test.css" } },
+        ];
+        const features: TestFeatureTable = [landedStylesheet];
+        const item = yield* Effect.fromResult(
+          renderItem(redact(accepted, undefined, configuration), configuration, { instance }),
+        );
+        const withFile = yield* Effect.fromResult(
+          renderTestContent(content, configuration, { features, files: holdsStyle, instance }),
+        );
+        const without = yield* Effect.fromResult(
+          renderTestContent(content, configuration, { features, instance }),
+        );
+        const rootId = /^<qti-assessment-item [^>]*\bid="(?<id>[^"]*)"/u.exec(item.html)?.groups?.[
+          "id"
+        ];
+
+        assert.strictEqual(rootId, scopedId(instance, "item"));
+        assert.match(withFile.html, /^<div [^>]*data-slot="test-content"/u);
+        assert.match(withFile.html, /^<div [^>]*id="sitting\.1-test-content"/u);
+        assert.strictEqual(withFile.instance, instance);
+        assert.deepStrictEqual(rulesIn(withFile.html), [`#${rootId} p { color: red }`]);
+        assert.deepStrictEqual(rulesIn(without.html), []);
+        assert.include(without.html, '<span data-stylesheet="none"></span>');
       }),
   );
 });

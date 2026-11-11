@@ -5,6 +5,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { ItemContentModule } from "#plate/content/contract.ts";
 import { attr, doc, el, qtiNamespace, text as sourceText } from "#plate/document/source.ts";
 import type { SourceDocument } from "#plate/document/source.ts";
+import { itemPart } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -26,6 +27,7 @@ import type { RedactRecord } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import type { HostFacts } from "#plate/pci/host.ts";
+import type { CommentFacts, CommentModule } from "#plate/session/comment.ts";
 import {
   InvalidInstance,
   NotRedacted,
@@ -2607,6 +2609,135 @@ describe("render, an element that references a catalog", () => {
   );
 });
 
+/**
+ * The module file the comment seam is consulted through, which {@link withComment} swaps.
+ */
+const commentFile = "#plate/session/comment.ts";
+
+/**
+ * A test-only comment module whose part is a `textarea` through the `comment` row, written when
+ * the item allows a comment, holding the kept text and posting under `<instance>.comment`.
+ *
+ * @param asked Where each set of facts the module is asked with is recorded.
+ * @returns The module.
+ */
+const textareaComment = (asked: CommentFacts[]): CommentModule => ({
+  implemented: true,
+  keep: (_posted, _allowed, kept) => kept,
+  part: (facts, state) => {
+    asked.push(facts);
+
+    return facts.allowed
+      ? Result.map(
+          itemPart(
+            state.parts,
+            "comment",
+            { id: `${facts.instance}-comment`, name: `${facts.instance}.comment` },
+            [text(Option.getOrElse(facts.kept, () => ""))],
+          ),
+          Option.some,
+        )
+      : Result.succeed(Option.none());
+  },
+  report: () => Option.none(),
+});
+
+/**
+ * Run an effect with a module in place of the comment stub, every module that imports it loaded
+ * afresh, and the stub restored after.
+ *
+ * @param module The module to register.
+ * @param effect The effect, which imports what it reads of plate dynamically, after the mock.
+ * @returns The effect, wrapped.
+ */
+const withComment = <A, E>(
+  module: CommentModule,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.sync(() => {
+    vi.resetModules();
+    vi.doMock(commentFile, () => ({ commentModule: module }));
+  }).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock(commentFile);
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * The slots of a render's Root's element children, in order, each by its `data-slot` marker and
+ * by its tag when it has none.
+ *
+ * @param rendering The render's output.
+ * @returns The slot names.
+ */
+const slotsOf = (rendering: Rendered): readonly string[] =>
+  rootOf(rendering).children.flatMap((child) =>
+    child.kind === "element" ? [String(child.attrs["data-slot"] ?? child.tag)] : [],
+  );
+
+describe("render, the comment seam", () => {
+  it.effect(
+    "[W0-BG] the comment part renders after the body and before the live region when the item allows comments",
+    () =>
+      Effect.gen(function* commentPlaced() {
+        const asked: CommentFacts[] = [];
+        const rendersWith = (allowComment: boolean) =>
+          withComment(
+            textareaComment(asked),
+            Effect.gen(function* rendered() {
+              const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+              const configuration = yield* configure({ allowComment });
+
+              return yield* Effect.fromResult(
+                plate.render(plate.redact(acceptForTest(item)), configuration, {
+                  comment: "A note",
+                  instance,
+                }),
+              );
+            }),
+          );
+        const allowed = yield* rendersWith(true);
+        const refused = yield* rendersWith(false);
+        const slots = slotsOf(allowed);
+        const comment = elementsIn(allowed).filter(
+          (element) => element.attrs["data-slot"] === rowFor("item", "comment").slot,
+        );
+
+        assert.deepStrictEqual(slots.slice(-2), ["item-comment", "item-live"]);
+        assert.isAbove(slots.indexOf("item-comment"), slots.indexOf("img"));
+        assert.deepStrictEqual(
+          comment.map((element) => [element.tag, element.attrs["name"], textOf(element)]),
+          [["textarea", `${instance}.comment`, "A note"]],
+        );
+        assert.deepStrictEqual(
+          slotsOf(refused),
+          slots.filter((slot) => slot !== "item-comment"),
+        );
+        assert.deepStrictEqual(asked, [
+          { allowed: true, finished: false, instance, kept: Option.some("A note"), locale: "en" },
+          { allowed: false, finished: false, instance, kept: Option.some("A note"), locale: "en" },
+        ]);
+      }),
+  );
+
+  it.effect("[W0-BG] the stub writes no comment part: the HTML is the one without a comment", () =>
+    Effect.gen(function* stubbed() {
+      const configuration = yield* configure({ allowComment: true });
+      const kept = yield* Effect.fromResult(
+        render(redacted, configuration, { comment: "A note", instance }),
+      );
+      const bare = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+
+      assert.strictEqual(kept.html, bare.html);
+      assert.notInclude(kept.html, "item-comment");
+    }),
+  );
+});
+
 describe("render, an element that names a stimulus", () => {
   it.effect(
     "[W0-AR] renders the same HTML as the element without the stimulus key, before and after the JSON codec: no module docks by default",
@@ -2740,5 +2871,166 @@ describe("redact, the stimulus documents", () => {
           }),
         ),
       ),
+  );
+});
+
+/**
+ * The model node of {@link landedStylesheet}: the package path its element names.
+ */
+interface LandedStylesheet {
+  readonly href: string;
+}
+
+/**
+ * An item-placed Stylesheet module as `m5-06` will land it, reduced to what the host's reader and
+ * the instance reach: it renders the rule the host's text for its path makes under the Root's id,
+ * `#<scopedId(instance, "item")> <text>`, carried as the `data-rule` of a childless `style`
+ * element, since the serialiser refuses any child of one (`RawTextChildren`).
+ */
+const landedStylesheet: ItemContentModule<
+  "qti-stylesheet",
+  LandedStylesheet,
+  LandedStylesheet,
+  LandedStylesheet
+> = {
+  content: () => [],
+  copy: (node) => node,
+  element: "qti-stylesheet",
+  feature: ["I-6"],
+  implemented: true,
+  namespace: qtiNamespace,
+  parse: (element, context) =>
+    Result.succeed(Option.map(context.read.valueOf(element, "href"), (href) => ({ href }))),
+  payloadSchema: ({ Schema }) => Schema.Struct({ href: Schema.String }),
+  placement: "item",
+  redact: (node) => Option.some(node),
+  render: (payload, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files(payload.href), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
+};
+
+/**
+ * The item {@link landedStylesheet} reads: a stylesheet naming `style/item.css`, and a paragraph.
+ */
+const styledDocument: SourceDocument = doc(
+  "items/styled.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "styled"), attr("time-dependent", "false"), attr("title", "Styled")],
+    [
+      el("qti-stylesheet", [attr("href", "style/item.css"), attr("type", "text/css")]),
+      el("qti-item-body", [], [el("p", [], [sourceText("Styled.")])]),
+    ],
+  ),
+);
+
+/**
+ * Render {@link styledDocument} with {@link landedStylesheet} in the Stylesheet stub's place, every
+ * module that imports the stub loaded afresh, and the stub restored after.
+ *
+ * @param options The host's options.
+ * @returns The rendered item.
+ */
+const renderStyled = (options: Options) =>
+  Effect.gen(function* styledRender() {
+    vi.resetModules();
+    vi.doMock("#plate/content/stylesheet.ts", () => ({ stylesheetModule: landedStylesheet }));
+
+    const model = yield* Effect.promise(() => import("#plate/model/item.ts"));
+    const payload = yield* Effect.promise(() => import("#plate/payload.ts"));
+    const plate = yield* Effect.promise(() => import("#plate/render.ts"));
+    const configuration = yield* configure({});
+    const built = yield* Effect.fromResult(model.buildItem(styledDocument));
+
+    return yield* Effect.fromResult(
+      plate.render(payload.redactItem(built), configuration, options),
+    );
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        vi.doUnmock("#plate/content/stylesheet.ts");
+        vi.resetModules();
+      }),
+    ),
+  );
+
+/**
+ * Read the rules the `style` elements of a render carry, in document order.
+ *
+ * @param html The rendered HTML.
+ * @returns Each `style` element's `data-rule`.
+ */
+const rulesIn = (html: string): readonly string[] =>
+  [...html.matchAll(/<style data-rule="(?<rule>[^"]*)"><\/style>/gu)].map(
+    ({ groups }) => groups?.["rule"] ?? "",
+  );
+
+/**
+ * An item whose element list holds a `qti-stylesheet`, which the stub marks and the model holds no
+ * node of.
+ */
+const stylesheetStubbed = Result.getOrThrow(
+  Result.fromOption(
+    acceptedItem(check(styledDocument, tables, Option.none())),
+    () => new Error("the styled item is not accepted"),
+  ),
+);
+
+/**
+ * The host's reader of package files here: it holds the one file {@link styledDocument} names.
+ *
+ * @param path A package-relative path.
+ * @returns The file's text, none for any other path.
+ */
+const holdsStyle = (path: string): Option.Option<string> =>
+  path === "style/item.css" ? Option.some("p { color: red }") : Option.none();
+
+describe("render, the host's files", () => {
+  it.effect("[W0-BH] two instances give two ids", () =>
+    Effect.gen(function* twoInstances() {
+      const first = yield* renderStyled({ files: holdsStyle, instance: "a" });
+      const second = yield* renderStyled({ files: holdsStyle, instance: "b" });
+
+      assert.strictEqual(first.instance, "a");
+      assert.strictEqual(second.instance, "b");
+      assert.deepStrictEqual(rulesIn(first.html), [
+        `#${scopedId(first.instance, "item")} p { color: red }`,
+      ]);
+      assert.deepStrictEqual(rulesIn(second.html), [
+        `#${scopedId(second.instance, "item")} p { color: red }`,
+      ]);
+      assert.notStrictEqual(rulesIn(first.html)[0], rulesIn(second.html)[0]);
+    }),
+  );
+
+  it.effect("[W0-BH] no module reads files: every fixture item renders as before", () =>
+    Effect.gen(function* pinned() {
+      const configuration = yield* defaults;
+      const reads: string[] = [];
+      const holdsEverything = (path: string): Option.Option<string> => {
+        reads.push(path);
+
+        return Option.some("p { color: red }");
+      };
+
+      for (const fixture of [redacted, shuffled, redact(stylesheetStubbed)]) {
+        const unhosted = yield* Effect.fromResult(render(fixture, configuration, { instance }));
+        const none = yield* Effect.fromResult(
+          render(fixture, configuration, { files: () => Option.none(), instance }),
+        );
+        const held = yield* Effect.fromResult(
+          render(fixture, configuration, { files: holdsEverything, instance }),
+        );
+
+        assert.deepStrictEqual(none, unhosted);
+        assert.deepStrictEqual(held, unhosted);
+      }
+
+      assert.deepStrictEqual(reads, []);
+    }),
   );
 });

@@ -104,6 +104,8 @@ export {
   UnmappedResponseError,
 } from "#plate/engine/evaluate.ts";
 
+export { commentName, decodeComment } from "#plate/form/comment.ts";
+
 export type {
   Binding,
   DecodeOptions,
@@ -193,6 +195,8 @@ export {
 export type { AdvanceFailure } from "#plate/session/advance.ts";
 
 export { advance, IntentRefused, StepResponseMisfit } from "#plate/session/advance.ts";
+
+export type { CommentFacts, CommentModule } from "#plate/session/comment.ts";
 
 export { renderTestContent } from "#plate/session/content.ts";
 

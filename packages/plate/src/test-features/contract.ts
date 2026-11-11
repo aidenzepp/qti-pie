@@ -378,12 +378,36 @@ export interface PresentContext {
 }
 
 /**
- * What the host hands a module's `render`, beside the emit state: the emission of body nodes, and
- * the supports and the view the content is shown to, which decide what a module shows of its own
- * nodes. It mirrors `ContentRenderKit` (`#plate/content/contract.ts`), whose nodes an item's
- * redaction has already printed.
+ * What the host hands a module's `render`, beside the emit state: the emission of body nodes, the
+ * supports and the view the content is shown to, which decide what a module shows of its own
+ * nodes, and the two facts of this render that only the host and the render know: the host's reader
+ * of package files and the instance of the item the content is shown with. It mirrors
+ * `ContentRenderKit` (`#plate/content/contract.ts`), whose nodes an item's redaction has already
+ * printed.
+ *
+ * Issue `m5-06` fills the test-level stylesheet module from `files` and `instance`: plate reads no
+ * file itself (`openPackage` hands the host paths only, and the host holds the texts), and the host
+ * passes the item's instance to the item's render and to this one, so a `<style>` the module
+ * renders is confined to that item's Root, `#<scopedId(instance, "item")>`.
  */
 export interface TestContentRenderKit {
+  /**
+   * Read the text of one package file from the host: `renderTestContent`'s `options.files`, or
+   * `() => Option.none()` when the host passed none. The kit resolves nothing: a module resolves
+   * the path it asks for against the test document. A module that finds no file renders nothing
+   * for it and says so through the Notice part, since the host decides at render time what it
+   * holds.
+   *
+   * @param path A package-relative path, as the module resolved it.
+   * @returns The file's text, none when the host holds no such file.
+   */
+  readonly files: (path: string) => Option.Option<string>;
+  /**
+   * The instance of the item the content is shown with: the item Root's id is
+   * `scopedId(instance, "item")`, so a module that confines a rule to that Root writes the
+   * selector `#<id>`. Two renderings of one item differ by it, so the selector does too.
+   */
+  readonly instance: string;
   /**
    * Print the body nodes by the session's outcomes and emit them at a phrasing position, with the
    * body's id scoping, heading shift, URLs and Notice part: a printed variable shows the value its

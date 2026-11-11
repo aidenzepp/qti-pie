@@ -61,6 +61,7 @@ import type {
 } from "#plate/payload.ts";
 import type { HostFacts } from "#plate/pci/host.ts";
 import { drawInstance } from "#plate/seed.ts";
+import { commentModule } from "#plate/session/comment.ts";
 import { noSupports } from "#plate/supports.ts";
 import type { Supports } from "#plate/supports.ts";
 import type { OutcomeView } from "#plate/vocabulary.ts";
@@ -85,15 +86,25 @@ import type { Accepted, AcceptedStimulus } from "#plate/validate/verdict.ts";
  * the candidate, `noSupports` when absent, and `view` the view the item is shown to, one of QTI's
  * six, the candidate's when absent: each content module's render decides by both what it shows of
  * what {@link redact} kept under the same two, so a render passes the supports and the view its
- * redaction took. `host` is what the host knows and plate does not (`HostFacts` in
+ * redaction took. `comment` is the comment the session holds for the item, which a session item's
+ * view (`ItemView.comment`) gives: the comment module (`#plate/session/comment.ts`) writes the
+ * comment part from it, after the body and before the live region, when the configuration's
+ * `allowComment` is set. `host` is what the host knows and plate does not (`HostFacts` in
  * `#plate/pci/host.ts`), the empty record when absent: each interaction module reads its own
  * member through its `redact` kit and writes what its controller needs onto its own Root, and the
  * shipped kinds read none, so for an item of those alone the HTML is the same with or without it.
  * It is a render input, never item data: nothing of it reaches the redacted item or its JSON.
+ * `files` is the host's reader of package-relative paths, none when the host holds no such file:
+ * plate reads no file itself (`openPackage` gives the host the package's paths, and the host holds
+ * the texts), so a content module's render reads one through the kit's `files`, as the two
+ * stylesheet modules of issue `m5-06` will, together with the kit's `instance` that scopes the
+ * Root's id. With no `files`, every path reads as none.
  */
 export interface Options {
   readonly assetBase?: string;
+  readonly comment?: string;
   readonly disabled?: boolean;
+  readonly files?: (path: string) => Option.Option<string>;
   readonly host?: HostFacts;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
@@ -481,23 +492,35 @@ const shippedRenderer =
 
 /**
  * Give the kit each content module's render reads: the emission of its content through the render
- * function, with the body's id scoping, heading shift, URLs and Notice part, and the supports and
- * the view the emit state holds.
+ * function, with the body's id scoping, heading shift, URLs and Notice part, the supports and the
+ * view the emit state holds, the host's reader of package files, and the render's instance.
  *
- * @param built The render's payload.
+ * @param built The render's payload, which gives the instance.
  * @param state The render's emit state.
  * @param renderInteraction The render function an interaction among the content is handed to.
+ * @param files The host's reader of package-relative paths, or {@link noFiles}.
  * @returns The kit.
  */
 const contentKitOf = (
   built: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
+  files: ContentRenderKit["files"],
 ): ContentRenderKit => ({
+  files,
+  instance: built.instance,
   nodes: (nodes) => emitNodes(nodes, built, state, renderInteraction),
   supports: state.supports ?? noSupports,
   view: state.view ?? defaultView,
 });
+
+/**
+ * The reader of package files a render uses when the host passed none: it holds no file, so every
+ * path reads as none.
+ *
+ * @returns None.
+ */
+const noFiles: ContentRenderKit["files"] = () => Option.none();
 
 /**
  * Answer `RenderInteraction.dock` over the payload's content: the first node of a module whose
@@ -511,6 +534,7 @@ const contentKitOf = (
  * @param state The render's emit state.
  * @param renderer The render function the docked node's content is emitted through.
  * @param docked The nodes docked so far, which this adds to.
+ * @param files The host's reader of package-relative paths, which the docked node's kit carries.
  * @returns The docked node's element, none when no module's node answers, or the refusal of a part
  *   swap.
  */
@@ -520,14 +544,16 @@ const dockOver = (
   state: EmitState,
   renderer: RenderInteraction,
   docked: Set<unknown>,
+  files: ContentRenderKit["files"],
 ): ReturnType<DockStimulus> =>
   Option.match(dockedBy(built.content, reference.idref), {
     onNone: () => Result.succeed(Option.none()),
     onSome: (found) => {
       docked.add(found.node);
 
-      return Result.map(found.render(state, contentKitOf(built, state, renderer)), (element) =>
-        Option.some([element]),
+      return Result.map(
+        found.render(state, contentKitOf(built, state, renderer, files)),
+        (element) => Option.some([element]),
       );
     },
   });
@@ -547,22 +573,25 @@ const dockOver = (
  * @param built The render's payload.
  * @param state The render's emit state.
  * @param docked The nodes body elements dock as the body is emitted, which the render then skips.
+ * @param files The host's reader of package-relative paths, which a content module's kit carries.
  * @returns The function that renders one interaction, container or content node through its module.
  */
 const interactionRenderer = (
   built: Payload,
   state: EmitState,
   docked: Set<unknown>,
+  files: ContentRenderKit["files"],
 ): RenderInteraction => {
   const renderer: RenderInteraction = Object.assign(shippedRenderer(built, state), {
     attach: (reference: ReferencingElement) =>
-      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer)),
+      attachedBy(built.content, reference, state, contentKitOf(built, state, renderer, files)),
     containers: (node: ContainerPayload, children: readonly Node[]) =>
       renderContainer(node, children, built, state),
     content: (node: ContentPayload) =>
-      renderContent(node, state, contentKitOf(built, state, renderer)),
+      renderContent(node, state, contentKitOf(built, state, renderer, files)),
     contentNodes,
-    dock: (reference: ReferencingElement) => dockOver(reference, built, state, renderer, docked),
+    dock: (reference: ReferencingElement) =>
+      dockOver(reference, built, state, renderer, docked, files),
     moduleContent,
     modules: (interaction: ModulePayload) => renderModule(interaction, built, state),
   });
@@ -640,13 +669,30 @@ export const renderTree = (
     const state = stateOf(configuration, parts, options.assetBase, options.supports, options.view);
     const built = payload(item, viewOf(instance, configuration, options));
     const docked = new Set<unknown>();
-    const renderer = interactionRenderer(built, state, docked);
+    const files = options.files ?? noFiles;
+    const renderer = interactionRenderer(built, state, docked, files);
     const body = yield* emitBody(built, state, renderer);
-    const kit = contentKitOf(built, state, renderer);
+    const kit = contentKitOf(built, state, renderer, files);
     const before = yield* renderItemContent(built.content, state, kit, docked, "before-body");
     const after = yield* renderItemContent(built.content, state, kit, docked, "after-body");
+    const comment = yield* commentModule.part(
+      {
+        allowed: configuration.allowComment,
+        finished: built.finished,
+        instance,
+        kept: Option.fromUndefinedOr(options.comment),
+        locale: state.locale,
+      },
+      state,
+    );
     const live = yield* itemPart(state.parts, "live", liveRegion, []);
-    const root = yield* emitItem(built, state, [...before, ...body, ...after, live]);
+    const root = yield* emitItem(built, state, [
+      ...before,
+      ...body,
+      ...after,
+      ...Option.toArray(comment),
+      live,
+    ]);
 
     if (writesMalformedHeading(built.body, configuration.headingLevel, renderer)) {
       return yield* Result.fail(new InvalidHeadingLevel({ level: configuration.headingLevel }));
@@ -663,8 +709,9 @@ export const renderTree = (
  * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
  * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
  * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
- * body and the Root, which holds the body and then the empty Live part the runtime announces into.
- * A shuffled Choice is presented in the order the configuration's `seed`, the
+ * body and the Root, which holds the body, the item's own content, the comment part when the
+ * comment module (`#plate/session/comment.ts`) writes one, and then the empty Live part the runtime
+ * announces into. A shuffled Choice is presented in the order the configuration's `seed`, the
  * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.

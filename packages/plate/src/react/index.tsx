@@ -6,7 +6,12 @@
  * @module
  */
 export type {
-  CreateTestServer,
+  AssessmentTestProviderProps,
+  AssessmentTestServerOptions,
+  AssessmentTestState,
+  AssessmentTestStore,
+  AssessmentTestTransport,
+  CreateAssessmentTestServer,
   InteractionComponent,
   InteractionParts,
   InteractionProps,
@@ -20,11 +25,6 @@ export type {
   Posted,
   StatusProps,
   Submit,
-  TestProviderProps,
-  TestServerOptions,
-  TestSessionState,
-  TestSessionStore,
-  TestTransport,
   TimerState,
   UseParts,
   UseUpgrade,
@@ -39,6 +39,18 @@ export { Notice, useParts, useUpgrade } from "#plate/react/parts.tsx";
 export { Item } from "#plate/react/item.tsx";
 
 export { ItemScope } from "#plate/react/interaction.tsx";
+
+export {
+  AssessmentTestProvider,
+  fetchTransport,
+  NoAssessmentTestProvider,
+  NotImplemented,
+  useAssessmentTest,
+  useCurrentItem,
+  useNavigation,
+  useSubmit,
+  useTimer,
+} from "#plate/react/assessment-test-provider.tsx";
 
 export { Associate } from "#plate/react/associate.tsx";
 
@@ -85,18 +97,6 @@ export { SelectPoint } from "#plate/react/select-point.tsx";
 export { Slider } from "#plate/react/slider.tsx";
 
 export { Status } from "#plate/react/status.tsx";
-
-export {
-  fetchTransport,
-  NoTestProvider,
-  NotImplemented,
-  TestProvider,
-  useCurrentItem,
-  useNavigation,
-  useSubmit,
-  useTestSession,
-  useTimer,
-} from "#plate/react/test-provider.tsx";
 
 export { createTestServer } from "#plate/react/test-server.tsx";
 

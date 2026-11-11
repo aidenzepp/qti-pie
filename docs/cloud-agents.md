@@ -182,7 +182,7 @@ The work is cut into issues, each with an id such as `m3d-01`. A GitHub issue ca
 | `m3g-03`   | React wrappers for the M3.d interactions                                                                                                                                                      |
 | `m3g-04`   | React wrappers for the elective interactions and PortableCustom over the frame host                                                                                                           |
 | `m3g-05`   | the shadcn registry item: registry.json, the item installing the components and the sheet                                                                                                     |
-| `m3g-06`   | TestProvider: the transport, the hooks, and createTestServer over plate's session functions                                                                                                   |
+| `m3g-06`   | AssessmentTestProvider: the transport, the hooks, and createAssessmentTestServer over plate's session functions                                                                               |
 | `m3g-07`   | the React 19 host fixture (criterion 10): one item rendered and scored with a shadcn theme                                                                                                    |
 | `m3g-08`   | the reference app: React, shadcn, React Hook Form, a sample test end to end in Chromium and WebKit; README examples compile and run                                                           |
 | `m4-01`    | PNP reader (AfA PNP 3.0, read tolerantly across the 12 contradictions) -> Supports                                                                                                            |

@@ -19,11 +19,11 @@ import { bg007Item } from "#plate/test/fixtures.ts";
 /**
  * Construct a session item from its defaults and the fields given; a given field wins.
  *
- * The defaults are `adaptive` false, `datestamp` `"2026-11-05T10:00:00.000Z"`, `duration` 0,
- * `firstOutcomes` none, `locked` false, `presented` false, `record` `fresh(bg007Item, "s1.1")` (the
- * item of a session whose instance is `s1`, at sequence index 1), `saved` none, `sequenceIndex` 1
- * and `templateDefaults` none. Every default is a literal, so the same call builds an equal item
- * each time.
+ * The defaults are `adaptive` false, `comment` none, `datestamp` `"2026-11-05T10:00:00.000Z"`,
+ * `duration` 0, `firstOutcomes` none, `locked` false, `presented` false, `record` `fresh(bg007Item,
+ * "s1.1")` (the item of a session whose instance is `s1`, at sequence index 1), `saved` none,
+ * `sequenceIndex` 1 and `templateDefaults` none. Every default is a literal, so the same call
+ * builds an equal item each time.
  *
  * `ref` follows the record unless given: it is the `item` of the record in force, the one given
  * when `record` is, and the identifier of `bg007Item`, `beginnersguide007`, otherwise. A test whose
@@ -37,6 +37,7 @@ export const sessionItem = (overrides: Partial<SessionItem> = {}): SessionItem =
 
   return {
     adaptive: false,
+    comment: Option.none(),
     datestamp: "2026-11-05T10:00:00.000Z",
     duration: 0,
     firstOutcomes: Option.none(),

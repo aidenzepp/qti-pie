@@ -2,10 +2,11 @@ import { readdirSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { defaultView } from "#plate/content/contract.ts";
 import { attr, doc, el, qtiNamespace, text, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { h, text as textNode } from "#plate/emit/node.ts";
-import { resolveOverrides } from "#plate/emit/parts.ts";
+import { resolveOverrides, scopedId } from "#plate/emit/parts.ts";
 import { parseContextOf, pathsOf } from "#plate/model/item.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import { readersOf } from "#plate/model/reader.ts";
@@ -290,6 +291,75 @@ const landedTimeLimits: TestFeatureModule<"qti-time-limits", TimeLimitsNode> = {
 };
 
 /**
+ * The node the landed stylesheet module reads a `qti-stylesheet` into.
+ */
+interface StylesheetNode {
+  readonly href: string;
+}
+
+/**
+ * A test-level stylesheet module as it would land, for this test alone: its `render` reads the file
+ * the host hands through the kit and writes a rule confined to the item's Root, or marks the file
+ * as absent. It writes the rule in a `data-rule` attribute, since the serialiser refuses text in a
+ * `style` element.
+ */
+const landedStylesheet: TestFeatureModule<"qti-stylesheet", StylesheetNode> = {
+  ...stub({
+    element: "qti-stylesheet",
+    feature: ["T-3"],
+    issue: "m5-06",
+    key: "qti-stylesheet",
+    namespace: qtiNamespace,
+  }),
+  implemented: true,
+  render: (_node, _state, kit) =>
+    Result.succeed(
+      Option.match(kit.files("style/test.css"), {
+        onNone: () => h("span", { "data-stylesheet": "none" }),
+        onSome: (css) => h("style", { "data-rule": `#${scopedId(kit.instance, "item")} ${css}` }),
+      }),
+    ),
+};
+
+/**
+ * The emit state a landed module's `render` is handed here, which the fake never reads.
+ */
+const emitState: EmitState = {
+  assetBase: "",
+  headingLevel: 2,
+  locale: "en",
+  parts: { replacementFor: () => Option.none() },
+};
+
+/**
+ * The host's reader of package files here: it holds the one file the landed module asks for.
+ *
+ * @param path A package-relative path.
+ * @returns The file's text, none for any other path.
+ */
+const holdsStyle = (path: string): Option.Option<string> =>
+  path === "style/test.css" ? Option.some("p { color: red }") : Option.none();
+
+/**
+ * Construct the kit a landed module's `render` is handed: the host's reader and the item's
+ * instance, and a `nodes` the fake never calls.
+ *
+ * @param instance The item's instance.
+ * @param files The host's reader of package-relative paths.
+ * @returns The kit.
+ */
+const renderKit = (
+  instance: string,
+  files: (path: string) => Option.Option<string>,
+): TestContentRenderKit => ({
+  files,
+  instance,
+  nodes: () => Result.succeed([]),
+  supports: noSupports,
+  view: defaultView,
+});
+
+/**
  * What the landed rubric-block module reads a block into: the owner of the block and the body nodes
  * of its content, as the context gave them.
  */
@@ -568,6 +638,8 @@ describe("a test-feature module not implemented", () => {
           parts: Result.getOrElse(resolveOverrides(), (failure) => assert.fail(failure.message)),
         };
         const kit: TestContentRenderKit = {
+          files: () => Option.none(),
+          instance: "q1",
           nodes: () => Result.succeed([]),
           supports: noSupports,
           view: "candidate",
@@ -587,6 +659,28 @@ describe("a test-feature module not implemented", () => {
         }
       }),
   );
+
+  it("[W0-BH] throws TestFeatureNotImplemented from its render, naming its key and the issue that fills it", () => {
+    for (const module of stubbed) {
+      const ran = Result.try({
+        catch: (thrown) => thrown,
+        try: () =>
+          module.render(
+            undefined,
+            emitState,
+            renderKit("sitting.1", () => Option.none()),
+          ),
+      });
+
+      assert.isTrue(
+        Result.isFailure(ran) &&
+          ran.failure instanceof TestFeatureNotImplemented &&
+          ran.failure.feature === module.key &&
+          ran.failure.issue === module.issue,
+        module.key,
+      );
+    }
+  });
 
   it("names its key and the issue that fills it in TestFeatureNotImplemented", () => {
     const thrown = new TestFeatureNotImplemented({ feature: "qti-time-limits", issue: "m3f-01" });
@@ -765,5 +859,26 @@ describe("a test-feature module that has landed", () => {
       deliveredBy(landed, { documents: new Map(), source: testOf([]), test }).title,
       "T (timed)",
     );
+  });
+
+  it("[W0-BH] a test-feature module's render reads files and the item's instance", () => {
+    const node = { href: "style/test.css" };
+    const first = landedStylesheet.render(node, emitState, renderKit("sitting.1", holdsStyle));
+    const second = landedStylesheet.render(node, emitState, renderKit("sitting.2", holdsStyle));
+    const absent = landedStylesheet.render(
+      node,
+      emitState,
+      renderKit("sitting.1", () => Option.none()),
+    );
+
+    assert.deepStrictEqual(
+      first,
+      Result.succeed(h("style", { "data-rule": "#sitting.1-item p { color: red }" })),
+    );
+    assert.deepStrictEqual(
+      second,
+      Result.succeed(h("style", { "data-rule": "#sitting.2-item p { color: red }" })),
+    );
+    assert.deepStrictEqual(absent, Result.succeed(h("span", { "data-stylesheet": "none" })));
   });
 });

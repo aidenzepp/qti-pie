@@ -1,9 +1,9 @@
 /**
- * The test layer over plate's pieces: `TestProvider` holds a test session reached through a
- * `TestTransport`, and its hooks read it; `fetchTransport` is the transport that speaks the wire
- * `createTestServer` (`#plate/react/test-server.tsx`) answers. The provider renders no form and no
+ * The test layer over plate's pieces: `AssessmentTestProvider` holds a test session reached through a
+ * `AssessmentTestTransport`, and its hooks read it; `fetchTransport` is the transport that speaks the wire
+ * `createAssessmentTestServer` (`#plate/react/test-server.tsx`) answers. The provider renders no form and no
  * submit control: the host renders the current item inside its own form and posts that form's
- * data through `useSubmit`. {@link NoTestProvider} is the failure every hook throws outside a
+ * data through `useSubmit`. {@link NoAssessmentTestProvider} is the failure every hook throws outside a
  * provider.
  *
  * @module
@@ -15,12 +15,12 @@ import { decodeItemView, InvalidItemView } from "#plate/codec/view.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
 import type { NavigationState } from "#plate/navigation.ts";
 import type {
+  AssessmentTestProviderProps,
+  AssessmentTestState,
+  AssessmentTestTransport,
   ItemViewPayload,
   Posted,
   Submit,
-  TestProviderProps,
-  TestSessionState,
-  TestTransport,
   TimerState,
 } from "#plate/react/contract.tsx";
 
@@ -35,7 +35,7 @@ export class NotImplemented extends Data.TaggedError("NotImplemented")<{
    */
   readonly issue: string;
   /**
-   * The piece's name, such as `TestProvider`.
+   * The piece's name, such as `AssessmentTestProvider`.
    */
   readonly piece: string;
 }> {
@@ -48,11 +48,11 @@ export class NotImplemented extends Data.TaggedError("NotImplemented")<{
 }
 
 /**
- * A hook of the test layer called outside a `TestProvider`: the hook has no session to read. Every
+ * A hook of the test layer called outside a `AssessmentTestProvider`: the hook has no session to read. Every
  * hook throws it when no provider is mounted above the component that calls it. It is thrown,
  * since React reports a component's failure only by a throw, which an error boundary catches.
  */
-export class NoTestProvider extends Data.TaggedError("NoTestProvider")<{
+export class NoAssessmentTestProvider extends Data.TaggedError("NoAssessmentTestProvider")<{
   /**
    * The hook's name, such as `useCurrentItem`.
    */
@@ -62,7 +62,7 @@ export class NoTestProvider extends Data.TaggedError("NoTestProvider")<{
    * The hook and the remedy.
    */
   override get message(): string {
-    return `${this.hook} was called outside a TestProvider, so it has no test session to read. Mount a TestProvider above the component that calls ${this.hook}, with a transport such as fetchTransport(url).`;
+    return `${this.hook} was called outside an AssessmentTestProvider, so it has no test session to read. Mount an AssessmentTestProvider above the component that calls ${this.hook}, with a transport such as fetchTransport(url).`;
   }
 }
 
@@ -273,8 +273,8 @@ const useShownView = (held: Held): ItemViewPayload => held.state.view ?? use(hel
  * @param props.transport How the provider reaches the test server.
  * @returns The children, under the provider's context.
  */
-export const TestProvider = ({ children, transport }: TestProviderProps): ReactNode => {
-  const [state, setState] = useState<TestSessionState>({ finished: false, pending: true });
+export const AssessmentTestProvider = ({ children, transport }: AssessmentTestProviderProps): ReactNode => {
+  const [state, setState] = useState<AssessmentTestState>({ finished: false, pending: true });
   const [failure, setFailure] = useState<Option.Option<unknown>>(Option.none());
   const [firstView] = useState(() => Promise.withResolvers<ItemViewPayload>());
   const show = useCallback(
@@ -350,7 +350,7 @@ export const TestProvider = ({ children, transport }: TestProviderProps): ReactN
  * @returns The session's state.
  * @throws {NoTestProvider} Outside a `TestProvider`.
  */
-export const useTestSession = (): TestSessionState => useHeld("useTestSession").state;
+export const useAssessmentTest = (): AssessmentTestState => useHeld("useAssessmentTest").state;
 
 /**
  * Read the current item's view: the last one the server answered, a refusal's included. Before

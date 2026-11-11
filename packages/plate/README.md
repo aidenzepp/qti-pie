@@ -452,7 +452,7 @@ export const step = (
 ## Records
 
 The host stores two records as JSON and hands each back on the next request. plate writes both.
-Each function that reads one back checks that it has version 6, that each field has its type, and
+Each function that reads one back checks that it has version 7, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does, and refuses another item's record with
 `RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
@@ -478,10 +478,10 @@ one does not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `StoredRecord`, `version: 6` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 6` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
+| `StoredRecord`, `version: 7` | One item's seed, template values, attempts, responses and outcomes, its `record` answers in `records`, and the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 7` | A test session, with its processing seed and its shuffle seed, its items' records and template defaults, each item's saved responses and `record` answers in `saved`, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
 
-plate reads only version 6, and refuses a record of another version with `InvalidRecord` or
+plate reads only version 7, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 
@@ -1322,8 +1322,9 @@ Its components are stubs today, and each line below lands with its issue:
 - A component for each interaction plate renders and for the item's chrome *(pending m3g-02)*,
   for the M3.d interactions *(pending m3g-03)*, and for the elective interactions and Portable
   Custom *(pending m3g-04)*.
-- `TestProvider` runs a test over a host's transport, with its hooks, and `createTestServer` puts
-  plate's session functions behind it on the server *(pending m3g-06)*.
+- `AssessmentTestProvider` runs a test over a host's transport, with its hooks, and
+  `createAssessmentTestServer` puts plate's session functions behind it on the server
+  *(pending m3g-06)*.
 - A shadcn registry item installs the components and the sheet *(pending m3g-05)*.
 
 ## Accessibility supports

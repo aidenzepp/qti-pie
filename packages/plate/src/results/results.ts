@@ -49,6 +49,7 @@ import { resultFields, resultValue, resultValues } from "#plate/results/values.t
 import type { ResultField, ResultSingle } from "#plate/results/values.ts";
 import { belonging, fitting, splitResponses } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
+import { commentModule } from "#plate/session/comment.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import { elapsedSeconds } from "#plate/session/elapsed.ts";
@@ -194,6 +195,12 @@ interface ItemReport {
    * The values reported for its responses, by identifier.
    */
   readonly answers: ItemRecord["responses"];
+  /**
+   * The comment the candidate left on the item, which the comment module reports as the item
+   * result's `candidateComment`: the session item's, and none for an item reported alone, which
+   * has no session.
+   */
+  readonly comment: Option.Option<string>;
   readonly datestamp: string;
   /**
    * The defaults the item's template processing set, by identifier: its record's, and none for an
@@ -304,6 +311,21 @@ const fieldElement = (field: ResultField): Element =>
     [attribute("fieldIdentifier", field.identifier), attribute("baseType", field.baseType)],
     [{ cdata: false, kind: "text", value: field.lexical }],
   );
+
+/**
+ * Construct the `candidateComment` element of an item result, which holds the candidate's comment
+ * as text.
+ *
+ * Issue m5-09 fills the module that gives the text ({@link commentModule}). The element is one the
+ * Results XSD gives the item result itself, after its variables, so writing it adds no extension
+ * content: a results report carries no extension content outside outcome information, and plate
+ * writes none in an `itemResult`.
+ *
+ * @param comment The comment, as the comment module reports it.
+ * @returns The element.
+ */
+const candidateComment = (comment: string): Element =>
+  element("candidateComment", [], [{ cdata: false, kind: "text", value: comment }]);
 
 /**
  * Give an optional attribute, none when it has no value.
@@ -537,7 +559,9 @@ const completionOf = (report: ItemReport): Value => {
  * a NULL record, which a record response the values reported lack holds. An answered status judges
  * only the interactions the page showed under the record's template values, as `checkResponses`
  * does, a record response's typed text among them, and reads a response's default as the record's
- * template processing set it, else as declared ({@link answeredStatusOf}).
+ * template processing set it, else as declared ({@link answeredStatusOf}). The item's comment, when
+ * the comment module reports one ({@link candidateComment}), comes last, after the outcome
+ * variables.
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -619,6 +643,7 @@ const itemResult = (report: ItemReport): Element => {
       ...records,
       ...templateVariables(item.templates, report.templates),
       ...outcomeVariables(item.outcomes, report.outcomes),
+      ...Option.toArray(Option.map(commentModule.report(report.comment), candidateComment)),
     ],
   );
 };
@@ -740,6 +765,7 @@ const itemResults = (
       context,
       itemResult({
         answers: record.responses,
+        comment: Option.none(),
         datestamp: input.datestamp.toISOString(),
         defaults: record.defaults,
         duration: Option.none(),
@@ -1002,6 +1028,7 @@ const sessionItemReport = (
         saved.responses,
         entry.record.responses,
       ),
+      comment: entry.comment,
       datestamp: entry.datestamp,
       defaults: entry.record.defaults,
       duration: Option.some(entry.duration),
