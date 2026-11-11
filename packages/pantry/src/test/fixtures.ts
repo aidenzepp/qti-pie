@@ -10,7 +10,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
  * A fix-forward of the materializer that changes what any directory holds bumps it, so the
  * corrected directories appear beside the old ones under new names instead of replacing them.
  */
-export const FIXTURES_VERSION = "3" as const;
+const FIXTURES_VERSION = "3" as const;
 
 /**
  * A string edit applied to one file of a freshly extracted package, as plain data.
@@ -49,7 +49,7 @@ export type TextEdit =
  * - `{ member }` is a loose, non-zip tarball member.
  * - `{ text }` is a hand-written file, written as UTF-8.
  */
-export type FileSource =
+type FileSource =
   | { readonly zip: string; readonly path: string }
   | { readonly member: string }
   | { readonly text: string };
@@ -61,7 +61,7 @@ export type FileSource =
  * - `copyFile` copies the package's file `from` to `to`, making its directories.
  * - `deleteFile` removes `path`.
  */
-export type FileEdit =
+type FileEdit =
   | { readonly _tag: "addFile"; readonly path: string; readonly source: FileSource }
   | { readonly _tag: "copyFile"; readonly from: string; readonly to: string }
   | { readonly _tag: "deleteFile"; readonly path: string };
@@ -75,7 +75,7 @@ export type FileEdit =
  * `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies after the {@link FileEdit}s
  * and {@link TextEdit}s of its spec, once the package is extracted.
  */
-export interface CutEdit {
+interface CutEdit {
   readonly _tag: "cut";
   readonly item: string;
   readonly schemaversion: "3.0.0" | "3.0.1";
@@ -94,7 +94,7 @@ export interface CutEdit {
  * `imsqti_fragment_xmlv3p0` (readings 93 and 115), not as a file of the including resource. It
  * applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
  */
-export interface CutTestEdit {
+interface CutTestEdit {
   readonly _tag: "cutTest";
   readonly test: string;
   readonly schemaversion: "3.0.0" | "3.0.1";
@@ -115,7 +115,7 @@ export interface CutTestEdit {
  * stub, and deletes every other entry. It applies last, after the spec's {@link FileEdit}s and
  * {@link TextEdit}s.
  */
-export interface LooseTestEdit {
+interface LooseTestEdit {
   readonly _tag: "looseTest";
   readonly test: string;
   readonly schemaversion: "3.0.0" | "3.0.1";
@@ -172,7 +172,7 @@ export class ExamplesError extends Schema.TaggedError<ExamplesError>()("Examples
  * @returns The 64 lower-case hex digits of the sha256 of `JSON.stringify([name, member, edits,
  *   version])`.
  */
-export const transformHash = (spec: FixtureSpec, version: string): string =>
+const transformHash = (spec: FixtureSpec, version: string): string =>
   createHash("sha256")
     .update(JSON.stringify([spec.name, spec.member, spec.edits, version]))
     .digest("hex");
@@ -237,7 +237,7 @@ const corpusMembers = {
  *   `BPIG_22April` item and `3.0.0` for one of `BBQsTest`.
  * @returns The spec, whose directory is named by the hash of exactly these values like any other.
  */
-export const cutItem = (
+const cutItem = (
   name: string,
   pkg: keyof typeof corpusMembers,
   itemPath: string,
@@ -420,7 +420,7 @@ export const negativeNames = [
  * response processing and a test's outcome processing (accepted, an unresolved braced pattern is a
  * string).
  */
-export const restoredNames = [
+const restoredNames = [
   "aria-h1-role-button",
   "aria-source-role",
   "lang-case-mismatch",
@@ -437,7 +437,7 @@ export const restoredNames = [
  * accepted) and a branch rule inside a section document placed twice that names a later item ref
  * of the same document (`branch-in-twice-placed-section`, accepted).
  */
-export const assemblyNames = [
+const assemblyNames = [
   "section-doc-twice",
   "section-doc-name-clash",
   "branch-backward-shuffled",
@@ -469,7 +469,7 @@ export const weightedNames = ["weighted-sum-float", "weighted-variables-integer"
  * 309's case B: a gap in a card inside a gap match), `card-empty` (a card with no content) and
  * `entry-empty` (a card whose one entry has none), the last two accepted by decision 324.
  */
-export const catalogNames = [
+const catalogNames = [
   "cut-catalog-supports",
   "cut-catalog-multiple",
   "cut-catalog-nodes",
@@ -494,7 +494,7 @@ export const catalogNames = [
  * value) and `companion-padded` (outer whitespace and a tab in the values that collapse or
  * normalize).
  */
-export const companionNames = [
+const companionNames = [
   "cut-companion",
   "companion-301",
   "companion-full",
@@ -517,7 +517,7 @@ export const companionNames = [
  *   `qti-calculator-info` in one calculator), `rule-both-systems`, `calculator-Basic`, `unit-case`,
  *   `increment-text`, `rule-system-SI` and `icon-missing`.
  */
-export const catalogNegativeNames = [
+const catalogNegativeNames = [
   "support-twice",
   "default-twice",
   "idref-html",
@@ -674,7 +674,7 @@ const dataNames = [
  * self-closed except `template-foreign`'s. The corpus PCIs' custom `data-*` attributes are
  * dropped: phase 8's law for them has not landed.
  */
-export const pciNames = [
+const pciNames = [
   "pci-simple",
   "pci-modules",
   "pci-configurations",
@@ -807,7 +807,7 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
  * `rtest01`, the examples' included fragment in place (spec reading 117), with one negative per
  * include law.
  */
-export const fixtureNames = [
+const fixtureNames = [
   "simple",
   "doctype",
   "latin1",
@@ -7501,7 +7501,7 @@ const applyEdit = (text: string, edit: TextEdit): string =>
  *   occur exactly once, a line that does not exist) or the text holds a character latin1 cannot
  *   write.
  */
-export const editBytes = (original: Uint8Array, edits: readonly TextEdit[]): Uint8Array => {
+const editBytes = (original: Uint8Array, edits: readonly TextEdit[]): Uint8Array => {
   let text = Buffer.from(original).toString("latin1");
 
   for (const edit of edits) {
