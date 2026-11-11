@@ -1,6 +1,6 @@
 /**
  * The census of the committed migration chain (plan-qti-pie Q6.02): the two migration folders the
- * Qti schema holds, the `_init` first and pantry-api-1 on top, beside the snapshot's two files and
+ * Qti schema holds, the `_sterling-standard` first and pantry-api-1 on top, beside the snapshot's two files and
  * `served/`, which holds the one file `grizzle generate` writes for the author login
  * (`#pantry/db/served.ts`), taken together by `#pantry/test/census.ts`, meet fin.md §13's zero
  * targets, except its validate files and constraint triggers, which the measured counts hold
@@ -64,14 +64,14 @@ const membersOf = (kind: "closed" | "relation"): number =>
 
 describe("the committed migration chain", () => {
   it.effect(
-    "is the _init, its later migrations, the snapshot and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
+    "is the _sterling-standard, its later migrations, the snapshot and the author login's served file, meets the zero targets but validate files and constraint triggers, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
       // chain's census; the schema's own members for the counts that follow from them (a table per
       // stored relation, a names constant per roster). A data step is a later migration's, and the
       // chain's later migrations move no stored rows, so the zero target for inserts holds.
-      // Bound: the committed chain, the `_init` first.
+      // Bound: the committed chain, the `_sterling-standard` first.
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(qtiMigrations)).toSorted();
@@ -92,7 +92,7 @@ describe("the committed migration chain", () => {
           "served",
           "snapshot.json",
         ]);
-        assert.match(init ?? "", /^\d{14}_init$/u);
+        assert.match(init ?? "", /^\d{14}_sterling-standard$/u);
         for (const migration of later) {
           assert.match(migration, /^\d{14}_[a-z0-9-]+$/u);
         }
