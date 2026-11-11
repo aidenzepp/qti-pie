@@ -74,13 +74,8 @@ From grizzle's README (Limits) and its agent guide, `.agents/skills/grizzle/SKIL
 - Tables are immutable unless declared `mutable(...)`.
 - No outer joins, window functions or raw SQL at run time; queries are grizzle's query language, with recursive
   queries for trees and closed types that carry per-variant data.
-- One SERIALIZABLE transaction per call.
+- One transaction per call, SERIALIZABLE unless `grizzle generate` proves a role's writes safe at READ COMMITTED.
 - Roles compile to PostgreSQL roles, views and row-level security; a login is the trust boundary.
-
-## Starting point
-
-`packages/pantry/src/smoke/` is a two-table schema with a role, a login and a workload, migrated on the local cluster and
-tested end to end. It proves the toolchain and is deleted once real schemas replace it.
 
 ## References
 
