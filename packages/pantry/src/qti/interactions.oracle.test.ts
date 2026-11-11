@@ -4,8 +4,7 @@
  * variables the laws read are `BuiltInVariable`'s own rows, under each root
  * (`#pantry/test/built-in-roots.oracle.test.ts`).
  *
- * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
- * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
+ * The builder's tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";

@@ -2,8 +2,7 @@
  * The identity overlays' free tests: the ID law `E1_derived` pins one value per lexical form, the
  * one XML Schema's whitespace collapse gives an `xs:NCName`.
  *
- * The database tests (`identity.db.test.ts`) judge the laws through PostgreSQL, and the builder's
- * tests (`#pantry/import/overlays/identity.test.ts`) its rows.
+ * The builder's tests (`#pantry/import/overlays/identity.test.ts`) its rows.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";

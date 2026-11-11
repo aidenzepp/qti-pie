@@ -3,8 +3,7 @@
  * every `BaseTypePattern` row speaks its XSD type's installed language, and `OperatorArity` agrees
  * with each expression kind's content automaton at its bounds.
  *
- * The fixtures' verdicts are `#pantry/import/overlays/expressions.test.ts`'s, and the database's
- * `expressions.db.test.ts`'s.
+ * The fixtures' verdicts are `#pantry/import/overlays/expressions.test.ts`'s.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";

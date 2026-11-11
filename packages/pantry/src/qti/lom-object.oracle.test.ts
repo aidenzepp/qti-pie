@@ -13,8 +13,7 @@
  * Oracle: the specification as a checker, §2.7.1.1 and §2.7.1.2 as stated above, against the law
  * oracle (`#pantry/test/oracle.ts` `judge`, through `#pantry/test/gen/genetic/judge.ts`
  * `judgeOne`, which also builds the import's rows). The host judge leaves a rule over a query
- * unjudged, so the import's side states neither law; `#pantry/qti/metadata.db.test.ts` holds the
- * database to them through the importer.
+ * unjudged, so the import's side states neither law.
  *
  * Bound: a package of one resource and its document, for each of the 2 resource types a record
  * names (item and test), each of 3 roots (an item's, a test's and a stimulus's, which is no

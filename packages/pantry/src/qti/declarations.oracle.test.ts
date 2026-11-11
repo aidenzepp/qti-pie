@@ -2,8 +2,7 @@
  * The O2 overlays' free tests: the reserved names are the specification's, and each base type's
  * pattern admits exactly the lexical forms the specification gives it.
  *
- * The database tests (`declarations.db.test.ts`) judge the laws through PostgreSQL; the builder's
- * tests (`#pantry/import/overlays/declarations.test.ts`) check its rows and codes.
+ * The builder's tests (`#pantry/import/overlays/declarations.test.ts`) check its rows and codes.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";

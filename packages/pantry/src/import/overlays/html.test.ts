@@ -5,8 +5,7 @@
  * element on the way up its scope, as the document's own construction says.
  *
  * The expected rows are written by hand from each document's construction, element by element, so
- * no expected row is computed by the builder's own walk. The database tests
- * (`#pantry/qti/html.db.test.ts`) judge the rows through PostgreSQL.
+ * no expected row is computed by the builder's own walk.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";

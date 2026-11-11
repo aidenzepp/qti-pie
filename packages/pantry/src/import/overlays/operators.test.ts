@@ -8,8 +8,7 @@
  *
  * The expected rows of the hand-written document are written from its construction, element by
  * element, and the specification is `#pantry/test/operator-spec.ts`, so no expectation is computed
- * by the builder's own code. The database tests (`#pantry/qti/operators.db.test.ts`) judge the
- * rows through PostgreSQL.
+ * by the builder's own code.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";

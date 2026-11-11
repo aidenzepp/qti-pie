@@ -13,8 +13,7 @@
  * above, against the law oracle (`#pantry/test/oracle.ts` `judge`, through
  * `#pantry/test/gen/genetic/judge.ts` `judgeOne`, which also builds the import's rows). The host
  * judge leaves a rule over a query unjudged, so the import's side states no law here: it builds
- * every row and holds none broken, and the database's refusal under `lom-title` is the database
- * tier's (`#pantry/qti/metadata.db.test.ts`).
+ * every row and holds none broken, and the database's refusal under `lom-title` is the database's.
  *
  * Bound: a package of one item resource listing its item and carrying one record, whose general
  * title is the item's own or another, for each of 4 spellings of the `href`: a dot segment, a

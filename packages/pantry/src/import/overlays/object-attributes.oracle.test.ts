@@ -22,8 +22,7 @@
  * both against §2.7.1.1, §2.7.1.2 and reading 105 as stated above: the two agree on every case,
  * and each raises AL3, `LomObjectIdentifier`, `LomObjectTitle` and the value domain exactly where
  * the case says. `lom-identifier` and `lom-title` are rules over queries, which the host judge
- * leaves to the database, so the oracle's side alone is held to them here, and
- * `#pantry/qti/metadata.db.test.ts` holds the database to them through the importer.
+ * leaves to the database, so the oracle's side alone is held to them here.
  *
  * Bound: an item resource whose root writes or omits its `identifier` and its `title`, its record
  * listing no entry, an empty one, the root's or another, and no title string, an empty one, the

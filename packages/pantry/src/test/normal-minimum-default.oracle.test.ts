@@ -14,7 +14,7 @@
  * oracle's laws, and by the import's rows: which `NormalMinimum`, `MasteryFloor` and
  * `MasteryCeiling` rows exist, and the laws they break on the host (`#pantry/test/host-judge.ts`),
  * `Mastery_range` among them as its check orders the pair rows, under the refusal's rule. The
- * database tier judges the check itself (`#pantry/qti/declarations.db.test.ts`).
+ * database judges the check itself.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

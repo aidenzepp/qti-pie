@@ -32,7 +32,7 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 /**
  * What the item ref's href names.
  */
-export type ItemTarget = "item" | "lti" | "missing" | "other" | "stray" | "unlisted";
+type ItemTarget = "item" | "lti" | "missing" | "other" | "stray" | "unlisted";
 
 /**
  * Every {@link ItemTarget}.

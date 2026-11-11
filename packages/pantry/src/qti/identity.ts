@@ -833,7 +833,7 @@ const unadmittedIds = select(DocumentId, (d) => d.eq(d.admitted, false));
  * The bindings of the ID/IDREF table: those of admitted elements' IDs, which "DocumentId key" holds
  * to one element per (document, id) and "Idref target" resolves an IDREF among (R2).
  */
-export const admittedBindings = select(IdBinding, (b) => b.eq(b.admitted, true));
+const admittedBindings = select(IdBinding, (b) => b.eq(b.admitted, true));
 
 /**
  * Every element's `xml:lang`, the source of {@link XmlLang}.

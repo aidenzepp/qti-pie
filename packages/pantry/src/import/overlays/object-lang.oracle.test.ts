@@ -20,8 +20,7 @@
  * the root's title in its language; the oracle raises the value domain exactly where the item's
  * `xml:lang` lies outside it. `lom-title` is a rule over a query (`MatchedTitle`,
  * `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the oracle's side
- * alone is held to it here, and `#pantry/qti/metadata.db.test.ts` holds the database to it through
- * the importer.
+ * alone is held to it here.
  *
  * Bound: an item whose `xml:lang` is `en`, empty, `en_GB` or unwritten, and whose record's title
  * is absent, the root's or another, its string's `language` unwritten, `en` or `fr`: 28 cases,

@@ -5,8 +5,7 @@
  * what QTI 3.0 Metadata §2.7.5.1 forbids (spec reading 122), and an overlay row stands on what the
  * tree holds: an `ObjectLang` on its object's root, a title's string under its title.
  *
- * The database tests (`metadata.db.test.ts`) judge the laws through PostgreSQL, and the builder's
- * tests (`#pantry/import/overlays/metadata.oracle.test.ts`) its rows.
+ * The builder's tests (`#pantry/import/overlays/metadata.oracle.test.ts`) its rows.
  */
 import { date, lexicalForm } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";

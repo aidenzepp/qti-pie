@@ -1069,7 +1069,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     168,
     {
       owner:
-        "\"Declaration not reserved\" (`src/qti/declarations.ts`): `Declaration_not_reserved` over `DeclarationIdentifier` by its `parentKind`, an item's declaration naming none of `itemSessionVariables` and a test's none of `testSessionVariables`, `duration` alone, so a test's own `numAttempts` and `completionStatus` are admitted; the oracle's Declaration not reserved (`src/test/oracle-laws/documents.ts`) and its completeness mutation (`src/test/oracle-complete/documents.ts`); held by `src/qti/declarations.oracle.test.ts` and, on PostgreSQL, `src/qti/declarations.db.test.ts`",
+        "\"Declaration not reserved\" (`src/qti/declarations.ts`): `Declaration_not_reserved` over `DeclarationIdentifier` by its `parentKind`, an item's declaration naming none of `itemSessionVariables` and a test's none of `testSessionVariables`, `duration` alone, so a test's own `numAttempts` and `completionStatus` are admitted; the oracle's Declaration not reserved (`src/test/oracle-laws/documents.ts`) and its completeness mutation (`src/test/oracle-complete/documents.ts`); held by `src/qti/declarations.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -1077,7 +1077,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     169,
     {
       owner:
-        "\"Binding cardinality\" (`src/qti/interactions.ts`): `Binding_cardinality` over `BindingCardinality` and `PlacedBindingCardinality` (`singleGap`), a gap match bound to a `single` response only where `Interaction.gaps`, the count of its `GapInteraction` rows (its own gaps and an included fragment's), is at most one; the oracle's Binding cardinality over the gaps the interaction is nearest to (`src/test/oracle.ts`); held by `src/test/binding-fit.oracle.test.ts` and, on PostgreSQL, `src/qti/interactions.db.test.ts`",
+        "\"Binding cardinality\" (`src/qti/interactions.ts`): `Binding_cardinality` over `BindingCardinality` and `PlacedBindingCardinality` (`singleGap`), a gap match bound to a `single` response only where `Interaction.gaps`, the count of its `GapInteraction` rows (its own gaps and an included fragment's), is at most one; the oracle's Binding cardinality over the gaps the interaction is nearest to (`src/test/oracle.ts`); held by `src/test/binding-fit.oracle.test.ts`",
       status: "G",
     },
   ],

@@ -22,8 +22,8 @@
  * sentinel left, which `declarationRef` copies (B12).
  *
  * The host reads a `Compute.when` term and `Compute.parseDouble` (`#pantry/test/predicates.ts`), so
- * it judges `Mastery_range` as every other law, and the database tier judges it too
- * (`#pantry/qti/declarations.db.test.ts`); the pair rows that law reads are held here besides.
+ * it judges `Mastery_range` as every other law, and the database judges it too; the
+ * pair rows that law reads are held here besides.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

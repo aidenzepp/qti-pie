@@ -4,9 +4,8 @@
  * over the small box of each reading exhausted and over packages a swarm draws past it.
  *
  * The specification is `#pantry/test/operator-spec.ts`, readings 119 and 121 restated from their
- * sources with a hand-written parser of `xs:double`'s lexical space. The database tests
- * (`operators.db.test.ts`) judge the laws through PostgreSQL, and the builder's tests
- * (`#pantry/import/overlays/operators.test.ts`) its rows.
+ * sources with a hand-written parser of `xs:double`'s lexical space. The builder's tests
+ * (`#pantry/import/overlays/operators.test.ts`) check its rows.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";

@@ -7,8 +7,7 @@
  * query `MapKeyFloat`, is held to the law oracle by
  * `#pantry/import/overlays/float-keys.oracle.test.ts`.
  *
- * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
- * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
+ * The builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
  */
 import { doubleText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";

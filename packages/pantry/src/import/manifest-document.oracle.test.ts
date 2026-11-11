@@ -4,7 +4,7 @@
  * (reading 93), and the manifest's is fixed, `manifest` (reading 176), since it is read before any
  * resource names a path. So a document-typed resource whose href names `imsmanifest.xml` names no
  * document of its type, and "Document entry" (`entry-kind`) refuses it, in the law oracle and, over
- * the query `TypedHref`, in the database (`#pantry/qti/package.db.test.ts`); a `cp:file` naming it
+ * the query `TypedHref`, in the database; a `cp:file` naming it
  * only locates it (IMS Content Packaging 1.2, §6.11.3); and a site whose href names it names no
  * document, whatever names it. The import's reader and the oracle shredded the manifest a second
  * time, as the document of each resource whose href named it, so the package held two documents at

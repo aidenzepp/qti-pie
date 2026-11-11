@@ -14,8 +14,7 @@
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`).
  * "Document entry" over a document-typed href is a rule over a query (`TypedHref`,
  * `#pantry/qti/queries.ts`), which the host judge leaves to the database, so the oracle's side
- * alone is held to it here, and `#pantry/qti/package.db.test.ts` holds the database to it; neither
- * side raises `RootOfType`.
+ * alone is held to it here; neither side raises `RootOfType`.
  *
  * Bound: the every-relation package with one resource added whose href, and its one file, names
  * no entry: for each of the 10 resource types `RootOfType` maps, at a path in the package with no

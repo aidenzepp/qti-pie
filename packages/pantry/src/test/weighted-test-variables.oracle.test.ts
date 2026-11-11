@@ -10,9 +10,8 @@
  * laws over the import's rows on the host (`#pantry/test/host-judge.ts`), the first broken law's
  * rule by precedence. The oracle's verdict is the case's rule, and the host's is too, but for a law
  * the host leaves to the database: "Set type" (P20) is a check over the query `HeldType` since
- * 0ca5ed68, and a statement over a derived relation only PostgreSQL judges (32692ced), which
- * `qti/expressions.db.test.ts` holds. The fixtures of {@link weightedNames} and `test-mapping` are
- * materialized; the rest are written here.
+ * 0ca5ed68, and a statement over a derived relation only PostgreSQL judges (32692ced). The fixtures
+ * of {@link weightedNames} and `test-mapping` are materialized; the rest are written here.
  */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";

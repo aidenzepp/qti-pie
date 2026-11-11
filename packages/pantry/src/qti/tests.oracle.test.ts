@@ -2,8 +2,8 @@
  * The test layer's free tests: the patterns its laws judge text by are the languages the
  * specifications state.
  *
- * The database tests (`tests.db.test.ts`) judge the laws through PostgreSQL; the overlay builders'
- * tests (`#pantry/import/overlays/tests.test.ts`) judge the rows the laws read.
+ * The overlay builders' tests (`#pantry/import/overlays/tests.test.ts`) judge the rows the laws
+ * read.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";

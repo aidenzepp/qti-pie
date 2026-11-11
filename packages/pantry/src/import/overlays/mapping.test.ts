@@ -5,7 +5,7 @@
  * map key per `qti-map-entry` from its attributes, and splits each two-item key at its one
  * whitespace character. The walk shares no code with the builder, which reads the tree's flat
  * rows (`flatten`). Each typed key's value is a query's (`#pantry/qti/queries.ts`), read from the
- * `MapKeyType` rows and the splits, so `#pantry/qti/mapping.db.test.ts` judges it.
+ * `MapKeyType` rows and the splits, so the database judges it.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";

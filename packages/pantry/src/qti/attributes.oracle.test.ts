@@ -3,8 +3,6 @@
  * distinctness refuses exactly a repeated closed name, the derived bounds are what
  * `#pantry/qti/limits.ts` derives, and `coords` is judged by `CoordsDType` alone, whatever its
  * shape.
- *
- * The database tests (`attributes.db.test.ts`) judge the same laws through PostgreSQL.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
