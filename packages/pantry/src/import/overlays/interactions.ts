@@ -567,7 +567,6 @@ const interactionAttributesOf = (context: Context) =>
                 name,
                 node,
                 rootKind: context.rootKind,
-                value: collapse(lexical),
               } satisfies Addition<typeof InteractionAttribute>,
             ] as const,
           ]
@@ -1103,7 +1102,7 @@ const referencesOf = (
             reference.attributes.some((name) => name === row.name) &&
             reference.kinds.some((kind) => kind === row.kind) &&
             // GRIZZLE-PENDING: Q18, Q19: A content reference becomes a query over its source, and this gate goes.
-            isNcName(row.value),
+            isNcName(collapse(row.lexical)),
         )
         .map((row) => ({
           key: keyOf([row.node, row.name]),
@@ -1111,7 +1110,7 @@ const referencesOf = (
             assemblyKind: context.rootKind,
             attribute: row.name,
             document: context.document,
-            identifier: row.value,
+            identifier: collapse(row.lexical),
             kind: row.kind,
             node: row.node,
           },
@@ -1183,7 +1182,7 @@ const sectionNamesOf = (
     referringRoots.every((root) => root !== context.rootKind)
       ? [...read.values()].flatMap((row) =>
           // GRIZZLE-PENDING: Q18, Q19: A section's reference becomes a query over its source, and this gate goes.
-          isNcName(row.value) &&
+          isNcName(collapse(row.lexical)) &&
           classes.some(
             (reference) =>
               reference.attributes.some((name) => name === row.name) &&
@@ -1195,7 +1194,7 @@ const sectionNamesOf = (
                   {
                     attribute: row.name,
                     document: context.document,
-                    identifier: row.value,
+                    identifier: collapse(row.lexical),
                     kind: row.kind,
                     node: row.node,
                   },

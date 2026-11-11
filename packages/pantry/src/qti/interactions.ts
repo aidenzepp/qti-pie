@@ -106,6 +106,7 @@ import {
   decimalText,
   drawn,
   fin,
+  generated,
   key,
   lexicalForm,
   mirrors,
@@ -281,13 +282,14 @@ const templateVariableKind = "qti-template-variable" satisfies Kind;
 /**
  * An attribute an O3 law reads, keyed by its element's node and its name: the element's kind,
  * document and document's root kind, the lexical form as written (C18's copy), and `value`, that
- * form collapsed, as `E1_derived` states it ({@link collapsed}), whatever the form: a value with
- * whitespace inside is held as its type's whiteSpace reads it, and is no value of its type.
+ * form collapsed (XML Schema Part 2, §4.3.6, as `SsmlAttribute`'s is), which the database derives,
+ * whatever the form: a value with whitespace inside is held as its type's whiteSpace reads it, and
+ * is no value of its type, which its value domain refuses alone.
  *
  * Copied text is `keyText` (`#pantry/qti/limits.ts`): the lexical form and the value each sit in a
  * containment's index, and a longer value is refused under the schema's one limit law.
  */
-export const InteractionAttribute = relation(
+export const InteractionAttribute = relation.generated(
   "InteractionAttribute",
   {
     document: uuid,
@@ -296,9 +298,9 @@ export const InteractionAttribute = relation(
     name: closedId(AttributeName),
     node: uuid,
     rootKind: closedId(NodeKind),
-    value: keyText,
   },
   ["node", "name"],
+  (v) => ({ value: generated(keyText, Compute.cast(Compute.collapse(v.lexical), keyText)) }),
 );
 
 /**
@@ -1576,18 +1578,6 @@ const referenceReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   );
 
 /**
- * State that an attribute's value is its lexical form collapsed (XML Schema Part 2, §4.3.6, as
- * `SsmlAttribute`'s is): each run of whitespace one space, and none at either end. It claims no
- * type of the value: every form has its collapsed value, so the copy every read attribute asks
- * holds beside it, and a value with whitespace inside, in no atomic type's lexical space, is
- * refused by its value domain alone.
- *
- * @param v - The row.
- * @returns The predicate.
- */
-const collapsed = (v: AttributeRow) => v.eq(v.value, Compute.collapse(v.lexical));
-
-/**
  * The XSD defaults of one count of the pair, per version: each default's value, with the kinds
  * whose count it is. A kind whose count has no default is in none, so its count, left unwritten,
  * has no value (the law oracle's `countAttribute`).
@@ -2512,7 +2502,6 @@ export const interactionLawsByName = {
     ),
     contained(on(InteractionAttribute, "node", "name"), on(read, "node", "name")),
     contained(on(InteractionAttribute, "document", "rootKind"), on(Document, "node", "rootKind")),
-    check("E1_derived", InteractionAttribute, collapsed),
     contained(
       on(Interaction, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
