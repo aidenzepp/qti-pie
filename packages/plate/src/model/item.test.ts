@@ -2110,7 +2110,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-0] [Q-2] reads adaptive and shuffle as true for true or 1 and false for false or 0, marking only adaptive",
+    "[I-0] [Q-2] reads adaptive and shuffle as true for true or 1 and false for false or 0, marking neither now the adaptive policy is filled",
     () =>
       Effect.gen(function* booleanAttributes() {
         const cases = [
@@ -2141,17 +2141,14 @@ describe("buildItem", () => {
           );
 
           assert.strictEqual(choiceIn(built.body).shuffle, on, written);
-          assert.deepStrictEqual(
-            built.unsupported,
-            on ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
-            written,
-          );
+          assert.strictEqual(built.adaptive, on, written);
+          assert.deepStrictEqual(built.unsupported, [], written);
         }
       }),
   );
 
   it.effect(
-    '[W0-BD] adaptive="true" is read into Item.adaptive and, while the policy is a stub, marked; an item without the attribute is neither',
+    '[W0-BD] adaptive="true" is read into Item.adaptive and, now the policy is filled, not marked; an item without the attribute is not adaptive',
     () =>
       Effect.gen(function* adaptiveFact() {
         const cases: readonly (readonly [readonly SourceAttribute[], boolean])[] = [
@@ -2161,7 +2158,7 @@ describe("buildItem", () => {
           [[], false],
         ];
 
-        assert.isFalse(adaptivePolicy.implemented);
+        assert.isTrue(adaptivePolicy.implemented);
         for (const [attributes, adaptive] of cases) {
           const built = yield* Effect.fromResult(
             buildItem(
@@ -2174,11 +2171,7 @@ describe("buildItem", () => {
           );
 
           assert.strictEqual(built.adaptive, adaptive, JSON.stringify(attributes));
-          assert.deepStrictEqual(
-            built.unsupported,
-            adaptive ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
-            JSON.stringify(attributes),
-          );
+          assert.deepStrictEqual(built.unsupported, [], JSON.stringify(attributes));
         }
       }),
   );
@@ -3077,8 +3070,8 @@ describe("buildItem", () => {
       });
       assert.deepStrictEqual(built.lang, Option.none());
       assert.deepStrictEqual([...built.responses.keys()], ["POINT"]);
+      assert.isTrue(built.adaptive);
       assert.deepStrictEqual(built.unsupported, [
-        { feature: 'adaptive="true"', path: root, shown: "mark" },
         { feature: "xml:base", path: `${body}/p`, shown: "mark" },
         { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
       ]);
@@ -5691,7 +5684,7 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
   );
 
   it.effect(
-    '[W0-BD] every corpus item that writes adaptive="true" keeps its mark and reads adaptive, and every other item has neither',
+    '[W0-BD] every corpus item that writes adaptive="true" reads adaptive and, now the policy is filled, carries no mark, and every other item reads not adaptive',
     () =>
       Effect.gen(function* adaptiveCorpus() {
         let adaptiveItems = 0;
@@ -5714,7 +5707,7 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
           seen += 1;
           adaptiveItems += written ? 1 : 0;
           assert.strictEqual(accepted.value.item.adaptive, written, `${member.location}: adaptive`);
-          assert.strictEqual(marked, written, `${member.location}: the mark`);
+          assert.isFalse(marked, `${member.location}: the mark`);
         }
 
         assert.isAbove(seen, 0);
