@@ -86,7 +86,9 @@ item-prefixed names that pass through it, because the package declares nothing t
   password files.
 
 Package-media mode is no setting of pantry's: an application lists `QtiMedia` (or a level of its own over it) in its
-grizzle config and writes its policy as `MediaType` rows, one per entry of its `policy.json`. The database alone
+grizzle config and writes its policy as `MediaType` rows, one per entry of its `policy.json`. Write them through a
+role of their own, one that writes nothing a READ COMMITTED reader reads: the media laws read `MediaType`, so a role
+that writes it beside relations a reader reads makes grizzle's certifier lift that reader to SERIALIZABLE. The database alone
 judges its laws: every address a player fetches is a path to a file of the package, with an extension a `MediaType`
 row lists; no address is a `data:` one; no `style` holds `url(`, `@import`, `image-set(`, `src(` or a CSS escape; no
 foreign markup is kept; and every entry is used. Each entry's `digest`, the SHA-256 of its bytes that PostgreSQL

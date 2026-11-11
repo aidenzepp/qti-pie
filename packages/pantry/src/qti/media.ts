@@ -241,6 +241,12 @@ export const MediaType = relation.generated(
 /**
  * The policy's level over `Qti`: {@link MediaType}, the rows the level's rules read, a level of its
  * own since a derived relation reads only the levels below its own.
+ *
+ * An application writes these rows through a role of their own, one that writes nothing its READ
+ * COMMITTED readers read. The media laws read `MediaType`, so a role writing it beside relations a
+ * reader reads gives grizzle's certifier another writer of that reader's reads, and it lifts the
+ * reader to SERIALIZABLE (found by edullm: a publisher that also wrote the policy moved its
+ * learner).
  */
 export const QtiMediaPolicy = schema.extend(Qti, "QtiMediaPolicy", { MediaType }, [
   key(on(MediaType, "type")),
