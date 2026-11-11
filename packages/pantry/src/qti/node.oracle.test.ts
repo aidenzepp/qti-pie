@@ -3,8 +3,7 @@
  * laws, its write type is the host's fields alone, and its content-order statements (N5) admit
  * exactly the state `stepOf` gives each child, over every family of the installed grammar and
  * over generated documents, and its membership checks test the handle of the node's own `Position`
- * field, as the host judge reads them. PostgreSQL judges the laws themselves in
- * `node.oracle.db.test.ts`.
+ * field, as the host judge reads them. PostgreSQL judges the laws themselves.
  */
 import {
   bits,
@@ -262,8 +261,7 @@ describe("Node's declarations", () => {
     // `satisfies` holds the written fields to exactly this record, a member written without
     // `document` is accepted, and each refusal below is a type error. A member that carries
     // `document` is not one: grizzle checks a nested member's fields by assignability, not for
-    // excess keys (the report's finding), so T0 refuses a wrong one in PostgreSQL
-    // (`node.oracle.db.test.ts`).
+    // excess keys (the report's finding), so T0 refuses a wrong one in PostgreSQL.
     const fields = {
       ancestry: true,
       chars: true,
@@ -903,8 +901,7 @@ const editedForeign = (
 
 /**
  * Each foreign law's case: a lawful document, and the corruption of it that breaks the law, a
- * second document or an edit of its rows. `node.oracle.db.test.ts` restates the first and the third
- * against PostgreSQL, and `chardata.db.test.ts` the other three's rows.
+ * second document or an edit of its rows.
  */
 const foreignCases: readonly {
   readonly corrupt:

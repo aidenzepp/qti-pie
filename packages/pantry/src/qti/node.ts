@@ -465,7 +465,7 @@ export const copiedTitleText = (n: NodeRow) =>
  * The two terms of a LOM learning resource type, its vocabulary's `source` and its `value`, whose
  * text `lom-learning-resource-type` copies (spec reading 122, `#pantry/qti/metadata.ts`).
  */
-export const vocabularyTermKinds = [
+const vocabularyTermKinds = [
   "lom:source",
   "lom:value",
 ] as const satisfies readonly (typeof NodeKind.handles)[number][];
