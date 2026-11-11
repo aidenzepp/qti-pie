@@ -106,7 +106,8 @@ const testDocument = {
 /**
  * The rows of a document the package lists under a resource type, its node and package stray: its
  * `Document` row, lawful on its own CHECKs, and the `ResourceDocument` row that names it under the
- * type, whose own CHECKs hold it to its `Document`'s path, root kind and document type.
+ * type, held to its `Document`'s path, root kind and document type. Its document type is generated
+ * from its type (`ResourceDocumentType`), so PostgreSQL computes it and the row states none.
  *
  * @param path - The path the document stands at.
  * @param held - The document's type and its root kind.
@@ -126,7 +127,6 @@ const listedDocumentAt = (
   },
   {
     fact: {
-      documentType: held.documentType,
       node: stray,
       package: stray,
       path,
@@ -140,7 +140,9 @@ const listedDocumentAt = (
 /**
  * The rows of a resource of the item type whose href names a path in the package, its package
  * stray and its node the other stray: its `ResourceHref` and its `ResourceTyped`, which are the
- * query `TypedHref`'s one row for it, each lawful on its own CHECKs.
+ * query `TypedHref`'s one row for it, each lawful on its own CHECKs. The type's spelling,
+ * `ResourceTyped`'s `typeLexical`, is generated from its code (`ResourceTypeLexical`), so
+ * PostgreSQL computes it and the row states none.
  *
  * @param path - The path its href names, which is also the href as written.
  * @returns The two rows.
@@ -151,12 +153,7 @@ const itemResourceNaming = (path: string): readonly Stated[] => [
     relation: ResourceHref,
   },
   {
-    fact: {
-      node: strayOther,
-      package: stray,
-      type: itemDocument.type,
-      typeLexical: itemDocument.type,
-    },
+    fact: { node: strayOther, package: stray, type: itemDocument.type },
     relation: ResourceTyped,
   },
 ];
