@@ -2023,8 +2023,6 @@ COMMENT ON CONSTRAINT "__aria_value_pk_kflmtnswsi" ON "qti"."aria_value" IS 'pri
 
 COMMENT ON CONSTRAINT "__aria_value_key_node_value_name_4imwgjejeb" ON "qti"."aria_value" IS 'key AriaValue(node, value, name)';
 
-COMMENT ON CONSTRAINT "__aria_value_key_node_name_value_6rqhq75fse" ON "qti"."aria_value" IS 'key AriaValue(node, name, value)';
-
 COMMENT ON CONSTRAINT "__assembled_catalog_pk_b5tgxmgzjo" ON "qti"."assembled_catalog" IS 'primary key of AssembledCatalog';
 
 COMMENT ON CONSTRAINT "__assembled_id_pk_qwz2fcv4hr" ON "qti"."assembled_id" IS 'primary key of AssembledId';
@@ -2104,8 +2102,6 @@ COMMENT ON CONSTRAINT "__binding_declaration_key_node_attribute_kind_cfz6qtibon"
 COMMENT ON CONSTRAINT "__binding_name_pk_k6l2t2abun" ON "qti"."binding_name" IS 'primary key of BindingName';
 
 COMMENT ON CONSTRAINT "__binding_name_key_node_attribute_kind_document_ftrs3xna4p" ON "qti"."binding_name" IS 'key BindingName(node, attribute, kind, document, identifier)';
-
-COMMENT ON CONSTRAINT "__binding_name_key_node_attribute_document_kind_earrsqclis" ON "qti"."binding_name" IS 'key BindingName(node, attribute, document, kind, identifier)';
 
 COMMENT ON CONSTRAINT "__body_xml_lang_pk_zzjcyx27yq" ON "qti"."body_xml_lang" IS 'primary key of BodyXmlLang';
 
@@ -2196,8 +2192,6 @@ COMMENT ON CONSTRAINT "__choice_interaction_key_node_interaction_lkjg3yj2vm" ON 
 COMMENT ON CONSTRAINT "__cn_attribute_pk_uahvc6us4g" ON "qti"."cn_attribute" IS 'primary key of CnAttribute';
 
 COMMENT ON CONSTRAINT "__cn_attribute_key_node_name_lexical_cu7muqqogb" ON "qti"."cn_attribute" IS 'key CnAttribute(node, name, lexical)';
-
-COMMENT ON CONSTRAINT "__cn_attribute_key_node_lexical_name_otulbj64mf" ON "qti"."cn_attribute" IS 'key CnAttribute(node, lexical, name)';
 
 COMMENT ON CONSTRAINT "__cn_count_pk_5n2ubteh2s" ON "qti"."cn_count" IS 'primary key of CnCount';
 
@@ -2399,8 +2393,6 @@ COMMENT ON CONSTRAINT "__expression_attribute_key_node_attribute_kind_c7mpnkqnjp
 
 COMMENT ON CONSTRAINT "__expression_attribute_key_node_attribute_written_sqs5cpgyqi" ON "qti"."expression_attribute" IS 'key ExpressionAttribute(node, attribute, written)';
 
-COMMENT ON CONSTRAINT "__expression_attribute_key_node_written_attribute_gmblqwrdel" ON "qti"."expression_attribute" IS 'key ExpressionAttribute(node, written, attribute)';
-
 COMMENT ON CONSTRAINT "__feedback_ref_pk_h56q5t5kv4" ON "qti"."feedback_ref" IS 'primary key of FeedbackRef';
 
 COMMENT ON CONSTRAINT "__feedback_ref_key_node_attribute_kind_document_dtev6ffm57" ON "qti"."feedback_ref" IS 'key FeedbackRef(node, attribute, kind, document, assemblyKind, identifier)';
@@ -2487,8 +2479,6 @@ COMMENT ON CONSTRAINT "__instance_key_id_document_assembly_assembly_kind_dsppv6y
 
 COMMENT ON CONSTRAINT "__instance_key_id_choices_assembly_document_e3i3rvfi3e" ON "qti"."instance" IS 'key Instance(id, choices, assembly, document)';
 
-COMMENT ON CONSTRAINT "__instance_key_id_assembly_assembly_kind_document_4ojunf6xi2" ON "qti"."instance" IS 'key Instance(id, assembly, assemblyKind, document)';
-
 COMMENT ON CONSTRAINT "__instance_key_id_hottexts_assembly_document_dofcjjs4tq" ON "qti"."instance" IS 'key Instance(id, hottexts, assembly, document)';
 
 COMMENT ON CONSTRAINT "__instance_key_id_ids_assembly_assembly_kind_mbbcwtkbua" ON "qti"."instance" IS 'key Instance(id, ids, assembly, assemblyKind, document)';
@@ -2528,8 +2518,6 @@ COMMENT ON CONSTRAINT "__interaction_attribute_pk_sbz3kmx43v" ON "qti"."interact
 COMMENT ON CONSTRAINT "__interaction_attribute_key_node_name_value_qmwpye5d5l" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node, name, value)';
 
 COMMENT ON CONSTRAINT "__interaction_attribute_key_node_name_kind_document_hu27cn42ds" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node, name, kind, document, lexical)';
-
-COMMENT ON CONSTRAINT "__interaction_attribute_key_node_value_name_beahcsfst3" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node, value, name)';
 
 COMMENT ON CONSTRAINT "__item_mode_pk_rmbrjefggb" ON "qti"."item_mode" IS 'primary key of ItemMode';
 
@@ -2786,8 +2774,6 @@ COMMENT ON CONSTRAINT "__node_key_id_end_fccsn4czp6" ON "qti"."node" IS 'key Nod
 COMMENT ON CONSTRAINT "__node_check_node_in_node_a2p3dbqqpr" ON "qti"."node" IS 'check of Node for law Node(id, pred(children), lastState) in Node(parent, at, state) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}';
 
 COMMENT ON CONSTRAINT "__node_check_node_start_in_node_5h7uutxasb" ON "qti"."node" IS 'check of Node for law Node(parent, pred(at), was) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}} in Node(parent, at, state) where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}';
-
-COMMENT ON CONSTRAINT "__node_key_id_children_start_document_ancestry_mpha43wxpq" ON "qti"."node" IS 'key Node(id, children, start, document, ancestry, documentType, governor, kind, nearest, nearestKind, parentKind, version)';
 
 COMMENT ON CONSTRAINT "__node_key_id_document_kind_parent_abf25mzj2n" ON "qti"."node" IS 'key Node(id, document, kind, parent)';
 

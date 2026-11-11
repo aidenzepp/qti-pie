@@ -306,9 +306,10 @@ as PostgreSQL's scanner reads it: whitespace, comments and the case of unquoted 
   `check` compiles every login again and holds each file to it byte for byte: the login's served file differs from
   what its workload compiles to under snapshot.json (an ungenerated change), naming the login and the first program
   where they part; run grizzle generate, which writes the served file again.
-- `meta.json`: it records the folder's place in the chain, the renames and drops it was drafted under, and every
+- `meta.json`: it records the folder's place in the chain, the renames and drops it was drafted under, every
   drafted statement of every file in its place, its confirmed groups and data losses among them, which `check` reads
-  every reviewed file against. `check` says: meta.json does not decode as a
+  every reviewed file against, and the law of each constraint the folder installs, by which `migrate` names the law a
+  refused statement of the folder breaks. `check` says: meta.json does not decode as a
   migration's meta.json, or names another schema; restore it from git, or broken chain: this migration does not start
   where the previous one ends; regenerate; never hand-edit meta.json.
 - An applied migration: the database ran exactly that text, and the ledger holds its digest. `migrate` says
@@ -539,7 +540,8 @@ The command line's own refusals, by stage:
   `PartialOperation`, whose `guard` is the code to write. A contract's facts are exactly its `proves`: a fact its
   predicate implies but `proves` leaves out is refused, and the refusal names the declaration to add. Narrow an exact
   integer into an integer field with
-  `Compute.cast` under `Compute.within`.
+  `Compute.cast` under `Compute.within`, and a sum, a mean or numeric arithmetic into a `pg.numeric(p, s)` field the
+  same way: a ChangeSet member writes each field at its own type, a numeric of another precision or scale included.
 - Test text with `Compute.matches(x, pattern)`, `Compute.startsWith` and `Compute.endsWith`, never a regex in your
   code. A pattern is `str.regex`'s grammar under `"u"`, anchored by `^` and `$`: a `Compute.pattern(source)`, made once
   as a module constant and admitted there (`const digits = Compute.pattern("^[0-9]+$")`), never a bare string; or a

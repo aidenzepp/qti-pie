@@ -43,8 +43,7 @@ CREATE TABLE "qti"."aria_value" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__aria_value_pk_kflmtnswsi" PRIMARY KEY ("node", "name"),
-  CONSTRAINT "__aria_value_key_node_value_name_4imwgjejeb" UNIQUE NULLS DISTINCT ("node", "value", "name"),
-  CONSTRAINT "__aria_value_key_node_name_value_6rqhq75fse" UNIQUE NULLS DISTINCT ("node", "name", "value")
+  CONSTRAINT "__aria_value_key_node_value_name_4imwgjejeb" UNIQUE NULLS DISTINCT ("node", "value", "name")
 );
 
 CREATE TABLE "qti"."assembled_catalog" (
@@ -327,8 +326,7 @@ CREATE TABLE "qti"."binding_name" (
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__binding_name_pk_k6l2t2abun" PRIMARY KEY ("node", "attribute"),
-  CONSTRAINT "__binding_name_key_node_attribute_kind_document_ftrs3xna4p" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "document", "identifier"),
-  CONSTRAINT "__binding_name_key_node_attribute_document_kind_earrsqclis" UNIQUE NULLS DISTINCT ("node", "attribute", "document", "kind", "identifier")
+  CONSTRAINT "__binding_name_key_node_attribute_kind_document_ftrs3xna4p" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "document", "identifier")
 );
 
 CREATE TABLE "qti"."body_xml_lang" (
@@ -568,8 +566,7 @@ CREATE TABLE "qti"."cn_attribute" (
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__cn_attribute_pk_uahvc6us4g" PRIMARY KEY ("node", "name"),
-  CONSTRAINT "__cn_attribute_key_node_name_lexical_cu7muqqogb" UNIQUE NULLS DISTINCT ("node", "name", "lexical"),
-  CONSTRAINT "__cn_attribute_key_node_lexical_name_otulbj64mf" UNIQUE NULLS DISTINCT ("node", "lexical", "name")
+  CONSTRAINT "__cn_attribute_key_node_name_lexical_cu7muqqogb" UNIQUE NULLS DISTINCT ("node", "name", "lexical")
 );
 
 CREATE TABLE "qti"."cn_count" (
@@ -980,8 +977,7 @@ CREATE TABLE "qti"."expression_attribute" (
   CONSTRAINT "e_1_derived" CHECK (((NOT "lexical" ~ '\A(?:directedPair|duration|file|float|identifier|integer|point|pair|string|uri|boolean)\Z'::"pg_catalog"."text" AND "attribute" = 122::smallint AND "base_type" = 12::smallint OR (NOT "lexical" ~ '\A(?:floor|signum|ceil)\Z'::"pg_catalog"."text" AND "base_type" = 2::smallint OR "lexical" ~ '\A(?:floor|signum|ceil)\Z'::"pg_catalog"."text" AND "base_type" = 1::smallint) AND "attribute" = 128::smallint OR "lexical" ~ CASE ("qti"."__constant_iksi4cbdex"())[NULLIF("pg_catalog"."substring"("qti"."__constant_gazfxeallk"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] WHEN '^boolean$'::"pg_catalog"."text" THEN '\Aboolean\Z'::"pg_catalog"."text" WHEN '^directedPair$'::"pg_catalog"."text" THEN '\AdirectedPair\Z'::"pg_catalog"."text" WHEN '^duration$'::"pg_catalog"."text" THEN '\Aduration\Z'::"pg_catalog"."text" WHEN '^file$'::"pg_catalog"."text" THEN '\Afile\Z'::"pg_catalog"."text" WHEN '^float$'::"pg_catalog"."text" THEN '\Afloat\Z'::"pg_catalog"."text" WHEN '^identifier$'::"pg_catalog"."text" THEN '\Aidentifier\Z'::"pg_catalog"."text" WHEN '^integer$'::"pg_catalog"."text" THEN '\Ainteger\Z'::"pg_catalog"."text" WHEN '^pair$'::"pg_catalog"."text" THEN '\Apair\Z'::"pg_catalog"."text" WHEN '^point$'::"pg_catalog"."text" THEN '\Apoint\Z'::"pg_catalog"."text" WHEN '^string$'::"pg_catalog"."text" THEN '\Astring\Z'::"pg_catalog"."text" WHEN '^uri$'::"pg_catalog"."text" THEN '\Auri\Z'::"pg_catalog"."text" ELSE ("qti"."__constant_iksi4cbdex"())[NULLIF("pg_catalog"."substring"("qti"."__constant_gazfxeallk"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] END AND "attribute" = 122::smallint OR "attribute" = 117::smallint) AND "written" = true OR ("base_type" IN (2::smallint, 12::smallint) AND "attribute" = 122::smallint OR "attribute" = 117::smallint) AND "kind" = 63::smallint AND "lexical" = ''::"pg_catalog"."text" AND "written" = false) IS TRUE),
   CONSTRAINT "weighted_base" CHECK (("base_type" IN (2::smallint, 12::smallint) OR "attribute" <> 117::smallint OR "written" = false) IS TRUE),
   CONSTRAINT "__expression_attribute_key_node_attribute_kind_c7mpnkqnjp" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "lexical"),
-  CONSTRAINT "__expression_attribute_key_node_attribute_written_sqs5cpgyqi" UNIQUE NULLS DISTINCT ("node", "attribute", "written"),
-  CONSTRAINT "__expression_attribute_key_node_written_attribute_gmblqwrdel" UNIQUE NULLS DISTINCT ("node", "written", "attribute")
+  CONSTRAINT "__expression_attribute_key_node_attribute_written_sqs5cpgyqi" UNIQUE NULLS DISTINCT ("node", "attribute", "written")
 );
 
 CREATE TABLE "qti"."feedback_ref" (
@@ -1238,7 +1234,6 @@ CREATE TABLE "qti"."instance" (
   CONSTRAINT "__instance_key_id_names_assembly_document_mixes_part_zohtgpqsze" UNIQUE NULLS DISTINCT ("id", "names", "assembly", "document", "mixes", "part", "replaced"),
   CONSTRAINT "__instance_key_id_document_assembly_assembly_kind_dsppv6yhem" UNIQUE NULLS DISTINCT ("id", "document", "assembly", "assembly_kind"),
   CONSTRAINT "__instance_key_id_choices_assembly_document_e3i3rvfi3e" UNIQUE NULLS DISTINCT ("id", "choices", "assembly", "document"),
-  CONSTRAINT "__instance_key_id_assembly_assembly_kind_document_4ojunf6xi2" UNIQUE NULLS DISTINCT ("id", "assembly", "assembly_kind", "document"),
   CONSTRAINT "__instance_key_id_hottexts_assembly_document_dofcjjs4tq" UNIQUE NULLS DISTINCT ("id", "hottexts", "assembly", "document"),
   CONSTRAINT "__instance_key_id_ids_assembly_assembly_kind_mbbcwtkbua" UNIQUE NULLS DISTINCT ("id", "ids", "assembly", "assembly_kind", "document"),
   CONSTRAINT "__instance_key_id_idref_targets_assembly_document_a4zx55h7yt" UNIQUE NULLS DISTINCT ("id", "idref_targets", "assembly", "document"),
@@ -1307,8 +1302,7 @@ CREATE TABLE "qti"."interaction_attribute" (
 '::"pg_catalog"."text", ' '::"pg_catalog"."text"), ''::"pg_catalog"."text", ' '::"pg_catalog"."text"), '  '::"pg_catalog"."text", ' 	'::"pg_catalog"."text"), '	 '::"pg_catalog"."text", '		'::"pg_catalog"."text"), '	'::"pg_catalog"."text", ''::"pg_catalog"."text"))::"qti"."__text_pwaizaq6lx") STORED NOT NULL,
   CONSTRAINT "__interaction_attribute_pk_sbz3kmx43v" PRIMARY KEY ("node", "name"),
   CONSTRAINT "__interaction_attribute_key_node_name_value_qmwpye5d5l" UNIQUE NULLS DISTINCT ("node", "name", "value"),
-  CONSTRAINT "__interaction_attribute_key_node_name_kind_document_hu27cn42ds" UNIQUE NULLS DISTINCT ("node", "name", "kind", "document", "lexical"),
-  CONSTRAINT "__interaction_attribute_key_node_value_name_beahcsfst3" UNIQUE NULLS DISTINCT ("node", "value", "name")
+  CONSTRAINT "__interaction_attribute_key_node_name_kind_document_hu27cn42ds" UNIQUE NULLS DISTINCT ("node", "name", "kind", "document", "lexical")
 );
 
 CREATE TABLE "qti"."item_mode" (
@@ -2237,7 +2231,6 @@ CREATE TABLE "qti"."node" (
   CONSTRAINT "__node_key_id_end_fccsn4czp6" UNIQUE NULLS DISTINCT ("id", "end"),
   CONSTRAINT "__node_check_node_in_node_a2p3dbqqpr" CHECK (("children" > 0::bigint OR "last_state" = 0::smallint) IS TRUE),
   CONSTRAINT "__node_check_node_start_in_node_5h7uutxasb" CHECK (("at" > 0::bigint OR "was" = 0::smallint) IS TRUE),
-  CONSTRAINT "__node_key_id_children_start_document_ancestry_mpha43wxpq" UNIQUE NULLS DISTINCT ("id", "children", "start", "document", "ancestry", "document_type", "governor", "kind", "nearest", "nearest_kind", "parent_kind", "version"),
   CONSTRAINT "__node_key_id_document_kind_parent_abf25mzj2n" UNIQUE NULLS DISTINCT ("id", "document", "kind", "parent"),
   CONSTRAINT "__node_key_id_at_children_lghweyjlxr" UNIQUE NULLS DISTINCT ("id", "at", "children"),
   CONSTRAINT "__node_key_id_document_r4xnpqafto" UNIQUE NULLS DISTINCT ("id", "document"),
