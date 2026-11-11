@@ -251,10 +251,12 @@ export const TestFlag = relation(
  *   `mixes`, whether its children's order is drawn at delivery, and `looseChain`, whether it and
  *   every section above it in its document is invisible and not kept together, so the order of the
  *   section that places the document reaches it. Both are false on every other kind.
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const Named = relation(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "Named",
   {
     document: uuid,

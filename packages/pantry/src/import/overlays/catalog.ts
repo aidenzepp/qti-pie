@@ -16,10 +16,12 @@
  * of them (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { booleanTrue, collapse, isNcName } from "#pantry/grammar/domains.ts";
+import { Option } from "effect";
+import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import { foldAt, governorOf } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
@@ -163,9 +165,8 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     // A catalog's `id` that is no NCName is no ID: it names no catalog, as it has no `DocumentId`
     // (spec reading 156), and its value domain refuses it alone.
     if (node.kind === "qti-catalog" && name === "id") {
-      // GRIZZLE-PENDING: Q18, Q19: CatalogId becomes a query over its source, and this gate goes.
-      if (isNcName(value)) {
-        catalogIds.set(id, { document, id: value, node: id, owner: id });
+      for (const catalog of Option.toArray(namedBy(lexical))) {
+        catalogIds.set(id, { document, id: catalog, node: id, owner: id });
       }
 
       continue;

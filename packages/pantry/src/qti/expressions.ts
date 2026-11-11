@@ -326,10 +326,12 @@ export const Processing = relation(
  * where it claims one, and the type of a setter's or a lookup's one expression, `HeldType`, a
  * derived relation of `#pantry/qti/queries.ts`. A type field its element leaves unread holds
  * `unknown`.
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const VariableRef = relation(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "VariableRef",
   {
     after: Affix,

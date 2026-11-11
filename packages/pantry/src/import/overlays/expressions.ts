@@ -36,6 +36,7 @@ import {
   typedCountOf,
   typedDeclarationOf,
 } from "#pantry/import/overlays/declarations.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import { charactersIn } from "#pantry/import/overlays/quotation.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
@@ -245,31 +246,6 @@ const tests: ReadonlySet<string> = new Set(testRoots);
  * What a reference's lexical form holds around its name, as `VariableRef` types it.
  */
 type Affix = Addition<typeof VariableRef>["before"];
-
-/**
- * Whether a run of text is XML whitespace, possibly none: a bare reference's affix.
- *
- * @param text - The text.
- * @returns Whether it is.
- */
-const isSpace = (text: string): text is Affix => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Read the whitespace a bare reference's split leaves around its name as the affix it is.
- *
- * @param text - The whitespace.
- * @returns It, as an {@link Affix}.
- * @throws {Error} When it holds a character that is no XML whitespace, which the split strips
- *   nothing else of: a defect of the split.
- */
-const affixOf = (text: string): Affix =>
-  Option.getOrThrowWith(
-    Option.liftPredicate(text, isSpace),
-    () =>
-      new Error(
-        `A bare reference's split left ${JSON.stringify(text)} beside its name, which is no XML whitespace. Strip only tab, line feed, carriage return and space.`,
-      ),
-  );
 
 /**
  * A float literal that is also a name, which a float-or-reference attribute reads as the literal.
@@ -874,13 +850,13 @@ const documentOf = (view: DocumentView): Document => {
 
 /**
  * Split a reference's lexical form around the name it spells, or none for a value of its
- * attribute that is a literal.
+ * attribute that is a literal: a braced name between its braces, and a bare one between the
+ * whitespace around it, where the form names something ({@link namedBy}).
  *
  * @param node - The element.
  * @param attribute - The attribute.
  * @returns The affixes and the name, or none.
  */
-// GRIZZLE-PENDING: Q18, Q19: VariableRef becomes a query over its source, and this gate goes.
 const spelledBy = (
   node: NodeRow<Composed>,
   attribute: AttributeRow<Composed>,
@@ -899,16 +875,11 @@ const spelledBy = (
       : undefined;
   }
 
-  const rest = lexical.replace(/^[\t\n\r ]+/u, "");
-  const name = rest.replace(/[\t\n\r ]+$/u, "");
+  const { lead, trail } = piecesOf(lexical);
 
-  return isNcName(name)
-    ? {
-        after: affixOf(rest.slice(name.length)),
-        before: affixOf(lexical.slice(0, lexical.length - rest.length)),
-        name,
-      }
-    : undefined;
+  return Option.getOrUndefined(
+    Option.map(namedBy(lexical), (name) => ({ after: trail, before: lead, name })),
+  );
 };
 
 /**

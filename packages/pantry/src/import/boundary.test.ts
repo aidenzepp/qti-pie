@@ -40,6 +40,7 @@ const xmlSide = [
   "export/render.ts",
   "import/context.ts",
   "import/fold.ts",
+  "import/names.ts",
   "import/overlays/*.ts",
   "import/package.ts",
   "import/preview.ts",
@@ -152,9 +153,6 @@ const crossings: ByStep = [
       "import/overlays/tests.ts: #pantry/grammar/domains.ts",
     ],
   ],
-  // S8 makes TableHeader a query over its source (B9), which takes html.ts's NCName gate, its one
-  // read of `grammar/domains.ts`.
-  ["S8", ["import/overlays/html.ts: #pantry/grammar/domains.ts"]],
   // S10 takes out of each module the code of the other side, which no export can carry across:
   // `ingest` with its login (the served `AuthorLogin` of `db/served.ts`, which `db/layer.ts`
   // provides, and the author role's type of `qti/roles.ts`), retries and refusal report out of
@@ -200,6 +198,7 @@ const crossings: ByStep = [
       "import/context.ts: #pantry/grammar/compose.ts",
       "import/fold.ts: #pantry/grammar/compose.ts",
       "import/fold.ts: #pantry/grammar/content.ts",
+      "import/names.ts: #pantry/grammar/domains.ts",
       "import/overlays/catalog.ts: #pantry/grammar/domains.ts",
       "import/overlays/catalog.ts: #pantry/qti/catalog.ts",
       "import/overlays/catalog.ts: #pantry/qti/identity.ts",

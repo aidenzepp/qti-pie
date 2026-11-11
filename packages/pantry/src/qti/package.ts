@@ -393,10 +393,12 @@ export const ResourceFile = relation(
  * row only where its `identifierref` names something once collapsed ({@link namingPattern}); any
  * other, absent or no NCName, names no resource, and AL3 or its value domain refuses it alone
  * (spec reading 152, decision 457 (2)).
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const Dependency = relation.generated(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "Dependency",
   {
     document: uuid,

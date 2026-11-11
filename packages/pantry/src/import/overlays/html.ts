@@ -10,9 +10,10 @@
  * accepted. Readings 124 and 125 read `Node` and `Attribute` alone, so they have no rows here.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { isNcName } from "#pantry/grammar/domains.ts";
+import { Option } from "effect";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
@@ -149,7 +150,7 @@ const tableWalkOf = (
  * Build a document's HTML rows.
  *
  * Each cell that writes `headers` has its {@link CellHeadersRow}, and each `th` that writes an `id`
- * whose value is an NCName ({@link isNcName}) its `TableHeader`, the ID's value its lexical form
+ * whose value names something ({@link namedBy}) its `TableHeader`, the ID's value its lexical form
  * with its outer whitespace set apart, as `DocumentId` holds it; any other `id` names no header
  * (spec reading 156). Each element on the walk up from either to its nearest `table` has its
  * `TableScope`. A text past `keyText`'s bound keeps its row, which `keyText` refuses under "Key
@@ -213,9 +214,7 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
     }
 
     const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
-    const value = id?.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
-    // GRIZZLE-PENDING: Q18, Q19: TableHeader becomes a query over its source, and this gate goes.
-    if (value !== undefined && isNcName(value)) {
+    for (const value of id === undefined ? [] : Option.toArray(namedBy(id))) {
       headerIds.set(cell.id, {
         document,
         id: value,

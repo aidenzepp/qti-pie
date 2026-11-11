@@ -446,10 +446,12 @@ export const BindingCardinality = relation(
  * fragment's interactions bind no variable of their own document, which declares none, but one of
  * each item that places the fragment ({@link PlacedBinding}); its rows count as
  * `Document.bindings`.
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const BindingName = relation(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "BindingName",
   {
     attribute: closedId(AttributeName),

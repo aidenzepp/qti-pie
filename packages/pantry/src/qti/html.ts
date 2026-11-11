@@ -166,10 +166,12 @@ export const HeaderToken = relation.generated(
  * its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner`
  * the node itself, an attribute ID's binding, so its copy shares the superkey `PlacedId` reads; and
  * `table`, its {@link TableScope}.
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const TableHeader = relation(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "TableHeader",
   { document: uuid, id: keyText, node: uuid, owner: uuid, table: uuid },
   ["node"],

@@ -25,11 +25,12 @@ import { Array as Arr, Option } from "effect";
 import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
-import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
 import { foldAt, governorOf } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import type { ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -658,7 +659,7 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
  * Write a document's names: each test part, section, section ref and item ref whose identifier
  * names something, with its collapsed identifier and its scope in the document. One that writes
  * none names nothing, so it has no row, and AL3 refuses it alone (spec reading 147). One whose
- * collapsed identifier is no NCName ({@link isNcName}) names nothing either, so it has no row, and
+ * collapsed identifier is no NCName ({@link namedBy}) names nothing either, so it has no row, and
  * its value domain refuses it alone (spec reading 152, decision 457 (2)).
  *
  * @param view - The document.
@@ -675,8 +676,7 @@ const namedOf = (
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
       .flatMap((node) =>
-        // GRIZZLE-PENDING: Q18, Q19: Named becomes a query over its source, and this gate goes.
-        Option.toArray(Option.filter(token(node, "identifier"), isNcName)).map((identifier) => {
+        Option.toArray(Option.flatMap(token(node, "identifier"), namedBy)).map((identifier) => {
           const above = aboveOf(view, scopes, node);
           const isPart = node.kind === partKind;
           // A section's own order and loose chain; every other kind's are false (`Named`).

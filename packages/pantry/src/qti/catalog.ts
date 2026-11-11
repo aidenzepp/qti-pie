@@ -142,10 +142,12 @@ export const CatalogRef = relation(
  * document, its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed),
  * with `owner` the node itself, an attribute ID's binding, so its copy shares the superkey
  * `DocumentId` reads.
+ *
+ * The import writes its rows where its form names something (`namedBy` of
+ * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
+ * `Attribute`.
  */
 export const CatalogId = relation(
-  // GRIZZLE-PENDING: Q18, Q19: a counted family over a derived relation, and collapse of an unbounded
-  // text in a query; then the import's NCName gate goes and these rows are a query over `Attribute`.
   "CatalogId",
   { document: uuid, id: keyText, node: uuid, owner: uuid },
   ["node"],

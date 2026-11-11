@@ -21,11 +21,12 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
-import { collapse, isNcName } from "#pantry/grammar/domains.ts";
+import { collapse } from "#pantry/grammar/domains.ts";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
@@ -741,7 +742,7 @@ const dependencyTargetsOf = (
  * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
  * and a resource's `href` and its `type`'s code are each a row only where it is written and, for
  * the code, spelled; AL3 refuses an absent required attribute. A dependency's `Dependency` is left
- * out, too, where its `identifierref` is no NCName once collapsed ({@link isNcName}): `xs:IDREF`
+ * out, too, where its `identifierref` names nothing ({@link namedBy}): `xs:IDREF`
  * restricts `xs:NCName`, so it names no resource, and its value domain refuses it alone (spec
  * reading 152, decision 457 (2)). A resource whose `type` is written and spells no handle has no
  * code, and its href is a row of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`), which no
@@ -844,10 +845,9 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
       });
     }
 
-    // GRIZZLE-PENDING: Q18, Q19: Dependency becomes a query over its source, and this gate goes.
     for (const lexical of node.kind === "cp:dependency"
       ? Option.toArray(
-          Option.filter(valueOf(node, "identifierref"), (value) => isNcName(collapse(value))),
+          Option.filter(valueOf(node, "identifierref"), (value) => Option.isSome(namedBy(value))),
         )
       : []) {
       dependencies.set(node.id, {

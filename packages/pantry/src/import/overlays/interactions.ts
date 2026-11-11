@@ -18,9 +18,10 @@ import {
   ContentReference,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
-import { booleanOf, collapse, isNcName } from "#pantry/grammar/domains.ts";
+import { booleanOf, collapse } from "#pantry/grammar/domains.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
+import { namedBy } from "#pantry/import/names.ts";
 import { declarationOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
@@ -303,28 +304,21 @@ const valueOf = (
 ): Option.Option<string> => Option.map(lexicalOf(context, node, name), collapse);
 
 /**
- * Read the name an element's attribute gives: its value collapsed, where that is an NCName
- * ({@link isNcName}). Any other value names nothing, and its value domain refuses it alone (spec
- * reading 152).
- *
- * The test is the one `namedBinding` of `#pantry/qti/interactions.ts` states, and the schema holds
- * that selection forward only: each binding it selects has its `BindingName` and, in an item, its
- * `BoundVariable`, and no law refuses a row beyond them. A row for a value that is no NCName would
- * stand, and "Binding declared" would judge it beside the value domain, which reading 152 rules
- * out. So the test stays here for as long as both relations are written rows, not queries over
- * the selection.
+ * Read the name an element's attribute gives ({@link namedBy}), the test `namedBinding` of
+ * `#pantry/qti/interactions.ts` states: a value that names nothing has no `BindingName` and no
+ * `BoundVariable`, so "Binding declared" never judges it beside its value domain (spec reading
+ * 152).
  *
  * @param context - The document.
  * @param node - The element.
  * @param name - The attribute's name.
  * @returns The name, or none where the element does not carry the attribute or it names nothing.
  */
-// GRIZZLE-PENDING: Q18, Q19: BindingName becomes a query over its source, and this gate goes.
 const nameOf = (
   context: Pick<Context, "attributes">,
   node: NodeId,
   name: string,
-): Option.Option<string> => Option.filter(valueOf(context, node, name), isNcName);
+): Option.Option<string> => Option.flatMap(lexicalOf(context, node, name), namedBy);
 
 /**
  * Read a node's `nodeRef` tuple, with its nearest interaction.
@@ -1066,7 +1060,7 @@ const ariaOf = (context: Context) => {
 
 /**
  * Build one content reference relation's rows: each read attribute of the relation's names and
- * kinds that names a variable ({@link isNcName}), in an item or a test, under its document's root
+ * kinds that names a variable ({@link namedBy}), in an item or a test, under its document's root
  * kind, the root of its own assembly, and its declaration row where the name is that of a
  * declaration of the document of a kind `ContentReference` allows there and no built-in of the root
  * ({@link declarationIn}), whatever its cardinality spells, with its cardinality row where it has
@@ -1100,21 +1094,21 @@ const referencesOf = (
         .filter(
           (row) =>
             reference.attributes.some((name) => name === row.name) &&
-            reference.kinds.some((kind) => kind === row.kind) &&
-            // GRIZZLE-PENDING: Q18, Q19: A content reference becomes a query over its source, and this gate goes.
-            isNcName(collapse(row.lexical)),
+            reference.kinds.some((kind) => kind === row.kind),
         )
-        .map((row) => ({
-          key: keyOf([row.node, row.name]),
-          reference: {
-            assemblyKind: context.rootKind,
-            attribute: row.name,
-            document: context.document,
-            identifier: collapse(row.lexical),
-            kind: row.kind,
-            node: row.node,
-          },
-        }))
+        .flatMap((row) =>
+          Option.toArray(namedBy(row.lexical)).map((identifier) => ({
+            key: keyOf([row.node, row.name]),
+            reference: {
+              assemblyKind: context.rootKind,
+              attribute: row.name,
+              document: context.document,
+              identifier,
+              kind: row.kind,
+              node: row.node,
+            },
+          })),
+        )
     : [];
   const resolved = named.flatMap(({ key, reference: referred }) =>
     Option.toArray(declarationIn(context.named, referred)).map((variable) => ({
@@ -1162,7 +1156,7 @@ const referencesOf = (
 
 /**
  * Build a section document's or an included fragment's references of one class: each read
- * attribute of the class's names and kinds that names a variable ({@link isNcName}), unresolved,
+ * attribute of the class's names and kinds that names a variable ({@link namedBy}), unresolved,
  * since neither declares anything; each resolves once per assembly that places the document (spec
  * readings 5 and 117). The NCName test stays for the reasons {@link referencesOf} gives, each
  * relation's source being `sectionSources` of `#pantry/qti/interactions.ts`.
@@ -1181,25 +1175,24 @@ const sectionNamesOf = (
   new Map(
     referringRoots.every((root) => root !== context.rootKind)
       ? [...read.values()].flatMap((row) =>
-          // GRIZZLE-PENDING: Q18, Q19: A section's reference becomes a query over its source, and this gate goes.
-          isNcName(collapse(row.lexical)) &&
           classes.some(
             (reference) =>
               reference.attributes.some((name) => name === row.name) &&
               reference.kinds.some((kind) => kind === row.kind),
           )
-            ? [
-                [
-                  keyOf([row.node, row.name]),
-                  {
-                    attribute: row.name,
-                    document: context.document,
-                    identifier: collapse(row.lexical),
-                    kind: row.kind,
-                    node: row.node,
-                  },
-                ] as const,
-              ]
+            ? Option.toArray(namedBy(row.lexical)).map(
+                (identifier) =>
+                  [
+                    keyOf([row.node, row.name]),
+                    {
+                      attribute: row.name,
+                      document: context.document,
+                      identifier,
+                      kind: row.kind,
+                      node: row.node,
+                    },
+                  ] as const,
+              )
             : [],
         )
       : [],
