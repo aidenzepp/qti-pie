@@ -1,9 +1,9 @@
 SELECT "r1"."c1"::"qti"."__domain_gfw43vigph" AS "value"
 FROM (VALUES (67::bigint), (7::bigint), (6::bigint), (69::bigint), (64::bigint), (70::bigint), (63::bigint), (60::bigint), (62::bigint), (61::bigint), (4::bigint), (5::bigint), (0::bigint), (21::bigint), (66::bigint), (18::bigint), (19::bigint), (14::bigint), (9::bigint), (17::bigint), (108::bigint), (20::bigint), (30::bigint), (25::bigint), (48::bigint), (27::bigint), (36::bigint), (110::bigint), (34::bigint), (16::bigint), (15::bigint), (65::bigint), (3::bigint), (12::bigint), (10::bigint), (11::bigint), (51::bigint), (74::bigint), (68::bigint), (71::bigint), (73::bigint), (8::bigint), (59::bigint), (13::bigint), (2::bigint), (1::bigint), (9223372036854775807::bigint), (28::bigint), (52::bigint), (96::bigint), (41::bigint), (97::bigint), (119::bigint), (56::bigint), (33::bigint), (121::bigint), (193::bigint), (306::bigint), (181::bigint), (117::bigint), (22::bigint), (92::bigint), (72::bigint), (45::bigint), (46::bigint), (31::bigint), (75::bigint), (50::bigint), (44::bigint), (29::bigint), (32::bigint)) AS "r1"("c1");
 
-CREATE ROLE "qti_queries__author" NOLOGIN;
+CREATE ROLE :"qti_queries__author" NOLOGIN;
 
-CREATE ROLE "qti_queries__author_app" LOGIN NOINHERIT;
+CREATE ROLE :"qti_queries__author_app" LOGIN NOINHERIT;
 
 CREATE SCHEMA "qti_queries__author";
 
@@ -999,533 +999,536 @@ CREATE VIEW "qti_queries__author"."xml_lang" ("document", "lang", "node", "scope
 SELECT "r1"."document", "r1"."lang", "r1"."node", "r1"."scope"
 FROM "qti"."xml_lang" AS "r1";
 
-GRANT "qti_queries__author" TO "qti_queries__author_app" WITH INHERIT FALSE, SET TRUE;
+GRANT :"qti_queries__author" TO :"qti_queries__author_app" WITH INHERIT FALSE, SET TRUE;
 
-GRANT USAGE ON SCHEMA "qti", "qti_queries", "qti_queries__author" TO "qti_queries__author";
+GRANT USAGE ON SCHEMA "qti", "qti_queries", "qti_queries__author" TO :"qti_queries__author";
 
-GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__flag_bits_12_i4uhexylc4", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."__domain_gfw43vigph", "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."attribute_slot", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."position", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."value_cardinality", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_xj3zno7u3h", "qti"."__text_c6iptmtj2x", "qti"."__text_ca4i7j77gp", "qti"."__text_qhjydx3ufb", "qti"."__text_gke7uypkov", "qti"."__text_mqbstvk5ay", "qti"."__text_d7mwmflg4k", "qti"."__text_l7nqeazg5h", "qti"."__text_k5kwygzatl", "qti"."__text_7dfilirtp3", "qti"."__text_xisvziygi3", "qti"."__text_7j6kgluyjp", "qti"."__text_xey6ryorh5", "qti"."__text_pwaizaq6lx", "qti"."__text_elwnhkz2pq", "qti"."__text_psn65t7m7e", "qti"."__text_23rzixl3a2", "qti"."__text_mpc5fvfrbl", "qti"."__text_vrcyezm7ka", "qti"."__text_zij47sgley", "qti"."__text_piekqyt5fn", "qti"."__text_fgve4r33vj", "qti"."__text_5xaumrdzw7", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__text_3adwbksayk" TO "qti_queries__author";
+GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__flag_bits_12_i4uhexylc4", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."__domain_gfw43vigph", "qti"."admission_map", "qti"."align_direction", "qti"."align_state", "qti"."attribute_model", "qti"."attribute_name", "qti"."attribute_slot", "qti"."base_type", "qti"."bound_facet", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."cn_base", "qti"."cn_part", "qti"."cn_part_form", "qti"."cn_type", "qti"."content_model", "qti"."declaration_kind", "qti"."document_type", "qti"."domain_primitive", "qti"."flag", "qti"."follow_set", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."include_set", "qti"."language", "qti"."node_kind", "qti"."position", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rounding_holds", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."symbol_set", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."value_cardinality", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_xj3zno7u3h", "qti"."__text_c6iptmtj2x", "qti"."__text_ca4i7j77gp", "qti"."__text_qhjydx3ufb", "qti"."__text_gke7uypkov", "qti"."__text_mqbstvk5ay", "qti"."__text_d7mwmflg4k", "qti"."__text_l7nqeazg5h", "qti"."__text_k5kwygzatl", "qti"."__text_7dfilirtp3", "qti"."__text_xisvziygi3", "qti"."__text_7j6kgluyjp", "qti"."__text_xey6ryorh5", "qti"."__text_pwaizaq6lx", "qti"."__text_elwnhkz2pq", "qti"."__text_psn65t7m7e", "qti"."__text_23rzixl3a2", "qti"."__text_mpc5fvfrbl", "qti"."__text_vrcyezm7ka", "qti"."__text_zij47sgley", "qti"."__text_piekqyt5fn", "qti"."__text_fgve4r33vj", "qti"."__text_5xaumrdzw7", "qti"."__text_3dlgl63rv6", "qti"."__text_aezrarw5qb", "qti"."__text_3adwbksayk" TO :"qti_queries__author";
 
-GRANT SELECT ON TABLE "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" TO "qti_queries__author";
+GRANT SELECT ON TABLE "qti_queries__author"."area_mapping", "qti_queries__author"."area_mapping_cardinality", "qti_queries__author"."aria_element", "qti_queries__author"."aria_range", "qti_queries__author"."aria_value", "qti_queries__author"."assembled_catalog", "qti_queries__author"."assembled_id", "qti_queries__author"."assembled_lang", "qti_queries__author"."assembled_name", "qti_queries__author"."assembled_reference", "qti_queries__author"."assessment_object", "qti_queries__author"."attribute", "qti_queries__author"."attribute_entity", "qti_queries__author"."binding", "qti_queries__author"."binding_base_type", "qti_queries__author"."binding_cardinality", "qti_queries__author"."binding_declaration", "qti_queries__author"."binding_name", "qti_queries__author"."body_xml_lang", "qti_queries__author"."bound_variable", "qti_queries__author"."branch_resolution", "qti_queries__author"."branch_rule", "qti_queries__author"."branch_shuffle", "qti_queries__author"."branch_target", "qti_queries__author"."card_support", "qti_queries__author"."catalog_id", "qti_queries__author"."catalog_ref", "qti_queries__author"."catalog_scope", "qti_queries__author"."catalog_target", "qti_queries__author"."cell_headers", "qti_queries__author"."cell_leaf", "qti_queries__author"."choice", "qti_queries__author"."choice_interaction", "qti_queries__author"."cn_attribute", "qti_queries__author"."cn_count", "qti_queries__author"."cn_part_text", "qti_queries__author"."cn_slot", "qti_queries__author"."comment", "qti_queries__author"."context_ref", "qti_queries__author"."context_ref_declaration", "qti_queries__author"."count_bound", "qti_queries__author"."count_range", "qti_queries__author"."data_ssml", "qti_queries__author"."data_ssml_member", "qti_queries__author"."data_ssml_property", "qti_queries__author"."declaration", "qti_queries__author"."declaration_base_type", "qti_queries__author"."declaration_cardinality", "qti_queries__author"."declaration_identifier", "qti_queries__author"."declaration_name", "qti_queries__author"."default_entry", "qti_queries__author"."dependency", "qti_queries__author"."dependency_target", "qti_queries__author"."doctype", "qti_queries__author"."document", "qti_queries__author"."document_id", "qti_queries__author"."document_lang", "qti_queries__author"."element_type", "qti_queries__author"."encoding_decl", "qti_queries__author"."entry", "qti_queries__author"."expression", "qti_queries__author"."expression_attribute", "qti_queries__author"."feedback_ref", "qti_queries__author"."feedback_ref_cardinality", "qti_queries__author"."feedback_ref_declaration", "qti_queries__author"."field_value", "qti_queries__author"."file", "qti_queries__author"."file_href", "qti_queries__author"."fragment_value", "qti_queries__author"."gap_interaction", "qti_queries__author"."header_token", "qti_queries__author"."hotspot", "qti_queries__author"."hottext", "qti_queries__author"."id_binding", "qti_queries__author"."identity_text", "qti_queries__author"."idref", "qti_queries__author"."idref_target", "qti_queries__author"."inclusion", "qti_queries__author"."instance", "qti_queries__author"."instance_name", "qti_queries__author"."interaction", "qti_queries__author"."interaction_attribute", "qti_queries__author"."item_mode", "qti_queries__author"."item_ref_document", "qti_queries__author"."item_ref_href", "qti_queries__author"."label_use", "qti_queries__author"."least_count", "qti_queries__author"."literal", "qti_queries__author"."literal_typed", "qti_queries__author"."lom_entry", "qti_queries__author"."lom_general", "qti_queries__author"."lom_language", "qti_queries__author"."lom_record", "qti_queries__author"."lom_resource_type", "qti_queries__author"."lom_resource_type_source", "qti_queries__author"."lom_string", "qti_queries__author"."lom_string_language", "qti_queries__author"."lom_title", "qti_queries__author"."lom_title_string", "qti_queries__author"."lookup_table", "qti_queries__author"."lookup_table_cardinality", "qti_queries__author"."lookup_value", "qti_queries__author"."lookup_value_type", "qti_queries__author"."manifest_id", "qti_queries__author"."map_key", "qti_queries__author"."map_key_items", "qti_queries__author"."map_key_type", "qti_queries__author"."mapping", "qti_queries__author"."mapping_base_type", "qti_queries__author"."mapping_cardinality", "qti_queries__author"."mapping_item_ref", "qti_queries__author"."mapping_item_ref_type", "qti_queries__author"."mapping_source_declaration", "qti_queries__author"."mastery_ceiling", "qti_queries__author"."mastery_floor", "qti_queries__author"."mastery_value", "qti_queries__author"."math_action", "qti_queries__author"."math_align_group", "qti_queries__author"."math_align_scope", "qti_queries__author"."math_apply", "qti_queries__author"."math_argument", "qti_queries__author"."math_cell", "qti_queries__author"."math_cn", "qti_queries__author"."math_dir", "qti_queries__author"."math_qualifier", "qti_queries__author"."math_rank", "qti_queries__author"."most_count", "qti_queries__author"."named", "qti_queries__author"."namespace", "qti_queries__author"."node", "qti_queries__author"."normal_maximum", "qti_queries__author"."normal_minimum", "qti_queries__author"."object_identifier", "qti_queries__author"."object_lang", "qti_queries__author"."object_title", "qti_queries__author"."open_attribute_name", "qti_queries__author"."open_element_name", "qti_queries__author"."open_element_type", "qti_queries__author"."operand", "qti_queries__author"."package", "qti_queries__author"."pci_module_form", "qti_queries__author"."pi", "qti_queries__author"."placed_binding", "qti_queries__author"."placed_binding_base_type", "qti_queries__author"."placed_binding_cardinality", "qti_queries__author"."placed_binding_declaration", "qti_queries__author"."placed_body_xml_lang", "qti_queries__author"."placed_catalog_ref", "qti_queries__author"."placed_choice", "qti_queries__author"."placed_document", "qti_queries__author"."placed_hottext", "qti_queries__author"."placed_id", "qti_queries__author"."placed_idref", "qti_queries__author"."placed_math_rank", "qti_queries__author"."placed_reference", "qti_queries__author"."placed_share_target", "qti_queries__author"."placed_variable_ref", "qti_queries__author"."placed_variable_ref_declaration", "qti_queries__author"."placed_xml_lang", "qti_queries__author"."printed_variable_ref", "qti_queries__author"."printed_variable_ref_declaration", "qti_queries__author"."processing", "qti_queries__author"."processing_template", "qti_queries__author"."quotation", "qti_queries__author"."reading", "qti_queries__author"."reading_cardinality", "qti_queries__author"."reading_declaration", "qti_queries__author"."record_field", "qti_queries__author"."record_field_name", "qti_queries__author"."reference", "qti_queries__author"."reference_document", "qti_queries__author"."reference_path", "qti_queries__author"."reference_segment", "qti_queries__author"."referring_document", "qti_queries__author"."resource", "qti_queries__author"."resource_document", "qti_queries__author"."resource_file", "qti_queries__author"."resource_href", "qti_queries__author"."resource_id", "qti_queries__author"."resource_lom_language_set", "qti_queries__author"."resource_typed", "qti_queries__author"."rounding", "qti_queries__author"."rounding_figures", "qti_queries__author"."rounding_mode", "qti_queries__author"."rounding_mode_figures", "qti_queries__author"."sd_decl", "qti_queries__author"."section", "qti_queries__author"."section_context_name", "qti_queries__author"."section_context_ref", "qti_queries__author"."section_context_ref_declaration", "qti_queries__author"."section_feedback_name", "qti_queries__author"."section_feedback_ref", "qti_queries__author"."section_feedback_ref_cardinality", "qti_queries__author"."section_feedback_ref_declaration", "qti_queries__author"."section_identifier", "qti_queries__author"."section_member", "qti_queries__author"."section_ordering", "qti_queries__author"."section_printed_name", "qti_queries__author"."section_printed_ref", "qti_queries__author"."section_printed_ref_declaration", "qti_queries__author"."section_scope", "qti_queries__author"."section_selection", "qti_queries__author"."section_template_name", "qti_queries__author"."section_template_ref", "qti_queries__author"."section_template_ref_cardinality", "qti_queries__author"."section_template_ref_declaration", "qti_queries__author"."share_fragment", "qti_queries__author"."share_target", "qti_queries__author"."site", "qti_queries__author"."site_path", "qti_queries__author"."site_target", "qti_queries__author"."slider", "qti_queries__author"."ssml_attribute", "qti_queries__author"."ssml_scope", "qti_queries__author"."statistic_date", "qti_queries__author"."stimulus_ref", "qti_queries__author"."table_header", "qti_queries__author"."table_scope", "qti_queries__author"."template_default", "qti_queries__author"."template_default_cardinality", "qti_queries__author"."template_default_target", "qti_queries__author"."template_ref", "qti_queries__author"."template_ref_cardinality", "qti_queries__author"."template_ref_declaration", "qti_queries__author"."test_document", "qti_queries__author"."test_flag", "qti_queries__author"."test_reference", "qti_queries__author"."test_token", "qti_queries__author"."text_idref", "qti_queries__author"."text_reference", "qti_queries__author"."text_reference_path", "qti_queries__author"."tolerance", "qti_queries__author"."tolerance_token", "qti_queries__author"."typed_value", "qti_queries__author"."usage_base_type", "qti_queries__author"."usage_value", "qti_queries__author"."usage_value_base_type", "qti_queries__author"."value", "qti_queries__author"."value_base_type", "qti_queries__author"."value_set", "qti_queries__author"."value_set_cardinality", "qti_queries__author"."variable_mapping", "qti_queries__author"."variable_ref", "qti_queries__author"."variable_ref_cardinality", "qti_queries__author"."variable_ref_declaration", "qti_queries__author"."variable_ref_table", "qti_queries__author"."xml_decl", "qti_queries__author"."xml_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."area_mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."area_mapping" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."area_mapping_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."area_mapping_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."aria_element" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_element" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."aria_range" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_range" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."aria_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."aria_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assembled_catalog" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_catalog" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assembled_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assembled_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assembled_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assembled_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assembled_reference" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."assessment_object" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."assessment_object" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."attribute" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."attribute_entity" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."attribute_entity" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."binding_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."binding_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."binding_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."binding_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."binding_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."body_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."body_xml_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."bound_variable" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."bound_variable" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."branch_resolution" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_resolution" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."branch_rule" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_rule" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."branch_shuffle" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_shuffle" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."branch_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."branch_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."card_support" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."card_support" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."catalog_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."catalog_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."catalog_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_scope" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."catalog_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."catalog_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cell_headers" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cell_headers" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cell_leaf" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cell_leaf" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."choice" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."choice" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."choice_interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."choice_interaction" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cn_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_attribute" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cn_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_count" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cn_part_text" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_part_text" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."cn_slot" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."cn_slot" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."comment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."comment" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."context_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."context_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."context_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."context_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."count_bound" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."count_bound" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."count_range" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."count_range" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."data_ssml" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_member" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_member" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_property" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."data_ssml_property" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."declaration_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."declaration_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."declaration_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_identifier" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."declaration_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."declaration_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."default_entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."default_entry" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."dependency" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."dependency" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."dependency_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."dependency_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."doctype" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."doctype" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."document_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."document_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."document_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."element_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."element_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."encoding_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."encoding_decl" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."entry" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."expression" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."expression" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."expression_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."expression_attribute" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."feedback_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."field_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."field_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."file" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."file" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."file_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."file_href" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."fragment_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."fragment_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."gap_interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."gap_interaction" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."header_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."header_token" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."hotspot" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."hotspot" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."hottext" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."hottext" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."id_binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."id_binding" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."identity_text" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."identity_text" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."idref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."idref_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."idref_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."inclusion" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."inclusion" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."instance" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."instance" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."instance_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."instance_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."interaction" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."interaction" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."interaction_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."interaction_attribute" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."item_mode" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_mode" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."item_ref_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_ref_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."item_ref_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."item_ref_href" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."label_use" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."label_use" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."least_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."least_count" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."literal" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."literal" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."literal_typed" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."literal_typed" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_entry" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_entry" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_general" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_general" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_language" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_language" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_record" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_record" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type_source" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_resource_type_source" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_string" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_string" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_string_language" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_string_language" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_title" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_title" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lom_title_string" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lom_title_string" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lookup_table" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_table" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lookup_table_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_table_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lookup_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."lookup_value_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."lookup_value_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."manifest_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."manifest_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."map_key" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."map_key_items" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key_items" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."map_key_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."map_key_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_item_ref_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mapping_source_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mapping_source_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mastery_ceiling" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_ceiling" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mastery_floor" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_floor" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."mastery_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."mastery_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_action" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_action" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_align_group" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_align_group" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_align_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_align_scope" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_apply" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_apply" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_argument" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_argument" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_cell" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_cell" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_cn" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_cn" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_dir" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_dir" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_qualifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_qualifier" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."math_rank" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."math_rank" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."most_count" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."most_count" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."named" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."named" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."namespace" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."namespace" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."node" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."node" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."normal_maximum" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."normal_maximum" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."normal_minimum" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."normal_minimum" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."object_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_identifier" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."object_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."object_title" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."object_title" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."open_attribute_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_attribute_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."open_element_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_element_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."open_element_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."open_element_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."operand" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."operand" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."package" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."package" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."pci_module_form" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."pci_module_form" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."pi" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."pi" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_binding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_binding_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_body_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_body_xml_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_catalog_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_catalog_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_choice" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_choice" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_hottext" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_hottext" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_idref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_math_rank" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_math_rank" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_reference" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_share_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_share_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_variable_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."placed_xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."placed_xml_lang" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."printed_variable_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."processing" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."processing" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."processing_template" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."processing_template" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."quotation" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."quotation" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reading" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reading_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reading_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reading_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."record_field" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."record_field" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."record_field_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."record_field_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reference_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reference_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_path" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."reference_segment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."reference_segment" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."referring_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."referring_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_file" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_file" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_href" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_href" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_id" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_id" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_lom_language_set" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_lom_language_set" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."resource_typed" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."resource_typed" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."rounding" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."rounding_figures" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_figures" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode_figures" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."rounding_mode_figures" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."sd_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."sd_decl" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_context_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_context_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_feedback_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_identifier" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_identifier" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_member" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_member" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_ordering" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_ordering" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_printed_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_printed_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_scope" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_selection" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_selection" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_template_name" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_name" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."section_template_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."share_fragment" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."share_fragment" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."share_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."share_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."site" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."site_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site_path" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."site_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."site_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."slider" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."slider" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."ssml_attribute" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."ssml_attribute" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."ssml_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."ssml_scope" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."statistic_date" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."statistic_date" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."stimulus_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."stimulus_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."table_header" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."table_header" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."table_scope" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."table_scope" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_default" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_default_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_default_target" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_default_target" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."template_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."template_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."test_document" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_document" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."test_flag" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_flag" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."test_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_reference" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."test_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."test_token" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."text_idref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_idref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."text_reference" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_reference" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."text_reference_path" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."text_reference_path" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."tolerance" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."tolerance" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."tolerance_token" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."tolerance_token" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."typed_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."typed_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."usage_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."usage_value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."usage_value_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."usage_value_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."value" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."value_base_type" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_base_type" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."value_set" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_set" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."value_set_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."value_set_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."variable_mapping" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_mapping" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."variable_ref" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_cardinality" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_cardinality" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_declaration" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_declaration" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_table" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."variable_ref_table" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."xml_decl" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."xml_decl" TO :"qti_queries__author";
 
-GRANT SELECT, INSERT ON TABLE "qti"."xml_lang" TO "qti_queries__author";
+GRANT SELECT, INSERT ON TABLE "qti"."xml_lang" TO :"qti_queries__author";
 
-GRANT EXECUTE ON FUNCTION "qti"."__refuse"("pg_catalog"."text", "pg_catalog"."text", "pg_catalog"."text") TO "qti_queries__author";
+GRANT EXECUTE ON FUNCTION "qti"."__refuse"("pg_catalog"."text", "pg_catalog"."text", "pg_catalog"."text") TO :"qti_queries__author";
 
-GRANT EXECUTE ON FUNCTION "qti"."__constant_uij2fonltq"(), "qti"."__constant_bkqh2friwv"(), "qti"."__constant_eo4djco6b4"(), "qti"."__constant_sx2lr4try3"(), "qti"."__constant_u7eltifwnk"(), "qti"."__constant_nhyhb5mvr7"(), "qti"."__constant_ibiapjhixk"(), "qti"."__constant_cc6vlqxc5e"(), "qti"."__constant_cjtc2ddtha"(), "qti"."__constant_milnmhezry"(), "qti"."__constant_caimmsgsgb"(), "qti"."__constant_hfmlcmj6m4"(), "qti"."__constant_2ydzf24l25"(), "qti"."__constant_m6cittd2yd"(), "qti"."__constant_hmibfx5gyk"(), "qti"."__constant_ncvuf24xxr"(), "qti"."__constant_ykvwltiwpp"(), "qti"."__constant_wzcsm5lgek"(), "qti"."__constant_npu4wt2fbp"(), "qti"."__constant_yegly32ojt"(), "qti"."__constant_gnajygigus"(), "qti"."__constant_5kz6ofzblb"(), "qti"."__constant_ct2vnrdq7e"(), "qti"."__constant_5ykzxdvynm"(), "qti"."__constant_eqtu3e3bf7"(), "qti"."__constant_4okg7vcxht"(), "qti"."__constant_kagon643nx"(), "qti"."__constant_bnroidxvkl"(), "qti"."__constant_vv2aahv5fj"(), "qti"."__constant_cvrzwozguy"(), "qti"."__constant_ciuqwbhuta"(), "qti"."__constant_whaydjeagy"(), "qti"."__constant_nzkmx3la3e"(), "qti"."__constant_lt7r7r6eus"(), "qti"."__constant_sqmzlmgx7q"(), "qti"."__constant_u6qipu43gw"(), "qti"."__constant_ldx6j6cflr"(), "qti"."__constant_kpxfwusb6s"(), "qti"."__constant_sj4gtqwjvu"(), "qti"."__constant_inwmcukoes"(), "qti"."__constant_3fgeygq5w3"(), "qti"."__constant_qlb2jx4hhv"(), "qti"."__constant_m7gdtnppww"(), "qti"."__constant_qclwnol5oy"(), "qti"."__constant_3e2fnl7lx2"(), "qti"."__constant_exnqxdg5si"(), "qti"."__constant_wrlwssqvsp"(), "qti"."__constant_5vczbwx7y7"(), "qti"."__constant_p5oxaznp4j"(), "qti"."__constant_fgsupcpxgj"(), "qti"."__constant_samvsv5x3m"(), "qti"."__constant_ibvgt6pxwh"(), "qti"."__constant_6pgyw625sv"(), "qti"."__constant_hltmkmsrwk"(), "qti"."__constant_qvvxi5pvxk"(), "qti"."__constant_2orzvrv6ut"(), "qti"."__constant_ydkoqmm5ih"(), "qti"."__constant_h5f56cbmgk"(), "qti"."__constant_3uo3ixnz45"(), "qti"."__constant_wvtqnkiky3"(), "qti"."__constant_47ksumromp"(), "qti"."__constant_kos3rnuvei"(), "qti"."__constant_5pcz6dyjzi"(), "qti"."__constant_3zq77hs2za"(), "qti"."__constant_cy4erml7fi"(), "qti"."__constant_6f44bj6f5z"(), "qti"."__constant_5hroyzn7i6"(), "qti"."__constant_ter3l763yp"(), "qti"."__constant_ftz6h5paqe"(), "qti"."__constant_przq27rlwm"(), "qti"."__constant_qrfq2g4hkz"(), "qti"."__constant_ogqwerfjhc"(), "qti"."__constant_2spvsmpumv"(), "qti"."__constant_5r3at22xvz"(), "qti"."__constant_zqmhcyzcur"(), "qti"."__constant_aprps52eby"(), "qti"."__constant_ahddjwrhv5"(), "qti"."__constant_k3fjlwxuwn"(), "qti"."__constant_r4cjds4gua"(), "qti"."__constant_iz4l44v4pt"(), "qti"."__constant_xvmgsamjvy"(), "qti"."__constant_r7m6yukmzl"(), "qti"."__constant_bxvzcve5q4"(), "qti"."__constant_dyvla5m4mo"(), "qti"."__constant_p4pvfhuaqm"(), "qti"."__constant_lliww2nzpo"(), "qti"."__constant_dqbnkda3gg"(), "qti"."__constant_gf6he576t3"(), "qti"."__constant_iksi4cbdex"(), "qti"."__constant_74uvt6ok2v"(), "qti"."__constant_62dwoqukhs"(), "qti"."__constant_jgtq6vvihi"(), "qti"."__constant_fsmfviu65m"(), "qti"."__constant_kb2tdexlqu"(), "qti"."__constant_wvuca46fcu"(), "qti"."__constant_nfgjamc5xd"(), "qti"."__constant_dj7xbg6izu"(), "qti"."__constant_ds6uapjf6a"(), "qti"."__constant_ho6c7gpjo3"(), "qti"."__constant_ejkw66w2je"(), "qti"."__constant_wnswxzyccu"(), "qti"."__constant_sl65lnozn2"(), "qti"."__constant_66i4fjuv6n"(), "qti"."__constant_wm7weop42i"(), "qti"."__constant_otpfpakmgn"(), "qti"."__constant_p2xwmlesaa"(), "qti"."__constant_eizgu7rgqp"(), "qti"."__constant_fccrluys3c"(), "qti"."__constant_7rkjmglcw6"(), "qti"."__constant_hh7nvhrixk"(), "qti"."__constant_j6uos7o7iw"(), "qti"."__constant_24trt7i5oc"(), "qti"."__constant_gazfxeallk"(), "qti"."__constant_hltqi7xvbx"(), "qti"."__constant_7puc5uc6kh"(), "qti"."__constant_wekhard5xm"(), "qti"."__constant_ajahbtka65"(), "qti"."__constant_6iey4mkmde"(), "qti"."__constant_3fecx3moff"(), "qti"."__constant_n42l2hiqge"(), "qti"."__constant_wozychch32"(), "qti"."__constant_7s64uc2x4z"(), "qti"."__constant_w7hnvtob66"(), "qti"."__constant_g43gzaakcc"(), "qti"."__constant_axl72j6gkk"(), "qti"."__constant_6l2ttocydo"(), "qti"."__constant_levw2mwpwa"(), "qti"."__constant_lnl5n26s3i"(), "qti"."__constant_7zvmsz3k33"(), "qti"."__constant_6ioyfvymul"(), "qti"."__constant_sn5ucr2eat"(), "qti"."__constant_3bgu23uy42"(), "qti"."__constant_uynctp5wdx"(), "qti"."__constant_sjctib2m6a"(), "qti"."__constant_uav4xy4p5a"(), "qti"."__constant_dc7u4pz4ga"(), "qti"."__constant_lxku7l7lok"(), "qti"."__constant_wn244xqmvq"(), "qti"."__constant_rwijlqnagg"(), "qti"."__constant_n4gntw4ty5"(), "qti"."__constant_aiwrmlshlf"(), "qti"."__admission_map_names_4fr2dlhoj4"(), "qti"."__align_direction_names_vluq7iazdg"(), "qti"."__align_state_names_ffk37slxn3"(), "qti"."__attribute_model_names_d7ufmii6j2"(), "qti"."__attribute_name_names_q6tmzcty4e"(), "qti"."__attribute_slot_names_4r5l4mp24z"(), "qti"."__base_type_names_ok3nu5nck4"(), "qti"."__bound_facet_names_b7dbsbn4iu"(), "qti"."__bound_zero_names_2iyjgurtgw"(), "qti"."__built_in_names_qkzs4cgupe"(), "qti"."__cardinality_names_kqiairsoqa"(), "qti"."__cn_base_names_2wtzhyubck"(), "qti"."__cn_part_names_6db2fcgfhy"(), "qti"."__cn_part_form_names_te7u7jycdu"(), "qti"."__cn_type_names_wmjelllvhg"(), "qti"."__content_model_names_b6tbyheoog"(), "qti"."__declaration_kind_names_o62wpad2p7"(), "qti"."__document_type_names_b6nphfgptk"(), "qti"."__domain_primitive_names_2yihitx2to"(), "qti"."__flag_names_dttyznb5cw"(), "qti"."__follow_set_names_tyqahfjnmm"(), "qti"."__governor_names_d7jfyla3na"(), "qti"."__href_scope_names_y4pbuo4f5q"(), "qti"."__identity_names_rrxxe77wjj"(), "qti"."__include_parent_names_fixlnrxa4e"(), "qti"."__include_set_names_6bs2sxuszz"(), "qti"."__language_names_pvmtywwssv"(), "qti"."__node_kind_names_ulbko553n7"(), "qti"."__position_names_sglcn7ygpg"(), "qti"."__reading_form_names_tbdimwd3yh"(), "qti"."__reading_source_names_6r6sgc6pfk"(), "qti"."__reference_form_names_ktgko5k4l4"(), "qti"."__reference_resolution_names_3knvypuotm"(), "qti"."__reference_role_names_ce5jhrrzsl"(), "qti"."__reference_spelling_names_gocqpuf7tl"(), "qti"."__referenced_table_names_qrpsijquzz"(), "qti"."__resource_type_names_4wps2tgde3"(), "qti"."__rounding_holds_names_6j2zaayymp"(), "qti"."__rp_template_names_tkkjkmwhuf"(), "qti"."__schema_version_names_p2hfvbhu24"(), "qti"."__shared_model_names_5s5lwnfjh3"(), "qti"."__symbol_set_names_7wklvi4qhu"(), "qti"."__type_name_names_vi2zj5deol"(), "qti"."__use_names_vmbq6fav2t"(), "qti"."__value_base_names_pjzlcpdwvv"(), "qti"."__value_cardinality_names_wzwznoycgf"(), "qti"."__value_domain_names_pskc2r7bt2"(), "qti"."__xml_standalone_names_psf7bszcug"(), "qti"."__attribute_name_live_7ot3c4gfh5"(), "qti"."__attribute_slot_live_g5haf24jp3"(), "qti"."__flag_live_egdpt3c4t6"(), "qti"."__node_kind_live_rds6vphboo"(), "qti"."__position_live_uvhnssun3f"(), "qti"."__value_base_live_trk5bm7ra5"(), "qti"."__value_cardinality_live_qbccqbzssx"() TO "qti_queries__author";
+GRANT EXECUTE ON FUNCTION "qti"."__constant_uij2fonltq"(), "qti"."__constant_bkqh2friwv"(), "qti"."__constant_eo4djco6b4"(), "qti"."__constant_sx2lr4try3"(), "qti"."__constant_u7eltifwnk"(), "qti"."__constant_nhyhb5mvr7"(), "qti"."__constant_ibiapjhixk"(), "qti"."__constant_cc6vlqxc5e"(), "qti"."__constant_cjtc2ddtha"(), "qti"."__constant_milnmhezry"(), "qti"."__constant_caimmsgsgb"(), "qti"."__constant_hfmlcmj6m4"(), "qti"."__constant_2ydzf24l25"(), "qti"."__constant_m6cittd2yd"(), "qti"."__constant_hmibfx5gyk"(), "qti"."__constant_ncvuf24xxr"(), "qti"."__constant_ykvwltiwpp"(), "qti"."__constant_wzcsm5lgek"(), "qti"."__constant_npu4wt2fbp"(), "qti"."__constant_yegly32ojt"(), "qti"."__constant_gnajygigus"(), "qti"."__constant_5kz6ofzblb"(), "qti"."__constant_ct2vnrdq7e"(), "qti"."__constant_5ykzxdvynm"(), "qti"."__constant_eqtu3e3bf7"(), "qti"."__constant_4okg7vcxht"(), "qti"."__constant_kagon643nx"(), "qti"."__constant_bnroidxvkl"(), "qti"."__constant_vv2aahv5fj"(), "qti"."__constant_cvrzwozguy"(), "qti"."__constant_ciuqwbhuta"(), "qti"."__constant_whaydjeagy"(), "qti"."__constant_nzkmx3la3e"(), "qti"."__constant_lt7r7r6eus"(), "qti"."__constant_sqmzlmgx7q"(), "qti"."__constant_u6qipu43gw"(), "qti"."__constant_ldx6j6cflr"(), "qti"."__constant_kpxfwusb6s"(), "qti"."__constant_sj4gtqwjvu"(), "qti"."__constant_inwmcukoes"(), "qti"."__constant_3fgeygq5w3"(), "qti"."__constant_qlb2jx4hhv"(), "qti"."__constant_m7gdtnppww"(), "qti"."__constant_qclwnol5oy"(), "qti"."__constant_3e2fnl7lx2"(), "qti"."__constant_exnqxdg5si"(), "qti"."__constant_wrlwssqvsp"(), "qti"."__constant_5vczbwx7y7"(), "qti"."__constant_p5oxaznp4j"(), "qti"."__constant_fgsupcpxgj"(), "qti"."__constant_samvsv5x3m"(), "qti"."__constant_ibvgt6pxwh"(), "qti"."__constant_6pgyw625sv"(), "qti"."__constant_hltmkmsrwk"(), "qti"."__constant_qvvxi5pvxk"(), "qti"."__constant_2orzvrv6ut"(), "qti"."__constant_ydkoqmm5ih"(), "qti"."__constant_h5f56cbmgk"(), "qti"."__constant_3uo3ixnz45"(), "qti"."__constant_wvtqnkiky3"(), "qti"."__constant_47ksumromp"(), "qti"."__constant_kos3rnuvei"(), "qti"."__constant_5pcz6dyjzi"(), "qti"."__constant_3zq77hs2za"(), "qti"."__constant_cy4erml7fi"(), "qti"."__constant_6f44bj6f5z"(), "qti"."__constant_5hroyzn7i6"(), "qti"."__constant_ter3l763yp"(), "qti"."__constant_ftz6h5paqe"(), "qti"."__constant_przq27rlwm"(), "qti"."__constant_qrfq2g4hkz"(), "qti"."__constant_ogqwerfjhc"(), "qti"."__constant_2spvsmpumv"(), "qti"."__constant_5r3at22xvz"(), "qti"."__constant_zqmhcyzcur"(), "qti"."__constant_aprps52eby"(), "qti"."__constant_ahddjwrhv5"(), "qti"."__constant_k3fjlwxuwn"(), "qti"."__constant_r4cjds4gua"(), "qti"."__constant_iz4l44v4pt"(), "qti"."__constant_xvmgsamjvy"(), "qti"."__constant_r7m6yukmzl"(), "qti"."__constant_bxvzcve5q4"(), "qti"."__constant_dyvla5m4mo"(), "qti"."__constant_p4pvfhuaqm"(), "qti"."__constant_lliww2nzpo"(), "qti"."__constant_dqbnkda3gg"(), "qti"."__constant_gf6he576t3"(), "qti"."__constant_iksi4cbdex"(), "qti"."__constant_74uvt6ok2v"(), "qti"."__constant_62dwoqukhs"(), "qti"."__constant_jgtq6vvihi"(), "qti"."__constant_fsmfviu65m"(), "qti"."__constant_kb2tdexlqu"(), "qti"."__constant_wvuca46fcu"(), "qti"."__constant_nfgjamc5xd"(), "qti"."__constant_dj7xbg6izu"(), "qti"."__constant_ds6uapjf6a"(), "qti"."__constant_ho6c7gpjo3"(), "qti"."__constant_ejkw66w2je"(), "qti"."__constant_wnswxzyccu"(), "qti"."__constant_sl65lnozn2"(), "qti"."__constant_66i4fjuv6n"(), "qti"."__constant_wm7weop42i"(), "qti"."__constant_otpfpakmgn"(), "qti"."__constant_p2xwmlesaa"(), "qti"."__constant_eizgu7rgqp"(), "qti"."__constant_fccrluys3c"(), "qti"."__constant_7rkjmglcw6"(), "qti"."__constant_hh7nvhrixk"(), "qti"."__constant_j6uos7o7iw"(), "qti"."__constant_24trt7i5oc"(), "qti"."__constant_gazfxeallk"(), "qti"."__constant_hltqi7xvbx"(), "qti"."__constant_7puc5uc6kh"(), "qti"."__constant_wekhard5xm"(), "qti"."__constant_ajahbtka65"(), "qti"."__constant_6iey4mkmde"(), "qti"."__constant_3fecx3moff"(), "qti"."__constant_n42l2hiqge"(), "qti"."__constant_wozychch32"(), "qti"."__constant_7s64uc2x4z"(), "qti"."__constant_w7hnvtob66"(), "qti"."__constant_g43gzaakcc"(), "qti"."__constant_axl72j6gkk"(), "qti"."__constant_6l2ttocydo"(), "qti"."__constant_levw2mwpwa"(), "qti"."__constant_lnl5n26s3i"(), "qti"."__constant_7zvmsz3k33"(), "qti"."__constant_6ioyfvymul"(), "qti"."__constant_sn5ucr2eat"(), "qti"."__constant_3bgu23uy42"(), "qti"."__constant_uynctp5wdx"(), "qti"."__constant_sjctib2m6a"(), "qti"."__constant_uav4xy4p5a"(), "qti"."__constant_dc7u4pz4ga"(), "qti"."__constant_lxku7l7lok"(), "qti"."__constant_wn244xqmvq"(), "qti"."__constant_rwijlqnagg"(), "qti"."__constant_n4gntw4ty5"(), "qti"."__constant_aiwrmlshlf"(), "qti"."__admission_map_names_4fr2dlhoj4"(), "qti"."__align_direction_names_vluq7iazdg"(), "qti"."__align_state_names_ffk37slxn3"(), "qti"."__attribute_model_names_d7ufmii6j2"(), "qti"."__attribute_name_names_q6tmzcty4e"(), "qti"."__attribute_slot_names_4r5l4mp24z"(), "qti"."__base_type_names_ok3nu5nck4"(), "qti"."__bound_facet_names_b7dbsbn4iu"(), "qti"."__bound_zero_names_2iyjgurtgw"(), "qti"."__built_in_names_qkzs4cgupe"(), "qti"."__cardinality_names_kqiairsoqa"(), "qti"."__cn_base_names_2wtzhyubck"(), "qti"."__cn_part_names_6db2fcgfhy"(), "qti"."__cn_part_form_names_te7u7jycdu"(), "qti"."__cn_type_names_wmjelllvhg"(), "qti"."__content_model_names_b6tbyheoog"(), "qti"."__declaration_kind_names_o62wpad2p7"(), "qti"."__document_type_names_b6nphfgptk"(), "qti"."__domain_primitive_names_2yihitx2to"(), "qti"."__flag_names_dttyznb5cw"(), "qti"."__follow_set_names_tyqahfjnmm"(), "qti"."__governor_names_d7jfyla3na"(), "qti"."__href_scope_names_y4pbuo4f5q"(), "qti"."__identity_names_rrxxe77wjj"(), "qti"."__include_parent_names_fixlnrxa4e"(), "qti"."__include_set_names_6bs2sxuszz"(), "qti"."__language_names_pvmtywwssv"(), "qti"."__node_kind_names_ulbko553n7"(), "qti"."__position_names_sglcn7ygpg"(), "qti"."__reading_form_names_tbdimwd3yh"(), "qti"."__reading_source_names_6r6sgc6pfk"(), "qti"."__reference_form_names_ktgko5k4l4"(), "qti"."__reference_resolution_names_3knvypuotm"(), "qti"."__reference_role_names_ce5jhrrzsl"(), "qti"."__reference_spelling_names_gocqpuf7tl"(), "qti"."__referenced_table_names_qrpsijquzz"(), "qti"."__resource_type_names_4wps2tgde3"(), "qti"."__rounding_holds_names_6j2zaayymp"(), "qti"."__rp_template_names_tkkjkmwhuf"(), "qti"."__schema_version_names_p2hfvbhu24"(), "qti"."__shared_model_names_5s5lwnfjh3"(), "qti"."__symbol_set_names_7wklvi4qhu"(), "qti"."__type_name_names_vi2zj5deol"(), "qti"."__use_names_vmbq6fav2t"(), "qti"."__value_base_names_pjzlcpdwvv"(), "qti"."__value_cardinality_names_wzwznoycgf"(), "qti"."__value_domain_names_pskc2r7bt2"(), "qti"."__xml_standalone_names_psf7bszcug"(), "qti"."__attribute_name_live_7ot3c4gfh5"(), "qti"."__attribute_slot_live_g5haf24jp3"(), "qti"."__flag_live_egdpt3c4t6"(), "qti"."__node_kind_live_rds6vphboo"(), "qti"."__position_live_uvhnssun3f"(), "qti"."__value_base_live_trk5bm7ra5"(), "qti"."__value_cardinality_live_qbccqbzssx"() TO :"qti_queries__author";
 
-GRANT USAGE ON SCHEMA "qti" TO "qti_queries__author_app";
+SELECT "pg_catalog"."pg_advisory_xact_lock"(5908366544113120676::bigint);
+GRANT TEMPORARY ON DATABASE :"DBNAME" TO :"qti_queries__author";
 
-GRANT EXECUTE ON FUNCTION "qti"."__snapshot_guard"("pg_catalog"."text") TO "qti_queries__author_app";
+GRANT USAGE ON SCHEMA "qti" TO :"qti_queries__author_app";
 
-GRANT SELECT ON TABLE "qti"."__ledger" TO "qti_queries__author_app";
+GRANT EXECUTE ON FUNCTION "qti"."__snapshot_guard"("pg_catalog"."text") TO :"qti_queries__author_app";
 
-ALTER ROLE "qti_queries__author_app" SET search_path = "pg_catalog", "pg_temp";
+GRANT SELECT ON TABLE "qti"."__ledger" TO :"qti_queries__author_app";
 
-ALTER ROLE "qti_queries__author_app" SET extra_float_digits = '1';
+ALTER ROLE :"qti_queries__author_app" SET search_path = "pg_catalog", "pg_temp";
 
-ALTER ROLE "qti_queries__author_app" SET DateStyle = 'ISO, YMD';
+ALTER ROLE :"qti_queries__author_app" SET extra_float_digits = '1';
 
-ALTER ROLE "qti_queries__author_app" SET bytea_output = 'hex';
+ALTER ROLE :"qti_queries__author_app" SET DateStyle = 'ISO, YMD';
 
-ALTER ROLE "qti_queries__author_app" SET lc_monetary = 'C.UTF-8';
+ALTER ROLE :"qti_queries__author_app" SET bytea_output = 'hex';
 
-ALTER ROLE "qti_queries__author_app" SET lc_numeric = 'C.UTF-8';
+ALTER ROLE :"qti_queries__author_app" SET lc_monetary = 'C.UTF-8';
 
-ALTER ROLE "qti_queries__author_app" SET lc_time = 'C.UTF-8';
+ALTER ROLE :"qti_queries__author_app" SET lc_numeric = 'C.UTF-8';
+
+ALTER ROLE :"qti_queries__author_app" SET lc_time = 'C.UTF-8';
 
 REVOKE ALL ON SCHEMA "qti", "qti_queries", "qti_queries__author" FROM PUBLIC;
 
@@ -2179,8 +2182,6 @@ COMMENT ON CONSTRAINT "__choice_key_document_kind_identifier_tm7vc2nvve" ON "qti
 
 COMMENT ON CONSTRAINT "__choice_key_node_nearest_bmvx7mkqwl" ON "qti"."choice" IS 'key Choice(node, nearest)';
 
-COMMENT ON CONSTRAINT "__choice_key_node_kind_tid3vkbmg6" ON "qti"."choice" IS 'key Choice(node, kind)';
-
 COMMENT ON CONSTRAINT "__choice_key_node_identifier_tnolxxtt77" ON "qti"."choice" IS 'key Choice(node, identifier)';
 
 COMMENT ON CONSTRAINT "__choice_key_node_document_kind_identifier_xahjwklefv" ON "qti"."choice" IS 'key Choice(node, document, kind, identifier)';
@@ -2221,13 +2222,7 @@ COMMENT ON CONSTRAINT "__context_ref_declaration_check_context_ref_otaik5mlhp" O
 
 COMMENT ON CONSTRAINT "__count_bound_pk_uzay2pj3by" ON "qti"."count_bound" IS 'primary key of CountBound';
 
-COMMENT ON CONSTRAINT "__count_bound_key_node_kind_max_written_fcih7fqf4z" ON "qti"."count_bound" IS 'key CountBound(node, kind, maxWritten)';
-
 COMMENT ON CONSTRAINT "__count_bound_key_node_mosts_7zuaztbkde" ON "qti"."count_bound" IS 'key CountBound(node, mosts)';
-
-COMMENT ON CONSTRAINT "__count_bound_key_node_max_name_max_written_fdvlwtlii3" ON "qti"."count_bound" IS 'key CountBound(node, maxName, maxWritten)';
-
-COMMENT ON CONSTRAINT "__count_bound_key_node_min_name_min_written_dpw7bssqyz" ON "qti"."count_bound" IS 'key CountBound(node, minName, minWritten)';
 
 COMMENT ON CONSTRAINT "__count_bound_key_node_leasts_choices_kind_min_name_ohqhsvclj2" ON "qti"."count_bound" IS 'key CountBound(node, leasts, choices, kind, minName, minWritten, version)';
 
@@ -2537,8 +2532,6 @@ COMMENT ON CONSTRAINT "__least_count_pk_gmz3yk64c7" ON "qti"."least_count" IS 'p
 
 COMMENT ON CONSTRAINT "__least_count_key_node_least_value_rh24rip5ua" ON "qti"."least_count" IS 'key LeastCount(node, leastValue)';
 
-COMMENT ON CONSTRAINT "__least_count_key_node_min_name_least_min_written_7x3ly34mmv" ON "qti"."least_count" IS 'key LeastCount(node, minName, least, minWritten)';
-
 COMMENT ON CONSTRAINT "__literal_pk_aelubxdbzj" ON "qti"."literal" IS 'primary key of Literal';
 
 COMMENT ON CONSTRAINT "__literal_key_node_text_base_type_kuvifxnykd" ON "qti"."literal" IS 'key Literal(node, text, baseType)';
@@ -2629,15 +2622,11 @@ COMMENT ON CONSTRAINT "__map_key_items_key_node_mapping_key_rej43kalrn" ON "qti"
 
 COMMENT ON CONSTRAINT "__map_key_type_pk_pcrwxus7sl" ON "qti"."map_key_type" IS 'primary key of MapKeyType';
 
-COMMENT ON CONSTRAINT "__map_key_type_key_node_base_type_ya2jqubgrb" ON "qti"."map_key_type" IS 'key MapKeyType(node, baseType)';
-
 COMMENT ON CONSTRAINT "__mapping_pk_lichj2blf4" ON "qti"."mapping" IS 'primary key of Mapping';
 
 COMMENT ON CONSTRAINT "__mapping_key_declaration_v75cz6uboq" ON "qti"."mapping" IS 'key Mapping(declaration)';
 
 COMMENT ON CONSTRAINT "__mapping_key_node_base_types_p7yck4752g" ON "qti"."mapping" IS 'key Mapping(node, baseTypes)';
-
-COMMENT ON CONSTRAINT "__mapping_key_node_declaration_base_types_5olx4zghbu" ON "qti"."mapping" IS 'key Mapping(node, declaration, baseTypes)';
 
 COMMENT ON CONSTRAINT "__mapping_key_node_declaration_szv2qk2y7n" ON "qti"."mapping" IS 'key Mapping(node, declaration)';
 
@@ -2673,8 +2662,6 @@ COMMENT ON CONSTRAINT "__mastery_value_key_node_lexical_2khxh3fstt" ON "qti"."ma
 
 COMMENT ON CONSTRAINT "__math_action_pk_4jdvklv2ii" ON "qti"."math_action" IS 'primary key of MathAction';
 
-COMMENT ON CONSTRAINT "__math_action_key_node_selection_lexical_selection_2bp7tohjvq" ON "qti"."math_action" IS 'key MathAction(node, selectionLexical, selectionWritten)';
-
 COMMENT ON CONSTRAINT "__math_action_key_node_selection_4jlq2hbkn7" ON "qti"."math_action" IS 'key MathAction(node, selection)';
 
 COMMENT ON CONSTRAINT "__math_align_group_pk_tgvbkr7qje" ON "qti"."math_align_group" IS 'primary key of MathAlignGroup';
@@ -2685,11 +2672,7 @@ COMMENT ON CONSTRAINT "__math_align_scope_pk_sxnaufx3ho" ON "qti"."math_align_sc
 
 COMMENT ON CONSTRAINT "__math_align_scope_key_node_cell_mzs6a6hlnb" ON "qti"."math_align_scope" IS 'key MathAlignScope(node, cell)';
 
-COMMENT ON CONSTRAINT "__math_align_scope_key_node_kind_state_unsdqiyrtv" ON "qti"."math_align_scope" IS 'key MathAlignScope(node, kind, state)';
-
 COMMENT ON CONSTRAINT "__math_align_scope_key_node_cell_passes_kind_own_r56zgsjtit" ON "qti"."math_align_scope" IS 'key MathAlignScope(node, cell, passes, kind, own)';
-
-COMMENT ON CONSTRAINT "__math_align_scope_key_node_kind_qp5snwaq5a" ON "qti"."math_align_scope" IS 'key MathAlignScope(node, kind)';
 
 COMMENT ON CONSTRAINT "__math_apply_pk_2firl5nro2" ON "qti"."math_apply" IS 'primary key of MathApply';
 
@@ -2729,11 +2712,7 @@ COMMENT ON CONSTRAINT "__math_rank_key_node_rank_pwzdhba4h6" ON "qti"."math_rank
 
 COMMENT ON CONSTRAINT "__most_count_pk_dueqkg2jsm" ON "qti"."most_count" IS 'primary key of MostCount';
 
-COMMENT ON CONSTRAINT "__most_count_key_node_most_value_ltlkebwcln" ON "qti"."most_count" IS 'key MostCount(node, mostValue)';
-
 COMMENT ON CONSTRAINT "__most_count_key_node_most_value_kind_min_written_ciipaza2oy" ON "qti"."most_count" IS 'key MostCount(node, mostValue, kind, minWritten)';
-
-COMMENT ON CONSTRAINT "__most_count_key_node_max_name_most_max_written_i7yj55avcy" ON "qti"."most_count" IS 'key MostCount(node, maxName, most, maxWritten)';
 
 COMMENT ON CONSTRAINT "__named_pk_7cwq6zir4x" ON "qti"."named" IS 'primary key of Named';
 
@@ -2759,9 +2738,9 @@ COMMENT ON CONSTRAINT "__node_check_node_children_concat_fold_jj4xcnrbo3" ON "qt
 
 COMMENT ON CONSTRAINT "__node_key_id_document_kind_start_nearest_version_osnugvmscd" ON "qti"."node" IS 'key Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__node_key_id_kind_phk5q5ctpf" ON "qti"."node" IS 'key Node(id, kind)';
-
 COMMENT ON CONSTRAINT "__node_key_id_attributes_document_document_type_ksb7lbuhav" ON "qti"."node" IS 'key Node(id, attributes, document, documentType, governor, kind, version)';
+
+COMMENT ON CONSTRAINT "__node_key_id_kind_phk5q5ctpf" ON "qti"."node" IS 'key Node(id, kind)';
 
 COMMENT ON CONSTRAINT "__node_key_id_children_ancestry_document_type_lfrp3r3sr4" ON "qti"."node" IS 'key Node(id, children, ancestry, documentType, nearest, nearestKind, version, document, governor, kind, parentKind, start)';
 
@@ -2796,8 +2775,6 @@ COMMENT ON CONSTRAINT "__normal_maximum_pk_zlhcz2bseu" ON "qti"."normal_maximum"
 COMMENT ON CONSTRAINT "__normal_maximum_key_node_lexical_5jx35mf7ti" ON "qti"."normal_maximum" IS 'key NormalMaximum(node, lexical)';
 
 COMMENT ON CONSTRAINT "__normal_minimum_pk_po6gjnvo47" ON "qti"."normal_minimum" IS 'primary key of NormalMinimum';
-
-COMMENT ON CONSTRAINT "__normal_minimum_key_node_lexical_written_n5q4frg4v7" ON "qti"."normal_minimum" IS 'key NormalMinimum(node, lexical, written)';
 
 COMMENT ON CONSTRAINT "__normal_minimum_key_node_lexical_f4vkku3rin" ON "qti"."normal_minimum" IS 'key NormalMinimum(node, lexical)';
 
@@ -2897,8 +2874,6 @@ COMMENT ON CONSTRAINT "__placed_variable_ref_pk_raoqh7fl2q" ON "qti"."placed_var
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_key_instance_node_attribute_xn4urytxtc" ON "qti"."placed_variable_ref" IS 'key PlacedVariableRef(instance, node, attribute, assembly, identifier, kind)';
 
-COMMENT ON CONSTRAINT "__placed_variable_ref_key_instance_node_attribute_4tzgx5op2t" ON "qti"."placed_variable_ref" IS 'key PlacedVariableRef(instance, node, attribute, resolution)';
-
 COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_pk_uqu4c6edzi" ON "qti"."placed_variable_ref_declaration" IS 'primary key of PlacedVariableRefDeclaration';
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_check_placed_kqrngn7yha" ON "qti"."placed_variable_ref_declaration" IS 'check of PlacedVariableRefDeclaration for law PlacedVariableRefDeclaration(kind, attribute, declarationKind) where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} in ReferenceDeclaration(kind, attribute, declaration)';
@@ -2952,10 +2927,6 @@ COMMENT ON CONSTRAINT "__record_field_name_key_node_identifier_lexical_c4t5k5bmv
 COMMENT ON CONSTRAINT "__reference_pk_2o4vr3munh" ON "qti"."reference" IS 'primary key of Reference';
 
 COMMENT ON CONSTRAINT "__reference_key_node_name_lexical_document_kind_riq43zrbyg" ON "qti"."reference" IS 'key Reference(node, name, lexical, document, kind)';
-
-COMMENT ON CONSTRAINT "__reference_key_node_name_document_kind_scope_sdgfvsas5v" ON "qti"."reference" IS 'key Reference(node, name, document, kind, scope)';
-
-COMMENT ON CONSTRAINT "__reference_key_node_name_scope_chd2zywqnq" ON "qti"."reference" IS 'key Reference(node, name, scope)';
 
 COMMENT ON CONSTRAINT "__reference_document_pk_owuhifiejx" ON "qti"."reference_document" IS 'primary key of ReferenceDocument';
 
@@ -3022,10 +2993,6 @@ COMMENT ON CONSTRAINT "__resource_typed_pk_bi7ndodb24" ON "qti"."resource_typed"
 COMMENT ON CONSTRAINT "__resource_typed_key_node_type_lexical_dabn272o6j" ON "qti"."resource_typed" IS 'key ResourceTyped(node, typeLexical)';
 
 COMMENT ON CONSTRAINT "__rounding_pk_p5ba7td7t4" ON "qti"."rounding" IS 'primary key of Rounding';
-
-COMMENT ON CONSTRAINT "__rounding_key_node_holds_z7s37mlxie" ON "qti"."rounding" IS 'key Rounding(node, holds)';
-
-COMMENT ON CONSTRAINT "__rounding_key_node_mode_written_pnxxg6mx3o" ON "qti"."rounding" IS 'key Rounding(node, modeWritten)';
 
 COMMENT ON CONSTRAINT "__rounding_key_node_kind_mode_written_ql5evmoy3p" ON "qti"."rounding" IS 'key Rounding(node, kind, modeWritten)';
 
@@ -3099,8 +3066,6 @@ COMMENT ON CONSTRAINT "__section_identifier_key_node_attribute_document_kejioanf
 
 COMMENT ON CONSTRAINT "__section_member_pk_ynknirsh4u" ON "qti"."section_member" IS 'primary key of SectionMember';
 
-COMMENT ON CONSTRAINT "__section_member_key_node_required_fkmhs74qcx" ON "qti"."section_member" IS 'key SectionMember(node, required)';
-
 COMMENT ON CONSTRAINT "__section_ordering_pk_3ahydw2wzd" ON "qti"."section_ordering" IS 'primary key of SectionOrdering';
 
 COMMENT ON CONSTRAINT "__section_ordering_key_parent_aiczs2shyz" ON "qti"."section_ordering" IS 'key SectionOrdering(parent)';
@@ -3160,8 +3125,6 @@ COMMENT ON CONSTRAINT "__share_fragment_pk_w7lv43thb6" ON "qti"."share_fragment"
 COMMENT ON CONSTRAINT "__share_fragment_key_node_document_src_piiuo4ss54" ON "qti"."share_fragment" IS 'key ShareFragment(node, document, src)';
 
 COMMENT ON CONSTRAINT "__share_fragment_key_node_placements_document_id_f5edkk7ljk" ON "qti"."share_fragment" IS 'key ShareFragment(node, placements, document, id)';
-
-COMMENT ON CONSTRAINT "__share_fragment_key_node_document_id_assembled_4zqjjwu6hh" ON "qti"."share_fragment" IS 'key ShareFragment(node, document, id, assembled)';
 
 COMMENT ON CONSTRAINT "__share_target_pk_tap2cz4xh5" ON "qti"."share_target" IS 'primary key of ShareTarget';
 
@@ -3263,8 +3226,6 @@ COMMENT ON CONSTRAINT "__test_flag_pk_jopuixtaka" ON "qti"."test_flag" IS 'prima
 
 COMMENT ON CONSTRAINT "__test_flag_key_node_name_lexical_r6wm4chdr7" ON "qti"."test_flag" IS 'key TestFlag(node, name, lexical)';
 
-COMMENT ON CONSTRAINT "__test_flag_key_node_name_value_vaylwuekyk" ON "qti"."test_flag" IS 'key TestFlag(node, name, value)';
-
 COMMENT ON CONSTRAINT "__test_reference_pk_ig7k5ukuna" ON "qti"."test_reference" IS 'primary key of TestReference';
 
 COMMENT ON CONSTRAINT "__test_reference_key_node_attribute_document_pu2mjiwgy6" ON "qti"."test_reference" IS 'key TestReference(node, attribute, document, identifier, kind, role, rootKind)';
@@ -3275,8 +3236,6 @@ COMMENT ON CONSTRAINT "__test_token_pk_iq46t3wn7h" ON "qti"."test_token" IS 'pri
 
 COMMENT ON CONSTRAINT "__test_token_key_node_name_lexical_dzjp5dvfu4" ON "qti"."test_token" IS 'key TestToken(node, name, lexical)';
 
-COMMENT ON CONSTRAINT "__test_token_key_node_value_name_bg3ese5hxu" ON "qti"."test_token" IS 'key TestToken(node, value, name)';
-
 COMMENT ON CONSTRAINT "__text_idref_pk_7k524ffk7d" ON "qti"."text_idref" IS 'primary key of TextIdref';
 
 COMMENT ON CONSTRAINT "__text_idref_key_node_at_pieces_after_oea6gb7ncz" ON "qti"."text_idref" IS 'key TextIdref(node, at, piecesAfter)';
@@ -3286,8 +3245,6 @@ COMMENT ON CONSTRAINT "__text_idref_check_identity_text_idrefs_concat_fold_dqvc7
 COMMENT ON CONSTRAINT "__text_reference_pk_47h6xjfe7g" ON "qti"."text_reference" IS 'primary key of TextReference';
 
 COMMENT ON CONSTRAINT "__text_reference_key_node_document_kind_lexical_z3nmpha32k" ON "qti"."text_reference" IS 'key TextReference(node, document, kind, lexical)';
-
-COMMENT ON CONSTRAINT "__text_reference_key_node_document_kind_scope_4k7jius2tf" ON "qti"."text_reference" IS 'key TextReference(node, document, kind, scope)';
 
 COMMENT ON CONSTRAINT "__text_reference_path_pk_aurefmdcbf" ON "qti"."text_reference_path" IS 'primary key of TextReferencePath';
 
@@ -3361,8 +3318,6 @@ COMMENT ON CONSTRAINT "__variable_ref_key_node_attribute_document_62ilbsg3m2" ON
 
 COMMENT ON CONSTRAINT "__variable_ref_key_node_attribute_base_type_74wiathley" ON "qti"."variable_ref" IS 'key VariableRef(node, attribute, baseType, cardinality, document, identifier, kind, language)';
 
-COMMENT ON CONSTRAINT "__variable_ref_key_node_attribute_resolution_d7m3hejg5o" ON "qti"."variable_ref" IS 'key VariableRef(node, attribute, resolution)';
-
 COMMENT ON CONSTRAINT "__variable_ref_cardinality_pk_zvunrslltz" ON "qti"."variable_ref_cardinality" IS 'primary key of VariableRefCardinality';
 
 COMMENT ON CONSTRAINT "__variable_ref_declaration_pk_l5cmpv5rjk" ON "qti"."variable_ref_declaration" IS 'primary key of VariableRefDeclaration';
@@ -3386,8 +3341,6 @@ COMMENT ON CONSTRAINT "__xml_lang_key_node_document_lang_mxvinzmzpt" ON "qti"."x
 COMMENT ON CONSTRAINT "__xml_lang_key_node_document_lang_scope_locn5q2jix" ON "qti"."xml_lang" IS 'key XmlLang(node, document, lang, scope)';
 
 COMMENT ON COLUMN "qti"."area_mapping"."__tag_base_type_point_glprtnetrp" IS 'tag DeclarationBaseType.baseType = point';
-
-COMMENT ON COLUMN "qti"."area_mapping"."__tag_kind_qti_area_mapping_uybltcpnqu" IS 'tag Node.kind = qti-area-mapping';
 
 COMMENT ON COLUMN "qti"."area_mapping"."__declaration_oxp5hcydih" IS 'declaration where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
@@ -3432,14 +3385,6 @@ COMMENT ON COLUMN "qti"."assembled_reference"."__pred_placements_wtijf47h4h" IS 
 COMMENT ON COLUMN "qti"."assembled_reference"."__pred_readings_lijgqabw6j" IS 'pred(readings)';
 
 COMMENT ON COLUMN "qti"."assembled_reference"."__pred_segments_lgkpa2wrsx" IS 'pred(segments)';
-
-COMMENT ON COLUMN "qti"."attribute"."__tag_selection_written_true_3nkngi2qwy" IS 'tag MathAction.selectionWritten = true';
-
-COMMENT ON COLUMN "qti"."attribute"."__tag_written_true_rwu275l4po" IS 'tag NormalMinimum.written = true';
-
-COMMENT ON COLUMN "qti"."attribute"."__tag_element_false_tmi7wtieyv" IS 'tag PciModuleForm.element = false';
-
-COMMENT ON COLUMN "qti"."attribute"."__tag_mode_written_true_ggm6ceqedn" IS 'tag Rounding.modeWritten = true';
 
 COMMENT ON COLUMN "qti"."attribute"."__tag_mode_written_true_ddd573kv3d" IS 'tag RoundingMode.modeWritten = true';
 
@@ -3707,6 +3652,10 @@ COMMENT ON COLUMN "qti"."attribute"."__node_z2a7wxsnma" IS 'node where {"args":[
 
 COMMENT ON COLUMN "qti"."attribute"."__node_bxkt3vhspy" IS 'node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"lexical","kind":"field"},{"kind":"literal","value":"^[\\t\\n\\r ]*(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)[\\t\\n\\r ]*$"}],"fn":"matches","kind":"compute"}';
 
+COMMENT ON COLUMN "qti"."attribute"."__node_5fk33wds5o" IS 'node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}}';
+
+COMMENT ON COLUMN "qti"."attribute"."__node_yhb5hmj5kb" IS 'node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:resource"}}';
+
 COMMENT ON COLUMN "qti"."attribute"."__node_liwiwg6km7" IS 'node where {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-interpolation-table","qti-match-table"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"default-value"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-interpolation-table-entry","qti-match-table-entry"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-value"}}],"kind":"and"}],"kind":"or"}';
 
 COMMENT ON COLUMN "qti"."attribute"."__node_lt2m3idpmd" IS 'node where {"args":[{"args":[{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base-type","weight-identifier"]},{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-test-variables"}}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-base-value"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base-type"}}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-math-operator"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"name"}}],"kind":"and"}],"kind":"or"}';
@@ -3773,10 +3722,6 @@ COMMENT ON COLUMN "qti"."attribute_entity"."__pred_at_xktcobhsti" IS 'pred(at)';
 
 COMMENT ON COLUMN "qti"."binding_base_type"."__tag_base_types_1_qzhsgg5lle" IS 'tag BindingCardinality.baseTypes = 1';
 
-COMMENT ON COLUMN "qti"."binding_cardinality"."__tag_max_written_true_6phmyjuam6" IS 'tag CountBound.maxWritten = true';
-
-COMMENT ON COLUMN "qti"."binding_cardinality"."__tag_most_value_1_lrsl6ypbxi" IS 'tag MostCount.mostValue = 1';
-
 COMMENT ON COLUMN "qti"."binding_cardinality"."__attribute_cy3lzlyym2" IS 'attribute where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."binding_cardinality"."__kind_wpz27h2czt" IS 'kind where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}';
@@ -3815,8 +3760,6 @@ COMMENT ON COLUMN "qti"."branch_resolution"."__index_rules_drrpvlphkc" IS 'the i
 
 COMMENT ON COLUMN "qti"."branch_resolution"."__predecessor_rules_cmwcem2edw" IS 'the predecessor of the index of the family Instance.rules';
 
-COMMENT ON COLUMN "qti"."branch_rule"."__tag_name_target_xns5bgpfiu" IS 'tag TestToken.name = target';
-
 COMMENT ON COLUMN "qti"."branch_rule"."__copy_rules_5edtuvooev" IS 'the owner''s count of the family TestDocument.rules';
 
 COMMENT ON COLUMN "qti"."branch_rule"."__index_rules_ipm5ml6trm" IS 'the index of the family TestDocument.rules';
@@ -3854,8 +3797,6 @@ COMMENT ON COLUMN "qti"."catalog_target"."__pred_carriers_5eaxdkd6g3" IS 'pred(c
 COMMENT ON COLUMN "qti"."catalog_target"."__pred_placements_wtijf47h4h" IS 'pred(placements)';
 
 COMMENT ON COLUMN "qti"."cell_headers"."__pred_tokens_ip7mlgrtju" IS 'pred(tokens)';
-
-COMMENT ON COLUMN "qti"."cell_leaf"."__tag_element_children_0_kpm373f3aa" IS 'tag MathAlignScope.elementChildren = 0';
 
 COMMENT ON COLUMN "qti"."cell_leaf"."__copy_leaves_w3sn3wc7dh" IS 'the owner''s count of the family MathCell.leaves';
 
@@ -3899,13 +3840,13 @@ COMMENT ON COLUMN "qti"."cn_slot"."__index_parts_scjx6gv3a5" IS 'the index of th
 
 COMMENT ON COLUMN "qti"."cn_slot"."__predecessor_parts_j3qu3kljud" IS 'the predecessor of the index of the family CnCount.parts';
 
-COMMENT ON COLUMN "qti"."comment"."__tag_kind_comment_zwfppnrrnj" IS 'tag Node.kind = comment';
-
 COMMENT ON COLUMN "qti"."context_ref"."__attribute_hfyfakg5bn" IS 'attribute where {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-response-processing"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-test"}}],"kind":"or"}';
 
 COMMENT ON COLUMN "qti"."context_ref"."__node_55rq6xvhgt" IS 'node where {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-response-processing"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-test"}}],"kind":"or"}';
 
 COMMENT ON COLUMN "qti"."count_bound"."__choices_figr66khyk" IS 'choices where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]}';
+
+COMMENT ON COLUMN "qti"."count_bound"."__kind_dmis5kzmyk" IS 'kind where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."count_bound"."__max_name_perr4lpmuf" IS 'maxName where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
@@ -3976,8 +3917,6 @@ COMMENT ON COLUMN "qti"."declaration_identifier"."__node_wmg2sk5kn2" IS 'node wh
 COMMENT ON COLUMN "qti"."declaration_name"."__tag_cardinalities_1_6kweaxdavh" IS 'tag DeclarationIdentifier.cardinalities = 1';
 
 COMMENT ON COLUMN "qti"."dependency"."__tag_kind_cp_dependency_lofonk6n6z" IS 'tag Node.kind = cp:dependency';
-
-COMMENT ON COLUMN "qti"."doctype"."__tag_kind_doctype_gzepw5kmru" IS 'tag Node.kind = doctype';
 
 COMMENT ON COLUMN "qti"."document"."__tag_governor_document_neflbf6gem" IS 'tag Node.governor = document';
 
@@ -4120,8 +4059,6 @@ COMMENT ON COLUMN "qti"."file"."__path_mzwjzn5rcd" IS 'path where {"kind":"compa
 COMMENT ON COLUMN "qti"."file_href"."__pred_files_u6kfigcvxz" IS 'pred(files)';
 
 COMMENT ON COLUMN "qti"."fragment_value"."__pred_carriers_5eaxdkd6g3" IS 'pred(carriers)';
-
-COMMENT ON COLUMN "qti"."gap_interaction"."__tag_kind_qti_gap_baeu5x2oxw" IS 'tag Choice.kind = qti-gap';
 
 COMMENT ON COLUMN "qti"."gap_interaction"."__copy_gaps_rsjlbhzgni" IS 'the owner''s count of the family Interaction.gaps';
 
@@ -4276,16 +4213,6 @@ COMMENT ON COLUMN "qti"."interaction"."__pred_choices_w4bygwsb7b" IS 'pred(choic
 COMMENT ON COLUMN "qti"."interaction"."__pred_gaps_eoqczpbhjr" IS 'pred(gaps)';
 
 COMMENT ON COLUMN "qti"."interaction"."__pred_module_forms_c2s5pqvqs7" IS 'pred(moduleForms)';
-
-COMMENT ON COLUMN "qti"."interaction_attribute"."__tag_max_written_true_6phmyjuam6" IS 'tag CountBound.maxWritten = true';
-
-COMMENT ON COLUMN "qti"."interaction_attribute"."__tag_min_written_true_s2qn2qby65" IS 'tag CountBound.minWritten = true';
-
-COMMENT ON COLUMN "qti"."interaction_attribute"."__tag_adaptive_true_s6fbyxrfcm" IS 'tag ItemMode.adaptive = true';
-
-COMMENT ON COLUMN "qti"."interaction_attribute"."__tag_min_written_true_qgac5c4oqs" IS 'tag LeastCount.minWritten = true';
-
-COMMENT ON COLUMN "qti"."interaction_attribute"."__tag_max_written_true_ecflwzrsaj" IS 'tag MostCount.maxWritten = true';
 
 COMMENT ON COLUMN "qti"."interaction_attribute"."__document_iv5jcjfpsr" IS 'document where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}';
 
@@ -4467,29 +4394,15 @@ COMMENT ON COLUMN "qti"."least_count"."__min_name_pq4iyemtqh" IS 'minName where 
 
 COMMENT ON COLUMN "qti"."least_count"."__node_tq76jy5o5h" IS 'node where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
-COMMENT ON COLUMN "qti"."lom_language"."__tag_kind_lom_language_6guimqy5l2" IS 'tag Node.kind = lom:language';
-
-COMMENT ON COLUMN "qti"."lom_language"."__tag_parent_kind_lom_general_3vcfeyuobm" IS 'tag Node.parentKind = lom:general';
-
 COMMENT ON COLUMN "qti"."lom_language"."__copy_carriers_62slo5woet" IS 'the owner''s count of the family ResourceLomLanguageSet.carriers';
 
 COMMENT ON COLUMN "qti"."lom_language"."__index_carriers_jjdsz7n4qi" IS 'the index of the family ResourceLomLanguageSet.carriers';
 
 COMMENT ON COLUMN "qti"."lom_language"."__predecessor_carriers_m6m3cwtjwp" IS 'the predecessor of the index of the family ResourceLomLanguageSet.carriers';
 
-COMMENT ON COLUMN "qti"."lom_resource_type"."__tag_kind_lom_value_uyss5uoxlf" IS 'tag Node.kind = lom:value';
-
-COMMENT ON COLUMN "qti"."lom_resource_type"."__tag_parent_kind_lom_learning_resource_type_vpculv3nxv" IS 'tag Node.parentKind = lom:learningResourceType';
-
 COMMENT ON COLUMN "qti"."lom_resource_type"."__node_dzmkpyu5uh" IS 'node where {"arg":{"args":[{"field":"text","kind":"field"}],"fn":"collapse","kind":"compute"},"kind":"in","values":["exam","self assessment"]}';
 
-COMMENT ON COLUMN "qti"."lom_resource_type_source"."__tag_kind_lom_source_m6ibym2vwk" IS 'tag Node.kind = lom:source';
-
-COMMENT ON COLUMN "qti"."lom_resource_type_source"."__tag_parent_kind_lom_learning_resource_type_vpculv3nxv" IS 'tag Node.parentKind = lom:learningResourceType';
-
 COMMENT ON COLUMN "qti"."lom_resource_type_source"."__node_jr3yepcmfz" IS 'node where {"arg":{"arg":{"args":[{"field":"text","kind":"field"}],"fn":"collapse","kind":"compute"},"kind":"in","values":["","LOMv1.0"]},"kind":"not"}';
-
-COMMENT ON COLUMN "qti"."lom_string"."__tag_kind_lom_string_y5pieaaf6y" IS 'tag Node.kind = lom:string';
 
 COMMENT ON COLUMN "qti"."lom_string"."__language_tag_kebbbhfmz4" IS 'languageTag where {"kind":"compare","left":{"field":"languages","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
@@ -4521,13 +4434,7 @@ COMMENT ON COLUMN "qti"."lookup_value"."__parent_pewwtbkfib" IS 'parent where {"
 
 COMMENT ON COLUMN "qti"."lookup_value_type"."__tag_base_types_1_po5rtpg5zw" IS 'tag LookupValue.baseTypes = 1';
 
-COMMENT ON COLUMN "qti"."manifest_id"."__tag_document_type_manifest_xf3a5pjxvr" IS 'tag Attribute.documentType = manifest';
-
-COMMENT ON COLUMN "qti"."manifest_id"."__tag_kind_cp_manifest_qkjmtgjag7" IS 'tag Attribute.kind = cp:manifest';
-
 COMMENT ON COLUMN "qti"."manifest_id"."__tag_kind_cp_manifest_5ceu2f7cj4" IS 'tag Node.kind = cp:manifest';
-
-COMMENT ON COLUMN "qti"."map_key"."__tag_base_type_string_du6v7sbmlk" IS 'tag MapKeyType.baseType = string';
 
 COMMENT ON COLUMN "qti"."map_key"."__tag_kind_qti_map_entry_encogh5pzb" IS 'tag Node.kind = qti-map-entry';
 
@@ -4551,11 +4458,11 @@ COMMENT ON COLUMN "qti"."map_key_type"."__node_tspabsizer" IS 'node where {"kind
 
 COMMENT ON COLUMN "qti"."mapping"."__tag_kind_qti_mapping_ircufmby53" IS 'tag Node.kind = qti-mapping';
 
+COMMENT ON COLUMN "qti"."mapping"."__declaration_oxp5hcydih" IS 'declaration where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
+
 COMMENT ON COLUMN "qti"."mapping"."__node_qoaju6itui" IS 'node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."mapping"."__node_wmg2sk5kn2" IS 'node where {"kind":"compare","left":{"field":"cardinalities","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
-
-COMMENT ON COLUMN "qti"."mapping_base_type"."__tag_base_types_1_girz7kbxpw" IS 'tag Mapping.baseTypes = 1';
 
 COMMENT ON COLUMN "qti"."mapping_item_ref"."__node_o7qeabbnno" IS 'node where {"kind":"compare","left":{"field":"types","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}}';
 
@@ -4575,13 +4482,9 @@ COMMENT ON COLUMN "qti"."mastery_value"."__index_masteries_qxccxqajhd" IS 'the i
 
 COMMENT ON COLUMN "qti"."mastery_value"."__predecessor_masteries_nfrovqm6on" IS 'the predecessor of the index of the family Declaration.masteries';
 
-COMMENT ON COLUMN "qti"."math_action"."__tag_kind_m_maction_d3xejeqvif" IS 'tag Node.kind = m:maction';
-
 COMMENT ON COLUMN "qti"."math_action"."__node_ftdvsxxkkg" IS 'node where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
-COMMENT ON COLUMN "qti"."math_align_group"."__tag_kind_m_maligngroup_fhvidvtaep" IS 'tag MathAlignScope.kind = m:maligngroup';
-
-COMMENT ON COLUMN "qti"."math_align_group"."__tag_state_open_hbfhgrpnnf" IS 'tag MathAlignScope.state = open';
+COMMENT ON COLUMN "qti"."math_action"."__selection_lexical_unwrxmx7dj" IS 'selectionLexical where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."math_align_group"."__copy_groups_ze5qygccpo" IS 'the owner''s count of the family MathCell.groups';
 
@@ -4589,7 +4492,7 @@ COMMENT ON COLUMN "qti"."math_align_group"."__index_groups_nrit634epy" IS 'the i
 
 COMMENT ON COLUMN "qti"."math_align_group"."__predecessor_groups_eiwl3i6crv" IS 'the predecessor of the index of the family MathCell.groups';
 
-COMMENT ON COLUMN "qti"."math_align_scope"."__tag_kind_m_mtd_xa35mctuma" IS 'tag Node.kind = m:mtd';
+COMMENT ON COLUMN "qti"."math_align_scope"."__cell_teggzyys3v" IS 'cell where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}';
 
 COMMENT ON COLUMN "qti"."math_align_scope"."__cell_crzb77exj4" IS 'cell where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maligngroup"}} and {"kind":"compare","left":{"field":"state","kind":"field"},"op":"eq","right":{"kind":"literal","value":"open"}}';
 
@@ -4609,8 +4512,6 @@ COMMENT ON COLUMN "qti"."math_align_scope"."__node_5sroalr7ba" IS 'node where {"
 
 COMMENT ON COLUMN "qti"."math_align_scope"."__node_x3mdbcdhup" IS 'node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}';
 
-COMMENT ON COLUMN "qti"."math_align_scope"."__node_permaeflu7" IS 'node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}';
-
 COMMENT ON COLUMN "qti"."math_align_scope"."__parent_ofh2oegku5" IS 'parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}';
 
 COMMENT ON COLUMN "qti"."math_align_scope"."__parent_bj6k3aos7e" IS 'parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}}';
@@ -4619,21 +4520,15 @@ COMMENT ON COLUMN "qti"."math_align_scope"."__parent_kind_bupdqhkd5a" IS 'parent
 
 COMMENT ON COLUMN "qti"."math_align_scope"."__received_nl6nb5uaz7" IS 'received where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}';
 
-COMMENT ON COLUMN "qti"."math_apply"."__tag_kind_m_apply_pjtmhvv7wn" IS 'tag Node.kind = m:apply';
-
 COMMENT ON COLUMN "qti"."math_apply"."__pred_arguments_xhws45g4kd" IS 'pred(arguments)';
 
 COMMENT ON COLUMN "qti"."math_apply"."__pred_owned_mqgcknrwyp" IS 'pred(owned)';
-
-COMMENT ON COLUMN "qti"."math_argument"."__tag_parent_kind_m_apply_d3jbpwaalp" IS 'tag Node.parentKind = m:apply';
 
 COMMENT ON COLUMN "qti"."math_argument"."__copy_arguments_qqpy2esbp5" IS 'the owner''s count of the family MathApply.arguments';
 
 COMMENT ON COLUMN "qti"."math_argument"."__index_arguments_g6vnjl4shc" IS 'the index of the family MathApply.arguments';
 
 COMMENT ON COLUMN "qti"."math_argument"."__predecessor_arguments_uuajbycqq3" IS 'the predecessor of the index of the family MathApply.arguments';
-
-COMMENT ON COLUMN "qti"."math_cell"."__tag_kind_m_mtd_xa35mctuma" IS 'tag Node.kind = m:mtd';
 
 COMMENT ON COLUMN "qti"."math_cell"."__pred_groups_vcil4lo3j4" IS 'pred(groups)';
 
@@ -4654,8 +4549,6 @@ COMMENT ON COLUMN "qti"."math_cn"."__node_4zs7f4hetq" IS 'node where {"kind":"co
 COMMENT ON COLUMN "qti"."math_cn"."__type_lexical_mw5gnzkqdv" IS 'typeLexical where {"kind":"compare","left":{"field":"typeLexical","kind":"field"},"op":"ne","right":{"kind":"literal","value":""}}';
 
 COMMENT ON COLUMN "qti"."math_cn"."__pred_parts_32uebfen7t" IS 'pred(parts)';
-
-COMMENT ON COLUMN "qti"."math_qualifier"."__tag_parent_kind_m_apply_d3jbpwaalp" IS 'tag Node.parentKind = m:apply';
 
 COMMENT ON COLUMN "qti"."math_qualifier"."__copy_owned_anz5oziziv" IS 'the owner''s count of the family MathApply.owned';
 
@@ -4679,7 +4572,7 @@ COMMENT ON COLUMN "qti"."most_count"."__most_gdqaao6iy4" IS 'most where {"kind":
 
 COMMENT ON COLUMN "qti"."most_count"."__node_uyvwkuoluo" IS 'node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
-COMMENT ON COLUMN "qti"."named"."__tag_name_identifier_hdbqpwof4p" IS 'tag TestToken.name = identifier';
+COMMENT ON COLUMN "qti"."most_count"."__node_mihgquu7mx" IS 'node where {"kind":"compare","left":{"field":"mostValue","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."named"."__copy_names_7hegcmmbq5" IS 'the owner''s count of the family TestDocument.names';
 
@@ -4715,10 +4608,6 @@ COMMENT ON COLUMN "qti"."node"."__before_children_0_3gyncqxilw" IS 'the accumula
 
 COMMENT ON COLUMN "qti"."node"."__before_children_0_x6eccbqpcx" IS 'the accumulator before plane 0 of the fold __node_children_count_fold_pnx6ol5egm over the family Node.children';
 
-COMMENT ON COLUMN "qti"."node"."__tag_kind_m_mtd_732qdbsle4" IS 'tag MathAlignScope.kind = m:mtd';
-
-COMMENT ON COLUMN "qti"."node"."__tag_element_true_7b46swo4dc" IS 'tag PciModuleForm.element = true';
-
 COMMENT ON COLUMN "qti"."node"."__copy_children_3gyszos53r" IS 'the owner''s count of the family Node.children';
 
 COMMENT ON COLUMN "qti"."node"."__parent_start_children_nf67wmljbp" IS 'the parent''s start of the family Node.children';
@@ -4737,17 +4626,13 @@ COMMENT ON COLUMN "qti"."node"."__first_c2z2qcicj5" IS 'first where {"kind":"com
 
 COMMENT ON COLUMN "qti"."node"."__id_rpd3elauv4" IS 'id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["foreign-element","no-namespace-element","own-namespace-element"]},"kind":"not"} and {"arg":{"args":[{"field":"version","kind":"field"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AnonymousType"},"kind":"not"}';
 
-COMMENT ON COLUMN "qti"."node"."__id_cd2i27c3ms" IS 'id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}';
-
 COMMENT ON COLUMN "qti"."node"."__id_33kgwoi4ec" IS 'id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}}';
 
-COMMENT ON COLUMN "qti"."node"."__id_d2goefw6wb" IS 'id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}';
+COMMENT ON COLUMN "qti"."node"."__id_czfco246xy" IS 'id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}}';
 
 COMMENT ON COLUMN "qti"."node"."__id_j5nn7krqpg" IS 'id where {"arg":{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"domain","kind":"closedAt","relation":"TextDomain"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID","IDREF","IDREFS"]} and {"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"domain","kind":"closedAt","relation":"TextDomain"}],"kind":"closedHas","relation":"ValueIdentity"} and {"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"kind":"closedHas","relation":"TextDomain"}';
 
 COMMENT ON COLUMN "qti"."node"."__id_bvzvtol7yn" IS 'id where {"arg":{"args":[{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"field":"admission","kind":"closedAt","relation":"ContentModelOf"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AdmissionIn"},"kind":"not"}';
-
-COMMENT ON COLUMN "qti"."node"."__id_ztgrncxr25" IS 'id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}';
 
 COMMENT ON COLUMN "qti"."node"."__id_jc6vfm2n22" IS 'id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:entry"}}';
 
@@ -4795,11 +4680,7 @@ COMMENT ON COLUMN "qti"."node"."__id_fh4h2bqbbf" IS 'id where {"arg":{"field":"p
 
 COMMENT ON COLUMN "qti"."node"."__id_k52urhgrax" IS 'id where {"args":[{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"field":"admission","kind":"closedAt","relation":"ContentModelOf"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AdmissionIn"}';
 
-COMMENT ON COLUMN "qti"."node"."__id_7fv35js5jl" IS 'id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}}';
-
 COMMENT ON COLUMN "qti"."node"."__id_bghas3ujed" IS 'id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"ud:value"}}';
-
-COMMENT ON COLUMN "qti"."node"."__id_akgrikbcwo" IS 'id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}';
 
 COMMENT ON COLUMN "qti"."node"."__id_4kyfqj6js7" IS 'id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}}';
 
@@ -4893,6 +4774,8 @@ COMMENT ON COLUMN "qti"."normal_minimum"."__index_minimums_ctzepj5jme" IS 'the i
 
 COMMENT ON COLUMN "qti"."normal_minimum"."__predecessor_minimums_o76ew7ybv7" IS 'the predecessor of the index of the family Declaration.minimums';
 
+COMMENT ON COLUMN "qti"."normal_minimum"."__lexical_27n7ajvgxq" IS 'lexical where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
+
 COMMENT ON COLUMN "qti"."normal_minimum"."__node_cmhaiwbl5v" IS 'node where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."open_attribute_name"."__copy_open_name_oeoj6unsev" IS 'the owner''s count of the family Attribute.openName';
@@ -4947,8 +4830,6 @@ COMMENT ON COLUMN "qti"."pci_module_form"."__node_zkko65kuex" IS 'node where {"k
 
 COMMENT ON COLUMN "qti"."pci_module_form"."__node_itpy7ns7w5" IS 'node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
-COMMENT ON COLUMN "qti"."pi"."__tag_kind_pi_57j5bswims" IS 'tag Node.kind = pi';
-
 COMMENT ON COLUMN "qti"."placed_binding"."__tag_assembly_kind_qti_assessment_item_qf7qyzopnq" IS 'tag Instance.assemblyKind = qti-assessment-item';
 
 COMMENT ON COLUMN "qti"."placed_binding"."__copy_bindings_25tfxmty3q" IS 'the owner''s count of the family Instance.bindings';
@@ -4960,10 +4841,6 @@ COMMENT ON COLUMN "qti"."placed_binding"."__predecessor_bindings_qazoxtzjz6" IS 
 COMMENT ON COLUMN "qti"."placed_binding"."__node_nqyr3apalb" IS 'node where {"kind":"compare","left":{"field":"adaptive","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}}';
 
 COMMENT ON COLUMN "qti"."placed_binding_base_type"."__tag_base_types_1_v2q3o6pgx3" IS 'tag PlacedBindingCardinality.baseTypes = 1';
-
-COMMENT ON COLUMN "qti"."placed_binding_cardinality"."__tag_max_written_true_6phmyjuam6" IS 'tag CountBound.maxWritten = true';
-
-COMMENT ON COLUMN "qti"."placed_binding_cardinality"."__tag_most_value_1_lrsl6ypbxi" IS 'tag MostCount.mostValue = 1';
 
 COMMENT ON COLUMN "qti"."placed_binding_cardinality"."__attribute_cy3lzlyym2" IS 'attribute where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
@@ -5067,8 +4944,6 @@ COMMENT ON COLUMN "qti"."placed_variable_ref"."__instance_n5ohc4oypz" IS 'instan
 
 COMMENT ON COLUMN "qti"."placed_variable_ref"."__node_uxuuifp4t7" IS 'node where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}';
 
-COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__tag_resolution_declared_2v4qpdk4sg" IS 'tag PlacedVariableRef.resolution = declared';
-
 COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__declaration_tjmicd327x" IS 'declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response"}}';
 
 COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__declaration_y3rrijdizl" IS 'declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response-point"}}';
@@ -5096,8 +4971,6 @@ COMMENT ON COLUMN "qti"."printed_variable_ref"."__node_55rq6xvhgt" IS 'node wher
 COMMENT ON COLUMN "qti"."processing"."__language_zyvgaanajc" IS 'language where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-processing","qti-response-processing","qti-template-processing"]},"kind":"not"} and {"arg":{"field":"parentKind","kind":"field"},"kind":"in","values":["qti-exit-response","qti-exit-template","qti-exit-test","qti-lookup-outcome-value","qti-outcome-condition","qti-outcome-else","qti-outcome-else-if","qti-outcome-if","qti-outcome-processing","qti-outcome-processing-fragment","qti-response-condition","qti-response-else","qti-response-else-if","qti-response-if","qti-response-processing","qti-response-processing-fragment","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value","qti-template-condition","qti-template-constraint","qti-template-else","qti-template-else-if","qti-template-if","qti-template-processing"]}';
 
 COMMENT ON COLUMN "qti"."processing"."__parent_wsm6mff5fw" IS 'parent where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-processing","qti-response-processing","qti-template-processing"]},"kind":"not"} and {"arg":{"field":"parentKind","kind":"field"},"kind":"in","values":["qti-exit-response","qti-exit-template","qti-exit-test","qti-lookup-outcome-value","qti-outcome-condition","qti-outcome-else","qti-outcome-else-if","qti-outcome-if","qti-outcome-processing","qti-outcome-processing-fragment","qti-response-condition","qti-response-else","qti-response-else-if","qti-response-if","qti-response-processing","qti-response-processing-fragment","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value","qti-template-condition","qti-template-constraint","qti-template-else","qti-template-else-if","qti-template-if","qti-template-processing"]}';
-
-COMMENT ON COLUMN "qti"."quotation"."__tag_kind_q_3inif2mybn" IS 'tag Node.kind = q';
 
 COMMENT ON COLUMN "qti"."quotation"."__after_opywcrlnpf" IS 'after where {"kind":"compare","left":{"field":"nextAt","kind":"field"},"op":"lt","right":{"field":"siblings","kind":"field"}}';
 
@@ -5237,13 +5110,13 @@ COMMENT ON COLUMN "qti"."reference"."__name_55zdbs4rpu" IS 'name where {"kind":"
 
 COMMENT ON COLUMN "qti"."reference"."__node_6rmfntt35j" IS 'node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section-ref"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"ne","right":{"kind":"literal","value":"external"}}';
 
+COMMENT ON COLUMN "qti"."reference"."__node_scx2hiwvjr" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"external"}}';
+
 COMMENT ON COLUMN "qti"."reference"."__node_rx3smqszrv" IS 'node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}';
 
 COMMENT ON COLUMN "qti"."reference_document"."__pred_references_6abcllx5dz" IS 'pred(references)';
 
 COMMENT ON COLUMN "qti"."reference_path"."__tag_root_kind_qti_assessment_stimulus_2vbuhphhzu" IS 'tag Document.rootKind = qti-assessment-stimulus';
-
-COMMENT ON COLUMN "qti"."reference_path"."__tag_scope_entry_ftwflfkyiu" IS 'tag Reference.scope = entry';
 
 COMMENT ON COLUMN "qti"."reference_path"."__package_7t2ctw5cbp" IS 'package where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-stimulus-ref"}}';
 
@@ -5269,10 +5142,6 @@ COMMENT ON COLUMN "qti"."resource"."__tag_kind_cp_resource_d4vxcw6kik" IS 'tag N
 
 COMMENT ON COLUMN "qti"."resource_file"."__pred_files_u6kfigcvxz" IS 'pred(files)';
 
-COMMENT ON COLUMN "qti"."resource_id"."__tag_document_type_manifest_xf3a5pjxvr" IS 'tag Attribute.documentType = manifest';
-
-COMMENT ON COLUMN "qti"."resource_id"."__tag_kind_cp_resource_2dx6aajhjw" IS 'tag Attribute.kind = cp:resource';
-
 COMMENT ON COLUMN "qti"."resource_lom_language_set"."__pred_carriers_5eaxdkd6g3" IS 'pred(carriers)';
 
 COMMENT ON COLUMN "qti"."rounding"."__node_32fqjggjvi" IS 'node where {"arg":{"field":"holds","kind":"field"},"kind":"in","values":["both","figures"]}';
@@ -5282,16 +5151,6 @@ COMMENT ON COLUMN "qti"."rounding"."__node_2zkwcxdwo5" IS 'node where {"arg":{"f
 COMMENT ON COLUMN "qti"."rounding"."__node_bb4ru6chas" IS 'node where {"kind":"compare","left":{"field":"holds","kind":"field"},"op":"eq","right":{"kind":"literal","value":"both"}}';
 
 COMMENT ON COLUMN "qti"."rounding"."__node_n3wznir2nw" IS 'node where {"kind":"compare","left":{"field":"modeWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
-
-COMMENT ON COLUMN "qti"."rounding_mode_figures"."__tag_holds_both_6csovww3f2" IS 'tag Rounding.holds = both';
-
-COMMENT ON COLUMN "qti"."section"."__tag_kind_qti_assessment_section_uapwmmmuie" IS 'tag Node.kind = qti-assessment-section';
-
-COMMENT ON COLUMN "qti"."section"."__tag_name_keep_together_o2be7ruydl" IS 'tag TestFlag.name = keep-together';
-
-COMMENT ON COLUMN "qti"."section"."__tag_name_visible_oiuo76g3uh" IS 'tag TestFlag.name = visible';
-
-COMMENT ON COLUMN "qti"."section"."__tag_value_false_cjndlhh3dj" IS 'tag TestFlag.value = false';
 
 COMMENT ON COLUMN "qti"."section"."__node_r5vmhcharh" IS 'node where {"args":[{"kind":"compare","left":{"field":"keepTogether","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}},{"kind":"compare","left":{"field":"loose","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"or"}';
 
@@ -5369,10 +5228,6 @@ COMMENT ON COLUMN "qti"."section_member"."__after_members_0_jebmjv7e56" IS 'the 
 
 COMMENT ON COLUMN "qti"."section_member"."__before_members_0_7nw4qxaepj" IS 'the accumulator before plane 0 of the fold __section_members_count_fold_k2pepzeac2 over the family Section.members';
 
-COMMENT ON COLUMN "qti"."section_member"."__tag_name_required_xji2m2yxye" IS 'tag TestFlag.name = required';
-
-COMMENT ON COLUMN "qti"."section_member"."__tag_value_true_ck4tzjcs4h" IS 'tag TestFlag.value = true';
-
 COMMENT ON COLUMN "qti"."section_member"."__copy_members_4lboupkyns" IS 'the owner''s count of the family Section.members';
 
 COMMENT ON COLUMN "qti"."section_member"."__index_members_drczlcj6z5" IS 'the index of the family Section.members';
@@ -5380,10 +5235,6 @@ COMMENT ON COLUMN "qti"."section_member"."__index_members_drczlcj6z5" IS 'the in
 COMMENT ON COLUMN "qti"."section_member"."__predecessor_members_z77cfwnh3n" IS 'the predecessor of the index of the family Section.members';
 
 COMMENT ON COLUMN "qti"."section_member"."__node_hf7blfijbr" IS 'node where {"kind":"compare","left":{"field":"required","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
-
-COMMENT ON COLUMN "qti"."section_ordering"."__tag_kind_qti_ordering_jdhmdg4ngw" IS 'tag Node.kind = qti-ordering';
-
-COMMENT ON COLUMN "qti"."section_ordering"."__tag_name_shuffle_epbg7t5m2h" IS 'tag TestFlag.name = shuffle';
 
 COMMENT ON COLUMN "qti"."section_ordering"."__node_sfmmgf7sef" IS 'node where {"kind":"compare","left":{"field":"shuffle","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
@@ -5412,10 +5263,6 @@ COMMENT ON COLUMN "qti"."section_scope"."__pred_feedbacks_c2txublcan" IS 'pred(f
 COMMENT ON COLUMN "qti"."section_scope"."__pred_prints_uwxz5ocwj4" IS 'pred(prints)';
 
 COMMENT ON COLUMN "qti"."section_scope"."__pred_templates_5bo5q45wjw" IS 'pred(templates)';
-
-COMMENT ON COLUMN "qti"."section_selection"."__tag_kind_qti_selection_pkhzp6bzml" IS 'tag Node.kind = qti-selection';
-
-COMMENT ON COLUMN "qti"."section_selection"."__tag_name_with_replacement_khljsxomzz" IS 'tag TestFlag.name = with-replacement';
 
 COMMENT ON COLUMN "qti"."section_selection"."__node_bxkmiz7ib7" IS 'node where {"kind":"compare","left":{"field":"withReplacement","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
@@ -5458,12 +5305,6 @@ COMMENT ON COLUMN "qti"."share_fragment"."__node_eixsmyfnul" IS 'node where {"ki
 COMMENT ON COLUMN "qti"."share_fragment"."__placements_umab3ec74p" IS 'placements where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."share_fragment"."__pred_placements_wtijf47h4h" IS 'pred(placements)';
-
-COMMENT ON COLUMN "qti"."share_target"."__tag_assembled_false_ozaww7oasa" IS 'tag ShareFragment.assembled = false';
-
-COMMENT ON COLUMN "qti"."site"."__tag_name_href_rc6np66dc4" IS 'tag Reference.name = href';
-
-COMMENT ON COLUMN "qti"."site"."__tag_scope_external_4ewa3hwoox" IS 'tag Reference.scope = external';
 
 COMMENT ON COLUMN "qti"."site"."__kind_xumnxfryga" IS 'kind where {"kind":"compare","left":{"field":"external","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"xi:include"}}';
 
@@ -5551,8 +5392,6 @@ COMMENT ON COLUMN "qti"."ssml_scope"."__parent_o57yro4pps" IS 'parent where {"ki
 
 COMMENT ON COLUMN "qti"."stimulus_ref"."__tag_kind_qti_assessment_stimulus_ref_qe7tad6rku" IS 'tag Node.kind = qti-assessment-stimulus-ref';
 
-COMMENT ON COLUMN "qti"."stimulus_ref"."__tag_name_identifier_hdbqpwof4p" IS 'tag TestToken.name = identifier';
-
 COMMENT ON COLUMN "qti"."table_header"."__tag_kind_th_xngqtwe4yz" IS 'tag Attribute.kind = th';
 
 COMMENT ON COLUMN "qti"."table_header"."__id_lmaiziq5mc" IS 'id where {"kind":"compare","left":{"field":"document","kind":"field"},"op":"ne","right":{"field":"table","kind":"field"}}';
@@ -5581,8 +5420,6 @@ COMMENT ON COLUMN "qti"."template_ref_declaration"."__declaration_6cfggqpwok" IS
 
 COMMENT ON COLUMN "qti"."template_ref_declaration"."__node_wmg2sk5kn2" IS 'node where {"kind":"compare","left":{"field":"cardinalities","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
-COMMENT ON COLUMN "qti"."test_document"."__tag_assembled_true_gg7wow7ogq" IS 'tag Document.assembled = true';
-
 COMMENT ON COLUMN "qti"."test_document"."__package_wmb66a5rru" IS 'package where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
 
 COMMENT ON COLUMN "qti"."test_document"."__path_3zs6iyyad2" IS 'path where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
@@ -5595,13 +5432,13 @@ COMMENT ON COLUMN "qti"."test_document"."__pred_rules_vfbblnhiag" IS 'pred(rules
 
 COMMENT ON COLUMN "qti"."test_document"."__pred_targets_c5nt4iqzuc" IS 'pred(targets)';
 
-COMMENT ON COLUMN "qti"."test_flag"."__tag_required_true_ocdlu4jowj" IS 'tag SectionMember.required = true';
-
 COMMENT ON COLUMN "qti"."test_flag"."__node_lp3xxymaae" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}}';
 
 COMMENT ON COLUMN "qti"."test_flag"."__node_2mdqieju4t" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}';
 
 COMMENT ON COLUMN "qti"."test_flag"."__node_gmu2rwiqtm" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
+
+COMMENT ON COLUMN "qti"."test_flag"."__node_6wkm55u4hp" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."test_flag"."__node_jbxopjiwnp" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shuffle"}}';
 
@@ -5657,6 +5494,14 @@ COMMENT ON COLUMN "qti"."test_token"."__node_cxuhc4dycy" IS 'node where {"kind":
 
 COMMENT ON COLUMN "qti"."test_token"."__node_fhyljg3ztm" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}}';
 
+COMMENT ON COLUMN "qti"."test_token"."__value_njvpodf45e" IS 'value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}';
+
+COMMENT ON COLUMN "qti"."test_token"."__value_6drsqx4lwf" IS 'value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"source-identifier"}}';
+
+COMMENT ON COLUMN "qti"."test_token"."__value_3h2f5zh2rc" IS 'value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}';
+
+COMMENT ON COLUMN "qti"."test_token"."__value_ph7qvsg5ej" IS 'value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}}';
+
 COMMENT ON COLUMN "qti"."text_idref"."__copy_idrefs_aiuv4a3ch4" IS 'the owner''s count of the family IdentityText.idrefs';
 
 COMMENT ON COLUMN "qti"."text_idref"."__pred_at_xktcobhsti" IS 'pred(at)';
@@ -5667,15 +5512,11 @@ COMMENT ON COLUMN "qti"."text_reference"."__kind_3plysbbxy5" IS 'kind where {"ki
 
 COMMENT ON COLUMN "qti"."text_reference"."__node_rx3smqszrv" IS 'node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}';
 
-COMMENT ON COLUMN "qti"."text_reference_path"."__tag_scope_entry_3uoeqhx6qk" IS 'tag TextReference.scope = entry';
-
 COMMENT ON COLUMN "qti"."tolerance"."__pred_tokens_ip7mlgrtju" IS 'pred(tokens)';
 
 COMMENT ON COLUMN "qti"."tolerance_token"."__copy_tokens_qrhw3bdivm" IS 'the owner''s count of the family Tolerance.tokens';
 
 COMMENT ON COLUMN "qti"."tolerance_token"."__pred_at_xktcobhsti" IS 'pred(at)';
-
-COMMENT ON COLUMN "qti"."usage_value"."__tag_kind_ud_value_b2yl5o5lx3" IS 'tag Node.kind = ud:value';
 
 COMMENT ON COLUMN "qti"."usage_value"."__base_type_lexical_ch24no2osx" IS 'baseTypeLexical where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]}';
 
@@ -5688,12 +5529,6 @@ COMMENT ON COLUMN "qti"."value_base_type"."__node_wmg2sk5kn2" IS 'node where {"k
 COMMENT ON COLUMN "qti"."value_set"."__node_wmg2sk5kn2" IS 'node where {"kind":"compare","left":{"field":"cardinalities","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."value_set"."__pred_fields_qv5oq352ox" IS 'pred(fields)';
-
-COMMENT ON COLUMN "qti"."variable_mapping"."__tag_kind_qti_variable_mapping_jzswa3wyza" IS 'tag Node.kind = qti-variable-mapping';
-
-COMMENT ON COLUMN "qti"."variable_mapping"."__tag_name_source_identifier_f3zkfvtsob" IS 'tag TestToken.name = source-identifier';
-
-COMMENT ON COLUMN "qti"."variable_mapping"."__tag_name_target_identifier_ynhub4kg6h" IS 'tag TestToken.name = target-identifier';
 
 COMMENT ON COLUMN "qti"."variable_ref"."__copy_variables_zsnuarcvup" IS 'the owner''s count of the family Document.variables';
 
@@ -5724,8 +5559,6 @@ COMMENT ON COLUMN "qti"."variable_ref"."__node_uxuuifp4t7" IS 'node where {"kind
 COMMENT ON COLUMN "qti"."variable_ref"."__node_a2cp5ppi33" IS 'node where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}}';
 
 COMMENT ON COLUMN "qti"."variable_ref"."__parent_ute33fgrzx" IS 'parent where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-and","qti-any-n","qti-base-value","qti-container-size","qti-contains","qti-correct","qti-custom-operator","qti-default","qti-delete","qti-divide","qti-duration-gte","qti-duration-lt","qti-equal","qti-equal-rounded","qti-field-value","qti-gcd","qti-gt","qti-gte","qti-index","qti-inside","qti-integer-divide","qti-integer-modulus","qti-integer-to-float","qti-is-null","qti-lcm","qti-lt","qti-lte","qti-map-response","qti-map-response-point","qti-match","qti-math-constant","qti-math-operator","qti-max","qti-member","qti-min","qti-multiple","qti-not","qti-null","qti-number-correct","qti-number-incorrect","qti-number-presented","qti-number-responded","qti-number-selected","qti-or","qti-ordered","qti-outcome-maximum","qti-outcome-minimum","qti-pattern-match","qti-power","qti-product","qti-random","qti-random-float","qti-random-integer","qti-repeat","qti-round","qti-round-to","qti-stats-operator","qti-string-match","qti-substring","qti-subtract","qti-sum","qti-test-variables","qti-truncate","qti-variable"]}';
-
-COMMENT ON COLUMN "qti"."variable_ref_declaration"."__tag_resolution_declared_miquxf3g2n" IS 'tag VariableRef.resolution = declared';
 
 COMMENT ON COLUMN "qti"."variable_ref_declaration"."__attribute_tlxaefzruf" IS 'attribute where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-map-response","qti-map-response-point"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}';
 
@@ -5839,11 +5672,13 @@ COMMENT ON CONSTRAINT "__attribute_key_node_name_o25ujcevyx" ON "qti"."attribute
 
 COMMENT ON CONSTRAINT "__attribute_key_node_tgqt5nrkx7" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"})';
 
-COMMENT ON CONSTRAINT "__attribute_key_node_document_type_kind_e5byhwivqy" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"}, documentType, kind)';
-
 COMMENT ON CONSTRAINT "__attribute_key_node_6v7u4jhu67" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"lexical","kind":"field"},{"kind":"literal","value":"^[\\t\\n\\r ]*(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)[\\t\\n\\r ]*$"}],"fn":"matches","kind":"compute"})';
 
 COMMENT ON CONSTRAINT "__attribute_key_node_kind_fhjz7em3nm" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"lexical","kind":"field"},{"kind":"literal","value":"^[\\t\\n\\r ]*(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)[\\t\\n\\r ]*$"}],"fn":"matches","kind":"compute"}, kind)';
+
+COMMENT ON CONSTRAINT "__attribute_key_node_q2x5ydl6n5" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}})';
+
+COMMENT ON CONSTRAINT "__attribute_key_node_i5tbkhmir2" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:resource"}})';
 
 COMMENT ON CONSTRAINT "__attribute_key_node_wrrfag76aj" ON "qti"."attribute" IS 'key Attribute(node where {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-interpolation-table","qti-match-table"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"default-value"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-interpolation-table-entry","qti-match-table-entry"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-value"}}],"kind":"and"}],"kind":"or"})';
 
@@ -5899,15 +5734,25 @@ COMMENT ON CONSTRAINT "__catalog_ref_key_document_token_index_carriers_pfnakxckk
 
 COMMENT ON CONSTRAINT "__choice_key_document_index_choices_ecdiz727hk" ON "qti"."choice" IS 'key Choice(document, the index of the family Document.choices)';
 
+COMMENT ON CONSTRAINT "__choice_key_node_j2cg6x6jmd" ON "qti"."choice" IS 'key Choice(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-gap"}})';
+
 COMMENT ON CONSTRAINT "__choice_interaction_key_interaction_index_choices_7hkirljucn" ON "qti"."choice_interaction" IS 'key ChoiceInteraction(interaction, the index of the family Interaction.choices)';
 
 COMMENT ON CONSTRAINT "__cn_part_text_key_node_index_parts_cod7obyrw7" ON "qti"."cn_part_text" IS 'key CnPartText(node, the index of the family MathCn.parts)';
 
 COMMENT ON CONSTRAINT "__cn_slot_key_node_index_parts_ngyyxxduwj" ON "qti"."cn_slot" IS 'key CnSlot(node, the index of the family CnCount.parts)';
 
+COMMENT ON CONSTRAINT "__count_bound_key_node_kind_6i4wm57iwz" ON "qti"."count_bound" IS 'key CountBound(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, kind where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
+COMMENT ON CONSTRAINT "__count_bound_key_node_max_name_l3mgg2orxj" ON "qti"."count_bound" IS 'key CountBound(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, maxName where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
+COMMENT ON CONSTRAINT "__count_bound_key_node_min_name_vqmg65wlb6" ON "qti"."count_bound" IS 'key CountBound(node where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, minName where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
 COMMENT ON CONSTRAINT "__declaration_base_type_key_node_index_base_types_lfr2itokjz" ON "qti"."declaration_base_type" IS 'key DeclarationBaseType(node, the index of the family Declaration.baseTypes)';
 
 COMMENT ON CONSTRAINT "__declaration_cardinality_key_node_index_akoojvjkc4" ON "qti"."declaration_cardinality" IS 'key DeclarationCardinality(node, the index of the family Declaration.cardinalities)';
+
+COMMENT ON CONSTRAINT "__document_key_node_czaqlpln2u" ON "qti"."document" IS 'key Document(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__document_key_node_2xwkm4raxx" ON "qti"."document" IS 'key Document(node where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}})';
 
@@ -5961,7 +5806,11 @@ COMMENT ON CONSTRAINT "__interaction_attribute_key_node_name_value_7ornt3zlhr" O
 
 COMMENT ON CONSTRAINT "__interaction_attribute_key_node_s2a23mqgqv" ON "qti"."interaction_attribute" IS 'key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["response-identifier"]})';
 
+COMMENT ON CONSTRAINT "__item_mode_key_document_vhjb4ke6pv" ON "qti"."item_mode" IS 'key ItemMode(document where {"kind":"compare","left":{"field":"adaptive","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
 COMMENT ON CONSTRAINT "__least_count_key_node_index_leasts_74vfmcveog" ON "qti"."least_count" IS 'key LeastCount(node, the index of the family CountBound.leasts)';
+
+COMMENT ON CONSTRAINT "__least_count_key_node_min_name_least_gynf655rwc" ON "qti"."least_count" IS 'key LeastCount(node where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, minName where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, least where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__lom_language_key_general_tag_index_carriers_xu7ssaeg47" ON "qti"."lom_language" IS 'key LomLanguage(general, tag, the index of the family ResourceLomLanguageSet.carriers)';
 
@@ -5973,13 +5822,23 @@ COMMENT ON CONSTRAINT "__map_key_key_node_euxthmmamh" ON "qti"."map_key" IS 'key
 
 COMMENT ON CONSTRAINT "__map_key_type_key_node_mapping_key_umazbopby7" ON "qti"."map_key_type" IS 'key MapKeyType(node where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"}, mapping where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"}, key where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"})';
 
+COMMENT ON CONSTRAINT "__map_key_type_key_node_xa67v7esfi" ON "qti"."map_key_type" IS 'key MapKeyType(node where {"kind":"compare","left":{"field":"baseType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"string"}})';
+
+COMMENT ON CONSTRAINT "__mapping_key_node_declaration_a6g7xsgf55" ON "qti"."mapping" IS 'key Mapping(node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, declaration where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}})';
+
 COMMENT ON CONSTRAINT "__mapping_item_ref_type_key_node_index_types_jepwnv3zhe" ON "qti"."mapping_item_ref_type" IS 'key MappingItemRefType(node, the index of the family MappingItemRef.types)';
 
 COMMENT ON CONSTRAINT "__mastery_value_key_node_index_masteries_xeifxbcajk" ON "qti"."mastery_value" IS 'key MasteryValue(node, the index of the family Declaration.masteries)';
 
+COMMENT ON CONSTRAINT "__math_action_key_node_selection_lexical_j5jv32cwhr" ON "qti"."math_action" IS 'key MathAction(node where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, selectionLexical where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
 COMMENT ON CONSTRAINT "__math_align_group_key_cell_index_groups_2ukveq7ug7" ON "qti"."math_align_group" IS 'key MathAlignGroup(cell, the index of the family MathCell.groups)';
 
-COMMENT ON CONSTRAINT "__math_align_scope_key_node_cell_element_children_25ok6cyfso" ON "qti"."math_align_scope" IS 'key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, cell where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, elementChildren)';
+COMMENT ON CONSTRAINT "__math_align_scope_key_node_cell_wsk3kuldea" ON "qti"."math_align_scope" IS 'key MathAlignScope(node where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, cell where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}})';
+
+COMMENT ON CONSTRAINT "__math_align_scope_key_node_r7dnmv4hy7" ON "qti"."math_align_scope" IS 'key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maligngroup"}} and {"kind":"compare","left":{"field":"state","kind":"field"},"op":"eq","right":{"kind":"literal","value":"open"}})';
+
+COMMENT ON CONSTRAINT "__math_align_scope_key_node_al4dfdcdgw" ON "qti"."math_align_scope" IS 'key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}})';
 
 COMMENT ON CONSTRAINT "__math_argument_key_parent_index_arguments_sb7d5puixk" ON "qti"."math_argument" IS 'key MathArgument(parent, the index of the family MathApply.arguments)';
 
@@ -5987,17 +5846,25 @@ COMMENT ON CONSTRAINT "__math_qualifier_key_parent_index_owned_gkafhg7rrj" ON "q
 
 COMMENT ON CONSTRAINT "__most_count_key_node_index_mosts_wc6ozvqd24" ON "qti"."most_count" IS 'key MostCount(node, the index of the family CountBound.mosts)';
 
+COMMENT ON CONSTRAINT "__most_count_key_node_max_name_most_ccnttbocjx" ON "qti"."most_count" IS 'key MostCount(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, maxName where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, most where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
+COMMENT ON CONSTRAINT "__most_count_key_node_vvqimjduwm" ON "qti"."most_count" IS 'key MostCount(node where {"kind":"compare","left":{"field":"mostValue","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}})';
+
 COMMENT ON CONSTRAINT "__named_key_document_index_names_iv3e44nqui" ON "qti"."named" IS 'key Named(document, the index of the family TestDocument.names)';
 
-COMMENT ON CONSTRAINT "__node_key_id_parent_kind_bcix5a5ymv" ON "qti"."node" IS 'key Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}, parentKind)';
+COMMENT ON CONSTRAINT "__node_key_id_mjycsmqyjq" ON "qti"."node" IS 'key Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
-COMMENT ON CONSTRAINT "__node_key_id_parent_kind_cy4qhoyaol" ON "qti"."node" IS 'key Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}, parentKind)';
+COMMENT ON CONSTRAINT "__node_key_id_wkztmwxewz" ON "qti"."node" IS 'key Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
 COMMENT ON CONSTRAINT "__node_key_id_rak7qkaqu6" ON "qti"."node" IS 'key Node(id where {"arg":{"args":[{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"field":"admission","kind":"closedAt","relation":"ContentModelOf"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AdmissionIn"},"kind":"not"})';
 
-COMMENT ON CONSTRAINT "__node_key_id_kind_djfim5msj4" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind)';
+COMMENT ON CONSTRAINT "__node_key_id_iahp7lz6uz" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:language"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:general"}})';
 
-COMMENT ON CONSTRAINT "__node_key_id_kind_parent_kind_ivdf2kq3sc" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind, parentKind)';
+COMMENT ON CONSTRAINT "__node_key_id_cmauusfcym" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:source"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:learningResourceType"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_yym7rio4a5" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:string"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_5dipzemapk" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:value"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:learningResourceType"}})';
 
 COMMENT ON CONSTRAINT "__node_key_id_zlofbnqy7x" ON "qti"."node" IS 'key Node(id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]} and {"kind":"compare","left":{"args":[{"field":"ancestry","kind":"field"},{"args":[{"kind":"literal","value":"qti-feedback-block"}],"kind":"closedRow","relation":"Enters"}],"fn":"disjoint","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}})';
 
@@ -6007,9 +5874,31 @@ COMMENT ON CONSTRAINT "__node_key_id_wbykfyb2sm" ON "qti"."node" IS 'key Node(id
 
 COMMENT ON CONSTRAINT "__node_key_id_document_ewjvjo4va3" ON "qti"."node" IS 'key Node(id where {"args":[{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"field":"admission","kind":"closedAt","relation":"ContentModelOf"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AdmissionIn"}, document where {"args":[{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"field":"admission","kind":"closedAt","relation":"ContentModelOf"},{"field":"kind","kind":"field"}],"kind":"closedHas","relation":"AdmissionIn"})';
 
-COMMENT ON CONSTRAINT "__node_key_id_kind_pu5nvolwj5" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}}, kind)';
+COMMENT ON CONSTRAINT "__node_key_id_ztddxaw3f6" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"ud:value"}})';
 
-COMMENT ON CONSTRAINT "__node_key_id_kind_qlw5xvtx32" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, kind)';
+COMMENT ON CONSTRAINT "__node_key_id_lyx44tblvw" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_ogisncmwyr" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"comment"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_ye35vbve6h" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"doctype"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_j6e5zmumiy" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_kryixtlzpo" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_4m4ubid2by" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"pi"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_op4rltlgmq" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"q"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_sbn2bndgr6" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-area-mapping"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_zdqtko3rx5" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_7gnc44ctkr" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-ordering"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_6wtvn5karc" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-selection"}})';
+
+COMMENT ON CONSTRAINT "__node_key_id_5xpupnusu3" ON "qti"."node" IS 'key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-variable-mapping"}})';
 
 COMMENT ON CONSTRAINT "__node_key_parent_state_45zr5znf3c" ON "qti"."node" IS 'key Node(parent where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"kind":"compare","left":{"args":[{"args":[{"field":"state","kind":"field"}],"fn":"singleton","kind":"compute"},{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"kind":"closedRow","relation":"Capped"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, state where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"kind":"compare","left":{"args":[{"args":[{"field":"state","kind":"field"}],"fn":"singleton","kind":"compute"},{"args":[{"field":"version","kind":"field"},{"field":"parentKind","kind":"field"}],"kind":"closedRow","relation":"Capped"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}})';
 
@@ -6029,11 +5918,17 @@ COMMENT ON CONSTRAINT "__normal_maximum_key_node_index_maximums_izghheeil5" ON "
 
 COMMENT ON CONSTRAINT "__normal_minimum_key_node_index_minimums_56b3zks7o3" ON "qti"."normal_minimum" IS 'key NormalMinimum(node, the index of the family Declaration.minimums)';
 
+COMMENT ON CONSTRAINT "__normal_minimum_key_node_lexical_pqjvs6bluy" ON "qti"."normal_minimum" IS 'key NormalMinimum(node where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, lexical where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
 COMMENT ON CONSTRAINT "__operand_key_operator_index_operands_a3zx2q2t7g" ON "qti"."operand" IS 'key Operand(operator, the index of the family Expression.operands)';
 
 COMMENT ON CONSTRAINT "__operand_key_operator_index_operands_after_operands_jzu4s4ev4d" ON "qti"."operand" IS 'key Operand(operator, the index of the family Expression.operands, the accumulator after plane 0 of the fold __expression_operands_or_fold_i355dcmrxf over the family Expression.operands, the accumulator after plane 0 of the fold __expression_operands_or_fold_fjtz42tscb over the family Expression.operands, the accumulator after plane 0 of the fold __expression_operands_or_fold_guyehrvzn2 over the family Expression.operands, the accumulator after plane 0 of the fold __expression_operands_or_fold_rm2w2xqpfy over the family Expression.operands, the accumulator after plane 0 of the fold __expression_operands_or_fold_uzerctqnyr over the family Expression.operands)';
 
 COMMENT ON CONSTRAINT "__pci_module_form_key_node_index_module_forms_jiezeqce2t" ON "qti"."pci_module_form" IS 'key PciModuleForm(node, the index of the family Interaction.moduleForms)';
+
+COMMENT ON CONSTRAINT "__pci_module_form_key_node_nrpdftegvy" ON "qti"."pci_module_form" IS 'key PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
+
+COMMENT ON CONSTRAINT "__pci_module_form_key_node_splfudugs3" ON "qti"."pci_module_form" IS 'key PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__placed_binding_key_instance_index_bindings_6qpolevqar" ON "qti"."placed_binding" IS 'key PlacedBinding(instance, the index of the family Instance.bindings)';
 
@@ -6059,6 +5954,8 @@ COMMENT ON CONSTRAINT "__placed_share_target_key_node_index_placements_ewdc2rsxl
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_key_instance_index_variables_biso4acfe2" ON "qti"."placed_variable_ref" IS 'key PlacedVariableRef(instance, the index of the family Instance.variables)';
 
+COMMENT ON CONSTRAINT "__placed_variable_ref_key_instance_node_attribute_6irvyyvwbg" ON "qti"."placed_variable_ref" IS 'key PlacedVariableRef(instance where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, node where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, attribute where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}})';
+
 COMMENT ON CONSTRAINT "__placed_xml_lang_key_instance_index_langs_5vnj3fmu3q" ON "qti"."placed_xml_lang" IS 'key PlacedXmlLang(instance, the index of the family Instance.langs)';
 
 COMMENT ON CONSTRAINT "__placed_xml_lang_key_instance_node_54e5cx3n65" ON "qti"."placed_xml_lang" IS 'key PlacedXmlLang(instance where {"kind":"compare","left":{"field":"document","kind":"field"},"op":"eq","right":{"field":"scope","kind":"field"}}, node where {"kind":"compare","left":{"field":"document","kind":"field"},"op":"eq","right":{"field":"scope","kind":"field"}})';
@@ -6073,6 +5970,10 @@ COMMENT ON CONSTRAINT "__reading_key_assembly_node_attribute_kind_53zhel5qei" ON
 
 COMMENT ON CONSTRAINT "__record_field_key_parent_index_fields_n4yb7e2ila" ON "qti"."record_field" IS 'key RecordField(parent, the index of the family ValueSet.fields)';
 
+COMMENT ON CONSTRAINT "__reference_key_node_3jgv6f5ia4" ON "qti"."reference" IS 'key Reference(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"external"}})';
+
+COMMENT ON CONSTRAINT "__reference_key_node_name_document_kind_t5sfukw2hb" ON "qti"."reference" IS 'key Reference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, name where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, document where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, kind where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}})';
+
 COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_sfbcqrtewp" ON "qti"."reference_segment" IS 'key ReferenceSegment(assembly, node, attribute, at, the accumulator after plane 0 of the fold __assembled_reference_segments_count_fold_zly3pfbpup over the family AssembledReference.segments, after)';
 
 COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_5a4lj55454" ON "qti"."reference_segment" IS 'key ReferenceSegment(assembly, node, attribute, at, the accumulator after plane 0 of the fold __assembled_reference_segments_count_fold_zly3pfbpup over the family AssembledReference.segments, after, digit)';
@@ -6080,6 +5981,10 @@ COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_5a4lj5
 COMMENT ON CONSTRAINT "__rounding_key_node_wy6tmbhrdj" ON "qti"."rounding" IS 'key Rounding(node where {"arg":{"field":"holds","kind":"field"},"kind":"in","values":["both","figures"]})';
 
 COMMENT ON CONSTRAINT "__rounding_key_node_2ba4yobww4" ON "qti"."rounding" IS 'key Rounding(node where {"arg":{"field":"holds","kind":"field"},"kind":"in","values":["both","mode"]})';
+
+COMMENT ON CONSTRAINT "__rounding_key_node_76eanebyxu" ON "qti"."rounding" IS 'key Rounding(node where {"kind":"compare","left":{"field":"holds","kind":"field"},"op":"eq","right":{"kind":"literal","value":"both"}})';
+
+COMMENT ON CONSTRAINT "__rounding_key_node_ocs2yqxdd2" ON "qti"."rounding" IS 'key Rounding(node where {"kind":"compare","left":{"field":"modeWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__section_key_node_utnomkiggd" ON "qti"."section" IS 'key Section(node where {"args":[{"kind":"compare","left":{"field":"keepTogether","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}},{"kind":"compare","left":{"field":"loose","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"or"})';
 
@@ -6095,6 +6000,8 @@ COMMENT ON CONSTRAINT "__section_member_key_section_index_members_fpkgcxgtng" ON
 
 COMMENT ON CONSTRAINT "__section_member_key_section_index_members_after_hov7ncouza" ON "qti"."section_member" IS 'key SectionMember(section, the index of the family Section.members, the accumulator after plane 0 of the fold __section_members_count_fold_k2pepzeac2 over the family Section.members)';
 
+COMMENT ON CONSTRAINT "__section_member_key_node_ibskkpqlze" ON "qti"."section_member" IS 'key SectionMember(node where {"kind":"compare","left":{"field":"required","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
 COMMENT ON CONSTRAINT "__section_printed_name_key_document_index_prints_d4vojuka7y" ON "qti"."section_printed_name" IS 'key SectionPrintedName(document, the index of the family ReferringDocument.prints)';
 
 COMMENT ON CONSTRAINT "__section_printed_ref_key_instance_index_prints_jzua2k4om2" ON "qti"."section_printed_ref" IS 'key SectionPrintedRef(instance, the index of the family SectionScope.prints)';
@@ -6102,6 +6009,8 @@ COMMENT ON CONSTRAINT "__section_printed_ref_key_instance_index_prints_jzua2k4om
 COMMENT ON CONSTRAINT "__section_template_name_key_document_index_templates_x3t7kz7ixx" ON "qti"."section_template_name" IS 'key SectionTemplateName(document, the index of the family ReferringDocument.templates)';
 
 COMMENT ON CONSTRAINT "__section_template_ref_key_instance_index_templates_wbk2d2hjfe" ON "qti"."section_template_ref" IS 'key SectionTemplateRef(instance, the index of the family SectionScope.templates)';
+
+COMMENT ON CONSTRAINT "__share_fragment_key_node_document_id_lpvmueua6z" ON "qti"."share_fragment" IS 'key ShareFragment(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, document where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, id where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
 
 COMMENT ON CONSTRAINT "__site_target_key_document_index_targets_5tzyeleor3" ON "qti"."site_target" IS 'key SiteTarget(document, the index of the family TestDocument.targets)';
 
@@ -6117,11 +6026,33 @@ COMMENT ON CONSTRAINT "__table_header_key_table_id_zjvfdq3rsz" ON "qti"."table_h
 
 COMMENT ON CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" ON "qti"."test_document" IS 'key TestDocument(package where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, path where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}})';
 
+COMMENT ON CONSTRAINT "__test_flag_key_node_dfzx4ezv4y" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}})';
+
+COMMENT ON CONSTRAINT "__test_flag_key_node_joiqh6ud3j" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
+COMMENT ON CONSTRAINT "__test_flag_key_node_ykf4u2mjs6" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shuffle"}})';
+
+COMMENT ON CONSTRAINT "__test_flag_key_node_6st5omxg4v" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
+
+COMMENT ON CONSTRAINT "__test_flag_key_node_okq7tydndc" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"with-replacement"}})';
+
 COMMENT ON CONSTRAINT "__test_reference_key_document_index_references_tze47p2elx" ON "qti"."test_reference" IS 'key TestReference(document, the index of the family ReferenceDocument.references)';
+
+COMMENT ON CONSTRAINT "__test_token_key_node_value_butyikcugm" ON "qti"."test_token" IS 'key TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}})';
+
+COMMENT ON CONSTRAINT "__test_token_key_node_value_4cvubombn3" ON "qti"."test_token" IS 'key TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"source-identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"source-identifier"}})';
+
+COMMENT ON CONSTRAINT "__test_token_key_node_value_yl4agtpdi6" ON "qti"."test_token" IS 'key TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}})';
+
+COMMENT ON CONSTRAINT "__test_token_key_node_value_nnb7ra53iy" ON "qti"."test_token" IS 'key TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}})';
+
+COMMENT ON CONSTRAINT "__text_reference_key_node_document_kind_xfubt7mbji" ON "qti"."text_reference" IS 'key TextReference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, document where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, kind where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}})';
 
 COMMENT ON CONSTRAINT "__usage_value_key_node_base_type_lexical_o4cwubtrum" ON "qti"."usage_value" IS 'key UsageValue(node where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]}, baseTypeLexical where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]})';
 
 COMMENT ON CONSTRAINT "__variable_ref_key_document_index_variables_tz2yzdippl" ON "qti"."variable_ref" IS 'key VariableRef(document, the index of the family Document.variables)';
+
+COMMENT ON CONSTRAINT "__variable_ref_key_node_attribute_uqmp6mjwgs" ON "qti"."variable_ref" IS 'key VariableRef(node where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, attribute where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}})';
 
 COMMENT ON CONSTRAINT "__xml_lang_key_document_index_langs_kvi32ks4ze" ON "qti"."xml_lang" IS 'key XmlLang(document, the index of the family Document.langs)';
 
@@ -6311,9 +6242,9 @@ COMMENT ON CONSTRAINT "__xml_lang_check_xml_lang_counted_document_langs_q6ek5m5l
 
 COMMENT ON CONSTRAINT "__area_mapping_fk_declaration_document_declaration_5ifzcdiexw" ON "qti"."area_mapping" IS 'foreign key AreaMapping(declaration, document, declarationKind, cardinalities, baseTypes) to Declaration(node, document, declarationKind, cardinalities, baseTypes)';
 
-COMMENT ON CONSTRAINT "__area_mapping_fk_node_document_kind_start_nearest_jpgndr7nuk" ON "qti"."area_mapping" IS 'foreign key AreaMapping(node, document, kind, start, nearest, version, declaration) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__area_mapping_fk_node_vmaayrzexa" ON "qti"."area_mapping" IS 'foreign key AreaMapping(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-area-mapping"}})';
 
-COMMENT ON CONSTRAINT "__area_mapping_fk_node_tag_kind_qti_area_mapping_moi6blcd5b" ON "qti"."area_mapping" IS 'foreign key AreaMapping(node, tag Node.kind = qti-area-mapping) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__area_mapping_fk_node_document_kind_start_nearest_jpgndr7nuk" ON "qti"."area_mapping" IS 'foreign key AreaMapping(node, document, kind, start, nearest, version, declaration) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__area_mapping_fk_declaration_tag_base_type_point_tjrlra56sf" ON "qti"."area_mapping" IS 'foreign key AreaMapping(declaration where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, tag DeclarationBaseType.baseType = point) to DeclarationBaseType(node, baseType)';
 
@@ -6409,7 +6340,7 @@ COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_ccvyqzs4t4" ON "qti"."attribu
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_d4twot3hoo" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"figures"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"figures"}}) to RoundingFigures(node, figuresLexical)';
 
-COMMENT ON CONSTRAINT "__attribute_fk_node_tag_mode_written_true_lajnxrxwlv" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"rounding-mode"}}, tag Rounding.modeWritten = true) to Rounding(node, modeWritten)';
+COMMENT ON CONSTRAINT "__attribute_fk_node_atcuez6dar" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"rounding-mode"}}) to Rounding(node where {"kind":"compare","left":{"field":"modeWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_tag_mode_written_true_mkjqh6hwiz" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"rounding-mode"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-equal-rounded","qti-round-to"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"rounding-mode"}}, tag RoundingMode.modeWritten = true) to RoundingMode(node, mode, modeWritten)';
 
@@ -6419,7 +6350,7 @@ COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_nzlzhztu3e" ON "qti"."attribu
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_vittfx2dfp" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-maximum"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-maximum"}}) to NormalMaximum(node, lexical)';
 
-COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_tag_written_true_26khtkgc52" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-minimum"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-minimum"}}, tag NormalMinimum.written = true) to NormalMinimum(node, lexical, written)';
+COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_27v7o7ntmr" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-minimum"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"normal-minimum"}}) to NormalMinimum(node where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, lexical where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_c5ty7o2lyw" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-selection"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"select"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-selection"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"select"}}) to SectionSelection(node, selectLexical)';
 
@@ -6477,7 +6408,7 @@ COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_w3gp43iei6" ON "qti"."attribu
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_ftnkgwpfay" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:resource"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, lexical where {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:resource"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}) to ResourceId(node, lexical)';
 
-COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_tag_selection_written_oopputu4ww" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"selection"}}, lexical where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"selection"}}, tag MathAction.selectionWritten = true) to MathAction(node, selectionLexical, selectionWritten)';
+COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_acdim7gny7" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"selection"}}, lexical where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"selection"}}) to MathAction(node where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, selectionLexical where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_noy2h3xyxk" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-card"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"support"}}, lexical where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-card"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"support"}}) to CardSupport(node, lexical)';
 
@@ -6487,7 +6418,7 @@ COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_5tchtzrw5z" ON "qti"."attribu
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_mnspuaixln" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-entry"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"map-key"}}, lexical where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-entry"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"map-key"}}) to MapKey(node, key)';
 
-COMMENT ON CONSTRAINT "__attribute_fk_node_tag_element_false_fwdow2gkzv" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-portable-custom-interaction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"module"}}, tag PciModuleForm.element = false) to PciModuleForm(node, element)';
+COMMENT ON CONSTRAINT "__attribute_fk_node_gto3ocdky3" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-portable-custom-interaction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"module"}}) to PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_4xl3kxxpod" ON "qti"."attribute" IS 'foreign key Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-response-processing"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"template"}}, lexical where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-response-processing"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"template"}}) to ProcessingTemplate(node, uri)';
 
@@ -6523,11 +6454,11 @@ COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_attribute_kind_hf7ydp5m5m" 
 
 COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_gaps_i5bmzuqj7l" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node, gaps) to Interaction(node, gaps)';
 
-COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_kind_tag_max_written_k65g2zruh7" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, kind where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)';
+COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_kind_mls7te3toe" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, kind where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}) to CountBound(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, kind where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_mosts_b566i2chuo" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]}, mosts where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]}) to CountBound(node, mosts)';
 
-COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_tag_most_value_1_7us4fh6wjq" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-position-object-interaction","qti-select-point-interaction"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"cardinality","kind":"field"},"op":"eq","right":{"kind":"literal","value":"single"}} and {"kind":"compare","left":{"field":"mosts","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, tag MostCount.mostValue = 1) to MostCount(node, mostValue)';
+COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_ylsretusxh" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-position-object-interaction","qti-select-point-interaction"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"cardinality","kind":"field"},"op":"eq","right":{"kind":"literal","value":"single"}} and {"kind":"compare","left":{"field":"mosts","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to MostCount(node where {"kind":"compare","left":{"field":"mostValue","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}})';
 
 COMMENT ON CONSTRAINT "__binding_cardinality_fk_node_attribute_csxrnj3ymh" ON "qti"."binding_cardinality" IS 'foreign key BindingCardinality(node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, attribute where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to BindingBaseType(node, attribute)';
 
@@ -6575,7 +6506,7 @@ COMMENT ON CONSTRAINT "__branch_rule_fk_document_predecessor_rules_norrf32fjr" O
 
 COMMENT ON CONSTRAINT "__branch_rule_fk_node_document_kind_start_nearest_dzmy4iflkp" ON "qti"."branch_rule" IS 'foreign key BranchRule(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__branch_rule_fk_node_target_tag_name_target_4tb6tvohuu" ON "qti"."branch_rule" IS 'foreign key BranchRule(node, target, tag TestToken.name = target) to TestToken(node, value, name)';
+COMMENT ON CONSTRAINT "__branch_rule_fk_node_target_4j4tms2ktd" ON "qti"."branch_rule" IS 'foreign key BranchRule(node, target) to TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}})';
 
 COMMENT ON CONSTRAINT "__branch_rule_fk_parent_parent_kind_jg2dnz3cmb" ON "qti"."branch_rule" IS 'foreign key BranchRule(parent, parentKind) to Node(id, kind)';
 
@@ -6639,7 +6570,7 @@ COMMENT ON CONSTRAINT "__cell_leaf_fk_cell_copy_leaves_groups_yeied22c2d" ON "qt
 
 COMMENT ON CONSTRAINT "__cell_leaf_fk_cell_pred_at_start_was_yoa25lqkhu" ON "qti"."cell_leaf" IS 'foreign key CellLeaf(cell, pred(at), startWas) to CellLeaf(cell, at, startAfter)';
 
-COMMENT ON CONSTRAINT "__cell_leaf_fk_node_cell_tag_element_children_0_hzblzfrx3z" ON "qti"."cell_leaf" IS 'foreign key CellLeaf(node, cell, tag MathAlignScope.elementChildren = 0) to MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, cell where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, elementChildren)';
+COMMENT ON CONSTRAINT "__cell_leaf_fk_node_cell_wyeyywxs5i" ON "qti"."cell_leaf" IS 'foreign key CellLeaf(node, cell) to MathAlignScope(node where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, cell where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}})';
 
 COMMENT ON CONSTRAINT "__cell_leaf_fk_node_document_kind_start_nearest_6hrxyjqhym" ON "qti"."cell_leaf" IS 'foreign key CellLeaf(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
@@ -6677,7 +6608,7 @@ COMMENT ON CONSTRAINT "__cn_slot_fk_node_copy_parts_type_5jd3d4tc36" ON "qti"."c
 
 COMMENT ON CONSTRAINT "__cn_slot_fk_node_predecessor_parts_y254qgvk6w" ON "qti"."cn_slot" IS 'foreign key CnSlot(node, the predecessor of the index of the family CnCount.parts) to CnSlot(node, the index of the family CnCount.parts)';
 
-COMMENT ON CONSTRAINT "__comment_fk_node_tag_kind_comment_3lqmhajxcn" ON "qti"."comment" IS 'foreign key Comment(node, tag Node.kind = comment) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__comment_fk_node_njlchqc3ap" ON "qti"."comment" IS 'foreign key Comment(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"comment"}})';
 
 COMMENT ON CONSTRAINT "__context_ref_fk_node_attribute_xelhgrcfvl" ON "qti"."context_ref" IS 'foreign key ContextRef(node where {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-response-processing"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-test"}}],"kind":"or"}, attribute where {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-item"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","completionStatus","duration","numAttempts"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-response-processing"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}}],"kind":"or"} and {"args":[{"arg":{"arg":{"field":"identifier","kind":"field"},"kind":"in","values":["QTI_CONTEXT","duration"]},"kind":"not"},{"kind":"compare","left":{"field":"assemblyKind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-test"}}],"kind":"or"}) to ContextRefDeclaration(node, attribute)';
 
@@ -6785,7 +6716,7 @@ COMMENT ON CONSTRAINT "__dependency_target_fk_node_package_ref_resource_gz7i7svj
 
 COMMENT ON CONSTRAINT "__dependency_target_fk_package_ref_target_lmgifak7bj" ON "qti"."dependency_target" IS 'foreign key DependencyTarget(package, ref, target) to ResourceId(package, identifier, node)';
 
-COMMENT ON CONSTRAINT "__doctype_fk_node_tag_kind_doctype_26yzr7gu2a" ON "qti"."doctype" IS 'foreign key Doctype(node, tag Node.kind = doctype) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__doctype_fk_node_n3ayoaosgg" ON "qti"."doctype" IS 'foreign key Doctype(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"doctype"}})';
 
 COMMENT ON CONSTRAINT "__document_fk_node_node_children_context_document_nfkpduab6n" ON "qti"."document" IS 'foreign key Document(node, nodeChildren, context, documentType, contextNearest, contextNearestKind, version, node, tag Node.governor = document, tag Node.kind = document, tag Node.parentKind = document, tag Node.start = 0) to Node(id, children, ancestry, documentType, nearest, nearestKind, version, document, governor, kind, parentKind, start)';
 
@@ -6915,9 +6846,9 @@ COMMENT ON CONSTRAINT "__gap_interaction_fk_interaction_copy_gaps_pv4l3jcxs2" ON
 
 COMMENT ON CONSTRAINT "__gap_interaction_fk_interaction_predecessor_gaps_ejfa4lixl7" ON "qti"."gap_interaction" IS 'foreign key GapInteraction(interaction, the predecessor of the index of the family Interaction.gaps) to GapInteraction(interaction, the index of the family Interaction.gaps)';
 
-COMMENT ON CONSTRAINT "__gap_interaction_fk_node_interaction_gnaeijqjip" ON "qti"."gap_interaction" IS 'foreign key GapInteraction(node, interaction) to ChoiceInteraction(node, interaction)';
+COMMENT ON CONSTRAINT "__gap_interaction_fk_node_cl43g3w2vp" ON "qti"."gap_interaction" IS 'foreign key GapInteraction(node) to Choice(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-gap"}})';
 
-COMMENT ON CONSTRAINT "__gap_interaction_fk_node_tag_kind_qti_gap_c7iujzxnhg" ON "qti"."gap_interaction" IS 'foreign key GapInteraction(node, tag Choice.kind = qti-gap) to Choice(node, kind)';
+COMMENT ON CONSTRAINT "__gap_interaction_fk_node_interaction_gnaeijqjip" ON "qti"."gap_interaction" IS 'foreign key GapInteraction(node, interaction) to ChoiceInteraction(node, interaction)';
 
 COMMENT ON CONSTRAINT "__header_token_fk_node_copy_tokens_table_nyhogzgngs" ON "qti"."header_token" IS 'foreign key HeaderToken(node, the owner''s count of the family CellHeaders.tokens, table) to CellHeaders(node, tokens, table)';
 
@@ -7033,7 +6964,7 @@ COMMENT ON CONSTRAINT "__interaction_attribute_fk_document_root_kind_s4xn62ma6h"
 
 COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_m5weigfv42" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node, name) to Attribute(node where {"args":[{"arg":{"field":"name","kind":"field"},"kind":"in","values":["aria-valuemax","aria-valuemin"]},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"adaptive"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-context-variable","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-printed-variable","qti-simple-associable-choice","qti-simple-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"template-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap-img","qti-gap-text","qti-simple-associable-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"match-max"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap-img","qti-gap-text","qti-simple-associable-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"match-min"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-hotspot-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shape"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-match-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-associations"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-match-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-associations"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-choice-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-choices"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-choice-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-choices"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction","qti-text-entry-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"string-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-strings"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-strings"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-feedback-block","qti-feedback-block.template","qti-feedback-inline","qti-modal-feedback","qti-test-feedback"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"outcome-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-media-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-plays"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-media-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-plays"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"index"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-slider-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lower-bound"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-slider-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"upper-bound"}}],"kind":"and"}],"kind":"or"}, name where {"args":[{"arg":{"field":"name","kind":"field"},"kind":"in","values":["aria-valuemax","aria-valuemin"]},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"adaptive"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-context-variable","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-printed-variable","qti-simple-associable-choice","qti-simple-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"template-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap-img","qti-gap-text","qti-simple-associable-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"match-max"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap-img","qti-gap-text","qti-simple-associable-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"match-min"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-hotspot-choice"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shape"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-match-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-associations"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-match-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-associations"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-choice-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-choices"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-choice-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-choices"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction","qti-text-entry-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"string-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-strings"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-extended-text-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-strings"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-feedback-block","qti-feedback-block.template","qti-feedback-inline","qti-modal-feedback","qti-test-feedback"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"outcome-identifier"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-media-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"max-plays"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-media-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"min-plays"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"index"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-slider-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lower-bound"}}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-slider-interaction"]},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"upper-bound"}}],"kind":"and"}],"kind":"or"})';
 
-COMMENT ON CONSTRAINT "__interaction_attribute_fk_document_tag_adaptive_ce5jlbs7na" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(document where {"arg":{"field":"value","kind":"field"},"kind":"in","values":["1","true"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-item"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"adaptive"}}, tag ItemMode.adaptive = true) to ItemMode(document, adaptive)';
+COMMENT ON CONSTRAINT "__interaction_attribute_fk_document_fiuuzyhxkg" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(document where {"arg":{"field":"value","kind":"field"},"kind":"in","values":["1","true"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-item"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"adaptive"}}) to ItemMode(document where {"kind":"compare","left":{"field":"adaptive","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_pbtlfgzhbs" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, kind where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, document where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}) to SectionTemplateName(node, attribute, kind, document, identifier)';
 
@@ -7043,13 +6974,13 @@ COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_2qjwm2
 
 COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_ya5djoabi4" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","index"]}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["identifier"]}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","index"]}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["identifier"]}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, kind where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","index"]}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["identifier"]}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, document where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","index"]}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["identifier"]}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]},"kind":"not"} and {"args":[{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["base","index"]}],"kind":"and"},{"args":[{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-printed-variable"]},{"arg":{"field":"name","kind":"field"},"kind":"in","values":["identifier"]}],"kind":"and"}],"kind":"or"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}) to SectionPrintedName(node, attribute, kind, document, identifier)';
 
-COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_tag_max_written_tsyp3sua7p" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]}, tag CountBound.maxWritten = true) to CountBound(node, maxName, maxWritten)';
+COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_akx63dkrel" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]}) to CountBound(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, maxName where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
-COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_value_tag_max_wpq2oq6ccd" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, tag MostCount.maxWritten = true) to MostCount(node, maxName, most, maxWritten)';
+COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_value_e5ehgdx6nv" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-max","max-associations","max-choices","max-plays","max-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}) to MostCount(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, maxName where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, most where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
-COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_tag_min_written_tvdqcxofo3" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]}, tag CountBound.minWritten = true) to CountBound(node, minName, minWritten)';
+COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_ughzzi2g7a" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]}) to CountBound(node where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, minName where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
-COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_value_tag_min_fg5acvyga3" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, tag LeastCount.minWritten = true) to LeastCount(node, minName, least, minWritten)';
+COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_value_542egmkgal" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["match-min","min-associations","min-choices","min-plays","min-strings"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[^-]|-0+$)"}],"fn":"matches","kind":"compute"} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:\\+?0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)|-0*(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808))$"}],"fn":"matches","kind":"compute"}) to LeastCount(node where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, minName where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, least where {"kind":"compare","left":{"field":"minWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_mvvquv3xzd" ON "qti"."interaction_attribute" IS 'foreign key InteractionAttribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, kind where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, document where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, rootKind where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}, value where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-gap","qti-gap-img","qti-gap-text","qti-hotspot-choice","qti-hottext","qti-inline-choice","qti-simple-associable-choice","qti-simple-choice","qti-template-block","qti-template-block.rubric","qti-template-inline","qti-template-inline.rubric","qti-template-variable"]} and {"arg":{"field":"name","kind":"field"},"kind":"in","values":["template-identifier"]} and {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-item","qti-assessment-test"]} and {"args":[{"field":"value","kind":"field"},{"kind":"literal","value":"^(?:[A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u0386\\u0388-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0641-\\u064A\\u0671-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5\\u06E5\\u06E6\\u0905-\\u0939\\u093D\\u0958-\\u0961\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09DC\\u09DD\\u09DF-\\u09E1\\u09F0\\u09F1\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A59-\\u0A5C\\u0A5E\\u0A72-\\u0A74\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABD\\u0AE0\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3D\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C60\\u0C61\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CDE\\u0CE0\\u0CE1\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D60\\u0D61\\u0E01-\\u0E2E\\u0E30\\u0E32\\u0E33\\u0E40-\\u0E45\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0\\u0EB2\\u0EB3\\u0EBD\\u0EC0-\\u0EC4\\u0F40-\\u0F47\\u0F49-\\u0F69\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3007\\u3021-\\u3029\\u3041-\\u3094\\u30A1-\\u30FA\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3][\\-.0-9A-Z_a-z\\u00B7\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u0131\\u0134-\\u013E\\u0141-\\u0148\\u014A-\\u017E\\u0180-\\u01C3\\u01CD-\\u01F0\\u01F4\\u01F5\\u01FA-\\u0217\\u0250-\\u02A8\\u02BB-\\u02C1\\u02D0\\u02D1\\u0300-\\u0345\\u0360\\u0361\\u0386-\\u038A\\u038C\\u038E-\\u03A1\\u03A3-\\u03CE\\u03D0-\\u03D6\\u03DA\\u03DC\\u03DE\\u03E0\\u03E2-\\u03F3\\u0401-\\u040C\\u040E-\\u044F\\u0451-\\u045C\\u045E-\\u0481\\u0483-\\u0486\\u0490-\\u04C4\\u04C7\\u04C8\\u04CB\\u04CC\\u04D0-\\u04EB\\u04EE-\\u04F5\\u04F8\\u04F9\\u0531-\\u0556\\u0559\\u0561-\\u0586\\u0591-\\u05A1\\u05A3-\\u05B9\\u05BB-\\u05BD\\u05BF\\u05C1\\u05C2\\u05C4\\u05D0-\\u05EA\\u05F0-\\u05F2\\u0621-\\u063A\\u0640-\\u0652\\u0660-\\u0669\\u0670-\\u06B7\\u06BA-\\u06BE\\u06C0-\\u06CE\\u06D0-\\u06D3\\u06D5-\\u06E8\\u06EA-\\u06ED\\u06F0-\\u06F9\\u0901-\\u0903\\u0905-\\u0939\\u093C-\\u094D\\u0951-\\u0954\\u0958-\\u0963\\u0966-\\u096F\\u0981-\\u0983\\u0985-\\u098C\\u098F\\u0990\\u0993-\\u09A8\\u09AA-\\u09B0\\u09B2\\u09B6-\\u09B9\\u09BC\\u09BE-\\u09C4\\u09C7\\u09C8\\u09CB-\\u09CD\\u09D7\\u09DC\\u09DD\\u09DF-\\u09E3\\u09E6-\\u09F1\\u0A02\\u0A05-\\u0A0A\\u0A0F\\u0A10\\u0A13-\\u0A28\\u0A2A-\\u0A30\\u0A32\\u0A33\\u0A35\\u0A36\\u0A38\\u0A39\\u0A3C\\u0A3E-\\u0A42\\u0A47\\u0A48\\u0A4B-\\u0A4D\\u0A59-\\u0A5C\\u0A5E\\u0A66-\\u0A74\\u0A81-\\u0A83\\u0A85-\\u0A8B\\u0A8D\\u0A8F-\\u0A91\\u0A93-\\u0AA8\\u0AAA-\\u0AB0\\u0AB2\\u0AB3\\u0AB5-\\u0AB9\\u0ABC-\\u0AC5\\u0AC7-\\u0AC9\\u0ACB-\\u0ACD\\u0AE0\\u0AE6-\\u0AEF\\u0B01-\\u0B03\\u0B05-\\u0B0C\\u0B0F\\u0B10\\u0B13-\\u0B28\\u0B2A-\\u0B30\\u0B32\\u0B33\\u0B36-\\u0B39\\u0B3C-\\u0B43\\u0B47\\u0B48\\u0B4B-\\u0B4D\\u0B56\\u0B57\\u0B5C\\u0B5D\\u0B5F-\\u0B61\\u0B66-\\u0B6F\\u0B82\\u0B83\\u0B85-\\u0B8A\\u0B8E-\\u0B90\\u0B92-\\u0B95\\u0B99\\u0B9A\\u0B9C\\u0B9E\\u0B9F\\u0BA3\\u0BA4\\u0BA8-\\u0BAA\\u0BAE-\\u0BB5\\u0BB7-\\u0BB9\\u0BBE-\\u0BC2\\u0BC6-\\u0BC8\\u0BCA-\\u0BCD\\u0BD7\\u0BE7-\\u0BEF\\u0C01-\\u0C03\\u0C05-\\u0C0C\\u0C0E-\\u0C10\\u0C12-\\u0C28\\u0C2A-\\u0C33\\u0C35-\\u0C39\\u0C3E-\\u0C44\\u0C46-\\u0C48\\u0C4A-\\u0C4D\\u0C55\\u0C56\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C82\\u0C83\\u0C85-\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBE-\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDE\\u0CE0\\u0CE1\\u0CE6-\\u0CEF\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-\\u0D10\\u0D12-\\u0D28\\u0D2A-\\u0D39\\u0D3E-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4D\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0E01-\\u0E2E\\u0E30-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84\\u0E87\\u0E88\\u0E8A\\u0E8D\\u0E94-\\u0E97\\u0E99-\\u0E9F\\u0EA1-\\u0EA3\\u0EA5\\u0EA7\\u0EAA\\u0EAB\\u0EAD\\u0EAE\\u0EB0-\\u0EB9\\u0EBB-\\u0EBD\\u0EC0-\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0F18\\u0F19\\u0F20-\\u0F29\\u0F35\\u0F37\\u0F39\\u0F3E-\\u0F47\\u0F49-\\u0F69\\u0F71-\\u0F84\\u0F86-\\u0F8B\\u0F90-\\u0F95\\u0F97\\u0F99-\\u0FAD\\u0FB1-\\u0FB7\\u0FB9\\u10A0-\\u10C5\\u10D0-\\u10F6\\u1100\\u1102\\u1103\\u1105-\\u1107\\u1109\\u110B\\u110C\\u110E-\\u1112\\u113C\\u113E\\u1140\\u114C\\u114E\\u1150\\u1154\\u1155\\u1159\\u115F-\\u1161\\u1163\\u1165\\u1167\\u1169\\u116D\\u116E\\u1172\\u1173\\u1175\\u119E\\u11A8\\u11AB\\u11AE\\u11AF\\u11B7\\u11B8\\u11BA\\u11BC-\\u11C2\\u11EB\\u11F0\\u11F9\\u1E00-\\u1E9B\\u1EA0-\\u1EF9\\u1F00-\\u1F15\\u1F18-\\u1F1D\\u1F20-\\u1F45\\u1F48-\\u1F4D\\u1F50-\\u1F57\\u1F59\\u1F5B\\u1F5D\\u1F5F-\\u1F7D\\u1F80-\\u1FB4\\u1FB6-\\u1FBC\\u1FBE\\u1FC2-\\u1FC4\\u1FC6-\\u1FCC\\u1FD0-\\u1FD3\\u1FD6-\\u1FDB\\u1FE0-\\u1FEC\\u1FF2-\\u1FF4\\u1FF6-\\u1FFC\\u20D0-\\u20DC\\u20E1\\u2126\\u212A\\u212B\\u212E\\u2180-\\u2182\\u3005\\u3007\\u3021-\\u302F\\u3031-\\u3035\\u3041-\\u3094\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-\\u30FE\\u3105-\\u312C\\u4E00-\\u9FA5\\uAC00-\\uD7A3]*)$"}],"fn":"matches","kind":"compute"}) to TemplateRef(node, attribute, kind, document, assemblyKind, identifier)';
 
@@ -7115,19 +7046,19 @@ COMMENT ON CONSTRAINT "__lom_language_fk_general_tag_copy_carriers_srlaovun25" O
 
 COMMENT ON CONSTRAINT "__lom_language_fk_general_tag_predecessor_carriers_heaox4fldh" ON "qti"."lom_language" IS 'foreign key LomLanguage(general, tag, the predecessor of the index of the family ResourceLomLanguageSet.carriers) to LomLanguage(general, tag, the index of the family ResourceLomLanguageSet.carriers)';
 
-COMMENT ON CONSTRAINT "__lom_language_fk_node_tag_kind_lom_language_tag_mkybl275iz" ON "qti"."lom_language" IS 'foreign key LomLanguage(node, tag Node.kind = lom:language, tag Node.parentKind = lom:general) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind, parentKind)';
+COMMENT ON CONSTRAINT "__lom_language_fk_node_ujxkatq76u" ON "qti"."lom_language" IS 'foreign key LomLanguage(node) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:language"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:general"}})';
 
 COMMENT ON CONSTRAINT "__lom_record_fk_node_document_kind_start_nearest_jkprd7jge7" ON "qti"."lom_record" IS 'foreign key LomRecord(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__lom_record_fk_parent_document_owner_owner_start_55jjdmeg5w" ON "qti"."lom_record" IS 'foreign key LomRecord(parent, document, owner, ownerStart, nearest, version, ownerParent) to Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__lom_resource_type_fk_term_tag_kind_lom_value_tag_flf6brqoin" ON "qti"."lom_resource_type" IS 'foreign key LomResourceType(term, tag Node.kind = lom:value, tag Node.parentKind = lom:learningResourceType) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind, parentKind)';
+COMMENT ON CONSTRAINT "__lom_resource_type_fk_term_evsa6kquly" ON "qti"."lom_resource_type" IS 'foreign key LomResourceType(term) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:value"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:learningResourceType"}})';
 
 COMMENT ON CONSTRAINT "__lom_resource_type_fk_node_cyekcelmbz" ON "qti"."lom_resource_type" IS 'foreign key LomResourceType(node where {"arg":{"args":[{"field":"text","kind":"field"}],"fn":"collapse","kind":"compute"},"kind":"in","values":["exam","self assessment"]}) to LomResourceTypeSource(node where {"arg":{"arg":{"args":[{"field":"text","kind":"field"}],"fn":"collapse","kind":"compute"},"kind":"in","values":["","LOMv1.0"]},"kind":"not"})';
 
-COMMENT ON CONSTRAINT "__lom_resource_type_source_fk_term_tag_kind_lom_axvauzd7cr" ON "qti"."lom_resource_type_source" IS 'foreign key LomResourceTypeSource(term, tag Node.kind = lom:source, tag Node.parentKind = lom:learningResourceType) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind, parentKind)';
+COMMENT ON CONSTRAINT "__lom_resource_type_source_fk_term_igp5gajsyd" ON "qti"."lom_resource_type_source" IS 'foreign key LomResourceTypeSource(term) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:source"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:learningResourceType"}})';
 
-COMMENT ON CONSTRAINT "__lom_string_fk_node_tag_kind_lom_string_mwizs27oh4" ON "qti"."lom_string" IS 'foreign key LomString(node, tag Node.kind = lom:string) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]}, kind)';
+COMMENT ON CONSTRAINT "__lom_string_fk_node_o7cxc5upd5" ON "qti"."lom_string" IS 'foreign key LomString(node) to Node(id where {"arg":{"field":"documentType","kind":"field"},"kind":"in","values":["manifest","resourcemetadata/xml"]} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"lom:string"}})';
 
 COMMENT ON CONSTRAINT "__lom_string_fk_node_pred_languages_tvhkjbboaj" ON "qti"."lom_string" IS 'foreign key LomString(node, pred(languages)) to LomStringLanguage(node, the index of the family LomString.languages)';
 
@@ -7173,9 +7104,9 @@ COMMENT ON CONSTRAINT "__lookup_value_type_fk_node_declaration_value_tag_l3xyezu
 
 COMMENT ON CONSTRAINT "__manifest_id_fk_document_package_bvnezez5s3" ON "qti"."manifest_id" IS 'foreign key ManifestId(document, package) to Document(node, package)';
 
-COMMENT ON CONSTRAINT "__manifest_id_fk_node_document_kind_start_nearest_ihktneqc5x" ON "qti"."manifest_id" IS 'foreign key ManifestId(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__manifest_id_fk_node_3rxofsqend" ON "qti"."manifest_id" IS 'foreign key ManifestId(node) to Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:manifest"}})';
 
-COMMENT ON CONSTRAINT "__manifest_id_fk_node_tag_document_type_manifest_tag_b3vzxycjtn" ON "qti"."manifest_id" IS 'foreign key ManifestId(node, tag Attribute.documentType = manifest, tag Attribute.kind = cp:manifest) to Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"}, documentType, kind)';
+COMMENT ON CONSTRAINT "__manifest_id_fk_node_document_kind_start_nearest_ihktneqc5x" ON "qti"."manifest_id" IS 'foreign key ManifestId(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__manifest_id_fk_node_tag_kind_cp_manifest_b7a4wrhoe5" ON "qti"."manifest_id" IS 'foreign key ManifestId(node, tag Node.kind = cp:manifest) to Node(id, kind)';
 
@@ -7189,7 +7120,7 @@ COMMENT ON CONSTRAINT "__map_key_fk_node_exquftw6jr" ON "qti"."map_key" IS 'fore
 
 COMMENT ON CONSTRAINT "__map_key_fk_node_wy7ookj3zp" ON "qti"."map_key" IS 'foreign key MapKey(node where {"kind":"compare","left":{"field":"caseText","kind":"field"},"op":"ne","right":{"kind":"literal","value":""}}) to Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-entry"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"case-sensitive"}})';
 
-COMMENT ON CONSTRAINT "__map_key_fk_node_tag_base_type_string_ogbc2e2kqg" ON "qti"."map_key" IS 'foreign key MapKey(node where {"kind":"compare","left":{"field":"folded","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag MapKeyType.baseType = string) to MapKeyType(node, baseType)';
+COMMENT ON CONSTRAINT "__map_key_fk_node_3z3snzdpbw" ON "qti"."map_key" IS 'foreign key MapKey(node where {"kind":"compare","left":{"field":"folded","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to MapKeyType(node where {"kind":"compare","left":{"field":"baseType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"string"}})';
 
 COMMENT ON CONSTRAINT "__map_key_items_fk_node_mapping_key_cfpezyzfzj" ON "qti"."map_key_items" IS 'foreign key MapKeyItems(node, mapping, key) to MapKeyType(node where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"}, mapping where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"}, key where {"arg":{"field":"baseType","kind":"field"},"kind":"in","values":["directedPair","pair","point"]} and {"args":[{"field":"key","kind":"field"},{"kind":"literal","value":"^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$"}],"fn":"matches","kind":"compute"})';
 
@@ -7213,7 +7144,7 @@ COMMENT ON CONSTRAINT "__mapping_fk_node_rgauaxrkjx" ON "qti"."mapping" IS 'fore
 
 COMMENT ON CONSTRAINT "__mapping_base_type_fk_declaration_base_type_fxa66cg5fw" ON "qti"."mapping_base_type" IS 'foreign key MappingBaseType(declaration, baseType) to DeclarationBaseType(node, baseType)';
 
-COMMENT ON CONSTRAINT "__mapping_base_type_fk_node_declaration_tag_base_7lf5xvamjh" ON "qti"."mapping_base_type" IS 'foreign key MappingBaseType(node, declaration, tag Mapping.baseTypes = 1) to Mapping(node, declaration, baseTypes)';
+COMMENT ON CONSTRAINT "__mapping_base_type_fk_node_declaration_e55drv2q7w" ON "qti"."mapping_base_type" IS 'foreign key MappingBaseType(node, declaration) to Mapping(node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, declaration where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}})';
 
 COMMENT ON CONSTRAINT "__mapping_cardinality_fk_declaration_cardinality_o5k4eagozm" ON "qti"."mapping_cardinality" IS 'foreign key MappingCardinality(declaration, cardinality) to DeclarationCardinality(node, cardinality)';
 
@@ -7253,9 +7184,9 @@ COMMENT ON CONSTRAINT "__mastery_value_fk_node_copy_masteries_3bdv35jz3w" ON "qt
 
 COMMENT ON CONSTRAINT "__mastery_value_fk_node_predecessor_masteries_ymqzomfgl2" ON "qti"."mastery_value" IS 'foreign key MasteryValue(node, the predecessor of the index of the family Declaration.masteries) to MasteryValue(node, the index of the family Declaration.masteries)';
 
-COMMENT ON CONSTRAINT "__math_action_fk_node_elements_element_children_75g6uypt27" ON "qti"."math_action" IS 'foreign key MathAction(node, elements, elementChildren) to Node(id, elements, elementChildren)';
+COMMENT ON CONSTRAINT "__math_action_fk_node_e6wwxt5kjm" ON "qti"."math_action" IS 'foreign key MathAction(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}})';
 
-COMMENT ON CONSTRAINT "__math_action_fk_node_tag_kind_m_maction_bse3y3zneq" ON "qti"."math_action" IS 'foreign key MathAction(node, tag Node.kind = m:maction) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__math_action_fk_node_elements_element_children_75g6uypt27" ON "qti"."math_action" IS 'foreign key MathAction(node, elements, elementChildren) to Node(id, elements, elementChildren)';
 
 COMMENT ON CONSTRAINT "__math_action_fk_node_qcsceuvnc3" ON "qti"."math_action" IS 'foreign key MathAction(node where {"kind":"compare","left":{"field":"selectionWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to Attribute(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"selection"}})';
 
@@ -7263,9 +7194,9 @@ COMMENT ON CONSTRAINT "__math_align_group_fk_cell_copy_groups_scuheibuik" ON "qt
 
 COMMENT ON CONSTRAINT "__math_align_group_fk_cell_predecessor_groups_rw35675ge5" ON "qti"."math_align_group" IS 'foreign key MathAlignGroup(cell, the predecessor of the index of the family MathCell.groups) to MathAlignGroup(cell, the index of the family MathCell.groups)';
 
-COMMENT ON CONSTRAINT "__math_align_group_fk_node_cell_hrvj2cek2h" ON "qti"."math_align_group" IS 'foreign key MathAlignGroup(node, cell) to MathAlignScope(node, cell)';
+COMMENT ON CONSTRAINT "__math_align_group_fk_node_h5ea54kiwr" ON "qti"."math_align_group" IS 'foreign key MathAlignGroup(node) to MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maligngroup"}} and {"kind":"compare","left":{"field":"state","kind":"field"},"op":"eq","right":{"kind":"literal","value":"open"}})';
 
-COMMENT ON CONSTRAINT "__math_align_group_fk_node_tag_kind_m_maligngroup_xuyva3ew4v" ON "qti"."math_align_group" IS 'foreign key MathAlignGroup(node, tag MathAlignScope.kind = m:maligngroup, tag MathAlignScope.state = open) to MathAlignScope(node, kind, state)';
+COMMENT ON CONSTRAINT "__math_align_group_fk_node_cell_hrvj2cek2h" ON "qti"."math_align_group" IS 'foreign key MathAlignGroup(node, cell) to MathAlignScope(node, cell)';
 
 COMMENT ON CONSTRAINT "__math_align_scope_fk_node_document_kind_start_6xrkulhxz6" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
@@ -7277,11 +7208,13 @@ COMMENT ON CONSTRAINT "__math_align_scope_fk_node_dg6zzrbijv" ON "qti"."math_ali
 
 COMMENT ON CONSTRAINT "__math_align_scope_fk_node_cell_pjjpknuypt" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maligngroup"}} and {"kind":"compare","left":{"field":"state","kind":"field"},"op":"eq","right":{"kind":"literal","value":"open"}}, cell where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maligngroup"}} and {"kind":"compare","left":{"field":"state","kind":"field"},"op":"eq","right":{"kind":"literal","value":"open"}}) to MathAlignGroup(node, cell)';
 
-COMMENT ON CONSTRAINT "__math_align_scope_fk_node_tag_kind_m_mtd_kqn5didktq" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}, tag Node.kind = m:mtd) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__math_align_scope_fk_node_ertzywz5y7" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}})';
 
 COMMENT ON CONSTRAINT "__math_align_scope_fk_parent_cell_received_parent_ran2qliciz" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, cell where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, received where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, parentKind where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}, inherited where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}}) to MathAlignScope(node, cell, passes, kind, own)';
 
 COMMENT ON CONSTRAINT "__math_align_scope_fk_parent_chosen_hcyh75uekm" ON "qti"."math_align_scope" IS 'foreign key MathAlignScope(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}}, chosen where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"m:mtd"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}}) to MathAction(node, selection)';
+
+COMMENT ON CONSTRAINT "__math_apply_fk_node_akdyi4h3uj" ON "qti"."math_apply" IS 'foreign key MathApply(node) to Node(id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
 COMMENT ON CONSTRAINT "__math_apply_fk_node_document_kind_start_nearest_btuhu2ytan" ON "qti"."math_apply" IS 'foreign key MathApply(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
@@ -7289,21 +7222,19 @@ COMMENT ON CONSTRAINT "__math_apply_fk_node_elements_element_children_gmue6ywvhs
 
 COMMENT ON CONSTRAINT "__math_apply_fk_node_operator_2t5hgnyaic" ON "qti"."math_apply" IS 'foreign key MathApply(node, operator) to Node(parent where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}}, kind where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
-COMMENT ON CONSTRAINT "__math_apply_fk_node_tag_kind_m_apply_ppxr3wftcz" ON "qti"."math_apply" IS 'foreign key MathApply(node, tag Node.kind = m:apply) to Node(id where {"kind":"compare","left":{"field":"elementChildren","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, kind)';
-
 COMMENT ON CONSTRAINT "__math_apply_fk_node_pred_arguments_kbfzyuznfu" ON "qti"."math_apply" IS 'foreign key MathApply(node, pred(arguments)) to MathArgument(parent, the index of the family MathApply.arguments)';
 
 COMMENT ON CONSTRAINT "__math_apply_fk_node_pred_owned_42urhv6fgn" ON "qti"."math_apply" IS 'foreign key MathApply(node, pred(owned)) to MathQualifier(parent, the index of the family MathApply.owned)';
 
-COMMENT ON CONSTRAINT "__math_argument_fk_node_document_kind_start_nearest_ooj6catlae" ON "qti"."math_argument" IS 'foreign key MathArgument(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__math_argument_fk_node_gq6sunzlo2" ON "qti"."math_argument" IS 'foreign key MathArgument(node) to Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
-COMMENT ON CONSTRAINT "__math_argument_fk_node_tag_parent_kind_m_apply_r4xstjnki4" ON "qti"."math_argument" IS 'foreign key MathArgument(node, tag Node.parentKind = m:apply) to Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:bvar","m:condition","m:degree","m:domainofapplication","m:interval","m:logbase","m:lowlimit","m:momentabout","m:uplimit"]},"kind":"not"} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}, parentKind)';
+COMMENT ON CONSTRAINT "__math_argument_fk_node_document_kind_start_nearest_ooj6catlae" ON "qti"."math_argument" IS 'foreign key MathArgument(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__math_argument_fk_parent_copy_arguments_eptpenf2ao" ON "qti"."math_argument" IS 'foreign key MathArgument(parent, the owner''s count of the family MathApply.arguments) to MathApply(node, arguments)';
 
 COMMENT ON CONSTRAINT "__math_argument_fk_parent_predecessor_arguments_fgk4pgzzqw" ON "qti"."math_argument" IS 'foreign key MathArgument(parent, the predecessor of the index of the family MathApply.arguments) to MathArgument(parent, the index of the family MathApply.arguments)';
 
-COMMENT ON CONSTRAINT "__math_cell_fk_node_tag_kind_m_mtd_a4j5agf7vn" ON "qti"."math_cell" IS 'foreign key MathCell(node, tag Node.kind = m:mtd) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__math_cell_fk_node_dk3pkd4k3e" ON "qti"."math_cell" IS 'foreign key MathCell(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}})';
 
 COMMENT ON CONSTRAINT "__math_cell_fk_node_pred_groups_by33mewuz5" ON "qti"."math_cell" IS 'foreign key MathCell(node, pred(groups)) to MathAlignGroup(cell, the index of the family MathCell.groups)';
 
@@ -7321,9 +7252,9 @@ COMMENT ON CONSTRAINT "__math_cn_fk_node_type_lexical_tag_name_type_bu3mdjozzc" 
 
 COMMENT ON CONSTRAINT "__math_dir_fk_node_x7yczixfhq" ON "qti"."math_dir" IS 'foreign key MathDir(node) to Attribute(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"dir"}})';
 
-COMMENT ON CONSTRAINT "__math_qualifier_fk_node_document_kind_start_nearest_ljmc7exiru" ON "qti"."math_qualifier" IS 'foreign key MathQualifier(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__math_qualifier_fk_node_2lmmx776rb" ON "qti"."math_qualifier" IS 'foreign key MathQualifier(node) to Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:apply"}})';
 
-COMMENT ON CONSTRAINT "__math_qualifier_fk_node_tag_parent_kind_m_apply_qbbhmacqwe" ON "qti"."math_qualifier" IS 'foreign key MathQualifier(node, tag Node.parentKind = m:apply) to Node(id where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["comment","doctype","document","entityRef","pi","text","ws"]},"kind":"not"} and {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["m:degree","m:logbase","m:momentabout"]} and {"kind":"compare","left":{"field":"elements","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:1"}}, parentKind)';
+COMMENT ON CONSTRAINT "__math_qualifier_fk_node_document_kind_start_nearest_ljmc7exiru" ON "qti"."math_qualifier" IS 'foreign key MathQualifier(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__math_qualifier_fk_parent_copy_owned_head_2lq2zk4pzv" ON "qti"."math_qualifier" IS 'foreign key MathQualifier(parent, the owner''s count of the family MathApply.owned, head) to MathApply(node, owned, operator)';
 
@@ -7347,7 +7278,7 @@ COMMENT ON CONSTRAINT "__named_fk_node_document_kind_start_nearest_version_hbah7
 
 COMMENT ON CONSTRAINT "__named_fk_node_end_kjfozhntrk" ON "qti"."named" IS 'foreign key Named(node, end) to Node(id, end)';
 
-COMMENT ON CONSTRAINT "__named_fk_node_identifier_tag_name_identifier_6f2sciu7ix" ON "qti"."named" IS 'foreign key Named(node, identifier, tag TestToken.name = identifier) to TestToken(node, value, name)';
+COMMENT ON CONSTRAINT "__named_fk_node_identifier_k6rw4rrppp" ON "qti"."named" IS 'foreign key Named(node, identifier) to TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}})';
 
 COMMENT ON CONSTRAINT "__named_fk_parent_parent_kind_6lc4dfnrin" ON "qti"."named" IS 'foreign key Named(parent, parentKind) to Node(id, kind)';
 
@@ -7429,9 +7360,9 @@ COMMENT ON CONSTRAINT "__node_fk_id_fgdmja7iz2" ON "qti"."node" IS 'foreign key 
 
 COMMENT ON CONSTRAINT "__node_fk_id_kriaqbxe47" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:maction"}}) to MathAction(node)';
 
-COMMENT ON CONSTRAINT "__node_fk_id_xunu72fw35" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}) to MathCell(node)';
+COMMENT ON CONSTRAINT "__node_fk_id_2ug7ffz3jq" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}) to MathAlignScope(node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}})';
 
-COMMENT ON CONSTRAINT "__node_fk_id_tag_kind_m_mtd_r3mva5sold" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}, tag MathAlignScope.kind = m:mtd) to MathAlignScope(node, kind)';
+COMMENT ON CONSTRAINT "__node_fk_id_xunu72fw35" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"m:mtd"}}) to MathCell(node)';
 
 COMMENT ON CONSTRAINT "__node_fk_id_5jub37xnsu" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"pi"}}) to Pi(node)';
 
@@ -7451,7 +7382,7 @@ COMMENT ON CONSTRAINT "__node_fk_id_i2s2afl6fo" ON "qti"."node" IS 'foreign key 
 
 COMMENT ON CONSTRAINT "__node_fk_id_vmybur325b" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-variable-mapping"}}) to VariableMapping(node)';
 
-COMMENT ON CONSTRAINT "__node_fk_parent_tag_element_true_czbaqk52xc" ON "qti"."node" IS 'foreign key Node(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interaction-modules"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-portable-custom-interaction"}}, tag PciModuleForm.element = true) to PciModuleForm(node, element)';
+COMMENT ON CONSTRAINT "__node_fk_parent_sxhwklm3tp" ON "qti"."node" IS 'foreign key Node(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interaction-modules"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-portable-custom-interaction"}}) to PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__node_fk_parent_pred_at_start_before_children_0_pkmgrrihfl" ON "qti"."node" IS 'foreign key Node(parent where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, pred(at), start, the accumulator before plane 0 of the fold __node_children_count_fold_pnx6ol5egm over the family Node.children, the accumulator before plane 0 of the fold __node_children_count_fold_2y2hrzbme2 over the family Node.children, elementsWas, charsWas, was) to Node(parent where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, at, end, the accumulator after plane 0 of the fold __node_children_count_fold_pnx6ol5egm over the family Node.children, the accumulator after plane 0 of the fold __node_children_count_fold_2y2hrzbme2 over the family Node.children, elements, charsAfter, state)';
 
@@ -7515,7 +7446,7 @@ COMMENT ON CONSTRAINT "__pci_module_form_fk_node_elxhx3pi6z" ON "qti"."pci_modul
 
 COMMENT ON CONSTRAINT "__pci_module_form_fk_node_avd6eyu2u7" ON "qti"."pci_module_form" IS 'foreign key PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to Node(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interaction-modules"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-portable-custom-interaction"}})';
 
-COMMENT ON CONSTRAINT "__pi_fk_node_tag_kind_pi_kbji54wjpu" ON "qti"."pi" IS 'foreign key Pi(node, tag Node.kind = pi) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__pi_fk_node_gbfre7x3n7" ON "qti"."pi" IS 'foreign key Pi(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"pi"}})';
 
 COMMENT ON CONSTRAINT "__placed_binding_fk_assembly_adaptive_o75ju3n4ke" ON "qti"."placed_binding" IS 'foreign key PlacedBinding(assembly, adaptive) to ItemMode(document, adaptive)';
 
@@ -7543,11 +7474,11 @@ COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_gaps_qwmi5za7le" ON 
 
 COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_instance_node_p45dimi2rn" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(instance where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, node where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, attribute where {"kind":"compare","left":{"field":"baseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to PlacedBindingBaseType(instance, node, attribute)';
 
-COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_kind_tag_max_ymxb7hpec5" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(node where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, kind where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)';
+COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_kind_ehra7v25qj" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(node where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}, kind where {"arg":{"field":"cardinality","kind":"field"},"kind":"in","values":["multiple","ordered"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-extended-text-interaction"}}) to CountBound(node where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, kind where {"kind":"compare","left":{"field":"maxWritten","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_mosts_2j5mtc275b" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]}, mosts where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associable-hotspot","qti-associate-interaction","qti-choice-interaction","qti-extended-text-interaction","qti-gap-img","qti-gap-match-interaction","qti-gap-text","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-simple-associable-choice"]}) to CountBound(node, mosts)';
 
-COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_tag_most_value_cu6qkjqtse" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-position-object-interaction","qti-select-point-interaction"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"cardinality","kind":"field"},"op":"eq","right":{"kind":"literal","value":"single"}} and {"kind":"compare","left":{"field":"mosts","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, tag MostCount.mostValue = 1) to MostCount(node, mostValue)';
+COMMENT ON CONSTRAINT "__placed_binding_cardinality_fk_node_zjsykd5sfv" ON "qti"."placed_binding_cardinality" IS 'foreign key PlacedBindingCardinality(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-match-interaction","qti-position-object-interaction","qti-select-point-interaction"]} and {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"response-identifier"}} and {"kind":"compare","left":{"field":"cardinality","kind":"field"},"op":"eq","right":{"kind":"literal","value":"single"}} and {"kind":"compare","left":{"field":"mosts","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to MostCount(node where {"kind":"compare","left":{"field":"mostValue","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}})';
 
 COMMENT ON CONSTRAINT "__placed_binding_declaration_fk_declaration_assembly_omvdisrozg" ON "qti"."placed_binding_declaration" IS 'foreign key PlacedBindingDeclaration(declaration, assembly, identifier, declarationKind, baseTypes, cardinalities) to DeclarationIdentifier(node, document, identifier, declarationKind, baseTypes, cardinalities)';
 
@@ -7647,9 +7578,9 @@ COMMENT ON CONSTRAINT "__placed_variable_ref_fk_instance_node_attribute_mksyab6p
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_igloiqm6oh" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(declaration, assembly, identifier, declarationKind, declBaseTypes, declCardinalities) to DeclarationIdentifier(node, document, identifier, declarationKind, baseTypes, cardinalities)';
 
-COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_xvpaavu2cx" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(instance, node, attribute, assembly, identifier, kind) to PlacedVariableRef(instance, node, attribute, assembly, identifier, kind)';
+COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_f34g7rmjtx" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(instance, node, attribute) to PlacedVariableRef(instance where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, node where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, attribute where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}})';
 
-COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_uad7elyejo" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(instance, node, attribute, tag PlacedVariableRef.resolution = declared) to PlacedVariableRef(instance, node, attribute, resolution)';
+COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_xvpaavu2cx" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(instance, node, attribute, assembly, identifier, kind) to PlacedVariableRef(instance, node, attribute, assembly, identifier, kind)';
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_w3orw7lk64" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response"}}) to Mapping(declaration)';
 
@@ -7675,11 +7606,11 @@ COMMENT ON CONSTRAINT "__processing_fk_parent_parent_kind_4rxvdt2ozo" ON "qti"."
 
 COMMENT ON CONSTRAINT "__processing_fk_parent_language_h2hdwutuic" ON "qti"."processing" IS 'foreign key Processing(parent where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-processing","qti-response-processing","qti-template-processing"]},"kind":"not"} and {"arg":{"field":"parentKind","kind":"field"},"kind":"in","values":["qti-exit-response","qti-exit-template","qti-exit-test","qti-lookup-outcome-value","qti-outcome-condition","qti-outcome-else","qti-outcome-else-if","qti-outcome-if","qti-outcome-processing","qti-outcome-processing-fragment","qti-response-condition","qti-response-else","qti-response-else-if","qti-response-if","qti-response-processing","qti-response-processing-fragment","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value","qti-template-condition","qti-template-constraint","qti-template-else","qti-template-else-if","qti-template-if","qti-template-processing"]}, language where {"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-outcome-processing","qti-response-processing","qti-template-processing"]},"kind":"not"} and {"arg":{"field":"parentKind","kind":"field"},"kind":"in","values":["qti-exit-response","qti-exit-template","qti-exit-test","qti-lookup-outcome-value","qti-outcome-condition","qti-outcome-else","qti-outcome-else-if","qti-outcome-if","qti-outcome-processing","qti-outcome-processing-fragment","qti-response-condition","qti-response-else","qti-response-else-if","qti-response-if","qti-response-processing","qti-response-processing-fragment","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value","qti-template-condition","qti-template-constraint","qti-template-else","qti-template-else-if","qti-template-if","qti-template-processing"]}) to Processing(node, language)';
 
+COMMENT ON CONSTRAINT "__quotation_fk_node_3yic2w2qbj" ON "qti"."quotation" IS 'foreign key Quotation(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"q"}})';
+
 COMMENT ON CONSTRAINT "__quotation_fk_node_at_children_76s7mf6npu" ON "qti"."quotation" IS 'foreign key Quotation(node, at, children) to Node(id, at, children)';
 
 COMMENT ON CONSTRAINT "__quotation_fk_node_document_kind_start_nearest_iwppbbhd3b" ON "qti"."quotation" IS 'foreign key Quotation(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
-
-COMMENT ON CONSTRAINT "__quotation_fk_node_tag_kind_q_eevfvcqnqp" ON "qti"."quotation" IS 'foreign key Quotation(node, tag Node.kind = q) to Node(id, kind)';
 
 COMMENT ON CONSTRAINT "__quotation_fk_node_pred_children_last_ijxo5zcc3v" ON "qti"."quotation" IS 'foreign key Quotation(node, pred(children), last) to Node(parent where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, at where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, last where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}})';
 
@@ -7749,7 +7680,7 @@ COMMENT ON CONSTRAINT "__reference_document_fk_document_pred_references_4x5exmog
 
 COMMENT ON CONSTRAINT "__reference_path_fk_document_package_bqnpgexo4m" ON "qti"."reference_path" IS 'foreign key ReferencePath(document, package) to Document(node, package)';
 
-COMMENT ON CONSTRAINT "__reference_path_fk_node_name_document_kind_tag_7m4kmf6cuu" ON "qti"."reference_path" IS 'foreign key ReferencePath(node, name, document, kind, tag Reference.scope = entry) to Reference(node, name, document, kind, scope)';
+COMMENT ON CONSTRAINT "__reference_path_fk_node_name_document_kind_gy7mxqdls3" ON "qti"."reference_path" IS 'foreign key ReferencePath(node, name, document, kind) to Reference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, name where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, document where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, kind where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}})';
 
 COMMENT ON CONSTRAINT "__reference_path_fk_package_path_d5rajx6tj6" ON "qti"."reference_path" IS 'foreign key ReferencePath(package, path) to Entry(package, path)';
 
@@ -7783,9 +7714,9 @@ COMMENT ON CONSTRAINT "__resource_href_fk_node_package_fjekl5ceyn" ON "qti"."res
 
 COMMENT ON CONSTRAINT "__resource_href_fk_node_scope_path_txhy3mohip" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, scope, path) to ResourceFile(resource, scope, path)';
 
-COMMENT ON CONSTRAINT "__resource_id_fk_node_package_ktbenj6fxx" ON "qti"."resource_id" IS 'foreign key ResourceId(node, package) to Resource(node, package)';
+COMMENT ON CONSTRAINT "__resource_id_fk_node_imcmcwtrnt" ON "qti"."resource_id" IS 'foreign key ResourceId(node) to Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"} and {"kind":"compare","left":{"field":"documentType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"manifest"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:resource"}})';
 
-COMMENT ON CONSTRAINT "__resource_id_fk_node_tag_document_type_manifest_tag_6kniy2k4hr" ON "qti"."resource_id" IS 'foreign key ResourceId(node, tag Attribute.documentType = manifest, tag Attribute.kind = cp:resource) to Attribute(node where {"args":[{"args":[{"arg":{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"field":"identity","kind":"closedAt","relation":"ValueIdentity"},"kind":"in","values":["ID"]},{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"field":"name","kind":"field"}],"field":"domain","kind":"closedAt","relation":"AttributeGrammar"}],"kind":"closedHas","relation":"ValueIdentity"}],"kind":"and"},{"args":[{"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-context-declaration"}},{"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}],"kind":"and"}],"kind":"or"}, documentType, kind)';
+COMMENT ON CONSTRAINT "__resource_id_fk_node_package_ktbenj6fxx" ON "qti"."resource_id" IS 'foreign key ResourceId(node, package) to Resource(node, package)';
 
 COMMENT ON CONSTRAINT "__resource_lom_language_set_fk_general_lang_pred_3khib6vema" ON "qti"."resource_lom_language_set" IS 'foreign key ResourceLomLanguageSet(general, lang, pred(carriers)) to LomLanguage(general, tag, the index of the family ResourceLomLanguageSet.carriers)';
 
@@ -7809,25 +7740,25 @@ COMMENT ON CONSTRAINT "__rounding_mode_fk_node_27rwhdwkln" ON "qti"."rounding_mo
 
 COMMENT ON CONSTRAINT "__rounding_mode_fk_node_kind_mode_written_i7ad3npkbo" ON "qti"."rounding_mode" IS 'foreign key RoundingMode(node, kind, modeWritten) to Rounding(node, kind, modeWritten)';
 
+COMMENT ON CONSTRAINT "__rounding_mode_figures_fk_node_o46qoopmnk" ON "qti"."rounding_mode_figures" IS 'foreign key RoundingModeFigures(node) to Rounding(node where {"kind":"compare","left":{"field":"holds","kind":"field"},"op":"eq","right":{"kind":"literal","value":"both"}})';
+
 COMMENT ON CONSTRAINT "__rounding_mode_figures_fk_node_figures_zbq6r2yqup" ON "qti"."rounding_mode_figures" IS 'foreign key RoundingModeFigures(node, figures) to RoundingFigures(node, figures)';
 
 COMMENT ON CONSTRAINT "__rounding_mode_figures_fk_node_mode_7peegtve4q" ON "qti"."rounding_mode_figures" IS 'foreign key RoundingModeFigures(node, mode) to RoundingMode(node, mode)';
 
-COMMENT ON CONSTRAINT "__rounding_mode_figures_fk_node_tag_holds_both_i6wshk6i3v" ON "qti"."rounding_mode_figures" IS 'foreign key RoundingModeFigures(node, tag Rounding.holds = both) to Rounding(node, holds)';
-
 COMMENT ON CONSTRAINT "__sd_decl_fk_node_wdrzbkdf5c" ON "qti"."sd_decl" IS 'foreign key SdDecl(node) to XmlDecl(node)';
 
-COMMENT ON CONSTRAINT "__section_fk_node_document_kind_start_nearest_6onc6leixq" ON "qti"."section" IS 'foreign key Section(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__section_fk_node_nihrcqwnpd" ON "qti"."section" IS 'foreign key Section(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}})';
 
-COMMENT ON CONSTRAINT "__section_fk_node_tag_kind_qti_assessment_section_r3vmzqta3i" ON "qti"."section" IS 'foreign key Section(node, tag Node.kind = qti-assessment-section) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__section_fk_node_document_kind_start_nearest_6onc6leixq" ON "qti"."section" IS 'foreign key Section(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__section_fk_node_pred_members_required_g6pjt5k2o5" ON "qti"."section" IS 'foreign key Section(node, pred(members), required) to SectionMember(section, the index of the family Section.members, the accumulator after plane 0 of the fold __section_members_count_fold_k2pepzeac2 over the family Section.members)';
 
 COMMENT ON CONSTRAINT "__section_fk_parent_parent_kind_2mmvsuzu2q" ON "qti"."section" IS 'foreign key Section(parent, parentKind) to Node(id, kind)';
 
-COMMENT ON CONSTRAINT "__section_fk_node_tag_name_keep_together_3kwd7bphyw" ON "qti"."section" IS 'foreign key Section(node where {"kind":"compare","left":{"field":"keepTogether","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, tag TestFlag.name = keep-together) to TestFlag(node, name)';
+COMMENT ON CONSTRAINT "__section_fk_node_exbembbhhi" ON "qti"."section" IS 'foreign key Section(node where {"kind":"compare","left":{"field":"keepTogether","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}) to TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}})';
 
-COMMENT ON CONSTRAINT "__section_fk_node_tag_name_visible_tag_value_false_do6o3ns4ph" ON "qti"."section" IS 'foreign key Section(node where {"kind":"compare","left":{"field":"loose","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag TestFlag.name = visible, tag TestFlag.value = false) to TestFlag(node, name, value)';
+COMMENT ON CONSTRAINT "__section_fk_node_6eau3iyfk2" ON "qti"."section" IS 'foreign key Section(node where {"kind":"compare","left":{"field":"loose","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
 
 COMMENT ON CONSTRAINT "__section_fk_node_lqa52wu7rm" ON "qti"."section" IS 'foreign key Section(node where {"kind":"compare","left":{"field":"shuffle","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to SectionOrdering(parent)';
 
@@ -7889,15 +7820,15 @@ COMMENT ON CONSTRAINT "__section_member_fk_section_copy_members_3s4onkyi7o" ON "
 
 COMMENT ON CONSTRAINT "__section_member_fk_section_predecessor_members_wt4h6xrsdq" ON "qti"."section_member" IS 'foreign key SectionMember(section, the predecessor of the index of the family Section.members, the accumulator before plane 0 of the fold __section_members_count_fold_k2pepzeac2 over the family Section.members) to SectionMember(section, the index of the family Section.members, the accumulator after plane 0 of the fold __section_members_count_fold_k2pepzeac2 over the family Section.members)';
 
-COMMENT ON CONSTRAINT "__section_member_fk_node_tag_name_required_tag_value_2ahirswwyl" ON "qti"."section_member" IS 'foreign key SectionMember(node where {"kind":"compare","left":{"field":"required","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag TestFlag.name = required, tag TestFlag.value = true) to TestFlag(node, name, value)';
+COMMENT ON CONSTRAINT "__section_member_fk_node_3d2u2573ow" ON "qti"."section_member" IS 'foreign key SectionMember(node where {"kind":"compare","left":{"field":"required","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
+
+COMMENT ON CONSTRAINT "__section_ordering_fk_node_i6k5ybxgko" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-ordering"}})';
 
 COMMENT ON CONSTRAINT "__section_ordering_fk_node_document_kind_start_zqrnutobj4" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__section_ordering_fk_node_tag_kind_qti_ordering_5ep6zijkhg" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(node, tag Node.kind = qti-ordering) to Node(id, kind)';
-
 COMMENT ON CONSTRAINT "__section_ordering_fk_parent_shuffle_og3mq7n4ca" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(parent, shuffle) to Section(node, shuffle)';
 
-COMMENT ON CONSTRAINT "__section_ordering_fk_node_tag_name_shuffle_mmiipctg4a" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(node where {"kind":"compare","left":{"field":"shuffle","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag TestFlag.name = shuffle) to TestFlag(node, name)';
+COMMENT ON CONSTRAINT "__section_ordering_fk_node_xxkzvqmbh7" ON "qti"."section_ordering" IS 'foreign key SectionOrdering(node where {"kind":"compare","left":{"field":"shuffle","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shuffle"}})';
 
 COMMENT ON CONSTRAINT "__section_printed_name_fk_document_copy_prints_wmm4dhedfr" ON "qti"."section_printed_name" IS 'foreign key SectionPrintedName(document, the owner''s count of the family ReferringDocument.prints) to ReferringDocument(document, prints)';
 
@@ -7929,13 +7860,13 @@ COMMENT ON CONSTRAINT "__section_scope_fk_instance_pred_templates_vnpoh2yt7t" ON
 
 COMMENT ON CONSTRAINT "__section_selection_fk_node_4axkm6zr4y" ON "qti"."section_selection" IS 'foreign key SectionSelection(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-selection"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"select"}})';
 
-COMMENT ON CONSTRAINT "__section_selection_fk_node_document_kind_start_66yywl4kta" ON "qti"."section_selection" IS 'foreign key SectionSelection(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__section_selection_fk_node_fbt42fqhy7" ON "qti"."section_selection" IS 'foreign key SectionSelection(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-selection"}})';
 
-COMMENT ON CONSTRAINT "__section_selection_fk_node_tag_kind_qti_selection_hhk3kunsen" ON "qti"."section_selection" IS 'foreign key SectionSelection(node, tag Node.kind = qti-selection) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__section_selection_fk_node_document_kind_start_66yywl4kta" ON "qti"."section_selection" IS 'foreign key SectionSelection(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__section_selection_fk_parent_members_required_with_i5jckw6cvn" ON "qti"."section_selection" IS 'foreign key SectionSelection(parent, members, required, withReplacement) to Section(node, members, required, withReplacement)';
 
-COMMENT ON CONSTRAINT "__section_selection_fk_node_tag_name_with_kcgvpzfbo2" ON "qti"."section_selection" IS 'foreign key SectionSelection(node where {"kind":"compare","left":{"field":"withReplacement","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag TestFlag.name = with-replacement) to TestFlag(node, name)';
+COMMENT ON CONSTRAINT "__section_selection_fk_node_j2djwaaplb" ON "qti"."section_selection" IS 'foreign key SectionSelection(node where {"kind":"compare","left":{"field":"withReplacement","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"with-replacement"}})';
 
 COMMENT ON CONSTRAINT "__section_template_name_fk_document_copy_templates_vqdwhljx5k" ON "qti"."section_template_name" IS 'foreign key SectionTemplateName(document, the owner''s count of the family ReferringDocument.templates) to ReferringDocument(document, templates)';
 
@@ -7975,7 +7906,7 @@ COMMENT ON CONSTRAINT "__share_fragment_fk_node_document_id_dqe35isltx" ON "qti"
 
 COMMENT ON CONSTRAINT "__share_target_fk_document_id_target_lhlrnny7wi" ON "qti"."share_target" IS 'foreign key ShareTarget(document, id, target) to IdBinding(document, id, owner)';
 
-COMMENT ON CONSTRAINT "__share_target_fk_node_document_id_tag_assembled_72ilh23hsz" ON "qti"."share_target" IS 'foreign key ShareTarget(node, document, id, tag ShareFragment.assembled = false) to ShareFragment(node, document, id, assembled)';
+COMMENT ON CONSTRAINT "__share_target_fk_node_document_id_4vmnuxmuic" ON "qti"."share_target" IS 'foreign key ShareTarget(node, document, id) to ShareFragment(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, document where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, id where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
 
 COMMENT ON CONSTRAINT "__share_target_fk_node_share_rank_qhjui2y3g6" ON "qti"."share_target" IS 'foreign key ShareTarget(node, shareRank) to MathRank(node, rank)';
 
@@ -7987,7 +7918,7 @@ COMMENT ON CONSTRAINT "__site_fk_node_parent_hjpmqzvjk4" ON "qti"."site" IS 'for
 
 COMMENT ON CONSTRAINT "__site_fk_node_kind_fbxz4p6yn5" ON "qti"."site" IS 'foreign key Site(node where {"kind":"compare","left":{"field":"external","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"xi:include"}}, kind where {"kind":"compare","left":{"field":"external","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"xi:include"}}) to SitePath(node, kind)';
 
-COMMENT ON CONSTRAINT "__site_fk_node_tag_name_href_tag_scope_external_uffcwup4ja" ON "qti"."site" IS 'foreign key Site(node where {"kind":"compare","left":{"field":"external","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag Reference.name = href, tag Reference.scope = external) to Reference(node, name, scope)';
+COMMENT ON CONSTRAINT "__site_fk_node_e5it4rcboz" ON "qti"."site" IS 'foreign key Site(node where {"kind":"compare","left":{"field":"external","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to Reference(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"external"}})';
 
 COMMENT ON CONSTRAINT "__site_fk_parent_part_replaced_parent_mixes_parent_ilvrrp6dxx" ON "qti"."site" IS 'foreign key Site(parent where {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, part where {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, replaced where {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, parentMixes where {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, parentLooseChain where {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}) to Section(node, part, replacing, mixes, looseChain)';
 
@@ -8041,7 +7972,7 @@ COMMENT ON CONSTRAINT "__statistic_date_fk_node_broxpesl6w" ON "qti"."statistic_
 
 COMMENT ON CONSTRAINT "__stimulus_ref_fk_node_document_kind_start_nearest_6uusckfgks" ON "qti"."stimulus_ref" IS 'foreign key StimulusRef(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
-COMMENT ON CONSTRAINT "__stimulus_ref_fk_node_identifier_tag_name_4qroek5c2h" ON "qti"."stimulus_ref" IS 'foreign key StimulusRef(node, identifier, tag TestToken.name = identifier) to TestToken(node, value, name)';
+COMMENT ON CONSTRAINT "__stimulus_ref_fk_node_identifier_i5lniyon5p" ON "qti"."stimulus_ref" IS 'foreign key StimulusRef(node, identifier) to TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}})';
 
 COMMENT ON CONSTRAINT "__stimulus_ref_fk_node_tag_kind_qti_assessment_b5l6kwzptx" ON "qti"."stimulus_ref" IS 'foreign key StimulusRef(node, tag Node.kind = qti-assessment-stimulus-ref) to Node(id, kind)';
 
@@ -8091,9 +8022,9 @@ COMMENT ON CONSTRAINT "__template_ref_declaration_fk_declaration_tag_base_4jmg5c
 
 COMMENT ON CONSTRAINT "__template_ref_declaration_fk_node_attribute_xnwucalmzd" ON "qti"."template_ref_declaration" IS 'foreign key TemplateRefDeclaration(node where {"kind":"compare","left":{"field":"cardinalities","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, attribute where {"kind":"compare","left":{"field":"cardinalities","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to TemplateRefCardinality(node, attribute)';
 
-COMMENT ON CONSTRAINT "__test_document_fk_node_package_path_root_kind_6qoyqsjydy" ON "qti"."test_document" IS 'foreign key TestDocument(node, package, path, rootKind) to Document(node, package, path, rootKind)';
+COMMENT ON CONSTRAINT "__test_document_fk_node_2jumpyhwuj" ON "qti"."test_document" IS 'foreign key TestDocument(node) to Document(node where {"kind":"compare","left":{"field":"assembled","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
-COMMENT ON CONSTRAINT "__test_document_fk_node_tag_assembled_true_y23yuweuvt" ON "qti"."test_document" IS 'foreign key TestDocument(node, tag Document.assembled = true) to Document(node, assembled)';
+COMMENT ON CONSTRAINT "__test_document_fk_node_package_path_root_kind_6qoyqsjydy" ON "qti"."test_document" IS 'foreign key TestDocument(node, package, path, rootKind) to Document(node, package, path, rootKind)';
 
 COMMENT ON CONSTRAINT "__test_document_fk_node_pred_instances_f3roy6l3gx" ON "qti"."test_document" IS 'foreign key TestDocument(node, pred(instances)) to Instance(document, the index of the family TestDocument.instances)';
 
@@ -8111,7 +8042,7 @@ COMMENT ON CONSTRAINT "__test_flag_fk_node_value_pn7j7wvbsl" ON "qti"."test_flag
 
 COMMENT ON CONSTRAINT "__test_flag_fk_node_epytspxmgn" ON "qti"."test_flag" IS 'foreign key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}})';
 
-COMMENT ON CONSTRAINT "__test_flag_fk_node_tag_required_true_suk7xk6by4" ON "qti"."test_flag" IS 'foreign key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}, tag SectionMember.required = true) to SectionMember(node, required)';
+COMMENT ON CONSTRAINT "__test_flag_fk_node_qgazkapx22" ON "qti"."test_flag" IS 'foreign key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}) to SectionMember(node where {"kind":"compare","left":{"field":"required","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__test_flag_fk_node_kboswbjc6j" ON "qti"."test_flag" IS 'foreign key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shuffle"}}) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-ordering"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"shuffle"}})';
 
@@ -8155,7 +8086,7 @@ COMMENT ON CONSTRAINT "__text_reference_fk_node_document_kind_b36g4mgxok" ON "qt
 
 COMMENT ON CONSTRAINT "__text_reference_path_fk_document_package_iztrd27ux5" ON "qti"."text_reference_path" IS 'foreign key TextReferencePath(document, package) to Document(node, package)';
 
-COMMENT ON CONSTRAINT "__text_reference_path_fk_node_document_kind_tag_ymzlntcrzt" ON "qti"."text_reference_path" IS 'foreign key TextReferencePath(node, document, kind, tag TextReference.scope = entry) to TextReference(node, document, kind, scope)';
+COMMENT ON CONSTRAINT "__text_reference_path_fk_node_document_kind_ujyxk4axm5" ON "qti"."text_reference_path" IS 'foreign key TextReferencePath(node, document, kind) to TextReference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, document where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, kind where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}})';
 
 COMMENT ON CONSTRAINT "__text_reference_path_fk_package_path_qrchdfsvxr" ON "qti"."text_reference_path" IS 'foreign key TextReferencePath(package, path) to Entry(package, path)';
 
@@ -8175,11 +8106,11 @@ COMMENT ON CONSTRAINT "__typed_value_fk_node_declaration_text_nrfkt3i34y" ON "qt
 
 COMMENT ON CONSTRAINT "__usage_base_type_fk_node_wtyompbkib" ON "qti"."usage_base_type" IS 'foreign key UsageBaseType(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["ud:value"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"baseType"}})';
 
+COMMENT ON CONSTRAINT "__usage_value_fk_node_ips3sinb7h" ON "qti"."usage_value" IS 'foreign key UsageValue(node) to Node(id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"ud:value"}})';
+
 COMMENT ON CONSTRAINT "__usage_value_fk_node_base_type_lexical_j6pbqzueup" ON "qti"."usage_value" IS 'foreign key UsageValue(node, baseTypeLexical) to UsageBaseType(node, lexical)';
 
 COMMENT ON CONSTRAINT "__usage_value_fk_node_text_4qqq73bk3q" ON "qti"."usage_value" IS 'foreign key UsageValue(node, text) to Node(id, stringValue)';
-
-COMMENT ON CONSTRAINT "__usage_value_fk_node_tag_kind_ud_value_znv4rrhlmv" ON "qti"."usage_value" IS 'foreign key UsageValue(node, tag Node.kind = ud:value) to Node(id where {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"baseType"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}} and {"kind":"compare","left":{"args":[{"args":[{"args":[{"args":[{"field":"version","kind":"field"},{"field":"governor","kind":"field"}],"field":"model","kind":"closedAt","relation":"AttributeModelOf"},{"kind":"literal","value":"fieldIdentifier"}],"field":"slot","kind":"closedAt","relation":"AttributeGrammar"}],"fn":"singleton","kind":"compute"},{"field":"attrs","kind":"field"}],"fn":"subset","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}}, kind)';
 
 COMMENT ON CONSTRAINT "__usage_value_fk_node_base_type_lexical_fqf2vzux2a" ON "qti"."usage_value" IS 'foreign key UsageValue(node where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]}, baseTypeLexical where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]}) to UsageValueBaseType(node, baseTypeLexical)';
 
@@ -8215,15 +8146,15 @@ COMMENT ON CONSTRAINT "__value_set_cardinality_fk_declaration_cardinality_kyslb2
 
 COMMENT ON CONSTRAINT "__value_set_cardinality_fk_node_declaration_element_skfohncmjm" ON "qti"."value_set_cardinality" IS 'foreign key ValueSetCardinality(node, declaration, elementChildren, fields) to ValueSet(node, parent, elementChildren, fields)';
 
+COMMENT ON CONSTRAINT "__variable_mapping_fk_node_avhxc6lk34" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node) to Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-variable-mapping"}})';
+
 COMMENT ON CONSTRAINT "__variable_mapping_fk_node_document_kind_start_rddrkw6ybr" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__variable_mapping_fk_node_parent_sghjsfuygb" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, parent) to MappingItemRef(node, itemRef)';
 
-COMMENT ON CONSTRAINT "__variable_mapping_fk_node_source_tag_name_source_lyht4ghuf4" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, source, tag TestToken.name = source-identifier) to TestToken(node, value, name)';
+COMMENT ON CONSTRAINT "__variable_mapping_fk_node_source_35kg2r3a7u" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, source) to TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"source-identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"source-identifier"}})';
 
-COMMENT ON CONSTRAINT "__variable_mapping_fk_node_target_tag_name_target_ml5omd3odc" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, target, tag TestToken.name = target-identifier) to TestToken(node, value, name)';
-
-COMMENT ON CONSTRAINT "__variable_mapping_fk_node_tag_kind_qti_variable_7zu2zkphdh" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, tag Node.kind = qti-variable-mapping) to Node(id, kind)';
+COMMENT ON CONSTRAINT "__variable_mapping_fk_node_target_cud6ruapgk" ON "qti"."variable_mapping" IS 'foreign key VariableMapping(node, target) to TestToken(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}}, value where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target-identifier"}})';
 
 COMMENT ON CONSTRAINT "__variable_ref_fk_document_copy_variables_root_kind_zhvl44uh43" ON "qti"."variable_ref" IS 'foreign key VariableRef(document, the owner''s count of the family Document.variables, rootKind) to Document(node, variables, rootKind)';
 
@@ -8243,9 +8174,9 @@ COMMENT ON CONSTRAINT "__variable_ref_cardinality_fk_node_attribute_s3yteeenwr" 
 
 COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_declaration_document_xpsv74dmig" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(declaration, document, identifier, declarationKind, declBaseTypes, declCardinalities) to DeclarationIdentifier(node, document, identifier, declarationKind, baseTypes, cardinalities)';
 
-COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_node_attribute_base_tc4suinenj" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(node, attribute, baseType, cardinality, document, identifier, kind, language) to VariableRef(node, attribute, baseType, cardinality, document, identifier, kind, language)';
+COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_node_attribute_m2xdvmhbfa" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(node, attribute) to VariableRef(node where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}}, attribute where {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}})';
 
-COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_node_attribute_tag_erisxsncwj" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(node, attribute, tag VariableRef.resolution = declared) to VariableRef(node, attribute, resolution)';
+COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_node_attribute_base_tc4suinenj" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(node, attribute, baseType, cardinality, document, identifier, kind, language) to VariableRef(node, attribute, baseType, cardinality, document, identifier, kind, language)';
 
 COMMENT ON CONSTRAINT "__variable_ref_declaration_fk_declaration_base_type_ucq2xshl2h" ON "qti"."variable_ref_declaration" IS 'foreign key VariableRefDeclaration(declaration where {"kind":"compare","left":{"field":"declBaseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, baseType where {"kind":"compare","left":{"field":"declBaseTypes","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to DeclarationBaseType(node, valueBase)';
 
@@ -8381,8 +8312,6 @@ COMMENT ON INDEX "qti"."__catalog_target_ix_document_assembled_mi42q2s6ku" IS 'b
 
 COMMENT ON INDEX "qti"."__choice_ix_node_gfaeb_4_prff_hqakbxexks" IS 'btree index Choice(__node_gfaeb4prff)';
 
-COMMENT ON INDEX "qti"."__choice_ix_node_zseimxjpkj_r6ugl4psth" IS 'btree index Choice(__node_zseimxjpkj)';
-
 COMMENT ON INDEX "qti"."__cn_count_ix_node_4_zs_7_f_4_hetq_type_lexical_mw_5_32kwnnitcd" IS 'btree index CnCount(__node_4zs7f4hetq, __type_lexical_mw5gnzkqdv)';
 
 COMMENT ON INDEX "qti"."__context_ref_ix_node_55_rq_6_xvhgt_attribute_ofb6ulzvpb" IS 'btree index ContextRef(__node_55rq6xvhgt, __attribute_hfyfakg5bn)';
@@ -8394,10 +8323,6 @@ COMMENT ON INDEX "qti"."__count_bound_ix_node_hees_5_ytmaq_wvdcxve7s4" IS 'btree
 COMMENT ON INDEX "qti"."__count_bound_ix_node_oryuiniu_46_y75przpimy" IS 'btree index CountBound(__node_oryuiniu46)';
 
 COMMENT ON INDEX "qti"."__count_bound_ix_node_oxfetlrikr_choices_figr_66_ekxcciuje7" IS 'btree index CountBound(__node_oxfetlrikr, __choices_figr66khyk)';
-
-COMMENT ON INDEX "qti"."__count_bound_ix_node_tq_76_jy_5_o_5_h_min_name_pq_4_cfzc3z4y7c" IS 'btree index CountBound(__node_tq76jy5o5h, __min_name_pq4iyemtqh)';
-
-COMMENT ON INDEX "qti"."__count_bound_ix_node_uyvwkuoluo_max_name_perr_4_n6ow3yqmjw" IS 'btree index CountBound(__node_uyvwkuoluo, __max_name_perr4lpmuf)';
 
 COMMENT ON INDEX "qti"."__count_bound_ix_node_wdev_3_ncr_3_a_4r36oaddlg" IS 'btree index CountBound(__node_wdev3ncr3a)';
 
@@ -8430,8 +8355,6 @@ COMMENT ON INDEX "qti"."__declaration_identifier_ix_identifier_q2wgv3dsez" IS 'b
 COMMENT ON INDEX "qti"."__dependency_ix_resource_package_txdc5xfn7z" IS 'btree index Dependency(resource, package)';
 
 COMMENT ON INDEX "qti"."__dependency_target_ix_package_ref_target_2iifdwtrng" IS 'btree index DependencyTarget(package, ref, target)';
-
-COMMENT ON INDEX "qti"."__document_ix_node_5_zotaizsb_2_qbvrbvdbck" IS 'btree index Document(__node_5zotaizsb2)';
 
 COMMENT ON INDEX "qti"."__document_ix_node_nv_676_cv_335_qde4grdoez" IS 'btree index Document(__node_nv676cv335)';
 
@@ -8559,8 +8482,6 @@ COMMENT ON INDEX "qti"."__interaction_attribute_ix_node_wv_6_u_4_xry_3_f_2c5cvlb
 
 COMMENT ON INDEX "qti"."__interaction_attribute_ix_document_root_kind_fyhxu2mcle" IS 'btree index InteractionAttribute(document, rootKind)';
 
-COMMENT ON INDEX "qti"."__item_mode_ix_document_gfqaer_5_w_2_f_xg25r6slqs" IS 'btree index ItemMode(__document_gfqaer5w2f)';
-
 COMMENT ON INDEX "qti"."__item_ref_document_ix_document_gvnh5jj7cf" IS 'btree index ItemRefDocument(document)';
 
 COMMENT ON INDEX "qti"."__item_ref_document_ix_package_path_document_tu47evbzrd" IS 'btree index ItemRefDocument(package, path, document)';
@@ -8570,8 +8491,6 @@ COMMENT ON INDEX "qti"."__item_ref_href_ix_package_path_yxfam2vwx3" IS 'btree in
 COMMENT ON INDEX "qti"."__label_use_ix_document_h_55_jb_4_nosx_4zh43rsle7" IS 'btree index LabelUse(__document_h55jb4nosx)';
 
 COMMENT ON INDEX "qti"."__label_use_ix_document_root_kind_d7n36nygky" IS 'btree index LabelUse(document, rootKind)';
-
-COMMENT ON INDEX "qti"."__least_count_ix_node_tq_76_jy_5_o_5_h_min_name_pq_4_y4fjvyu23q" IS 'btree index LeastCount(__node_tq76jy5o5h, __min_name_pq4iyemtqh, __least_4gxcnzzzun)';
 
 COMMENT ON INDEX "qti"."__lom_entry_ix_holder_parent_document_identifier_hm5zycuw2h" IS 'btree index LomEntry(holder, parent, document, identifierKind, identifierStart, nearest, version)';
 
@@ -8615,11 +8534,7 @@ COMMENT ON INDEX "qti"."__map_key_items_ix_mapping_ordered_g2mbwmphv3" IS 'btree
 
 COMMENT ON INDEX "qti"."__map_key_items_ix_mapping_unordered_7n3efglzvm" IS 'btree index MapKeyItems(mapping, unordered)';
 
-COMMENT ON INDEX "qti"."__map_key_type_ix_node_tspabsizer_bxj3mcnjkq" IS 'btree index MapKeyType(__node_tspabsizer)';
-
 COMMENT ON INDEX "qti"."__map_key_type_ix_base_type_mapping_kdf4georz2" IS 'btree index MapKeyType(baseType, mapping)';
-
-COMMENT ON INDEX "qti"."__mapping_ix_node_qoaju_6_itui_ekxlzzr4vt" IS 'btree index Mapping(__node_qoaju6itui)';
 
 COMMENT ON INDEX "qti"."__mapping_ix_node_wmg_2_sk_5_kn_2_xel2ctprgm" IS 'btree index Mapping(__node_wmg2sk5kn2)';
 
@@ -8639,15 +8554,7 @@ COMMENT ON INDEX "qti"."__mapping_source_declaration_ix_item_document_target_f6w
 
 COMMENT ON INDEX "qti"."__mapping_source_declaration_ix_item_ref_item_6r7kblgpwe" IS 'btree index MappingSourceDeclaration(itemRef, itemDocument)';
 
-COMMENT ON INDEX "qti"."__math_action_ix_node_ftdvsxxkkg_zkkakvjgqu" IS 'btree index MathAction(__node_ftdvsxxkkg)';
-
-COMMENT ON INDEX "qti"."__math_align_scope_ix_node_2_cng_4_arpih_mmrhoiqhjk" IS 'btree index MathAlignScope(__node_2cng4arpih)';
-
-COMMENT ON INDEX "qti"."__math_align_scope_ix_node_5_sroalr_7_ba_cell_crzb_yvcuj6zxfk" IS 'btree index MathAlignScope(__node_5sroalr7ba, __cell_crzb77exj4)';
-
 COMMENT ON INDEX "qti"."__math_align_scope_ix_node_i_5_vkip_2_st_6_dir_mellqolgaz" IS 'btree index MathAlignScope(__node_i5vkip2st6, __dir_lexical_h6z4ucsu6w)';
-
-COMMENT ON INDEX "qti"."__math_align_scope_ix_node_x_3_mdbcdhup_efi73o4ghn" IS 'btree index MathAlignScope(__node_x3mdbcdhup)';
 
 COMMENT ON INDEX "qti"."__math_align_scope_ix_parent_bj_6_k_3_aos_7_e_chosen_6koelug4xi" IS 'btree index MathAlignScope(__parent_bj6k3aos7e, __chosen_nwrwqehg4j)';
 
@@ -8659,8 +8566,6 @@ COMMENT ON INDEX "qti"."__math_cn_ix_node_4_zs_7_f_4_hetq_type_lexical_mw_5_xzzq
 
 COMMENT ON INDEX "qti"."__math_rank_ix_parent_hwejryg_34_m_parent_rank_vbozqp2pxf" IS 'btree index MathRank(__parent_hwejryg34m, __parent_rank_djgpmhcqav)';
 
-COMMENT ON INDEX "qti"."__most_count_ix_node_uyvwkuoluo_max_name_perr_4_zoblsng4ar" IS 'btree index MostCount(__node_uyvwkuoluo, __max_name_perr4lpmuf, __most_gdqaao6iy4)';
-
 COMMENT ON INDEX "qti"."__named_ix_node_4_f_5_xcfmhbc_part_4_gtxaphjyp_p6wr2egvhs" IS 'btree index Named(__node_4f5xcfmhbc, __part_4gtxaphjyp, __replaced_cn7cl6rjxv, __mixes_byc4olsxrq, __loose_chain_ajn7kudydp)';
 
 COMMENT ON INDEX "qti"."__named_ix_parent_vipwpcgcs_7_part_4_cq_4_qtivnd_aoesrvjgd7" IS 'btree index Named(__parent_vipwpcgcs7, __part_4cq4qtivnd, __replaced_xc4ckx6v2e)';
@@ -8671,41 +8576,21 @@ COMMENT ON INDEX "qti"."__node_ix_document_jlx_2_xep_5_af_kind_3_zonnawsqb_pgvug
 
 COMMENT ON INDEX "qti"."__node_ix_id_2_ecax_7_r_3_ho_bfjukv7bjf" IS 'btree index Node(__id_2ecax7r3ho)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_2_sa_7_ei_5_zyl_ervqviuc6w" IS 'btree index Node(__id_2sa7ei5zyl)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_33_kgwoi_4_ec_ojslxjumzu" IS 'btree index Node(__id_33kgwoi4ec)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_46_tfv_6_spbo_hgwe7bdbsp" IS 'btree index Node(__id_46tfv6spbo)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_4_fp_7_viwvjp_fhcj5uzovg" IS 'btree index Node(__id_4fp7viwvjp)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_4_kyfqj_6_js_7_h5y5njhzbp" IS 'btree index Node(__id_4kyfqj6js7)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_4_p_3_x_6_fs_6_ds_string_value_au_6_fy_catsvvezob" IS 'btree index Node(__id_4p3x6fs6ds, __string_value_au6fy6olpt)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_4_vxvcu_7_dk_3_ihwlxgelr7" IS 'btree index Node(__id_4vxvcu7dk3)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_aejnsmuu_6_s_zynyxypog5" IS 'btree index Node(__id_aejnsmuu6s)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_apujacx_2_gd_hleehmvdyg" IS 'btree index Node(__id_apujacx2gd)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_bghas_3_ujed_m3navgatoc" IS 'btree index Node(__id_bghas3ujed)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_buqmbkuqrp_3l33y67exd" IS 'btree index Node(__id_buqmbkuqrp)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_d_7_bnzrx_6_s_4_parent_nega_7_gzl_7_u_i4ok6pqon7" IS 'btree index Node(__id_d7bnzrx6s4, __parent_nega7gzl7u, __string_value_vxgni3ywe7)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_dlldehzzx_5_tofufm2qcr" IS 'btree index Node(__id_dlldehzzx5)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_fh_4_h_2_bqbbf_7kgc2fhw2x" IS 'btree index Node(__id_fh4h2bqbbf)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_fxsmrdbafd_parent_j_2_bpgu_2_cmv_string_kdttkro3wo" IS 'btree index Node(__id_fxsmrdbafd, __parent_j2bpgu2cmv, __string_value_st2tbmdq6p)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_gq_6_uzbosmd_lbbldzbt2l" IS 'btree index Node(__id_gq6uzbosmd)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_h_3_sirmwbhr_sdpzsaqlul" IS 'btree index Node(__id_h3sirmwbhr)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_hdt_6_eyj_25_k_qrxya73myb" IS 'btree index Node(__id_hdt6eyj25k)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_ixxzr_33747_dha3padnfb" IS 'btree index Node(__id_ixxzr33747)';
 
@@ -8713,21 +8598,11 @@ COMMENT ON INDEX "qti"."__node_ix_id_j_5_nn_7_krqpg_document_pbft_2_kftgd_hm2q55
 
 COMMENT ON INDEX "qti"."__node_ix_id_jc_6_vfm_2_n_22_string_value_jbv_6_mmx_2ogwaicb2b" IS 'btree index Node(__id_jc6vfm2n22, __string_value_jbv6mmx2wd)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_jqcli_57_r_6_e_bldsko2j2o" IS 'btree index Node(__id_jqcli57r6e)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_laqeu_7_frlh_cy5xxe72iy" IS 'btree index Node(__id_laqeu7frlh)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_lqxlri_2_euy_string_value_vgoifjqt_7_p_mo34tq2ncz" IS 'btree index Node(__id_lqxlri2euy, __string_value_vgoifjqt7p)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_lsekb_7_odow_o6wkiwwwkl" IS 'btree index Node(__id_lsekb7odow)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_nvk_6_qhdomt_3pcqs3cpc7" IS 'btree index Node(__id_nvk6qhdomt)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_okrh_2_pyfc_7_parent_er_7_bsmdz_2_i_pyzpzwws3d" IS 'btree index Node(__id_okrh2pyfc7, __parent_er7bsmdz2i, __string_value_w5fvqit5qr)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_orae_3_kwywm_boahc6pavr" IS 'btree index Node(__id_orae3kwywm)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_q_3_fkvdlrzq_vldm573gsy" IS 'btree index Node(__id_q3fkvdlrzq)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_rbrnmh_2_xkm_73o3wfx6yz" IS 'btree index Node(__id_rbrnmh2xkm)';
 
@@ -8735,19 +8610,11 @@ COMMENT ON INDEX "qti"."__node_ix_id_rpd_3_elauv_4_j3peuc2tu7" IS 'btree index N
 
 COMMENT ON INDEX "qti"."__node_ix_id_shysbno_63_f_ehtzojrq55" IS 'btree index Node(__id_shysbno63f)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_tw_4_vam_75_we_5kcd7y5t2c" IS 'btree index Node(__id_tw4vam75we)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_v_3_yvnypwaj_sz2qes5tv3" IS 'btree index Node(__id_v3yvnypwaj)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_xxjhviby_37_2hf4xzjzjl" IS 'btree index Node(__id_xxjhviby37)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_xzp_4_ngpydi_77offtplxc" IS 'btree index Node(__id_xzp4ngpydi)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_zvbpmu_7_yp_2_7lilutusav" IS 'btree index Node(__id_zvbpmu7yp2)';
-
 COMMENT ON INDEX "qti"."__node_ix_document_start_id_fjfijlv7gg" IS 'btree index Node(document, start, id)';
-
-COMMENT ON INDEX "qti"."__normal_minimum_ix_node_cmhaiwbl_5_v_3fnrsivv7a" IS 'btree index NormalMinimum(__node_cmhaiwbl5v)';
 
 COMMENT ON INDEX "qti"."__object_identifier_ix_identifier_lalkbhxwcs" IS 'btree index ObjectIdentifier(identifier)';
 
@@ -8760,10 +8627,6 @@ COMMENT ON INDEX "qti"."__open_element_name_ix_node_dnhfkvuye_3_p3amxegryk" IS '
 COMMENT ON INDEX "qti"."__open_element_name_ix_parent_beba_3_avbja_parent_xrpkgh2egm" IS 'btree index OpenElementName(__parent_beba3avbja, __parent_namespace_4hhnuwl5pd)';
 
 COMMENT ON INDEX "qti"."__open_element_name_ix_parent_parent_kind_6p3wnbjbjh" IS 'btree index OpenElementName(parent, parentKind)';
-
-COMMENT ON INDEX "qti"."__pci_module_form_ix_node_itpy_7_ns_7_w_5_t2fzjjgic5" IS 'btree index PciModuleForm(__node_itpy7ns7w5)';
-
-COMMENT ON INDEX "qti"."__pci_module_form_ix_node_zkko_65_kuex_elv36nmskz" IS 'btree index PciModuleForm(__node_zkko65kuex)';
 
 COMMENT ON INDEX "qti"."__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7" IS 'btree index PlacedBinding(__node_nqyr3apalb)';
 
@@ -8820,8 +8683,6 @@ COMMENT ON INDEX "qti"."__placed_share_target_ix_instance_document_assembly_gx7r
 COMMENT ON INDEX "qti"."__placed_share_target_ix_target_instance_target_y7tchqidv3" IS 'btree index PlacedShareTarget(targetInstance, target, targetRank)';
 
 COMMENT ON INDEX "qti"."__placed_share_target_ix_target_instance_target_d2oyu5er3k" IS 'btree index PlacedShareTarget(targetInstance, targetDocument, assembly)';
-
-COMMENT ON INDEX "qti"."__placed_variable_ref_ix_instance_n_5_ohc_4_oypz_vdka6ilemq" IS 'btree index PlacedVariableRef(__instance_n5ohc4oypz, __node_uxuuifp4t7, __attribute_r3bfjzxqlg)';
 
 COMMENT ON INDEX "qti"."__placed_variable_ref_ix_assembly_identifier_nzdg4ajijy" IS 'btree index PlacedVariableRef(assembly, identifier)';
 
@@ -8895,8 +8756,6 @@ COMMENT ON INDEX "qti"."__record_field_ix_node_ivazk_4_ulfo_identifier_e6hjpr4hd
 
 COMMENT ON INDEX "qti"."__reference_ix_node_6_rmfntt_35_j_erkaurnkvr" IS 'btree index Reference(__node_6rmfntt35j)';
 
-COMMENT ON INDEX "qti"."__reference_ix_node_rx_3_smqszrv_name_55_zdbs_4_rpu_jcrxk2llay" IS 'btree index Reference(__node_rx3smqszrv, __name_55zdbs4rpu, __document_5cau2dspow, __kind_3plysbbxy5)';
-
 COMMENT ON INDEX "qti"."__reference_path_ix_package_7_t_2_ctw_5_cbp_path_ao_ji3zvkr7e6" IS 'btree index ReferencePath(__package_7t2ctw5cbp, __path_ao7rtnqc22)';
 
 COMMENT ON INDEX "qti"."__reference_path_ix_document_package_ft7vjozed2" IS 'btree index ReferencePath(document, package)';
@@ -8908,10 +8767,6 @@ COMMENT ON INDEX "qti"."__resource_ix_document_package_4v6ha45foo" IS 'btree ind
 COMMENT ON INDEX "qti"."__resource_href_ix_package_path_abu2xsqi5y" IS 'btree index ResourceHref(package, path)';
 
 COMMENT ON INDEX "qti"."__resource_typed_ix_package_type_omgjswfary" IS 'btree index ResourceTyped(package, type)';
-
-COMMENT ON INDEX "qti"."__rounding_ix_node_bb_4_ru_6_chas_xc52xxnxi6" IS 'btree index Rounding(__node_bb4ru6chas)';
-
-COMMENT ON INDEX "qti"."__rounding_ix_node_n_3_wznir_2_nw_b735ps3dez" IS 'btree index Rounding(__node_n3wznir2nw)';
 
 COMMENT ON INDEX "qti"."__section_ix_node_bxkmiz_7_ib_7_jvlcsbo6z5" IS 'btree index Section(__node_bxkmiz7ib7)';
 
@@ -8947,8 +8802,6 @@ COMMENT ON INDEX "qti"."__section_identifier_ix_node_a_2_cp_5_ppi_33_yngytm7d4l"
 
 COMMENT ON INDEX "qti"."__section_identifier_ix_document_root_kind_g3l2niacdw" IS 'btree index SectionIdentifier(document, rootKind)';
 
-COMMENT ON INDEX "qti"."__section_member_ix_node_hf_7_blfijbr_abaq6dgm6h" IS 'btree index SectionMember(__node_hf7blfijbr)';
-
 COMMENT ON INDEX "qti"."__section_ordering_ix_node_sfmmgf_7_sef_q43fvqvfz2" IS 'btree index SectionOrdering(__node_sfmmgf7sef)';
 
 COMMENT ON INDEX "qti"."__section_printed_ref_ix_instance_qrmqdmq_4_b_2_node_xtdegqajaj" IS 'btree index SectionPrintedRef(__instance_qrmqdmq4b2, __node_55rq6xvhgt, __attribute_hfyfakg5bn)';
@@ -8974,8 +8827,6 @@ COMMENT ON INDEX "qti"."__section_template_ref_declaration_ix_instance_o_2_uml3n
 COMMENT ON INDEX "qti"."__section_template_ref_declaration_ix_declaration_eniodpekco" IS 'btree index SectionTemplateRefDeclaration(declaration, assembly, identifier, declarationKind, baseTypes, cardinalities)';
 
 COMMENT ON INDEX "qti"."__share_fragment_ix_document_sba_7_m_53_uwz_cdvfxla47d" IS 'btree index ShareFragment(__document_sba7m53uwz, __placements_umab3ec74p)';
-
-COMMENT ON INDEX "qti"."__share_fragment_ix_node_eixsmyfnul_document_slbxn5gade" IS 'btree index ShareFragment(__node_eixsmyfnul, __document_jwyigkitch, __id_chqpn6jlrw)';
 
 COMMENT ON INDEX "qti"."__share_fragment_ix_document_assembled_xmwggb7idu" IS 'btree index ShareFragment(document, assembled)';
 
@@ -9037,17 +8888,9 @@ COMMENT ON INDEX "qti"."__template_ref_declaration_ix_declaration_document_ym7oy
 
 COMMENT ON INDEX "qti"."__test_flag_ix_node_2_mdqieju_4_t_u3qwtmv43a" IS 'btree index TestFlag(__node_2mdqieju4t)';
 
-COMMENT ON INDEX "qti"."__test_flag_ix_node_agrnt_4_oxfj_value_b_2_u_3_pnmj_fh2fyk37ua" IS 'btree index TestFlag(__node_agrnt4oxfj, __value_b2u3pnmj35)';
-
 COMMENT ON INDEX "qti"."__test_flag_ix_node_gmu_2_rwiqtm_xbk5gzzuum" IS 'btree index TestFlag(__node_gmu2rwiqtm)';
 
-COMMENT ON INDEX "qti"."__test_flag_ix_node_hrmsw_5_h_6_x_3_eiptz7por4" IS 'btree index TestFlag(__node_hrmsw5h6x3)';
-
-COMMENT ON INDEX "qti"."__test_flag_ix_node_jbxopjiwnp_value_ktkpmvehm_4_x7utshxb5k" IS 'btree index TestFlag(__node_jbxopjiwnp, __value_ktkpmvehm4)';
-
 COMMENT ON INDEX "qti"."__test_flag_ix_node_lcua_5_jzlyq_osuevcpr4r" IS 'btree index TestFlag(__node_lcua5jzlyq)';
-
-COMMENT ON INDEX "qti"."__test_flag_ix_node_lp_3_xxymaae_value_6_qw_7_vodyxw_ttii24aran" IS 'btree index TestFlag(__node_lp3xxymaae, __value_6qw7vodyxw)';
 
 COMMENT ON INDEX "qti"."__test_flag_ix_node_kind_parent_kind_oxjx2mn4cq" IS 'btree index TestFlag(node, kind, parentKind)';
 
@@ -9055,19 +8898,9 @@ COMMENT ON INDEX "qti"."__test_reference_ix_node_pqzmng_5_ral_attribute_q_4_yrgk
 
 COMMENT ON INDEX "qti"."__test_reference_ix_node_z_5_sz_4_ltt_7_q_attribute_jbrvboh7cc" IS 'btree index TestReference(__node_z5sz4ltt7q, __attribute_sirmk7mkrc, __document_mxzv7urj63, __identifier_wmxmzpfbae, __kind_4gx7mayacx, __root_kind_4h7extdk2j)';
 
-COMMENT ON INDEX "qti"."__test_token_ix_node_a_3_rnnkv_3_n_2_bzwbw7odlj" IS 'btree index TestToken(__node_a3rnnkv3n2)';
-
 COMMENT ON INDEX "qti"."__test_token_ix_node_b_5_hrtsniob_3cyb2sgyd4" IS 'btree index TestToken(__node_b5hrtsniob)';
 
-COMMENT ON INDEX "qti"."__test_token_ix_node_cxuhc_4_dycy_35d4tppcsl" IS 'btree index TestToken(__node_cxuhc4dycy)';
-
-COMMENT ON INDEX "qti"."__test_token_ix_node_fhyljg_3_ztm_rh65lv2f3s" IS 'btree index TestToken(__node_fhyljg3ztm)';
-
-COMMENT ON INDEX "qti"."__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" IS 'btree index TestToken(__node_l7omvxv2od)';
-
 COMMENT ON INDEX "qti"."__text_idref_ix_document_token_r43v6t4zvp" IS 'btree index TextIdref(document, token)';
-
-COMMENT ON INDEX "qti"."__text_reference_ix_node_rx_3_smqszrv_document_5_cau_m4tt5whv7z" IS 'btree index TextReference(__node_rx3smqszrv, __document_5cau2dspow, __kind_3plysbbxy5)';
 
 COMMENT ON INDEX "qti"."__text_reference_path_ix_document_package_fj2vzkfhas" IS 'btree index TextReferencePath(document, package)';
 
@@ -9092,8 +8925,6 @@ COMMENT ON INDEX "qti"."__value_set_cardinality_ix_declaration_cardinality_zautz
 COMMENT ON INDEX "qti"."__variable_ref_ix_node_a_2_cp_5_ppi_33_attribute_k57kmi67dy" IS 'btree index VariableRef(__node_a2cp5ppi33, __attribute_kvvribbpob)';
 
 COMMENT ON INDEX "qti"."__variable_ref_ix_node_ept_2_xsrq_7_v_parent_ute_33_bc7uvcfnfz" IS 'btree index VariableRef(__node_ept2xsrq7v, __parent_ute33fgrzx, __kind_3skb4abdy2, __language_g4fbnc6kzm, __element_base_s2ys2dkumh, __element_cardinality_kv7fsfl2bu)';
-
-COMMENT ON INDEX "qti"."__variable_ref_ix_node_uxuuifp_4_t_7_attribute_r_3_hbrsbajasi" IS 'btree index VariableRef(__node_uxuuifp4t7, __attribute_r3bfjzxqlg)';
 
 COMMENT ON INDEX "qti"."__variable_ref_ix_node_w_3_q_3_f_46_jo_2_language_ylud6vetn2" IS 'btree index VariableRef(__node_w3q3f46jo2, __language_hdk63u5nao)';
 
