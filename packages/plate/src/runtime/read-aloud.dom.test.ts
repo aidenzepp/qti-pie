@@ -13,15 +13,27 @@
 /// <reference types="vite-plus/client" />
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { commands, server } from "vite-plus/test/browser/context";
+import { commands, server, userEvent } from "vite-plus/test/browser/context";
 import { configure } from "#plate/configuration.ts";
 import { redact, render } from "#plate/render.ts";
 import { readAloud as entryReadAloud } from "#plate/runtime.dom.ts";
 import { liveSlot } from "#plate/runtime/announce.dom.ts";
 import { readAloud } from "#plate/runtime/read-aloud.dom.ts";
-import type { ReadAloudSynthesis, ReadAloudUtterance } from "#plate/runtime/read-aloud.dom.ts";
+import type {
+  ReadAloud,
+  ReadAloudSynthesis,
+  ReadAloudUtterance,
+  ReadAloudVoice,
+} from "#plate/runtime/read-aloud.dom.ts";
 import { noSupports } from "#plate/supports.ts";
-import type { ReadingType, Supports } from "#plate/supports.ts";
+import type {
+  LinkIndication,
+  ReadingType,
+  RestrictionType,
+  SpokenPreferences,
+  Supports,
+  TypingEcho,
+} from "#plate/supports.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -805,5 +817,762 @@ describe(server.browser, () => {
       assert.isFunction(entryReadAloud);
       assert.strictEqual(entryReadAloud, readAloud);
     });
+  });
+});
+
+/**
+ * The fixture item of issue m5-13, relative to the package.
+ */
+const spokenItem = "fixtures/m5/items/spoken.xml";
+
+/**
+ * Render the spoken fixture item as plate's SSR writes it, with the default configuration.
+ *
+ * @returns The item's HTML.
+ */
+const renderedSpoken = Effect.gen(function* renderSpokenFixture() {
+  const bytes = new TextEncoder().encode(
+    yield* Effect.promise(() => commands.readFile(spokenItem)),
+  );
+  const accepted = Option.getOrThrow(acceptedItem(yield* open(spokenItem, bytes)));
+  const configuration = yield* configure({});
+
+  return Result.getOrThrow(render(redact(accepted), configuration, { instance: "w0d" })).html;
+});
+
+/**
+ * Construct a candidate's spoken preferences: the PNP's defaults, a computer read-aloud reading
+ * type, and the changes given.
+ *
+ * @param changes The preferences to set.
+ * @returns The spoken preferences.
+ */
+const preferences = (changes: Partial<SpokenPreferences> = {}): SpokenPreferences => ({
+  linkIndication: Option.none(),
+  pitch: 0.5,
+  readingType: "computer-read-aloud",
+  restrictions: new Set(),
+  speechRate: 180,
+  typingEcho: Option.none(),
+  volume: 0.5,
+  ...changes,
+});
+
+/**
+ * A controller on a mounted item and the fake it speaks through.
+ */
+interface Attached {
+  readonly controller: ReadAloud;
+  readonly fake: FakeSynthesis;
+  readonly root: HTMLElement;
+}
+
+/**
+ * Mount an item and attach a controller to it with a recording fake.
+ *
+ * @param html The item's HTML.
+ * @param spokenPreferences The `spoken` option, none for the option left out.
+ * @param supports The supports, a computer-read-aloud candidate's by default.
+ * @param voices The voices the fake offers, none for a fake that lists none.
+ * @returns The mounted item, the controller and the fake.
+ */
+const attach = (
+  html: string,
+  spokenPreferences?: SpokenPreferences,
+  supports: Supports = computerReadAloud,
+  voices?: readonly ReadAloudVoice[],
+): Attached => {
+  const root = mount(html);
+  const fake = fakeSynthesis();
+  const common = {
+    supports,
+    synthesis:
+      voices === undefined ? fake.synthesis : { ...fake.synthesis, getVoices: () => voices },
+    utterance: fake.utterance,
+  };
+  const controller =
+    spokenPreferences === undefined
+      ? readAloud(root, common)
+      : readAloud(root, { ...common, spoken: spokenPreferences });
+
+  return { controller, fake, root };
+};
+
+/**
+ * End a test's attachment: release the controller and remove the item.
+ *
+ * @param attached The attachment.
+ */
+const detach = ({ controller, root }: Attached): void => {
+  controller.teardown();
+  unmount(root);
+};
+
+/**
+ * Focus a text control of a mounted item and type keys into it, as a candidate does.
+ *
+ * @param root The item root.
+ * @param selector The control's selector.
+ * @param keys The keys, in `userEvent.keyboard`'s syntax.
+ * @returns A promise settled when the keys were typed.
+ */
+const typeInto = async (root: HTMLElement, selector: string, keys: string): Promise<void> => {
+  const control = root.querySelector(selector);
+
+  assert.instanceOf(control, HTMLElement);
+  control.focus();
+  await userEvent.keyboard(keys);
+};
+
+/**
+ * The selector of the Text Entry's input in the spoken fixture.
+ */
+const textEntryControl = '[data-slot="text-entry-interaction-control"]';
+
+/**
+ * The selector of the Extended Text's textarea in the spoken fixture.
+ */
+const extendedTextControl = '[data-slot="extended-text-interaction-control"]';
+
+/**
+ * The spoken texts of the whole spoken fixture item for a computer-read-aloud candidate under no
+ * preference: the link's text and the emphasised word are text runs of their own.
+ */
+const spokenWhole = [
+  "Read the ",
+  "style guide",
+  " before you write.",
+  "The ",
+  "quick",
+  " answer is best.",
+  "Your name: ",
+  "Describe your day in two sentences.",
+];
+
+/**
+ * A formula as an HTML parser reads MathML into a page, which the spoken fixture cannot hold
+ * until the MathML module renders (issue m3e-05): the engine reads the DOM, whatever wrote it.
+ */
+const formula = "<p>Solve <math><mi>x</mi><mo>+</mo><mn>1</mn></math> now.</p>";
+
+/**
+ * Two rubric blocks as issue m3e-01 writes them, a `div` with `data-use` and `data-view`, which the
+ * spoken fixture cannot hold until the Rubric Block module renders.
+ */
+const rubrics =
+  '<div data-use="instructions" data-view="candidate"><p>Answer in one line.</p></div>' +
+  '<div data-use="navigation" data-view="candidate"><p>Use Next to move on.</p></div>';
+
+/**
+ * Put markup in front of an item's first paragraph.
+ *
+ * @param root The item root.
+ * @param html The markup.
+ */
+const insertFirst = (root: HTMLElement, html: string): void => {
+  const first = root.querySelector("p");
+
+  assert.isNotNull(first);
+  first.insertAdjacentHTML("beforebegin", html);
+};
+
+/**
+ * Put markup after an item's second paragraph.
+ *
+ * @param root The item root.
+ * @param html The markup.
+ */
+const insertAfterSecond = (root: HTMLElement, html: string): void => {
+  const [, second] = root.querySelectorAll("p");
+
+  assert.isDefined(second);
+  second.insertAdjacentHTML("afterend", html);
+};
+
+describe(server.browser, () => {
+  describe("the candidate's spoken preferences (issue m5-13)", () => {
+    it.effect("[A-40d] rate, pitch and volume reach each utterance", () =>
+      Effect.gen(function* prosodyReaches() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ pitch: 0.75, speechRate: 270, volume: 0.9 }),
+        );
+
+        attached.controller.play();
+
+        assert.deepStrictEqual(attached.fake.texts(), spokenWhole);
+
+        for (const utterance of attached.fake.spoken) {
+          assert.strictEqual(utterance.rate, 1.5, utterance.text);
+          assert.strictEqual(utterance.pitch, 1.5, utterance.text);
+          assert.strictEqual(utterance.volume, 0.9, utterance.text);
+        }
+
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40d] without spoken preferences the defaults apply", () =>
+      Effect.gen(function* defaultsApply() {
+        const attached = attach(yield* renderedSpoken);
+
+        attached.controller.play();
+
+        assert.deepStrictEqual(attached.fake.texts(), spokenWhole);
+
+        for (const utterance of attached.fake.spoken) {
+          assert.strictEqual(utterance.rate, 1, utterance.text);
+          assert.strictEqual(utterance.pitch, 1, utterance.text);
+          assert.strictEqual(utterance.volume, 0.5, utterance.text);
+        }
+
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40d] rate, pitch and volume are held within the Web Speech bounds", () =>
+      Effect.gen(function* boundsHold() {
+        const html = yield* renderedSpoken;
+        const cases: readonly {
+          readonly change: Pick<SpokenPreferences, "pitch" | "speechRate" | "volume">;
+          readonly want: readonly (number | undefined)[];
+        }[] = [
+          { change: { pitch: 9, speechRate: 99_999, volume: 4 }, want: [10, 2, 1] },
+          { change: { pitch: -1, speechRate: 1, volume: -2 }, want: [0.1, 0, 0] },
+          {
+            change: { pitch: Number.NaN, speechRate: Number.NaN, volume: Number.NaN },
+            want: [1, 1, 0.5],
+          },
+        ];
+
+        for (const { change, want } of cases) {
+          const attached = attach(html, preferences(change));
+
+          attached.controller.play();
+
+          const [first] = attached.fake.spoken;
+
+          assert.isDefined(first);
+          assert.deepStrictEqual([first.rate, first.pitch, first.volume], want);
+          detach(attached);
+        }
+      }),
+    );
+
+    /*
+     * Section 5's rows for the formula and the instructions rubric read SSR output, which the base
+     * cannot write: m3e-05 (MathML) and m3e-01 (Rubric Block) are not on renderer/m5/main, so they
+     * wait as todos, and the rows after them prove the same engine rules on spliced markup.
+     */
+    it.todo(
+      "[A-40c] skip-math-equations passes over the formula in silence (todo: needs m3e-05 MathML on renderer/m5/main)",
+    );
+
+    it.todo(
+      "[A-40c] directions-only reads only prompts and instruction rubrics (todo: needs m3e-01 Rubric Block on renderer/m5/main)",
+    );
+
+    it.effect(
+      "[A-40c] skip-math and skip-chemistry equations pass over a spliced math element in silence",
+      () =>
+        Effect.gen(function* skipsMath() {
+          const html = yield* renderedSpoken;
+
+          for (const restriction of ["skip-math-equations", "skip-chemistry-equations"] as const) {
+            const attached = attach(html, preferences({ restrictions: new Set([restriction]) }));
+
+            insertAfterSecond(attached.root, formula);
+            attached.controller.play();
+
+            const texts = attached.fake.texts();
+
+            assert.deepStrictEqual(
+              texts,
+              [
+                "Read the ",
+                "style guide",
+                " before you write.",
+                "The ",
+                "quick",
+                " answer is best.",
+                "Solve ",
+                " now.",
+                "Your name: ",
+                "Describe your day in two sentences.",
+              ],
+              restriction,
+            );
+
+            for (const piece of ["x", "+", "1"]) {
+              assert.notInclude(texts, piece, restriction);
+            }
+
+            detach(attached);
+          }
+
+          const unrestricted = attach(html, preferences());
+
+          insertAfterSecond(unrestricted.root, formula);
+          unrestricted.controller.play();
+          assert.deepStrictEqual(unrestricted.fake.texts().slice(6, 11), [
+            "Solve ",
+            "x",
+            "+",
+            "1",
+            " now.",
+          ]);
+          detach(unrestricted);
+        }),
+    );
+
+    it.effect("[A-40c] word-by-word reads only the chosen word", () =>
+      Effect.gen(function* wordByWord() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ restrictions: new Set(["word-by-word"]) }),
+        );
+        const word = attached.root.querySelector("em");
+
+        assert.isNotNull(word);
+        attached.controller.play(word);
+
+        assert.deepStrictEqual(attached.fake.texts(), ["quick"]);
+        assert.strictEqual(attached.controller.state, "speaking");
+
+        attached.fake.finish();
+        assert.strictEqual(attached.controller.state, "idle");
+
+        const link = attached.root.querySelector("a");
+
+        assert.isNotNull(link);
+        attached.controller.play(link);
+        assert.deepStrictEqual(attached.fake.texts(), ["quick", "style guide"]);
+
+        attached.fake.finish();
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40c] word-by-word reads nothing when no word is chosen", () =>
+      Effect.gen(function* noWordChosen() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ restrictions: new Set(["word-by-word"]) }),
+        );
+        const input = attached.root.querySelector(textEntryControl);
+
+        assert.isNotNull(input);
+        attached.controller.play();
+        attached.controller.play(attached.root);
+        attached.controller.play(document.body);
+        attached.controller.play(input);
+
+        assert.deepStrictEqual(attached.fake.texts(), []);
+        assert.strictEqual(attached.controller.state, "idle");
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40c] directions-only reads only the prompt of the rendered item", () =>
+      Effect.gen(function* directionsOnlyRendered() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ restrictions: new Set(["directions-only"]) }),
+        );
+
+        attached.controller.play();
+
+        assert.deepStrictEqual(attached.fake.texts(), ["Describe your day in two sentences."]);
+        detach(attached);
+      }),
+    );
+
+    it.effect(
+      "[A-40c] directions-only reads a spliced instructions rubric and the prompt, not a navigation rubric",
+      () =>
+        Effect.gen(function* directionsOnly() {
+          const attached = attach(
+            yield* renderedSpoken,
+            preferences({ restrictions: new Set(["directions-only"]) }),
+          );
+
+          insertFirst(attached.root, rubrics);
+          attached.controller.play();
+
+          assert.deepStrictEqual(attached.fake.texts(), [
+            "Answer in one line.",
+            "Describe your day in two sentences.",
+          ]);
+          detach(attached);
+        }),
+    );
+
+    it.effect("[A-40c] unrestricted, and an ext: restriction, read the whole item", () =>
+      Effect.gen(function* unrestricted() {
+        const html = yield* renderedSpoken;
+
+        const cases: readonly ReadonlySet<RestrictionType>[] = [
+          new Set(),
+          new Set(["unrestricted"]),
+          new Set(["unrestricted", "ext:slow-reveal"]),
+        ];
+
+        for (const restrictions of cases) {
+          const attached = attach(html, preferences({ restrictions }));
+
+          attached.controller.play();
+          assert.deepStrictEqual(attached.fake.texts(), spokenWhole, [...restrictions].join(" "));
+          detach(attached);
+        }
+      }),
+    );
+
+    it.effect(
+      "[A-40c] restrictions combine: word-by-word with a spliced formula passed over, and with directions-only",
+      () =>
+        Effect.gen(function* combine() {
+          const html = yield* renderedSpoken;
+          const mathAndWord = attach(
+            html,
+            preferences({ restrictions: new Set(["skip-math-equations", "word-by-word"]) }),
+          );
+
+          insertAfterSecond(mathAndWord.root, formula);
+
+          const digit = mathAndWord.root.querySelector("mn");
+          const word = mathAndWord.root.querySelector("em");
+
+          assert.isNotNull(digit);
+          assert.isNotNull(word);
+          mathAndWord.controller.play(digit);
+          assert.deepStrictEqual(mathAndWord.fake.texts(), [], "the formula is passed over");
+          mathAndWord.controller.play(word);
+          assert.deepStrictEqual(mathAndWord.fake.texts(), ["quick"]);
+          detach(mathAndWord);
+
+          const directionsAndWord = attach(
+            html,
+            preferences({ restrictions: new Set(["directions-only", "word-by-word"]) }),
+          );
+          const emphasis = directionsAndWord.root.querySelector("em");
+          const prompt = directionsAndWord.root.querySelector('[data-slot$="-prompt"]');
+
+          assert.isNotNull(emphasis);
+          assert.isNotNull(prompt);
+          directionsAndWord.controller.play(emphasis);
+          assert.deepStrictEqual(
+            directionsAndWord.fake.texts(),
+            [],
+            "a word outside the directions",
+          );
+          directionsAndWord.controller.play(prompt);
+          assert.deepStrictEqual(directionsAndWord.fake.texts(), [
+            "Describe your day in two sentences.",
+          ]);
+          detach(directionsAndWord);
+        }),
+    );
+
+    it.effect("[A-40d] speak-link says link before a link's text", () =>
+      Effect.gen(function* speakLink() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ linkIndication: Option.some("speak-link") }),
+        );
+
+        attached.controller.play();
+
+        const texts = attached.fake.texts();
+        const linked = texts.findIndex((text) => text.endsWith("style guide"));
+
+        assert.strictEqual(texts[linked], "link style guide");
+        assert.isTrue(texts[linked]?.startsWith("link"));
+        assert.deepStrictEqual(
+          texts.filter((_, index) => index !== linked),
+          spokenWhole.filter((text) => text !== "style guide"),
+          "no other utterance changes",
+        );
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40d] speak-link says link once, before the first text of a link of several", () =>
+      Effect.gen(function* oneLinkWord() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ linkIndication: Option.some("speak-link") }),
+        );
+
+        attached.root
+          .querySelector("a")
+          ?.replaceChildren(
+            ...new DOMParser().parseFromString("<b>see</b> the <i>guide</i>", "text/html").body
+              .childNodes,
+          );
+        attached.controller.play();
+
+        assert.deepStrictEqual(attached.fake.texts().slice(0, 6), [
+          "Read the ",
+          "link see",
+          " the ",
+          "guide",
+          " before you write.",
+          "The ",
+        ]);
+        detach(attached);
+      }),
+    );
+
+    it.effect(
+      "[A-40d] sound-effect marks a link as speak-link does, and none reads it as text",
+      () =>
+        Effect.gen(function* otherIndications() {
+          const html = yield* renderedSpoken;
+          const soundEffect = attach(
+            html,
+            preferences({ linkIndication: Option.some("sound-effect") }),
+          );
+
+          soundEffect.controller.play();
+          assert.include(soundEffect.fake.texts(), "link style guide");
+          detach(soundEffect);
+
+          const unmarked: readonly Option.Option<LinkIndication>[] = [
+            Option.some("none"),
+            Option.none(),
+          ];
+
+          for (const linkIndication of unmarked) {
+            const attached = attach(html, preferences({ linkIndication }));
+
+            attached.controller.play();
+            assert.deepStrictEqual(attached.fake.texts(), spokenWhole);
+            detach(attached);
+          }
+        }),
+    );
+
+    it.effect("[A-40d] different-voice reads the link text in the synthesis's second voice", () =>
+      Effect.gen(function* differentVoice() {
+        const first: ReadAloudVoice = { default: true, lang: "en-US", name: "Alpha" };
+        const second: ReadAloudVoice = { default: false, lang: "en-US", name: "Beta" };
+        const html = yield* renderedSpoken;
+        const attached = attach(
+          html,
+          preferences({ linkIndication: Option.some("different-voice") }),
+          computerReadAloud,
+          [first, second],
+        );
+
+        attached.controller.play();
+        assert.deepStrictEqual(
+          attached.fake.texts(),
+          spokenWhole,
+          "no link word with a second voice",
+        );
+        assert.deepStrictEqual(
+          attached.fake.spoken.map((utterance) => utterance.voice),
+          spokenWhole.map((text) => (text === "style guide" ? second : undefined)),
+        );
+        detach(attached);
+
+        for (const voices of [undefined, [first]]) {
+          const single = attach(
+            html,
+            preferences({ linkIndication: Option.some("different-voice") }),
+            computerReadAloud,
+            voices,
+          );
+
+          single.controller.play();
+          assert.include(
+            single.fake.texts(),
+            "link style guide",
+            "a single voice reads as speak-link",
+          );
+          assert.isTrue(single.fake.spoken.every((utterance) => utterance.voice === undefined));
+          detach(single);
+        }
+      }),
+    );
+
+    it.effect("[A-40e] typing-echo words speaks each completed word typed in a text entry", () =>
+      Effect.gen(function* echoWords() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ typingEcho: Option.some("words") }),
+        );
+
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "two words "));
+
+        assert.deepStrictEqual(attached.fake.texts(), ["two", "words"]);
+        assert.strictEqual(attached.controller.state, "idle", "the echo is no reading");
+        assert.deepStrictEqual(attached.fake.calls, ["speak", "speak"]);
+
+        for (const utterance of attached.fake.spoken) {
+          assert.strictEqual(utterance.rate, 1);
+          assert.strictEqual(utterance.lang, "en");
+        }
+
+        detach(attached);
+      }),
+    );
+
+    it.effect(
+      "[A-40e] typing-echo words completes a word on punctuation and keeps apostrophes inside",
+      () =>
+        Effect.gen(function* echoPunctuation() {
+          const attached = attach(
+            yield* renderedSpoken,
+            preferences({ typingEcho: Option.some("words") }),
+          );
+
+          yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "don't, stop. go"));
+
+          assert.deepStrictEqual(
+            attached.fake.texts(),
+            ["don't", "stop"],
+            "the word being typed is not yet complete",
+          );
+          detach(attached);
+        }),
+    );
+
+    it.effect("[A-40e] typing-echo words speaks the last word of a line in an extended text", () =>
+      Effect.gen(function* echoLine() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ typingEcho: Option.some("words") }),
+        );
+
+        yield* Effect.promise(() => typeInto(attached.root, extendedTextControl, "hi, yo{Enter}"));
+
+        assert.deepStrictEqual(attached.fake.texts(), ["hi", "yo"]);
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40e] typing-echo characters speaks each character typed", () =>
+      Effect.gen(function* echoCharacters() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ typingEcho: Option.some("characters") }),
+        );
+
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "ab c"));
+
+        assert.deepStrictEqual(attached.fake.texts(), ["a", "b", "space", "c"]);
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40e] typing-echo characters-and-words speaks each character and each word", () =>
+      Effect.gen(function* echoBoth() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ typingEcho: Option.some("characters-and-words") }),
+        );
+
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "ab "));
+
+        assert.deepStrictEqual(attached.fake.texts(), ["a", "b", "space", "ab"]);
+        detach(attached);
+      }),
+    );
+
+    it.effect("[A-40e] typing-echo none, and no typing echo, speak nothing", () =>
+      Effect.gen(function* echoOff() {
+        const html = yield* renderedSpoken;
+
+        const silent: readonly Option.Option<TypingEcho>[] = [Option.some("none"), Option.none()];
+
+        for (const typingEcho of silent) {
+          const attached = attach(html, preferences({ typingEcho }));
+
+          yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "two words "));
+          assert.deepStrictEqual(attached.fake.calls, []);
+          detach(attached);
+        }
+
+        const absent = attach(html);
+
+        yield* Effect.promise(() => typeInto(absent.root, textEntryControl, "two words "));
+        assert.deepStrictEqual(absent.fake.calls, []);
+        detach(absent);
+      }),
+    );
+
+    it.effect("[A-40e] typing echo is off for a screen-reader reading type", () =>
+      Effect.gen(function* echoOffForScreenReader() {
+        const html = yield* renderedSpoken;
+        const echoing = { typingEcho: Option.some("words" as const) };
+        const attachments = [
+          attach(
+            html,
+            preferences({ ...echoing, readingType: "screen-reader" }),
+            spoken("screen-reader"),
+          ),
+          attach(
+            html,
+            preferences({ ...echoing, readingType: "screen-reader" }),
+            computerReadAloud,
+          ),
+          attach(html, preferences(echoing), spoken("screen-reader")),
+        ];
+
+        for (const attached of attachments) {
+          assert.isFalse(attached.controller.available);
+          yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "two words "));
+          assert.deepStrictEqual(attached.fake.calls, []);
+          detach(attached);
+        }
+      }),
+    );
+
+    it.effect(
+      "[A-40e] an option-only spoken is off at the start: no read-aloud support, no echo",
+      () =>
+        Effect.gen(function* optionOnly() {
+          const attached = attach(
+            yield* renderedSpoken,
+            preferences({ typingEcho: Option.some("words") }),
+            noSupports,
+          );
+
+          assert.isFalse(attached.controller.available);
+          yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "two words "));
+          assert.deepStrictEqual(attached.fake.calls, []);
+          detach(attached);
+        }),
+    );
+
+    it.effect("[A-40e] the echo waits out a pause and ends at teardown", () =>
+      Effect.gen(function* echoPausedAndTornDown() {
+        const attached = attach(
+          yield* renderedSpoken,
+          preferences({ typingEcho: Option.some("words") }),
+        );
+
+        attached.controller.play();
+        attached.controller.pause();
+
+        const reading = attached.fake.spoken.length;
+
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "held "));
+        assert.strictEqual(attached.fake.spoken.length, reading, "nothing speaks under a pause");
+
+        attached.controller.resume();
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "back "));
+        assert.deepStrictEqual(attached.fake.texts().slice(reading), ["back"]);
+
+        attached.controller.teardown();
+
+        const afterTeardown = attached.fake.spoken.length;
+
+        yield* Effect.promise(() => typeInto(attached.root, textEntryControl, "gone "));
+        assert.strictEqual(attached.fake.spoken.length, afterTeardown);
+        unmount(attached.root);
+      }),
+    );
   });
 });

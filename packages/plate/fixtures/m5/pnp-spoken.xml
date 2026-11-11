@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile in the schema's spellings: the spoken preferences of rows A-40c, A-40d and A-40e, and the braille preferences of row A-10b. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <spoken>
+    <reading-type>computer-read-aloud</reading-type>
+    <restriction-type>skip-math-equations</restriction-type>
+    <speech-rate>270</speech-rate>
+    <pitch>0.75</pitch>
+    <volume>0.9</volume>
+    <link-indication>speak-link</link-indication>
+    <typing-echo>words</typing-echo>
+  </spoken>
+  <braille>
+    <grade>1</grade>
+    <braille-type>ueb</braille-type>
+    <math-type>nemeth</math-type>
+  </braille>
+</access-for-all-pnp>

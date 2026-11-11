@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="spoken" title="Spoken preferences" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="NAME" cardinality="single" base-type="string"/>
+  <qti-response-declaration identifier="ESSAY" cardinality="single" base-type="string"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p data-catalog-idref="braille-note">Read the <a href="https://example.org/guide">style guide</a> before you write.</p>
+    <p>The <em>quick</em> answer is best.</p>
+    <p>Your name: <qti-text-entry-interaction response-identifier="NAME" expected-length="20"/></p>
+    <qti-extended-text-interaction response-identifier="ESSAY">
+      <qti-prompt>Describe your day in two sentences.</qti-prompt>
+    </qti-extended-text-interaction>
+  </qti-item-body>
+  <qti-catalog-info>
+    <qti-catalog id="braille-note">
+      <qti-card support="braille">
+        <qti-card-entry data-braille-type="ueb" xml:lang="en">
+          <qti-html-content>
+            <p>The unified braille note.</p>
+          </qti-html-content>
+        </qti-card-entry>
+        <qti-card-entry data-braille-type="ebae" default="true" xml:lang="en">
+          <qti-html-content>
+            <p>The American edition braille note.</p>
+          </qti-html-content>
+        </qti-card-entry>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>
