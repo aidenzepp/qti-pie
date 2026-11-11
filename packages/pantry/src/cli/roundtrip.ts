@@ -141,21 +141,14 @@ export const roundtripCommand = Command.make(
     const { packageId, report } = yield* withAuthorApp(
       () =>
         Promise.all([
-          import("@bjornpagen/grizzle/runtime"),
-          import("#pantry/db/served.ts"),
+          import("#pantry/db/layer.ts"),
           import("#pantry/import/read.ts"),
           import("#pantry/import/package.ts"),
           import("#pantry/export/package.ts"),
         ]),
-      ([
-        { Db },
-        { AuthorLogin },
-        { readPackage },
-        { importPackage },
-        { compareExported, exportPackage },
-      ]) =>
+      ([{ authorDb }, { readPackage }, { importPackage }, { compareExported, exportPackage }]) =>
         Effect.gen(function* roundtripOnPool() {
-          const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
+          const db = yield* authorDb;
           const stored = yield* importPackage(db.workload, yield* readPackage(dir));
           const compared = yield* replaceWith(exportDir, (written) =>
             Effect.flatMap(exportPackage(stored, written), (entries) =>

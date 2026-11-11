@@ -1,5 +1,5 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { DbLayer, served } from "@bjornpagen/grizzle/runtime";
+import { Db, DbLayer, served } from "@bjornpagen/grizzle/runtime";
 import type { PoolBounds } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { primedLoginConnection } from "#pantry/db/connection.ts";
@@ -79,3 +79,16 @@ export const AuthorAppLayer = Layer.unwrap(
  * the layer provides neither. Building it fails as {@link AuthorAppLayer} fails.
  */
 export const ImportLive = Layer.merge(AuthorAppLayer, NodeFileSystem.layer);
+
+/**
+ * The author role's `Db` over {@link AuthorAppLayer}: the served author login's `author` role,
+ * opened with no token, the `Db` whose workload the command line imports and round-trips through
+ * (`importPackage(db.workload, pkg)` of `#pantry/import/package.ts`). It is here, in the database
+ * layer, so the command line opens it without reading `#pantry/db/served.ts` itself.
+ *
+ * `Db.open` contacts nothing of the database; it fails with grizzle's `OpenError` only where the
+ * host refuses the role.
+ */
+export const authorDb = Effect.gen(function* authorDb() {
+  return yield* Db.open((yield* AuthorLogin).roles.author, {});
+});

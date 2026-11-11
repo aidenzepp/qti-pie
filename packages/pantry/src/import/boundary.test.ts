@@ -154,9 +154,9 @@ const crossings: ByStep = [
     ],
   ],
   // S10 takes out of each module the code of the other side, which no export can carry across:
-  // `ingest` with its login (the served `AuthorLogin` of `db/served.ts`, which `db/layer.ts`
-  // provides, and the author role's type of `qti/roles.ts`), retries and refusal report out of
-  // `import/package.ts`; the row type with its relations out of `import/write.ts` into the
+  // `ingest` with its login's members (the types of `importWrite` and `packageOf` in
+  // `qti/logins.ts`, which type the author `Db`'s workload it applies through), retries and refusal
+  // report out of `import/package.ts`; the row type with its relations out of `import/write.ts` into the
   // schema, where the author login's workload reads them; the reader's refusal out of `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`,
   // and the database's refusal an error of its own, so `import/refusal.ts` reads no
   // `ImportRefused` and the command line gets the database's refusal from `ingest` (§2.4); the
@@ -174,9 +174,8 @@ const crossings: ByStep = [
       "export/pages.ts: #pantry/model/assemble.ts",
       "export/pages.ts: #pantry/model/xdm.ts",
       "export/render.ts: #pantry/export/pages.ts",
-      "import/package.ts: #pantry/db/served.ts",
       "import/package.ts: #pantry/import/refusal.ts",
-      "import/package.ts: #pantry/qti/roles.ts",
+      "import/package.ts: #pantry/qti/logins.ts",
       "import/refusal.ts: #pantry/import/rules.ts",
       "import/rules.ts: #pantry/package/refusal-origin.ts",
       "qti/attributes.ts: #pantry/model/xdm.ts",
