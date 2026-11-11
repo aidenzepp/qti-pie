@@ -3021,6 +3021,9 @@ served the author login's committed workload. Not re-measured at `eb56d58b`, the
   holds no reproduction, issue or reply for it. `src/export/package.db.test.ts`'s `importHookTimeoutMs`, twice
   `leaseTestTimeoutMs`, is a budget and not a measurement of its hook: the hook loads the author layer, which compiles
   nothing, and imports every accepted package, so its measurement is still owed and needs the cluster as well.
+- **Deleted.** pantry's database-test cull of 2026-11-11 deleted `src/export/package.db.test.ts`: it caught no bug, and
+  its paging, one-statement and plan checks are grizzle's own (`test/pg/page/plans.test.ts` at `791f16e`). No pantry test
+  pays this cost now; a measurement of it is grizzle's to take.
 
 ## grizzle's own reds at the `eb56d58` pin (#379; trunk checked at `4ad41b69`)
 

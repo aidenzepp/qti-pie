@@ -59,10 +59,8 @@ export const authorReads = {
 /**
  * Build the author application's two workloads over an author role: {@link authorReads}, and
  * {@link importWrite}. {@link AuthorApp} holds them over {@link Author}, and `MediaAuthorApp` of
- * `#pantry/qti/media.ts` the same two over its role over `QtiMedia`; a database test
- * compiles them with members of its own beside them over a role of its own
- * (`#pantry/test/served-members.ts`), since grizzle puts a role in one login only. Every program is
- * over `Qti`, so each login serves the same members.
+ * `#pantry/qti/media.ts` the same two over its role over `QtiMedia`. Every program is over `Qti`,
+ * so each login serves the same members.
  *
  * @param _qti - `Qti`, which every program is over.
  * @param author - The author role, {@link Author} or a role of the same entries over `Qti`.

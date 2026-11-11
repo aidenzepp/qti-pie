@@ -376,8 +376,7 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
     // Oracle: the specification as a checker: a document holds one Document row, on its document
     // node, which the read takes the document's charsets from. A page stream is the database's,
     // read as grizzle's cursors give it (the cuts above), so no page variant is judged here; an
-    // XmlDecl row's version is the database's to hold, by its pattern law
-    // (`#pantry/export/trusted-laws.db.test.ts`), so no case breaks it.
+    // XmlDecl row's version is the database's to hold, by its pattern law, so no case breaks it.
     // Bound: the generator's drawn bounds, one document a case.
     searched(
       ctx,

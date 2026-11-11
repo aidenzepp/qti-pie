@@ -7,8 +7,7 @@
  * reads it with `readFileString`), so evaluating a production module parses none of its megabytes
  * and no bundle carries it. grizzle's `DbLayer.make` loads the file's workloads and compiles
  * nothing, and its pool opens no session until a `Db` asks for one. Test support may import the
- * snapshot as a module: a probe's compile reads it (`#pantry/test/served-members.ts`), and only a
- * test evaluates it.
+ * snapshot as a module, since only a test evaluates it.
  *
  * Oracle: grizzle's `served` and `DbLayer.make`, which refuse a file of another login at stage
  * `config`, beside `ServedLoadError` for a file that cannot be read or is no JSON; and a search of
@@ -136,7 +135,7 @@ describe("db/layer.ts, read from disk", () => {
         path.join("db", "layer.ts"),
         path.join("import", "package.ts"),
         path.join("db", "layer.test.ts"),
-        path.join("test", "served-members.ts"),
+        path.join("test", "scratch.ts"),
       ].map(isProduction),
       [true, true, false, false],
     );
