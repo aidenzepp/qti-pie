@@ -19,8 +19,9 @@ import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
- * The payload the codec checks, which `src/react/test-wire.test.tsx` pins to the contract's
- * `ItemViewPayload`: the contract is a `.tsx` file, which this file's `tsc` project cannot resolve.
+ * The payload the codec checks, which `src/react/assessment-test-wire.test.tsx` pins to the
+ * contract's `ItemViewPayload`: the contract is a `.tsx` file, which this file's `tsc` project
+ * cannot resolve.
  */
 type ItemViewPayload = typeof ItemViewPayloadSchema.Type;
 

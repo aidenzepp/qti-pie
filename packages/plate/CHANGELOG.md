@@ -131,8 +131,8 @@ line when the area merges.
   Q-4, Q-7, Q-9, Q-14, Q-15, Q-17, Q-18, Q-19, Q-21) _(pending m3g-04)_
 - the shadcn registry item: `registry.json`, the item installing the components and the sheet
   _(pending m3g-05)_
-- `TestProvider`: the transport, the hooks, and `createTestServer` over plate's session functions
-  _(pending m3g-06)_
+- `AssessmentTestProvider`: the transport, the hooks, and `createAssessmentTestServer` over plate's
+  session functions _(pending m3g-06)_
 - the React 19 host fixture (criterion 10): one item rendered and scored with a shadcn theme
   _(pending m3g-07)_
 - the reference app: React, shadcn, React Hook Form, a sample test end to end in Chromium and

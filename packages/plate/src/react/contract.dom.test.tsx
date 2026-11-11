@@ -3,7 +3,7 @@
  * plate's part functions build for the M2 Choice fixture to the same `data-slot` markers, ids and
  * entry names as `render`'s HTML (OD-8: one emitter, a React projection); every stub component (the
  * 21 interactions', `Item`, `Status` and `Navigation`) renders the item's notice; and
- * `TestProvider` fails at mount naming the issue that fills it.
+ * `AssessmentTestProvider` fails at mount naming the issue that fills it.
  *
  * Every case sits under a `describe` named by the engine (`server.browser`), as in
  * `src/test/page.dom.test.ts`.
@@ -27,6 +27,7 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { payload } from "#plate/payload.ts";
 import type { EmitState, Redacted } from "#plate/payload.ts";
 import {
+  AssessmentTestProvider,
   Associate,
   Choice,
   Drawing,
@@ -50,7 +51,6 @@ import {
   SelectPoint,
   Slider,
   Status,
-  TestProvider,
   TextEntry,
   Upload,
   useParts,
@@ -293,14 +293,14 @@ describe(server.browser, () => {
     );
   });
 
-  describe("TestProvider", () => {
+  describe("AssessmentTestProvider", () => {
     it("fails at mount with NotImplemented naming m3g-06", () => {
       const errors: unknown[] = [];
       const transport = {
         post: () => Promise.reject(new NotImplemented({ issue: "test", piece: "post" })),
         view: () => Promise.reject(new NotImplemented({ issue: "test", piece: "view" })),
       };
-      const { unmount } = mount(<TestProvider transport={transport} />, {
+      const { unmount } = mount(<AssessmentTestProvider transport={transport} />, {
         onUncaughtError: (thrown) => {
           errors.push(thrown);
         },
@@ -313,7 +313,7 @@ describe(server.browser, () => {
       assert.strictEqual(errors.length, 1);
       assert.instanceOf(error, NotImplemented);
       assert.strictEqual(error.issue, "m3g-06");
-      assert.strictEqual(error.piece, "TestProvider");
+      assert.strictEqual(error.piece, "AssessmentTestProvider");
     });
   });
 });
