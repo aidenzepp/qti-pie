@@ -2574,7 +2574,14 @@ follows is history.
 - **LP's last commit,** `d13a8389`, finds the sentinel-range characters a document writes with one regex in crust, not
   a walk over every code point.
 
-## A fixed target's UNIQUE: one set of columns, a second index in another order (cost, open)
+## A fixed target's UNIQUE: one set of columns, a second index in another order (cost; fixed in grizzle `b724f378`)
+
+**Closed** at the repin to grizzle `589646c4`: DUPINDEX-01 (`b724f378`) holds one key per column set, merging every
+primary key, UNIQUE and span key of a relation by its set, and refuses a declared key over another key's set
+(`MalformedDescription`). The `_init` drafted from zero there drops the later-order UNIQUE of each of the seven
+groups (`aria_value`, `binding_name`, `cn_attribute`, `expression_attribute`, `instance`, `interaction_attribute`,
+`node`), each beside its kept key over the same set; pantry declared none of them and changes nothing, and no
+declared key of `Qti` restates another. What follows is history.
 
 Found at grizzle trunk `3cc8fbd` (`3cc8fbda540167265f51b94f462d58f1cc2b6bc6`, 2026-11-08), rehearsing the repin past
 `0c2154c`, when the three `constant(...)` source terms became fixed targets (`3cc8fbda`).
