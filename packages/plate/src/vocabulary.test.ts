@@ -582,7 +582,7 @@ describe("the vocabulary class inventory", () => {
     assert.deepStrictEqual([...behaviourClasses["inline-choice-interaction"]], []);
   });
 
-  it("[I-19] styles the six body utility classes and nothing else on the body", () => {
+  it("[I-19] styles the six body utility classes and qti-keyword-emphasis, and nothing else on the body", () => {
     assert.sameMembers(
       [...styledClasses.body],
       [
@@ -592,6 +592,7 @@ describe("the vocabulary class inventory", () => {
         "qti-italic",
         "qti-bordered",
         "qti-well",
+        "qti-keyword-emphasis",
       ],
     );
     assert.deepStrictEqual([...behaviourClasses.body], []);

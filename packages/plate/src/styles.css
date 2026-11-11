@@ -1216,6 +1216,17 @@
 /* end supports */
 
 /* begin keyword-emphasis (issue m5-11) */
+
+/*
+ * Keyword emphasis (A-23): text of the class qti-keyword-emphasis is set heavier and underlined
+ * only inside an item whose Root carries data-keyword-emphasis, which the Root hook writes for a
+ * candidate whose PNP asks for it. For every other candidate the class renders plain.
+ */
+:where([data-slot="item"][data-keyword-emphasis]) .qti-keyword-emphasis {
+  font-weight: 700;
+  text-decoration-line: underline;
+}
+
 /* end keyword-emphasis */
 
 /* begin display (issue m5-12) */

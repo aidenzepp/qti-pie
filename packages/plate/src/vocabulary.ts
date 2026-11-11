@@ -493,14 +493,17 @@ const writingClasses = [
  * The vocabulary classes plate's stylesheet gives a presentation, by owner.
  *
  * The inventory is closed: a `qti-*` class outside it has no rule. It holds no alias for the
- * corpus misspelling `qti-label-suffix-period`, and not `qti-keyword-emphasis` (M4). The rest of
- * the vocabulary's utility classes and its layout grid are M3's.
+ * corpus misspelling `qti-label-suffix-period`. `qti-keyword-emphasis`, a preference of the PNP
+ * (A-23, issue m5-11), is the body's one class that styles only under its Root's
+ * `data-keyword-emphasis`. The rest of the vocabulary's utility classes and its layout grid are
+ * M3's.
  */
 export const styledClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
   /**
    * The general utility classes on the item body: `vocab.txt:441` (`qti-visually-hidden`), `:559`
    * (`qti-underline`), `:578` (`qti-italic`), `:1010` (`qti-hidden`) and `:1061` (`qti-bordered`,
-   * `qti-well`).
+   * `qti-well`), and `qti-keyword-emphasis` (A-23, issue m5-11), which the sheet styles only inside
+   * a Root that carries `data-keyword-emphasis`.
    */
   body: [
     "qti-hidden",
@@ -509,6 +512,7 @@ export const styledClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
     "qti-italic",
     "qti-bordered",
     "qti-well",
+    "qti-keyword-emphasis",
   ],
   /**
    * Choice's labels, suffixes, orientation, stacking, hidden controls and vertical writing: the

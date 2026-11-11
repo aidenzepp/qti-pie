@@ -28,6 +28,11 @@
  *   `data-color-theme` ({@link colorThemes} and `ext:` names), which plate's sheet applies, and
  *   `data-font-family`, the names quoted in order and then the generic family, which no scale
  *   bounds and so is the host's to apply.
+ * - **Keyword emphasis (A-23)**: the bare `data-keyword-emphasis`, written exactly when
+ *   `display.keywordEmphasis` is true (issue m5-11). It carries no value to check. It marks the
+ *   Root for the rule of plate's sheet on text of the class `qti-keyword-emphasis`; without it the
+ *   class renders plain, as emphasis meant for everyone is written with `strong` or `em`. The Root
+ *   row of the part table does not list it, so a host's replacement of the Root may drop it.
  *
  * **The host-sheet contract.** plate applies no colour a host passed and no font family a host
  * named: its sheet cannot read an arbitrary attribute value. The host applies them through its own
@@ -45,6 +50,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import type { RootHook } from "#plate/content/contract.ts";
+import { when } from "#plate/emit/node.ts";
 import type { Attributes } from "#plate/emit/node.ts";
 import { noSupports } from "#plate/supports.ts";
 import type {
@@ -347,7 +353,7 @@ const polarityAttributes = (display: DisplayPreferences): Attributes =>
 
 /**
  * Write the Root's attributes for a candidate's display preferences: the magnification step, the
- * polarity, the single-column marker, then the text appearance.
+ * polarity, the single-column marker, the text appearance, then the keyword emphasis marker.
  *
  * @param display The display preferences of the supports.
  * @returns The data attributes that apply, an empty record when no preference applies.
@@ -363,16 +369,17 @@ const attributesOf = (display: DisplayPreferences): Attributes => ({
     Option.some("single-column").pipe(Option.filter(() => display.layoutSingleColumn)),
   ),
   ...display.text.pipe(Option.match({ onNone: () => ({}), onSome: textAttributes })),
+  ...when(display.keywordEmphasis, { "data-keyword-emphasis": true }),
 });
 
 /**
- * The Root hook: the display preferences (A-20, A-26, A-30a and A-30b, A-42b) as data attributes
- * on the item Root, as the module head states (D25, issues m3e-09b and m5-12).
+ * The Root hook: the display preferences (A-20, A-23, A-26, A-30a and A-30b, A-42b) as data
+ * attributes on the item Root, as the module head states (D25, issues m3e-09b, m5-11 and m5-12).
  *
  * It reads `state.supports.display` alone, an absent `supports` reading as none, and writes only
  * the attributes the module head names: no `style` on any element, no class, and no attribute the
- * chrome writes. The Root row of the part table merges each of them, so a host's replacement of the
- * Root cannot drop one and the sheet may key on it.
+ * chrome writes. The Root row of the part table merges each of them but the keyword emphasis
+ * marker, so a host's replacement of the Root cannot drop one of those and the sheet may key on it.
  */
 export const rootHook: RootHook = {
   /**

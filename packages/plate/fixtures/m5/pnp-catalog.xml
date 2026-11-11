@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A hand-written AfA PNP 3.0 profile in the schema's spellings that assigns, and activates at the start, the catalog supports, keyword emphasis, captions and alternative text, with keyword translation in Spanish. -->
+<access-for-all-pnp xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0pnp_v1p0">
+  <additional-directions/>
+  <keyboard-directions/>
+  <linguistic-guidance/>
+  <simplified-graphics/>
+  <simplified-language-portions/>
+  <keyword-translation xml:lang="es"/>
+  <keyword-emphasis/>
+  <captions/>
+  <alternative-text/>
+  <activate-at-initialization-set>
+    <additional-directions/>
+    <keyboard-directions/>
+    <linguistic-guidance/>
+    <simplified-graphics/>
+    <simplified-language-portions/>
+    <keyword-translation/>
+    <keyword-emphasis/>
+    <captions/>
+    <alternative-text/>
+  </activate-at-initialization-set>
+</access-for-all-pnp>

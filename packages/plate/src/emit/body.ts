@@ -20,6 +20,12 @@
  * (`RenderInteraction.dock`), whose nodes replace its content; the hook answers none while no
  * module declares `dock`, and the element then renders as any other.
  *
+ * Two supports of the candidate change one element each, and only for a candidate who asks (issue
+ * m5-11): captions (A-13a) write `default` on one captions `track` of each `video`
+ * ({@link captioned}), and alternative text (A-7) follows each `img` that has an `alt` with its
+ * text shown ({@link altTextAfter}). With neither in the state's supports, no element changes, and
+ * every output is what it was before the step.
+ *
  * The emitter value-imports no interaction module and nothing that reaches one, neither
  * `#plate/model/interactions.ts` nor `#plate/emit/item.ts` (which reaches them through the
  * payload), so a module may value-import {@link emitNodes} to write its content without a cycle: a
@@ -694,7 +700,17 @@ const blank = /^[\t\n\f\r ]*$/u;
  * stand.
  */
 interface Walk {
+  /**
+   * Whether the candidate's supports ask for alternative text shown (A-7, issue m5-11), from the
+   * state's `supports`; false when it holds none.
+   */
+  readonly alternativeText: boolean;
   readonly assetBase: string;
+  /**
+   * Whether the candidate's supports ask for captions shown automatically (A-13a, issue m5-11),
+   * from the state's `supports`; false when it holds none.
+   */
+  readonly captions: boolean;
   /**
    * The nodes an attach answer places after the nearest enclosing element at a flow position
    * (`after-block` in {@link AttachAnswer}), waiting for that element's emission to flush them
@@ -709,6 +725,11 @@ interface Walk {
    */
   readonly headingOffset: number;
   readonly instance: string;
+  /**
+   * The item's language, `payload.lang`, which the captions track to default is matched against
+   * (A-13a).
+   */
+  readonly lang: string;
   readonly locale: Locale;
   /**
    * How many id-less elements referencing each catalog the walk has handed `attach`, and naming
@@ -1130,6 +1151,161 @@ const attached = (
   });
 
 /**
+ * Read an emitted element's attribute as text.
+ *
+ * @param element The element as emitted.
+ * @param name The attribute's name.
+ * @returns The attribute's value; none when the element lacks it or carries it as a boolean.
+ */
+const textAttribute = (element: Element, name: string): Option.Option<string> =>
+  Option.filter(
+    Option.fromUndefinedOr(element.attrs[name]),
+    (value): value is string => value !== true,
+  );
+
+/**
+ * Fold a language tag's ASCII capitals to lower case, which is how a language tag is compared:
+ * "At all times, language tags and their subtags, including private use and extensions, are to be
+ * treated as case insensitive" (RFC 5646, section 2.1.1).
+ *
+ * @param tag The tag as written.
+ * @returns The tag with `A` to `Z` as `a` to `z`.
+ */
+const foldedTag = (tag: string): string =>
+  tag.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
+
+/**
+ * Tell whether an emitted element is a `track` of one of the kinds, `kind` being an enumerated
+ * attribute that HTML reads without regard to ASCII case.
+ *
+ * @param node The node.
+ * @param kinds The kinds, lower case.
+ * @returns Whether the node is a `track` whose `kind` is one of them.
+ */
+const isTrackOf = (node: Node, kinds: readonly string[]): node is Element =>
+  node.kind === "element" &&
+  node.tag === "track" &&
+  Option.exists(textAttribute(node, "kind"), (kind) => kinds.includes(foldedTag(kind)));
+
+/**
+ * Pick the captions track of a `video` that is written with `default` (A-13a, issue m5-11): the
+ * first `track` whose `kind` is `captions` and whose `srclang` is the item's language, else the
+ * first captions `track`, in document order.
+ *
+ * A `video` the author already gave a default `track`, of kind `captions` or `subtitles`, has none
+ * picked: HTML allows one default among those, and the author's stands.
+ *
+ * @param video The `video` as emitted.
+ * @param lang The item's language.
+ * @returns The track to default; none when the `video` has no captions track or the author has
+ *   defaulted one.
+ */
+const trackToDefault = (video: Element, lang: string): Option.Option<Element> => {
+  const authored = video.children.some(
+    (child) => isTrackOf(child, ["captions", "subtitles"]) && Object.hasOwn(child.attrs, "default"),
+  );
+  const captions = video.children.filter((child): child is Element =>
+    isTrackOf(child, ["captions"]),
+  );
+
+  return authored
+    ? Option.none()
+    : Option.fromUndefinedOr(
+        captions.find((track) =>
+          Option.exists(
+            textAttribute(track, "srclang"),
+            (srclang) => foldedTag(srclang) === foldedTag(lang),
+          ),
+        ) ?? captions[0],
+      );
+};
+
+/**
+ * Write `default` on the captions track of a `video` for a candidate whose supports ask for
+ * captions (A-13a, issue m5-11), so the browser shows the captions without the candidate turning
+ * them on ({@link trackToDefault} picks the track).
+ *
+ * @param element The element as emitted.
+ * @param walk What the walk carries: whether captions are on and the item's language.
+ * @returns The `video` with the picked track's `default`; the element itself, unchanged, when it
+ *   is not a `video`, the candidate does not ask or no track is picked.
+ */
+const captioned = (element: Element, walk: Walk): Element =>
+  walk.captions && element.tag === "video"
+    ? Option.match(trackToDefault(element, walk.lang), {
+        onNone: () => element,
+        onSome: (picked) =>
+          h(
+            element.tag,
+            element.attrs,
+            element.children.map((child) =>
+              child === picked
+                ? h(picked.tag, { ...picked.attrs, default: true }, picked.children)
+                : child,
+            ),
+          ),
+      })
+    : element;
+
+/**
+ * Construct the Alt Text part: the `span` that shows an image's alternative text, hidden from
+ * assistive technology because the image's `alt` is already its accessible name, so a screen
+ * reader reads the text once.
+ *
+ * @param alternative The image's `alt`.
+ * @param walk What the walk carries: the part overrides.
+ * @returns The `span`, or the refusal of its replacement.
+ */
+const altTextPart = (alternative: string, walk: Walk): Result.Result<Element, PartSwapRefused> => {
+  const row = rowFor("alt-text", "root");
+
+  return applyPart(
+    row,
+    { "aria-hidden": "true", "data-slot": row.slot },
+    [text(alternative)],
+    Option.getOrUndefined(walk.parts.replacementFor("alt-text", "root")),
+  );
+};
+
+/**
+ * Follow an emitted `img` with its alternative text shown, for a candidate whose supports ask for
+ * it (A-7, issue m5-11). The `img` keeps its `alt`, so the text stays its programmatic name; the
+ * `span` that follows it is the visual copy ({@link altTextPart}). An `alt` that is empty or only
+ * ASCII whitespace marks a decorative image and gets none. The walk gives the `span` wherever it
+ * emits an image, in the body, in a Prompt or a choice, and in the content of a catalog card.
+ *
+ * @param nodes What the element emitted: the element first, then any nodes a catalog presenter
+ *   attached after it.
+ * @param walk What the walk carries: whether alternative text is on, and the part overrides.
+ * @returns The nodes with the `span` right after the `img`; the nodes themselves, unchanged, when
+ *   the first is not an `img` with an `alt` or the candidate does not ask; or the refusal of the
+ *   part's replacement.
+ */
+const altTextAfter = (
+  nodes: readonly Node[],
+  walk: Walk,
+): Result.Result<readonly Node[], PartSwapRefused> => {
+  const [first, ...rest] = nodes;
+
+  if (!walk.alternativeText || first?.kind !== "element" || first.tag !== "img") {
+    return Result.succeed(nodes);
+  }
+
+  return Option.match(
+    Option.filter(textAttribute(first, "alt"), (alternative) => !blank.test(alternative)),
+    {
+      onNone: () => Result.succeed(nodes),
+      onSome: (alternative) =>
+        Result.map(altTextPart(alternative, walk), (part): readonly Node[] => [
+          first,
+          part,
+          ...rest,
+        ]),
+    },
+  );
+};
+
+/**
  * Dock a module's nodes into an emitted element that names a stimulus, through the render
  * function's `dock`: the nodes it answers replace the element's content.
  *
@@ -1168,6 +1344,11 @@ const docked = (
  * references a catalog, and then the nodes its subtree deferred to it when it stands at a flow
  * position.
  *
+ * For a candidate who asks, a `video` is written with its captions track defaulted
+ * ({@link captioned}, A-13a) and an `img` with an `alt` is followed by that text shown
+ * ({@link altTextAfter}, A-7); the `span` stands before the nodes a presenter attaches, so it
+ * follows its image directly.
+ *
  * @param element The element's payload.
  * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
  * @param walk What the walk carries.
@@ -1183,18 +1364,24 @@ const admittedElement = (
   const inner = below(walk, element.tag);
 
   return Result.map(
-    Result.flatMap(elementOf(element, declared, inner), (emitted) =>
-      Result.flatMap(
-        Option.match(Option.fromUndefinedOr(element.stimulus), {
-          onNone: () => Result.succeed(emitted),
-          onSome: (idref) => docked(emitted, idref, walk),
-        }),
-        (hosting) =>
-          Option.match(Option.fromUndefinedOr(element.catalog), {
-            onNone: () => Result.succeed([hosting]),
-            onSome: (idref) => attached(hosting, idref, walk),
+    Result.flatMap(
+      Result.flatMap(elementOf(element, declared, inner), (emitted) =>
+        Result.flatMap(
+          Option.match(Option.fromUndefinedOr(element.stimulus), {
+            onNone: () => Result.succeed(emitted),
+            onSome: (idref) => docked(emitted, idref, walk),
           }),
+          (hosting) => {
+            const shown = captioned(hosting, walk);
+
+            return Option.match(Option.fromUndefinedOr(element.catalog), {
+              onNone: () => Result.succeed([shown]),
+              onSome: (idref) => attached(shown, idref, walk),
+            });
+          },
+        ),
       ),
+      (nodes) => altTextAfter(nodes, walk),
     ),
     (nodes) => (inner.deferred === walk.deferred ? nodes : [...nodes, ...inner.deferred]),
   );
@@ -1498,7 +1685,9 @@ const walkOf = (
   renderInteraction: RenderInteraction,
   position: Position,
 ): Walk => ({
+  alternativeText: state.supports?.alternativeText ?? false,
   assetBase: state.assetBase,
+  captions: state.supports?.captions ?? false,
   deferred: [],
   headingOffset: headingOffsetOf(
     payload.body,
@@ -1507,6 +1696,7 @@ const walkOf = (
     contentNodesOf(renderInteraction),
   ),
   instance: payload.instance,
+  lang: payload.lang,
   locale: state.locale,
   minted: new Map(),
   parts: state.parts,

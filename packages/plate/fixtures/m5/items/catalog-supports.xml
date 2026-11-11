@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0p1_v1p0.xsd"
+  identifier="m5-catalog-supports" title="Kelp forest" adaptive="false" time-dependent="false" xml:lang="en">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+    <qti-correct-response>
+      <qti-value>B</qti-value>
+    </qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+    <qti-default-value>
+      <qti-value>0</qti-value>
+    </qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body>
+    <p data-catalog-idref="support-cards">A kelp forest grows in cold, clear water, and young fish shelter among its fronds.</p>
+    <p><img data-catalog-idref="simple-graphics" src="images/kelp-forest.png" alt="Sunlight falls through a dense kelp forest onto a school of small fish" width="320" height="200"/></p>
+    <p><img src="images/kelp-canopy.png" alt="The kelp canopy seen from a boat, a dark green mat on the surface" width="320" height="200"/></p>
+    <video controls="controls" src="media/kelp-forest.mp4" width="320" height="200">
+      <track kind="captions" src="media/kelp-forest.fr.vtt" srclang="fr"/>
+      <track kind="captions" src="media/kelp-forest.en.vtt" srclang="en"/>
+    </video>
+    <p>Kelp grows fastest where the water is <span class="qti-keyword-emphasis">cold and rich in nutrients</span>.</p>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-prompt>Where do young fish shelter?</qti-prompt>
+      <qti-simple-choice identifier="A">On the open sand</qti-simple-choice>
+      <qti-simple-choice identifier="B">Among the kelp fronds</qti-simple-choice>
+      <qti-simple-choice identifier="C">Beside the boat</qti-simple-choice>
+    </qti-choice-interaction>
+  </qti-item-body>
+  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
+  <qti-catalog-info>
+    <qti-catalog id="support-cards">
+      <qti-card support="additional-directions">
+        <qti-html-content>
+          <p>Study the passage once, then say its main idea in your own words before you answer.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="keyboard-directions">
+        <qti-html-content>
+          <p>Press the arrow keys to move between the choices, then press Space to pick one.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="linguistic-guidance">
+        <qti-html-content>
+          <p>Here a forest means many tall sea plants growing close together under water.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="simplified-language-portions">
+        <qti-html-content>
+          <p>Kelp is a big sea plant. Small fish hide in it.</p>
+        </qti-html-content>
+      </qti-card>
+      <qti-card support="keyword-translation">
+        <qti-card-entry xml:lang="es">
+          <qti-html-content>
+            <p>bosque de algas</p>
+          </qti-html-content>
+        </qti-card-entry>
+        <qti-card-entry xml:lang="fr" default="true">
+          <qti-html-content>
+            <p>forêt de varech</p>
+          </qti-html-content>
+        </qti-card-entry>
+      </qti-card>
+    </qti-catalog>
+    <qti-catalog id="simple-graphics">
+      <qti-card support="simplified-graphics">
+        <qti-html-content>
+          <p><img src="images/kelp-forest-simple.png" alt="Three tall green stripes standing in blue water" width="160" height="100"/></p>
+        </qti-html-content>
+      </qti-card>
+    </qti-catalog>
+  </qti-catalog-info>
+</qti-assessment-item>
