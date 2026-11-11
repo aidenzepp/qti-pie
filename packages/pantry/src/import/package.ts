@@ -4,8 +4,8 @@
  *
  * The read package is built into its rows once (`programOf` of `#pantry/import/program.ts`), its
  * directory never read again, and written by the author login's `importWrite` member, the one
- * ChangeSet step over the author role (`changeSetOf` of `#pantry/import/write.ts`) that `grizzle
- * generate` compiled into the login's served file, applied once to the package's facts
+ * ChangeSet step over the author role (`#pantry/qti/logins.ts`) that `grizzle generate` compiled
+ * into the login's served file, applied once to the package's facts
  * (`packageFactsOf`). The apply is one transaction, so the database holds the whole package or
  * nothing of it: there is no split and no completion marker. grizzle writes each relation's rows in
  * one statement, its nested rows past one Bind message through a carrier, a temporary table of the

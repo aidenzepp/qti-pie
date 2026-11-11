@@ -28,7 +28,7 @@ type ByStep = readonly (readonly [step: Step, entries: readonly string[]])[];
  * `import/read.ts`, the package read and parsed before the database, is here. `import/package.ts`,
  * `import/write.ts` and `export/package.ts` stay here, the XML program, the row builders and the
  * export's unshred and zip, once S10 takes out the parts §2.3 keeps:
- * `ingest`, `changeSetOf` with the row type, and the reads. `model/folds.ts`, which §2.1 does not
+ * `ingest`, the row type, and the reads. `model/folds.ts`, which §2.1 does not
  * list, is here with the rest of the XDM model: the import's builders and the law oracle both
  * fold with it.
  */
@@ -157,9 +157,8 @@ const crossings: ByStep = [
   // S10 takes out of each module the code of the other side, which no export can carry across:
   // `ingest` with its login (the served `AuthorLogin` of `db/served.ts`, which `db/layer.ts`
   // provides, and the author role's type of `qti/roles.ts`), retries and refusal report out of
-  // `import/package.ts`; `changeSetOf` with the author role out of `import/write.ts`, and the row
-  // type with its relations into the schema, where the author login's workload reads them; the
-  // reader's refusal out of `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`,
+  // `import/package.ts`; the row type with its relations out of `import/write.ts` into the
+  // schema, where the author login's workload reads them; the reader's refusal out of `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`,
   // and the database's refusal an error of its own, so `import/refusal.ts` reads no
   // `ImportRefused` and the command line gets the database's refusal from `ingest` (§2.4); the
   // export's reads, with the same login and role, out of `export/package.ts`, behind the scan; and
@@ -181,7 +180,6 @@ const crossings: ByStep = [
       "import/package.ts: #pantry/qti/roles.ts",
       "import/refusal.ts: #pantry/import/rules.ts",
       "import/rules.ts: #pantry/package/refusal-origin.ts",
-      "import/write.ts: #pantry/qti/roles.ts",
       "qti/attributes.ts: #pantry/model/xdm.ts",
       "qti/logins.ts: #pantry/import/write.ts",
       "vocab/open.ts: @qti-pie/crust/tree.ts",

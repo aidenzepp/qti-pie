@@ -1,6 +1,7 @@
 /**
- * The rows one package is written as, and the one ChangeSet that writes them (plan W5, Q5.15; the
- * W5 amendment's A, C5, C13, C19 and C21; rows-first.md §1 and §2).
+ * The rows one package is written as, the facts the author login's `importWrite` ChangeSet applies
+ * (`#pantry/qti/logins.ts`; plan W5, Q5.15; the W5 amendment's A, C5, C13, C19 and C21;
+ * rows-first.md §1 and §2).
  *
  * A package is written once, as one ChangeSet step over the author role that inserts every owner
  * with its whole family: no relation is `mutable`, so no apply needs a read flight, and nothing is
@@ -26,7 +27,7 @@
  * `#pantry/import/fold.ts`), so the tree and every overlay builder read one view and name each node
  * by one id.
  */
-import { Bits, ChangeSet } from "@bjornpagen/grizzle";
+import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
 import { Option, Struct } from "effect";
 import {
@@ -64,7 +65,6 @@ import type {
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
-import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
@@ -869,30 +869,3 @@ const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
  * @returns The facts, one array of rows per relation.
  */
 export const packageFactsOf = (inputs: PackageInputs) => Struct.map(rowsOfSet)(inputs);
-
-/**
- * Build one package's ChangeSet: one step over the author role, each relation of the package's
- * inputs inserted once, by its key (grizzle's `insertAll`, which types and checks each key's rows
- * as that relation's own insert), every owner in the same stratum as its whole family (the W5
- * amendment's A, C19). A ChangeSet is canonical, its members sorted by relation, so the order of
- * the inserts is no part of it. The author login declares it with no rows as its `importWrite`
- * member (`#pantry/qti/logins.ts`), the program `grizzle generate` compiles once into the login's
- * served file; each import applies that member to its own facts ({@link packageFactsOf}).
- *
- * The `Node` insert carries each document's tree, its attributes and namespace declarations, and
- * their families nested; the `Package` insert its record. Every other input is its keyed set's
- * rows, flat.
- *
- * The caller passes the role, the one its database was opened on: describing the author role costs
- * about 2 s and 271 MB (measured 2026-11-06 at load average 27), and a caller that only builds
- * rows, such as the dry run, never needs it.
- *
- * @param author - The author role (`#pantry/qti/roles.ts` `authorRoleOf`), its login's.
- * @param inputs - The package's inputs.
- * @returns The ChangeSet that inserts the inputs' rows. Over no rows, as the author login declares
- *   it, it is the `importWrite` program that `grizzle generate` compiles into the login's served
- *   file.
- */
-// GRIZZLE-PENDING: Q2: the rowless builder declares `importWrite` with no rows, and `inputs` goes.
-export const changeSetOf = (author: AuthorRole, inputs: PackageInputs) =>
-  ChangeSet.empty(author).insertAll(packageFactsOf(inputs));

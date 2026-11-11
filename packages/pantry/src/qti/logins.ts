@@ -13,27 +13,36 @@
  * nothing (`#pantry/db/served.ts`): `importPackage` applies the served `importWrite` member to each
  * package's facts (`packageFactsOf` of `#pantry/import/write.ts`; the W5 amendment's C19).
  */
-import { insertableNamesOf, login, paged, workload } from "@bjornpagen/grizzle";
+import { ChangeSet, insertableNamesOf, login, paged, workload } from "@bjornpagen/grizzle";
 import { pipe, Record as Rec, Struct } from "effect";
 import { exportQueriesOf } from "#pantry/export/scan.ts";
-import type { PackageInputs } from "#pantry/import/write.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
 import type { AuthorRole } from "#pantry/qti/roles.ts";
 import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * A package's inputs with no row: each relation an import writes, grizzle's `insertableNamesOf`,
- * with its empty keyed set.
+ * Declare the import's write program, the login's `importWrite` member: one ChangeSet step over the
+ * author role, each relation an import writes (grizzle's `insertableNamesOf`) inserted once by its
+ * key with no row (`insertAll`, which types and checks each key's rows as that relation's own
+ * insert), every owner in the same stratum as its whole family (the W5 amendment's A, C19). A
+ * ChangeSet is canonical, its members sorted by relation, so the order of the inserts is no part
+ * of it. `grizzle generate` compiles it once into the login's served file, and each import applies
+ * that member to its own package's facts (`packageFactsOf` of `#pantry/import/write.ts`).
  *
  * @param qti - The `Qti` schema.
- * @returns The inputs.
+ * @param author - The author role over it.
+ * @returns The ChangeSet, over no rows.
  */
-// GRIZZLE-PENDING: Q2, the rowless ChangeSet builder, which states the import's inserts with no rows.
-const noInputsOf = (qti: QtiSchema): PackageInputs =>
-  pipe(
-    Struct.pick(qti.relations, insertableNamesOf(qti)),
-    Rec.map(() => new Map<string, never>()),
+// GRIZZLE-PENDING: Q2: the rowless ChangeSet builder declares these inserts by relation name with no rows, and this function goes.
+const importWriteOf = (qti: QtiSchema, author: AuthorRole) =>
+  ChangeSet.empty(author).insertAll(
+    packageFactsOf(
+      pipe(
+        Struct.pick(qti.relations, insertableNamesOf(qti)),
+        Rec.map(() => new Map<string, never>()),
+      ),
+    ),
   );
 
 /**
@@ -55,7 +64,7 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
       entriesOf,
       packageOf: qti.relations.Package,
     }),
-    workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
+    workload(author, { importWrite: importWriteOf(qti, author) }),
   ] as const;
 };
 
@@ -69,13 +78,14 @@ export const authorWorkloadsOf = (qti: QtiSchema, author: AuthorRole) => {
  *   `packageOf`, the `Package` row by its key, a key member whose handle's `get` the export reads
  *   to refuse an id no package has and the import reads back after a commit with no answer, so
  *   every read pantry runs is a member of the workload;
- * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows, the member `importWrite`,
- *   every insert an array member. grizzle compiles a ChangeSet from its Description, which names
- *   each insert and none of its rows, so this is the program every package's import applies to its
- *   package's facts, compiled once into the served file. Compiling it also guards the refusals of
- *   the write program itself: the schema's own compile already refuses a column or a relation no
- *   write fills, and this one refuses an insert outside the author role (`OutsideRole`) and a
- *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
+ * - **the import's write program**: the ChangeSet with no rows ({@link importWriteOf}), the member
+ *   `importWrite`, every insert an array member. grizzle compiles a ChangeSet from its Description,
+ *   which names each insert and none of its rows, so this is the program every package's import
+ *   applies to its package's facts, compiled once into the served file. Compiling it also guards
+ *   the refusals of the write program itself: the schema's own compile already refuses a column or
+ *   a relation no write fills, and this one refuses an insert outside the author role
+ *   (`OutsideRole`) and a stratum no order of its statements keeps every key at
+ *   (`UnorderableStratum`).
  *
  * Its name is the one every earlier installation used, so a migration from scratch needs no
  * `--rename @…`. Where it is installed, its PostgreSQL role is the one grizzle's `roleNameOf` gives

@@ -6,12 +6,12 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { insertableNamesOf } from "@bjornpagen/grizzle";
+import { ChangeSet, insertableNamesOf } from "@bjornpagen/grizzle";
 import { Effect, Schema } from "effect";
 import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { documentLayerNames, overlayRelations, writtenRelations } from "#pantry/import/roster.ts";
-import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
+import { documentRowsOf, packageFactsOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/own-login.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -111,7 +111,7 @@ layer(NodeServices.layer)("the roster", (it) => {
       Effect.gen(function* inserts() {
         const { program } = yield* everyRelation;
         const { desc } = Schema.decodeUnknownSync(InsertedRelations)(
-          changeSetOf(Author, program.inputs),
+          ChangeSet.empty(Author).insertAll(packageFactsOf(program.inputs)),
         );
         const inserted = desc.strata.flatMap(({ members }) =>
           members.map(({ relation }) => relation),
