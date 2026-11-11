@@ -16,7 +16,8 @@ pantry's API is plain grizzle values. Breaking changes:
   `AuthorAppLayer` (`db/layer.ts`), are no longer exported: the `"exports"` map lists neither module, which the
   command line and the tests alone import. `connectionServices`, `servedPathOf`, `QtiInstall`, `installFolder`,
   `readInstall`, `InstallPolicyError` and `installedPolicy` are deleted, and `GR8DES_QTI_INSTALL` is read nowhere.
-- `db/install.ts` holds only `MediaPolicySchema` and `MediaPolicy`; an extension is at most 127 characters.
+- `db/install.ts` holds only the media policy file's schema: `MediaExtension`, `MediaType`, `MediaPolicySchema` and
+  `MediaPolicy`; an extension is at most 127 characters.
 - New exports: `qti/media.ts`, `import/program.ts`, `import/refusal.ts`, `vocab/laws.ts` and `db/served.ts`
   (`AuthorLogin`). `"sideEffects": false`.
 - One migration, regenerated from zero: `migrations/qti/<timestamp>_sterling-standard`.
