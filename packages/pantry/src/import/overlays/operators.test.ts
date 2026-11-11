@@ -326,8 +326,8 @@ const leastFigures: ReadonlyMap<string, bigint> = new Map([
 /**
  * Restate `E1_derived` over a rounding operator's `Rounding` row and the detail rows it holds, and
  * the mirrors between them, as PostgreSQL evaluates them: what it holds, by its mode in force and
- * its `figures`; the collapsed `figures`; the written or default mode; and its `both` arm, copying
- * both.
+ * its `figures`; the written or default mode; and its `both` arm, copying its mode and its
+ * `figures` collapsed, the form the database derives.
  *
  * @param rows - The operator's document's rows, which hold one rounding operator.
  * @returns Whether every one holds.
@@ -354,9 +354,11 @@ const roundingDerived = (rows: OperatorRows): boolean => {
     holdsFigures === (figures !== undefined) &&
     holdsMode === (mode !== undefined) &&
     (rounding.holds === "both") === (both !== undefined) &&
-    (figures === undefined || figures.figures === collapsedText(figures.figuresLexical)) &&
     modeHeld &&
-    (both === undefined || (both.figures === figures?.figures && both.mode === mode?.mode))
+    (both === undefined ||
+      (figures !== undefined &&
+        both.figures === collapsedText(figures.figuresLexical) &&
+        both.mode === mode?.mode))
   );
 };
 

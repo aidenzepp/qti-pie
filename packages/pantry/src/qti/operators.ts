@@ -144,12 +144,16 @@ export const Rounding = relation(
 
 /**
  * A rounding operator's `figures`, keyed by its node, where it writes one: `figuresLexical` as
- * written, copied from the attribute, and `figures`, collapsed (`E1_derived`).
+ * written, copied from the attribute, and `figures`, that form collapsed, which the database
+ * derives.
  */
-export const RoundingFigures = relation(
+export const RoundingFigures = relation.generated(
   "RoundingFigures",
-  { figures: keyText, figuresLexical: keyText, node: uuid },
+  { figuresLexical: keyText, node: uuid },
   ["node"],
+  (f) => ({
+    figures: generated(keyText, Compute.cast(Compute.collapse(f.figuresLexical), keyText)),
+  }),
 );
 
 /**
@@ -402,9 +406,6 @@ export const operatorLawsByName = {
     ),
     contained(on(RoundingFigures, "node"), on(figuresAttributes, "node")),
     mirrors(on(RoundingFigures, "node"), on(figuredRoundings, "node")),
-    check("E1_derived", RoundingFigures, (f) =>
-      f.eq(f.figures, Compute.collapse(f.figuresLexical)),
-    ),
     contained(on(modeAttributes, "node", "lexical"), on(writtenModesInForce, "node", "mode")),
     mirrors(on(RoundingMode, "node"), on(modedRoundings, "node")),
     contained(

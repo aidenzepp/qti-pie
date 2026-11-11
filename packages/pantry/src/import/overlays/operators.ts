@@ -209,11 +209,8 @@ export const rowsOf = (view: DocumentView): OperatorRows => {
       version: node.version,
     });
 
-    const figures = figuresLexical.pipe(
-      Option.map((lexical) => ({ figures: collapse(lexical), figuresLexical: lexical })),
-    );
-    if (Option.isSome(figures)) {
-      built.RoundingFigures.set(node.id, { ...figures.value, node: node.id });
+    if (Option.isSome(figuresLexical)) {
+      built.RoundingFigures.set(node.id, { figuresLexical: figuresLexical.value, node: node.id });
     }
 
     if (Option.isSome(mode)) {
@@ -225,9 +222,9 @@ export const rowsOf = (view: DocumentView): OperatorRows => {
       });
     }
 
-    if (Option.isSome(figures) && Option.isSome(mode)) {
+    if (Option.isSome(figuresLexical) && Option.isSome(mode)) {
       built.RoundingModeFigures.set(node.id, {
-        figures: figures.value.figures,
+        figures: collapse(figuresLexical.value),
         mode: mode.value,
         node: node.id,
       });
