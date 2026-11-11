@@ -25,7 +25,7 @@
  * without lookaround (seat QX); its cases run once it does.
  */
 import { assert, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { DatabaseError } from "pg";
 import { describe } from "vitest";
 import {
@@ -39,7 +39,6 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { openClasses } from "#pantry/grammar/kinds.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -51,6 +50,9 @@ import {
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import type { LawName, LawNamesFile } from "#pantry/import/refusal.ts";
+import lawNamesFile from "#pantry/vocab/law-names.json" with { type: "json" };
+import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
 
 /**
  * Assert that no CHECK and no key refused a case: it was accepted, or met a foreign key, the owner
@@ -64,6 +66,41 @@ const assertNoRowLawRefuses = (verdict: Option.Option<DatabaseError>, label: str
   assert.isTrue(
     refused === undefined || refused.code === "23503",
     `${label}: ${refused?.code ?? ""} ${refused?.constraint ?? ""} ${refused?.message ?? ""}`,
+  );
+};
+
+/**
+ * The law each constraint of `attribute` states, its id by the constraint's name, as the committed
+ * snapshot maps them (`constraintToLaw`).
+ */
+const attributeLaws = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(
+  snapshot.constraintToLaw.tables.attribute,
+);
+
+/**
+ * The committed law-name dictionary, which names a law by its id.
+ */
+const lawNames: LawNamesFile = lawNamesFile;
+
+/**
+ * Assert that a case was refused by a constraint of `attribute` that states the law named, read
+ * through the snapshot's map of each constraint to its law and the law-name dictionary. grizzle
+ * installs the closed attributes' key (AL2 distinct) as one constraint over the closed attributes
+ * and one at each target a containment fixes, and PostgreSQL refuses a repeated name by whichever
+ * of them it checks first, so the verdict names the law, not the constraint.
+ *
+ * @param verdict - The server's error, if any.
+ * @param law - The law's name.
+ * @param label - The case.
+ */
+const assertLawRefuses = (verdict: Option.Option<DatabaseError>, law: LawName, label: string) => {
+  const refused = Option.getOrUndefined(verdict);
+  const id = refused?.constraint === undefined ? undefined : attributeLaws[refused.constraint];
+
+  assert.strictEqual(
+    id === undefined ? undefined : lawNames.laws[id]?.name,
+    law,
+    `${label}: ${refused?.code ?? ""} ${refused?.constraint ?? ""} ${refused?.message ?? "accepted"}`,
   );
 };
 
@@ -307,21 +344,14 @@ const on = (element: string): Stated["fact"] => ({
   kind: element,
 });
 
-/**
- * The selection of AL2's key over the closed attributes, `closedName` of
- * `#pantry/qti/attributes.ts`, as grizzle's comment on the key spells it: the name in none of the
- * open classes.
- */
-const closedSelection = `{"arg":{"arg":{"field":"name","kind":"field"},"kind":"in","values":${JSON.stringify(openClasses)}},"kind":"not"}`;
-
 describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
   it.effect(
     "accepts a hotspot choice's admitted, distinct, rightly folded attributes by every CHECK and key, and refuses each corruption by its law",
     () =>
       // Oracle: PostgreSQL, Attribute's CHECKs and key as grizzle installs them: AL1_admission,
-      // E1_derived and AL4_open_names by name, and AL2's key over the closed attributes and the or
-      // fold's slot-0 pin and combine by their comments; each control is the row the fold would
-      // write.
+      // E1_derived and AL4_open_names by name, the or fold's slot-0 pin and combine by their
+      // comments, and AL2's key over the closed attributes by its law, whichever of its
+      // constraints refuses; each control is the row the fold would write.
       // Bound: one control per law and one corruption per named invalid variant (rules file rule
       // 8): an unadmitted name, a wrong slot, a repeated closed name, a junk accumulator at slot
       // 0, a wrong after, an open class stepping the fold (the mutant without the step selection),
@@ -370,19 +400,16 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           "identifier holding shape's slot",
         );
 
-        assertVerdict(
+        assertLawRefuses(
           yield* judged(
             client,
-            statedInserts([secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier])]),
+            statedInserts([
+              admitted,
+              secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier]),
+            ]),
           ),
-          yield* constraintDescribed(
-            client,
-            "attribute",
-            `key Attribute(node where ${closedSelection}, name where ${closedSelection})`,
-          ),
-          true,
-          "identifier repeated",
-          "23505",
+          "AL2 distinct",
+          "identifier repeated, both attributes written, so the second's fold reads the first",
         );
 
         assertVerdict(
