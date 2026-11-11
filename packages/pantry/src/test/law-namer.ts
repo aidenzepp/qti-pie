@@ -50,7 +50,7 @@ import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { mathmlLawsByName, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLawsByName, operatorRelations } from "#pantry/qti/operators.ts";
-import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
+import { HrefParams, packageLawsByName, Sha256Hex } from "#pantry/qti/package.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
@@ -443,6 +443,10 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   // value domain's, with its rule, so one cause names one rule (the orchestrator's ruling of
   // 2026-11-06).
   [DayForm, "value domain"],
+  // An entry's `digest` is PostgreSQL's SHA-256 of its stored bytes, which `Compute.sha256` writes
+  // in this very language, so no row breaks it; it is named by the law of the record it is a
+  // field of, its relation's rows'.
+  [Sha256Hex, "Entry family"],
 ]);
 
 /**

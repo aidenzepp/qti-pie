@@ -90,7 +90,7 @@ every other relation of `Qti`, is internal and changes with pantry.
 | Relation | Key | Published fields |
 | --- | --- | --- |
 | `Package` | `id` | `id`, `name` |
-| `Entry` | `package`, `at` | `package`, `at`, `path`, `content` |
+| `Entry` | `package`, `at` | `package`, `at`, `path`, `content`, `digest` |
 | `Document` | `node` | `node`, `package`, `path`, `documentType`, `rootKind` |
 | `TestDocument` | `node` | `node`, `package`, `path`, `rootKind` |
 | `Named` | `node` | `node`, `document`, `identifier`, `kind`, `parent`, `part` |
@@ -107,7 +107,9 @@ A section's visibility is its `TestFlag` row named `visible`. QTI requires the a
 section has that row. A document's `documentType` is `manifest` for the manifest, and the type of the manifest resource
 that lists it for any other document. An item's media is found by path: a reference's `ReferencePath` row holds its
 resolved `path` in its `package`, and that package's `Entry` row with the same `path` holds the file's bytes as
-`content`.
+`content`. Its `digest` is the SHA-256 of those bytes as 64 lowercase hex digits, which PostgreSQL computes from the
+stored bytes, so no write carries one. A content-addressed store names the file by it, and a read takes it without the
+bytes.
 
 A published field's type is part of the contract, and a closed id carries its roster's handle names. A `BaseType`
 handle is typed as a plain `string`, so `PublishedRow<"BaseType">` does not narrow its `id` to the roster's handles.

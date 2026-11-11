@@ -12,6 +12,18 @@ pantry is not tagged yet; the first `pantry-v0.<n>.0` tag carries these entries.
 exported eight module subpaths and the command line read an install folder. [Moving an app to the entry
 point](#moving-an-app-to-the-entry-point) says what replaces each.
 
+### Entry's digest
+
+- `Entry` has a new published field, `digest`: the SHA-256 of the entry's `content`, written as 64 lowercase hex
+  digits. PostgreSQL computes it from the stored bytes, a generated column, so no write carries one, and grizzle's
+  `Addition<typeof Entry>` holds no `digest`. A content-addressed store names the file by it, and a read takes it
+  without `content`, so it carries no bytes. `publishedRelations.Entry` lists it.
+- `Entry`'s table gains the column, so an app regenerates its own migration over pantry's, and its served file with
+  it. Where the table already holds entries, PostgreSQL rewrites it to add the column, hashing every stored entry's
+  bytes while it holds the table locked.
+- `Fact<typeof Entry>` and `PublishedRow<"Entry">` gain `digest`: an object literal of either type in an app's code
+  adds it.
+
 ### The entry point
 
 - `package.json` `"exports"` is `{ ".": "./src/index.ts" }`. `@qti-pie/pantry` is the only entry point, and no other
@@ -69,7 +81,7 @@ and `PublishedRow<Name>` types. Every other field and relation is internal.
 | Relation                | Key             | Published fields                                                                                  |
 | ----------------------- | --------------- | ------------------------------------------------------------------------------------------------- |
 | `Package`               | `id`            | `id`, `name`                                                                                      |
-| `Entry`                 | `package`, `at` | `package`, `at`, `path`, `content`                                                                |
+| `Entry`                 | `package`, `at` | `package`, `at`, `path`, `content`, `digest`                                                      |
 | `Document`              | `node`          | `node`, `package`, `path`, `documentType`, `rootKind`                                             |
 | `TestDocument`          | `node`          | `node`, `package`, `path`, `rootKind`                                                             |
 | `Named`                 | `node`          | `node`, `document`, `identifier`, `kind`, `parent`, `part`                                        |

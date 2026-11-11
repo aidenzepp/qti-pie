@@ -80,7 +80,7 @@ const publishedContract = {
     kind: "relation",
   },
   Entry: {
-    fields: ["package", "at", "path", "content"],
+    fields: ["package", "at", "path", "content", "digest"],
     key: ["package", "at"],
     kind: "relation",
   },

@@ -129,6 +129,8 @@ export const namedBy = (
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
+ * - An entry's `digest` is the SHA-256 of its `content`, `Compute.sha256`, defined on every bytes
+ *   value: never NULL, so it is named by the law of its relation's rows, "Entry family".
  */
 export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy(
@@ -150,6 +152,7 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "MapKeyItems.ordered",
     "MapKeyItems.unordered",
   ),
+  ...namedBy("Entry family", "Entry.digest"),
 ];
 
 /**

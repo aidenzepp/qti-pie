@@ -3996,6 +3996,7 @@
     "DocumentLang.lang": "Key text bound",
     "DocumentLang.value": "Key text bound",
     "EncodingDecl.encoding": "XML production",
+    "Entry.digest": "Entry family",
     "Entry.path": "Key text bound",
     "ExpressionAttribute.lexical": "Key text bound",
     "FeedbackRef.identifier": "Key text bound",

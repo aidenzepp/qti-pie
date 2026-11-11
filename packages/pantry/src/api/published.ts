@@ -95,8 +95,9 @@ const published = <
  * row named `visible`, which QTI's required attribute gives every section (decision 503).
  * {@link Entry} and {@link ReferencePath} are published with every field they declare, so an app
  * finds an item's media by path: a reference's resolved path, and the package entry at that path
- * with its bytes (operator ruling 6a456d85). The surface test pins this record, and its fields are
- * the contract {@link PublishedRow} types.
+ * with its bytes (operator ruling 6a456d85) and their digest, the SHA-256 PostgreSQL computes,
+ * which names the bytes in a content-addressed store. The surface test pins this record, and its
+ * fields are the contract {@link PublishedRow} types.
  */
 export const publishedRelations = {
   BaseType: { kind: "roster", relation: BaseType } satisfies PublishedRoster<typeof BaseType>,
@@ -106,7 +107,7 @@ export const publishedRelations = {
     ["node", "document", "identifier", "declarationKind"],
   ),
   Document: published(Document, ["node"], ["node", "package", "path", "documentType", "rootKind"]),
-  Entry: published(Entry, ["package", "at"], ["package", "at", "path", "content"]),
+  Entry: published(Entry, ["package", "at"], ["package", "at", "path", "content", "digest"]),
   ItemRefDocument: published(ItemRefDocument, ["node"], ["node", "document", "package", "path"]),
   Named: published(Named, ["node"], ["node", "document", "identifier", "kind", "parent", "part"]),
   Package: published(Package, ["id"], ["id", "name"]),

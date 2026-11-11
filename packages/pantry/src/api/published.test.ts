@@ -30,12 +30,12 @@ describe("publishedRelations", () => {
     assert.deepStrictEqual(TestFlag.fields, ["node", "name", "value"]);
   });
 
-  it("publishes Entry, a package's entries by path with their bytes", () => {
+  it("publishes Entry, a package's entries by path with their bytes and their digest", () => {
     const { Entry } = publishedRelations;
 
     assert.strictEqual(Entry.kind, "relation");
     assert.deepStrictEqual(Entry.key, ["package", "at"]);
-    assert.deepStrictEqual(Entry.fields, ["package", "at", "path", "content"]);
+    assert.deepStrictEqual(Entry.fields, ["package", "at", "path", "content", "digest"]);
   });
 
   it("publishes ReferencePath, a reference's resolved path in its package", () => {
