@@ -128,8 +128,7 @@ export type NamesUnder = Closed<
  *
  * @param input - The admission maps and the kinds' names.
  * @param input.admissionIn - `AdmissionIn`: each admission map's children.
- * @param input.families - `ContentModelOf`: each (version, parent) family's admission map, in
- *   (version, parent) code order, the rows' order.
+ * @param input.families - `ContentModelOf`: each (version, parent) family's admission map.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.nameOf - A kind's expanded name, none for a kind that is no element of a
  *   vocabulary.
