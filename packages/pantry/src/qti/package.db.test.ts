@@ -23,7 +23,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {

@@ -35,8 +35,10 @@ import {
   migrationConnection,
   passwordCommandSetting,
 } from "#pantry/db/connection.ts";
-import { Qti, QtiBase } from "#pantry/qti/own.ts";
-import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author } from "#pantry/qti/roles.ts";
 
 /**
  * The author login's PostgreSQL role, the one its session logs in as.

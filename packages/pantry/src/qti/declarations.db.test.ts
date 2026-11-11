@@ -49,7 +49,7 @@ import {
   TypedValue,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 import {
   assertVerdict,

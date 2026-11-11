@@ -22,7 +22,7 @@ import {
   versions,
 } from "#pantry/grammar/install.ts";
 import { anyTypeKinds, cardinalityKinds, itemBuiltInNames } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { readProgram } from "#pantry/import/program.ts";

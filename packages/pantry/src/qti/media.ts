@@ -1,13 +1,18 @@
 /**
- * Package-media mode: the laws an install's media policy adds to `Qti`, so the database refuses a
- * fetch of anything but a file of the package whose type the policy lists
- * (`#pantry/db/install.ts` `MediaPolicy`), and pantry's importer states nothing of them. A player
- * fetches each such file from wherever the install serves the package's files, by the entry's
- * digest (`Entry.digest`), with the media type the policy gives its extension, and holds no file
- * nothing names. Each law is a check the migration compiles from the policy, a row's CHECK
- * constraint or, for Entry used, a check over a query, which deferred triggers judge at commit
- * (README, "Rules over queries"), so every writer meets it, and a refused import names its law and
- * rule as any other refusal does.
+ * The package-media level, `QtiMedia`: the laws an application stacks over `Qti` with grizzle's
+ * `schema.extend`, so the database refuses a fetch of anything but a file of the package whose
+ * extension the application's policy lists, and pantry's importer states nothing of them. The
+ * policy is data, the rows of {@link MediaType}, each extension a player may fetch with the media
+ * type the application serves its files with, which the application writes as its own rows. A
+ * player fetches each such file from wherever the application serves the package's files, by the
+ * entry's digest (`Entry.digest`), with the media type the policy gives its extension, and holds no
+ * file nothing names.
+ *
+ * A level reaches the relations below it only through a query (README, "Levels"), so each law is a
+ * rule over a derived relation of `QtiMedia` that reads `Qti`'s tables, which deferred triggers
+ * judge at commit (README, "Rules over queries"), and every writer meets it. A refusal by one is
+ * grizzle's `{ kind: "above", level: "QtiMedia", law }` to a login over `Qti`, and the law's own to
+ * a login over `QtiMedia`; it names its law and rule as any other refusal does.
  *
  * - **Media path** (rule `media-path`): every address a player fetches, each field
  *   `#pantry/vocab/fetched.ts` declares, names a file of the package, which `file-exists` holds to
@@ -32,11 +37,11 @@
  *   `ImgDType`), since the census reads an element by its kind. None of them names an entry a law can
  *   hold, so none could be served as a file of the package.
  * - **Media type** (rule `media-type`): every entry a fetched reference resolves to has an extension
- *   the policy lists: the text after the last `.` of its path's last segment, where that `.` is not
- *   the segment's first character, as Node's `path.posix.extname` reads that segment
- *   ({@link extensionPattern}), so a path that ends with `/` has none; matched case-sensitively, so
- *   `photo.JPG` and `photo.jpeg` are refused under a policy that lists `jpg`. The law reads the
- *   reference's resolved path, which `file-exists` holds to be the entry's own.
+ *   a {@link MediaType} row lists: the text after the last `.` of its path's last segment, where
+ *   that `.` is not the segment's first character, as Node's `path.posix.extname` reads that
+ *   segment ({@link extensionPattern}), so a path that ends with `/` has none; matched
+ *   case-sensitively, so `photo.JPG` and `photo.jpeg` are refused under a policy that lists `jpg`.
+ *   The law reads the reference's resolved path, which `file-exists` holds to be the entry's own.
  * - **Media data** (rule `media-data`): no address uses the `data:` scheme, so no value carries a
  *   base64 payload: no admitted attribute and no element text whose domain is an `xs:anyURI`, links
  *   and identifiers included, as the URL Standard reads its scheme ({@link dataScheme}), and no
@@ -75,15 +80,30 @@
  * @see {@link https://url.spec.whatwg.org/#concept-basic-url-parser | URL Standard, the basic URL parser}
  * @see {@link https://nodejs.org/api/path.html#pathextnamepath | Node.js, path.extname}
  */
-import { check, Compute, derived, query, v } from "@bjornpagen/grizzle";
-import type { RowScalars } from "@bjornpagen/grizzle";
+import {
+  check,
+  Compute,
+  contained,
+  derived,
+  generated,
+  key,
+  on,
+  query,
+  relation,
+  schema,
+  str,
+  v,
+} from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
-import type { MediaPolicy } from "#pantry/db/install.ts";
-import { grammar, ReferenceAttribute, TextDomain } from "#pantry/grammar/install.ts";
+import {
+  AttributeGrammar,
+  AttributeModelOf,
+  grammar,
+  TextDomain,
+} from "#pantry/grammar/install.ts";
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { admitted, Attribute, domainOf } from "#pantry/qti/attributes.ts";
-import type { QtiBase } from "#pantry/qti/base.ts";
+import { Attribute, dataScheme, leadingStripped, tabOrNewline } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { Node } from "#pantry/qti/node.ts";
 import {
@@ -93,46 +113,9 @@ import {
   TextReference,
   TextReferencePath,
 } from "#pantry/qti/package.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
-
-/**
- * The characters the URL Standard strips before a URL, the C0 controls and the space, as the body
- * of a character class. NUL is left out: no XML document holds it, and grizzle admits no pattern
- * that does.
- *
- * @see {@link https://url.spec.whatwg.org/#c0-control | URL Standard, C0 control}
- */
-const leadingStripped = String.raw`\u{1}-\u{20}`;
-
-/**
- * The ASCII tab and newline the URL Standard removes from anywhere in a URL, as the body of a
- * character class.
- *
- * @see {@link https://url.spec.whatwg.org/#ascii-tab-or-newline | URL Standard, ASCII tab or newline}
- */
-const tabOrNewline = String.raw`\t\n\r`;
-
-/**
- * An address that uses the `data:` scheme, as the URL Standard reads a scheme: past the leading C0
- * controls and spaces it strips, the letters `data` in any case, any tab or newline among them
- * removed, and the colon that ends a scheme.
- *
- * @see {@link https://url.spec.whatwg.org/#scheme-state | URL Standard, scheme state}
- */
-const dataScheme = Compute.pattern<string>(
-  `^[${leadingStripped}]*[dD][${tabOrNewline}]*[aA][${tabOrNewline}]*[tT][${tabOrNewline}]*[aA][${tabOrNewline}]*:`,
-);
-
-/**
- * A token of an address list that uses the `data:` scheme: at the list's start or after the
- * whitespace that separates its tokens, which a token never holds.
- *
- * @see {@link https://www.w3.org/TR/xmlschema-2/#atomic-vs-list | XML Schema 1.0 Part 2, §2.5.1.2 List datatypes}
- */
-const dataToken = Compute.pattern<string>(
-  `(?:^|[${tabOrNewline} ])[${leadingStripped}]*[dD][aA][tT][aA]:`,
-);
 
 /**
  * An address that is no path relative to its document, as the URL Standard reads one against the
@@ -156,20 +139,6 @@ export const nonRelative = Compute.pattern<string>(
  * @see {@link https://nodejs.org/api/path.html#pathextnamepath | Node.js, path.extname}
  */
 const extensionPattern = Compute.pattern<string>(String.raw`[^/]\.[^./]+$`);
-
-/**
- * A style that makes the player fetch, or could spell a fetch past this pattern, in any case: CSS's
- * `url(`, an `@import`, `image-set(` (`-webkit-image-set(` among them) and `src(`, each of which
- * takes an address as a plain string, and any backslash, which begins a CSS escape, so no escaped
- * spelling such as `\75 rl(` names a function the pattern does not read.
- *
- * @see {@link https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point | CSS Syntax 3, consume an escaped code point}
- * @see {@link https://www.w3.org/TR/css-images-4/#image-set-notation | CSS Images 4, image-set()}
- * @see {@link https://www.w3.org/TR/css-values-4/#urls | CSS Values 4, src()}
- */
-const styleFetch = Compute.pattern(
-  String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`,
-);
 
 /**
  * The governors an element kind's attributes and text are read under: the kind itself, and every
@@ -197,19 +166,11 @@ export const governorsOf = (kinds: readonly string[]): readonly string[] => {
 };
 
 /**
- * One fetched attribute name, with every governor it is fetched under.
- */
-interface FetchedName {
-  readonly governors: readonly string[];
-  readonly name: (typeof fetchedAttributes)[number]["name"];
-}
-
-/**
  * The fetched attributes by name, each with the governors of every kind that fetches it.
  */
-const fetchedNames: readonly FetchedName[] = Object.values(
-  Arr.groupBy(fetchedAttributes, ({ name }) => name),
-).map((rows) => ({ governors: governorsOf(rows.map(({ kind }) => kind)), name: rows[0].name }));
+const fetchedNames = Object.values(Arr.groupBy(fetchedAttributes, ({ name }) => name)).map(
+  (rows) => ({ governors: governorsOf(rows.map(({ kind }) => kind)), name: rows[0].name }),
+);
 
 /**
  * The governors whose text a player fetches.
@@ -237,225 +198,361 @@ const uriDomains = grammar.attributes.valueDomain.rows.flatMap(({ domain, primit
 const uninterpretedClasses = openClasses.filter((name) => name !== "data-*");
 
 /**
- * An `Attribute` row as a row check reads it.
+ * A file extension a policy lists: lowercase ASCII letters and digits, without its dot, as an
+ * entry's path writes it after its last `.` (`photo.jpg` is `jpg`). An extension matches as
+ * written, so a policy lists one spelling of each and a path in another case is refused.
  */
-type AttributeRow = RowScalars<typeof Attribute>;
+export const MediaExtension = str.regex("^[a-z0-9]{1,127}$");
 
 /**
- * A `Node` row as a row check reads it.
- */
-type NodeRow = RowScalars<typeof Node>;
-
-/**
- * A `Reference` row as a row check reads it.
- */
-type ReferenceRow = RowScalars<typeof Reference>;
-
-/**
- * A `ReferencePath` row as a row check reads it.
- */
-type ReferencePathRow = RowScalars<typeof ReferencePath>;
-
-/**
- * State that an attribute is a fetched field: its name one a kind fetches, under a governor of such
- * a kind.
+ * The media type a policy serves an extension's files with, as an HTTP `Content-Type` names it: a
+ * type and a subtype, each a restricted name (RFC 6838, §4.2), in lower case, the form the registry
+ * writes, with no parameter.
  *
- * @param a - The row.
- * @returns The predicate.
+ * @see {@link https://www.rfc-editor.org/rfc/rfc6838#section-4.2 | RFC 6838, §4.2 Naming Requirements}
  */
-const fetchedAttribute = (a: AttributeRow) =>
-  a.or(
-    ...fetchedNames.map(({ governors, name }) =>
-      a.and(a.eq(a.name, name), a.in(a.governor, governors)),
+export const MediaTypeName = str.regex(
+  "^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$",
+);
+
+/**
+ * An extension with its dot before it, as a path ends with it.
+ */
+const Suffix = str.regex("^[.][a-z0-9]{1,127}$");
+
+/**
+ * The application's media policy, one row per extension a player may fetch: the extension, the
+ * media type the application serves its files with, and `suffix`, the extension with its dot, as a
+ * path ends with it, which PostgreSQL generates. Each media type is listed under one extension, its
+ * one spelling ("Media type", a key on `type`): a policy that lists `jpg` for `image/jpeg` lists no
+ * `jpeg`. A policy of no row admits no fetched entry at all.
+ */
+export const MediaType = relation.generated(
+  "MediaType",
+  { extension: MediaExtension, type: MediaTypeName },
+  ["extension"],
+  (m) => ({
+    suffix: generated(
+      Suffix,
+      Compute.concat(Compute.literal(str.regex("^[.]$"), "."), m.extension),
     ),
-  );
+  }),
+);
 
 /**
- * State that a reference, or a reference resolved in the package, is a fetched field's: its
- * element's kind and its attribute's name are a row of `fetchedAttributes`.
- *
- * @param r - The row.
- * @returns The predicate.
+ * The policy's level over `Qti`: {@link MediaType}, the rows the level's rules read, a level of its
+ * own since a derived relation reads only the levels below its own.
  */
-const fetchedReference = (r: ReferencePathRow | ReferenceRow) =>
-  r.or(...fetchedAttributes.map(({ kind, name }) => r.and(r.eq(r.kind, kind), r.eq(r.name, name))));
+export const QtiMediaPolicy = schema.extend(Qti, "QtiMediaPolicy", { MediaType }, [
+  key(on(MediaType, "type")),
+]);
 
 /**
- * State that an element's text is in an `xs:anyURI` domain: its governor reads its text in a domain
- * (`TextDomain`), and that domain is an `xs:anyURI`'s.
- *
- * @param n - The row.
- * @returns The predicate.
+ * Every attribute, by its key, with what the policy's laws read of it: its name, its element's
+ * kind, governor and version, and the address facts PostgreSQL generates from its lexical form
+ * (`Attribute.dataScheme`, `dataToken` and `styleFetch`).
  */
-const uriText = (n: NodeRow) =>
-  n.and(
-    TextDomain.has(n.version, n.governor),
-    n.in(TextDomain.at("domain", n.version, n.governor), uriDomains),
-  );
+const MediaAttribute = derived(
+  "MediaAttribute",
+  query(Qti).rule((r) => {
+    const {
+      dataScheme: usesData,
+      dataToken,
+      governor,
+      id,
+      kind,
+      name,
+      node,
+      styleFetch,
+      version,
+    } = v(Attribute, "attribute");
+
+    return r
+      .match(Attribute, {
+        dataScheme: usesData,
+        dataToken,
+        governor,
+        id,
+        kind,
+        name,
+        node,
+        styleFetch,
+        version,
+      })
+      .find({
+        dataScheme: usesData,
+        dataToken,
+        governor,
+        id,
+        kind,
+        name,
+        node,
+        styleFetch,
+        version,
+      });
+  }),
+);
 
 /**
- * Build the laws one policy states, by name: the module's header gives each. A roster of no
- * extension lists no type, so its Media type admits no fetched entry at all.
- *
- * @param policy - The install's policy.
- * @returns The statements by law.
+ * Every attribute fetched under a governor of a kind that fetches it, by its element and name: the
+ * attributes Media path holds to a {@link Reference}.
  */
-const lawsOfPolicy = ({ media }: MediaPolicy) => {
-  const rosters = Option.toArray(
-    Arr.match(Object.keys(media), {
-      onEmpty: () => Option.none(),
-      onNonEmpty: (extensions) => Option.some(extensions),
-    }),
-  );
+const FetchedAttribute = derived(
+  "FetchedAttribute",
+  query(Qti).rule((r) => {
+    const { governor, name, node } = v(Attribute, "attribute");
 
-  return {
-    "Media data": [
-      check("Media_data", Attribute, (a) =>
-        a.and(
-          a.or(
-            a.not(admitted(a)),
-            a.not(a.in(domainOf(a), uriDomains)),
-            a.not(Compute.matches(a.lexical, dataScheme)),
+    return r
+      .match(Attribute, { governor, name, node })
+      .where(
+        Compute.or(
+          ...fetchedNames.map(({ governors, name: fetched }) =>
+            Compute.and(Compute.eq(name, fetched), Compute.in(governor, governors)),
           ),
-          a.or(a.not(a.in(a.name, addressLists)), a.not(Compute.matches(a.lexical, dataToken))),
         ),
-      ),
-      check("Media_data", Node, (n) =>
-        n.or(n.not(uriText(n)), n.not(Compute.matches(n.stringValue, dataScheme))),
-      ),
-    ],
-    "Media foreign": [
-      check("Media_foreign", Attribute, (a) => a.not(a.in(a.name, uninterpretedClasses))),
-      check("Media_foreign", Node, (n) => n.not(n.in(n.kind, Object.values(foreignKinds)))),
-    ],
-    "Media path": [
-      check("Media_path", Attribute, (a) =>
+      )
+      .find({ name, node });
+  }),
+);
+
+/**
+ * Every reference, by its element and name, with its kind, its outcome's scope and its lexical
+ * form, which Media path reads.
+ */
+const MediaReference = derived(
+  "MediaReference",
+  query(Qti).rule((r) => {
+    const { kind, lexical, name, node, scope } = v(Reference, "reference");
+
+    return r
+      .match(Reference, { kind, lexical, name, node, scope })
+      .find({ kind, lexical, name, node, scope });
+  }),
+);
+
+/**
+ * Every text reference, by its element, with its kind and its outcome's scope.
+ */
+const MediaTextReference = derived(
+  "MediaTextReference",
+  query(Qti).rule((r) => {
+    const { kind, node, scope } = v(TextReference, "reference");
+
+    return r.match(TextReference, { kind, node, scope }).find({ kind, node, scope });
+  }),
+);
+
+/**
+ * Every node, by its id, with its kind, governor, version and string value, which Media path,
+ * Media data and Media foreign read.
+ */
+const MediaNode = derived(
+  "MediaNode",
+  query(Qti).rule((r) => {
+    const { governor, id, kind, stringValue, version } = v(Node, "node");
+
+    return r
+      .match(Node, { governor, id, kind, stringValue, version })
+      .find({ governor, id, kind, stringValue, version });
+  }),
+);
+
+/**
+ * The resolved path of every fetched reference, by its element and name.
+ */
+const FetchedPath = derived(
+  "FetchedPath",
+  query(Qti).rule((r) => {
+    const { kind, name, node, path } = v(ReferencePath, "path");
+
+    return r
+      .match(ReferencePath, { kind, name, node, path })
+      .where(
+        Compute.or(
+          ...fetchedAttributes.map((fetched) =>
+            Compute.and(Compute.eq(kind, fetched.kind), Compute.eq(name, fetched.name)),
+          ),
+        ),
+      )
+      .find({ name, node, path });
+  }),
+);
+
+/**
+ * The resolved path of every fetched reference whose extension a {@link MediaType} row lists.
+ */
+const ServedPath = derived(
+  "ServedPath",
+  query(QtiMediaPolicy).rule((r) => {
+    const { name, node, path } = v(ReferencePath, "path");
+    const { suffix } = v(MediaType, "media");
+
+    return r
+      .match(ReferencePath, { name, node, path })
+      .match(MediaType, { suffix })
+      .where(Compute.matches(path, extensionPattern))
+      .where(Compute.eq(Compute.endsWith(path, suffix), true))
+      .find({ name, node, path });
+  }),
+);
+
+/**
+ * The resolved path of every fetched text reference, by its element.
+ */
+const FetchedTextPath = derived(
+  "FetchedTextPath",
+  query(Qti).rule((r) => {
+    const { kind, node, path } = v(TextReferencePath, "path");
+
+    return r
+      .match(TextReferencePath, { kind, node, path })
+      .where(Compute.in(kind, fetchedTexts))
+      .find({ node, path });
+  }),
+);
+
+/**
+ * The resolved path of every fetched text reference whose extension a {@link MediaType} row lists.
+ */
+const ServedTextPath = derived(
+  "ServedTextPath",
+  query(QtiMediaPolicy).rule((r) => {
+    const { node, path } = v(TextReferencePath, "path");
+    const { suffix } = v(MediaType, "media");
+
+    return r
+      .match(TextReferencePath, { node, path })
+      .match(MediaType, { suffix })
+      .where(Compute.matches(path, extensionPattern))
+      .where(Compute.eq(Compute.endsWith(path, suffix), true))
+      .find({ node, path });
+  }),
+);
+
+/**
+ * The entries no document is at and no reference resolves to, by package and path. Each negation is
+ * a filter of its own.
+ */
+const UnusedEntry = derived(
+  "UnusedEntry",
+  query(Qti).rule((r) => {
+    const { package: pkg, path } = v(Entry, "entry");
+
+    return r
+      .match(Entry, { package: pkg, path })
+      .where(r.not(Document, { package: pkg, path }))
+      .where(r.not(ReferencePath, { package: pkg, path }))
+      .where(r.not(TextReferencePath, { package: pkg, path }))
+      .find({ package: pkg, path });
+  }),
+);
+
+/**
+ * The level's laws by name, the module's header giving each. Every check is named by its law with
+ * spaces written as underscores, as every check of the schema is (`checkNameOf` of
+ * `#pantry/import/refusal.ts`).
+ */
+export const mediaLawsByName = {
+  "Entry used": [check("Entry_used", UnusedEntry, (u) => u.eq(u.path, manifestPath))],
+  "Media data": [
+    check("Media_data", MediaAttribute, (a) =>
+      a.and(
         a.or(
-          a.not(fetchedAttribute(a)),
-          a.and(
-            ReferenceAttribute.has(a.version, a.kind, a.name),
-            a.not(Compute.matches(a.lexical, nonRelative)),
+          a.not(
+            a.eq(
+              Compute.subset(
+                Compute.singleton(a.name),
+                AttributeGrammar.row(AttributeModelOf.at("model", a.version, a.governor)),
+              ),
+              true,
+            ),
           ),
+          a.not(
+            a.in(
+              AttributeGrammar.at(
+                "domain",
+                AttributeModelOf.at("model", a.version, a.governor),
+                a.name,
+              ),
+              uriDomains,
+            ),
+          ),
+          a.eq(a.dataScheme, false),
         ),
+        a.or(a.not(a.in(a.name, addressLists)), a.eq(a.dataToken, false)),
       ),
-      check("Media_path", Node, (n) =>
-        n.or(
-          n.not(n.in(n.governor, textGovernors)),
+    ),
+    check("Media_data", MediaNode, (n) =>
+      n.or(
+        n.not(
           n.and(
-            n.in(n.kind, resolvedTextKinds),
-            n.not(Compute.matches(n.stringValue, nonRelative)),
+            TextDomain.has(n.version, n.governor),
+            n.in(TextDomain.at("domain", n.version, n.governor), uriDomains),
           ),
         ),
+        n.not(Compute.matches(n.stringValue, dataScheme)),
       ),
-      check("Media_path", Reference, (r) =>
-        r.or(r.not(fetchedReference(r)), r.eq(r.scope, "entry")),
-      ),
-      check("Media_path", TextReference, (r) =>
-        r.or(r.not(r.in(r.kind, fetchedTexts)), r.eq(r.scope, "entry")),
-      ),
-    ],
-    "Media style": [
-      check("Media_style", Attribute, (a) =>
-        a.or(a.not(a.eq(a.name, "style")), a.not(Compute.matches(a.lexical, styleFetch))),
-      ),
-    ],
-    "Media type": [
-      check("Media_type", ReferencePath, (p) =>
-        p.or(
-          p.not(fetchedReference(p)),
-          ...rosters.map((extensions) =>
-            p.and(
-              Compute.matches(p.path, extensionPattern),
-              p.or(
-                ...extensions.map((extension) =>
-                  p.eq(Compute.endsWith(p.path, `.${extension}`), true),
-                ),
-              ),
+    ),
+  ],
+  "Media foreign": [
+    check("Media_foreign", MediaAttribute, (a) => a.not(a.in(a.name, uninterpretedClasses))),
+    check("Media_foreign", MediaNode, (n) => n.not(n.in(n.kind, Object.values(foreignKinds)))),
+  ],
+  "Media path": [
+    contained(on(FetchedAttribute, "node", "name"), on(Reference, "node", "name")),
+    check("Media_path", MediaReference, (r) =>
+      r.or(
+        r.not(
+          r.or(
+            ...fetchedAttributes.map(({ kind, name }) =>
+              r.and(r.eq(r.kind, kind), r.eq(r.name, name)),
             ),
           ),
         ),
+        r.and(r.eq(r.scope, "entry"), r.not(Compute.matches(r.lexical, nonRelative))),
       ),
-      check("Media_type", TextReferencePath, (p) =>
-        p.or(
-          p.not(p.in(p.kind, fetchedTexts)),
-          ...rosters.map((extensions) =>
-            p.and(
-              Compute.matches(p.path, extensionPattern),
-              p.or(
-                ...extensions.map((extension) =>
-                  p.eq(Compute.endsWith(p.path, `.${extension}`), true),
-                ),
-              ),
-            ),
-          ),
-        ),
+    ),
+    check("Media_path", MediaNode, (n) =>
+      n.or(
+        n.not(n.in(n.governor, textGovernors)),
+        n.and(n.in(n.kind, resolvedTextKinds), n.not(Compute.matches(n.stringValue, nonRelative))),
       ),
-    ],
-  } as const;
-};
+    ),
+    check("Media_path", MediaTextReference, (r) =>
+      r.or(r.not(r.in(r.kind, fetchedTexts)), r.eq(r.scope, "entry")),
+    ),
+  ],
+  "Media style": [
+    check("Media_style", MediaAttribute, (a) =>
+      a.or(a.not(a.eq(a.name, "style")), a.eq(a.styleFetch, false)),
+    ),
+  ],
+  "Media type": [
+    contained(on(FetchedPath, "node", "name", "path"), on(ServedPath, "node", "name", "path")),
+    contained(on(FetchedTextPath, "node", "path"), on(ServedTextPath, "node", "path")),
+  ],
+} as const;
 
 /**
- * The laws one policy states, by name.
+ * The package-media level over {@link QtiMediaPolicy}: every derived relation its laws read, and the
+ * laws. An application lists it, or a level of its own over it, in its grizzle config's `schemas`,
+ * so the installation holds `Qti`, the policy and these laws, and writes its policy as
+ * {@link MediaType} rows.
  */
-type MediaLaws = ReturnType<typeof lawsOfPolicy>;
-
-/**
- * Build the laws a policy states, by name, or none for no policy: each call its own statements,
- * which the schema built of them holds, and which the importer names its refusals by through that
- * build (`#pantry/qti/schema.ts` `qtiLevelsOf`). None for this package's own install, which is why
- * its schema, migrations and snapshot are the same whether the mode exists or not.
- *
- * @param policy - The install's policy, none for this package's own install.
- * @returns The statements by law; empty for none.
- */
-export const mediaLawsByName = (policy: Option.Option<MediaPolicy>): Partial<MediaLaws> =>
-  Option.match(policy, { onNone: () => ({}), onSome: lawsOfPolicy });
-
-/**
- * Build the query a policy's rule over a query reads, over a stored level: `UnusedEntry`, the
- * entries no document is at and no reference resolves to, by package and path, a query no table
- * stores (README, "Rules over queries"). Each negation is a filter of its own. It is a
- * relation of every build, a policy's or none, so `Qti`'s relations are one shape whatever the
- * policy (`QtiSchema` of `#pantry/qti/schema.ts`); only a policy's build states a law over it
- * ({@link mediaQueriesOf}).
- *
- * @param base - The stored level the query reads.
- * @returns The derived relation.
- */
-const unusedEntryOf = (base: QtiBase) =>
-  derived(
-    "UnusedEntry",
-    query(base).rule((r) => {
-      const { package: pkg, path } = v(Entry, "entry");
-
-      return r
-        .match(Entry, { package: pkg, path })
-        .where(r.not(Document, { package: pkg, path }))
-        .where(r.not(ReferencePath, { package: pkg, path }))
-        .where(r.not(TextReferencePath, { package: pkg, path }))
-        .find({ package: pkg, path });
-    }),
-  );
-
-/**
- * Build what a policy states over the queries of a stored level, beside the checks
- * {@link mediaLawsByName} states over its tables: the relation `UnusedEntry`, in every build, and,
- * for a policy, the rule over it by its law, "Entry used" (the module's header). Its check holds
- * every unused entry to be the manifest, which a document always is, so a package whose every file
- * is the manifest, a document or a resolved reference's path has no row of it, and any other
- * entry breaks the check. None states no rule, and this package's own install none, so its
- * schema, migrations and snapshot hold the relation and no law over it.
- *
- * @param policy - The install's policy, none for this package's own install.
- * @param base - The stored level, built for the same policy.
- * @returns The relations by name, and the statements by law, empty for none.
- */
-export const mediaQueriesOf = (policy: Option.Option<MediaPolicy>, base: QtiBase) => {
-  const UnusedEntry = unusedEntryOf(base);
-  const stated = {
-    "Entry used": [check("Entry_used", UnusedEntry, (u) => u.eq(u.path, manifestPath))],
-  } as const;
-  const lawsByName: Partial<typeof stated> = Option.isSome(policy) ? stated : {};
-
-  return { lawsByName, relations: { UnusedEntry } };
-};
+export const QtiMedia = schema.extend(
+  QtiMediaPolicy,
+  "QtiMedia",
+  {
+    FetchedAttribute,
+    FetchedPath,
+    FetchedTextPath,
+    MediaAttribute,
+    MediaNode,
+    MediaReference,
+    MediaTextReference,
+    ServedPath,
+    ServedTextPath,
+    UnusedEntry,
+  },
+  Object.values(mediaLawsByName).flat(),
+);

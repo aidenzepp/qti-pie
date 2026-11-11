@@ -10,7 +10,7 @@
 import { Option } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
-import type { Qti } from "#pantry/qti/own.ts";
+import type { Qti } from "#pantry/qti/schema.ts";
 import { installedNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**

@@ -1,17 +1,10 @@
 import { readFileSync } from "node:fs";
 import { defineConfig } from "@bjornpagen/grizzle";
 import type { MigrationConnectionConfig } from "@bjornpagen/grizzle";
-import { Console, Effect, FileSystem, Option, PlatformError } from "effect";
+import { Console, Effect, FileSystem, PlatformError } from "effect";
 import { migrationConnection } from "#pantry/db/connection.ts";
-import { authorAppOf } from "#pantry/qti/logins.ts";
-import { qtiSchema } from "#pantry/qti/schema.ts";
-
-/**
- * This package's own `Qti`, with no media policy: the schema the committed migrations install,
- * whatever install `GR8DES_QTI_INSTALL` names for the runtime, since an install's migrations are
- * its own config's to generate.
- */
-const ownQti = qtiSchema(Option.none());
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The file system the migration identity's connection reads the cluster's CA through
@@ -58,13 +51,14 @@ const connection = (): MigrationConnectionConfig =>
   );
 
 /**
- * The grizzle configuration every `grizzle` command of this package names: this package's own
- * `Qti` schema, its one login, the committed migrations, and the migration identity's connection
- * to the local cluster.
+ * The grizzle configuration every `grizzle` command of this package names: `Qti` alone, with no
+ * package-media level, whatever install `GR8DES_QTI_INSTALL` names for the runtime, since an
+ * install's migrations are its own config's to generate; its one login; the committed migrations;
+ * and the migration identity's connection to the local cluster.
  */
 export default defineConfig({
   connection,
-  logins: [authorAppOf(ownQti)],
+  logins: [AuthorApp],
   migrations: "migrations",
-  schemas: [ownQti],
+  schemas: [Qti],
 });

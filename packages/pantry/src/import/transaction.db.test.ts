@@ -32,7 +32,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { WrapApply } from "#pantry/import/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";

@@ -42,7 +42,7 @@ import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { checkNameOf, refusalOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";

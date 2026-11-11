@@ -66,7 +66,7 @@ import {
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
 
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   constraintDescribed,

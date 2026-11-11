@@ -1,12 +1,8 @@
 /**
  * The `Qti` schema's stored level, `QtiBase`, composed by name: every roster and closed relation
  * `install.ts` declares, every stored relation of the `src/qti/` modules, and every module's laws
- * over them, each array once (plan §1.1, the W5 amendment's §C), and an install's package-media
- * laws where its policy states them (`#pantry/qti/media.ts`). `Qti` (`#pantry/qti/schema.ts`) is
- * the level over it that names the queries its rules read (`#pantry/qti/queries.ts`).
- *
- * Loading this module builds no schema: {@link qtiBaseOf} builds one where it is called, each call
- * its own, and the caller holds it (`#pantry/qti/own.ts` for this package's own install).
+ * over them, each array once (plan §1.1, the W5 amendment's §C). `Qti` (`#pantry/qti/schema.ts`)
+ * is the level over it that names the queries its rules read (`#pantry/qti/queries.ts`).
  *
  * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
  * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it
@@ -150,7 +146,6 @@ import {
   ValueSet,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import type { mediaLawsByName } from "#pantry/qti/media.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { dataSsmlLaws, dataSsmlRelations } from "#pantry/qti/data-ssml.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
@@ -516,13 +511,7 @@ type QtiStatement =
   | (typeof operatorLaws)[number]
   | (typeof mathmlLaws)[number]
   | (typeof catalogLaws)[number]
-  | (typeof dataSsmlLaws)[number]
-  | NonNullable<MediaStatements[keyof MediaStatements]>[number];
-
-/**
- * The package-media laws a policy states, by name (`#pantry/qti/media.ts`).
- */
-type MediaStatements = ReturnType<typeof mediaLawsByName>;
+  | (typeof dataSsmlLaws)[number];
 
 /**
  * Every module's statements, in module order, each module's list one element: a list of lists
@@ -576,18 +565,8 @@ export const qtiRelations = {
 };
 
 /**
- * Build the stored level of the QTI 3.0 schema for a package-media install's laws: the relations
- * and every module's laws, then the policy's. Its name, `Qti`, names the installation: its
- * PostgreSQL schema, which holds every table, and its migrations folder, `migrations/qti/`.
- *
- * @param mediaLaws - The policy's laws, none for no policy.
- * @returns The stored level.
+ * The stored level of the QTI 3.0 schema: the relations and every module's laws. Its name, `Qti`,
+ * names the installation: its PostgreSQL schema, which holds every table, and its migrations
+ * folder, `migrations/qti/`.
  */
-export const qtiBaseOf = (mediaLaws: readonly QtiStatement[]) =>
-  schema("Qti", qtiRelations, [...moduleLaws, mediaLaws].flat());
-
-/**
- * The stored level of the QTI 3.0 schema, whatever policy built it: every policy's holds the same
- * relations, and its statements are every module's, then the policy's.
- */
-export type QtiBase = ReturnType<typeof qtiBaseOf>;
+export const QtiBase = schema("Qti", qtiRelations, moduleLaws.flat());

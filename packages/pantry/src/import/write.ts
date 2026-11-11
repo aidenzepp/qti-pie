@@ -65,7 +65,7 @@ import type {
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
-import type { QtiSchema } from "#pantry/qti/schema.ts";
+import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * Where one document stands in its package, beside its view: every overlay builder's `ids` argument
@@ -294,7 +294,7 @@ export type NodeRoot = NodeMember & { readonly document: Addition<typeof Node>["
 export type DocumentLayerRows = {
   readonly [Name in keyof typeof documentLayer]: ReadonlyMap<
     string,
-    Addition<QtiSchema["relations"][Name]>
+    Addition<(typeof Qti)["relations"][Name]>
   >;
 };
 
@@ -307,9 +307,9 @@ export type DocumentLayerRows = {
  * those, so each builder's row types are held to grizzle's here.
  */
 export type PackageInputs = {
-  readonly [Name in keyof InsertAllRowsOf<QtiSchema>]: ReadonlyMap<
+  readonly [Name in keyof InsertAllRowsOf<typeof Qti>]: ReadonlyMap<
     string,
-    InsertAllRowsOf<QtiSchema>[Name][number]
+    InsertAllRowsOf<typeof Qti>[Name][number]
   >;
 };
 

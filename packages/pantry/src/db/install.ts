@@ -1,19 +1,16 @@
 /**
- * The install this process opens: this package's own, whose schema is the default `Qti` and whose
- * snapshot is the committed one, or a package-media install, the folder `GR8DES_QTI_INSTALL` names.
+ * The install a process opens: this package's own, whose served file is the committed one, or a
+ * package-media install, the folder `GR8DES_QTI_INSTALL` names, whose `migrations/` its own grizzle
+ * config generated, the author login's served file `migrations/qti/served/author_app.json` among
+ * them. The setting names the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`), read from
+ * the folder alone ({@link installFolder}, {@link servedPathOf}), and nothing else: the install's
+ * policy is rows of its own database (`MediaType` of `#pantry/qti/media.ts`), and its migrations
+ * are never this package's to generate or apply.
  *
- * A package-media install's folder holds `policy.json`, its policy, and `migrations/`, the
- * migrations a grizzle config outside this package generated for it, the author login's served file
- * `migrations/qti/served/author_app.json` among them. The setting tells this package two things and
- * nothing else: the served file `AuthorAppLayer` opens (`#pantry/db/layer.ts`), which it reads from
- * the folder alone ({@link installFolder}, {@link servedPathOf}), and the policy the `Qti` schema
- * is built with (`#pantry/qti/own.ts`), which only a module that builds the schema reads. Its
- * migrations are never this package's to generate or apply: grizzle.config.ts installs the default
- * `Qti` whatever the setting says.
+ * Its policy file, `policy.json`, parses with {@link MediaPolicySchema}: each of its entries is one
+ * `MediaType` row the install writes.
  */
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import * as NodePath from "@effect/platform-node/NodePath";
-import { Array as Arr, Config, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+import { Array as Arr, Config, Effect, FileSystem, Option, Path, Schema } from "effect";
 
 /**
  * A file extension a media policy lists: lowercase ASCII letters and digits, without its dot, as an
@@ -59,8 +56,10 @@ const typesSpelledTwice = (media: Readonly<Record<string, string>>): readonly st
 /**
  * An install's policy, `policy.json`: exactly `{ "media": { "<extension>": "<type>/<subtype>", ...
  * } }`, the one closed record of the extensions a player may fetch, each with the media type the
- * install serves its files with. It lists at least one extension, and each media type under one
- * extension, its one spelling: a policy that lists `jpg` for `image/jpeg` lists no `jpeg`.
+ * install serves its files with, each entry one row of `MediaType` (`#pantry/qti/media.ts`), which
+ * holds the same two laws: one type per extension, and one extension per type. It lists at least
+ * one extension, and each media type under one extension, its one spelling: a policy that lists
+ * `jpg` for `image/jpeg` lists no `jpeg`.
  */
 export const MediaPolicySchema = Schema.Struct({
   media: Schema.Record(MediaExtension, MediaType).check(
@@ -82,7 +81,8 @@ export type MediaPolicy = typeof MediaPolicySchema.Type;
 const PolicyText = Schema.fromJsonString(MediaPolicySchema);
 
 /**
- * A package-media install: its folder, absolute, and its policy.
+ * A package-media install: its folder, absolute, and its policy, as {@link MediaPolicySchema} parsed
+ * it.
  */
 export interface QtiInstall {
   readonly folder: string;
@@ -141,20 +141,6 @@ export const readInstall = Effect.gen(function* readInstall() {
 
   return Option.some(install);
 }).pipe(Effect.withSpan("db.readInstall"));
-
-/**
- * The policy `Qti` is built with in this process, none for this package's own install: the
- * install's policy, read once, when this module loads, through the process's own settings, for
- * `#pantry/qti/own.ts` to build the schema with. A policy file it refuses fails the load, naming
- * the file. `AuthorAppLayer` reads none of it: it opens the served file by the folder alone,
- * through the layer's own settings.
- */
-export const installedPolicy: Option.Option<MediaPolicy> = Option.map(
-  await Effect.runPromise(
-    readInstall.pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
-  ),
-  ({ policy }) => policy,
-);
 
 /**
  * Name the served file an install's grizzle config generated for the author login:

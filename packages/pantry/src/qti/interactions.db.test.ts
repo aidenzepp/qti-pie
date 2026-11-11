@@ -43,7 +43,7 @@ import { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts"
 import { Document } from "#pantry/qti/chardata.ts";
 import type { AriaRange } from "#pantry/qti/interactions.ts";
 import { Choice, Hottext, Slider } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 import { bitsText } from "#pantry/test/bits.ts";
 import {

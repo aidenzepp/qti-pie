@@ -43,7 +43,7 @@ import {
 } from "#pantry/test/predicates.ts";
 import type { Datum, Row, StoredSide, StoredStatement, Term } from "#pantry/test/predicates.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The fields of an `Attribute` row the oracle knows before the database writes it: its owner's

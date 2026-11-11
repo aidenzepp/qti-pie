@@ -16,7 +16,7 @@
 import { Option, Schema } from "effect";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 /**

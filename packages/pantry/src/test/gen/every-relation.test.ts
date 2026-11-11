@@ -13,7 +13,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   everyRelationPackage,
   scopedPackage,

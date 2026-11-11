@@ -14,7 +14,7 @@
  * - {@link hrefPiecesOf}: an href's path and its query or fragment.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { QtiSchema } from "#pantry/qti/schema.ts";
+import type { Qti } from "#pantry/qti/schema.ts";
 
 // GRIZZLE-PENDING: Q7: a total Compute text split (substring, pattern group or k-th token) generates each piece from its form, and this module goes.
 
@@ -22,17 +22,17 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
  * XML whitespace `S`, possibly none, as the schema's one `Space` type holds every lead, trail and
  * token affix (`#pantry/qti/attributes.ts`).
  */
-export type Space = Addition<QtiSchema["relations"]["Idref"]>["before"];
+export type Space = Addition<(typeof Qti)["relations"]["Idref"]>["before"];
 
 /**
  * The whitespace between a point's or a pair's two items, as `Gap` types it.
  */
-type Gap = Addition<QtiSchema["relations"]["MapKeyItems"]>["gap"];
+type Gap = Addition<(typeof Qti)["relations"]["MapKeyItems"]>["gap"];
 
 /**
  * An href's `params` piece, as `ResourceHref` and `Reference` type it: empty, or from a `?` or `#`.
  */
-type Params = Addition<QtiSchema["relations"]["Reference"]>["params"];
+type Params = Addition<(typeof Qti)["relations"]["Reference"]>["params"];
 
 /**
  * The XML whitespace characters (XML 1.0, production 3, `S`).

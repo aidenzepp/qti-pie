@@ -29,10 +29,9 @@ import type { AnyLogin } from "@bjornpagen/grizzle";
 import { compileServed } from "@bjornpagen/grizzle/compile";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { servedPath } from "#pantry/db/served.ts";
-import { authorAppOf } from "#pantry/qti/logins.ts";
-import { qtiSchema } from "#pantry/qti/schema.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
 
 /**
  * The package's `migrations` folder, which `grizzle.config.ts` names and grizzle lays out as
@@ -42,12 +41,12 @@ const migrationsDirectory = path.resolve(import.meta.dirname, "..", "..", "migra
 
 /**
  * The logins `grizzle.config.ts` configures, each with the folder of its schema under
- * {@link migrationsDirectory}: the author application over this package's own `Qti`, with no
- * single-CDN policy. The config cannot be imported here, since loading it reads the cluster's CA,
- * so this list mirrors its `logins`, and the folder scan holds the committed served files to it.
+ * {@link migrationsDirectory}: the author application over `Qti`. The config cannot be imported
+ * here, since loading it reads the cluster's CA, so this list mirrors its `logins`, and the folder
+ * scan holds the committed served files to it.
  */
 const configured: readonly { readonly login: AnyLogin; readonly schema: string }[] = [
-  { login: authorAppOf(qtiSchema(Option.none())), schema: "qti" },
+  { login: AuthorApp, schema: "qti" },
 ];
 
 /**

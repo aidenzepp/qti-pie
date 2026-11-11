@@ -21,7 +21,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";

@@ -22,11 +22,11 @@ const startupForbidden = [
 ];
 
 /**
- * This package's own install's author login, test support whose workloads grizzle's builders build
- * when the module is evaluated (`#pantry/qti/own-login.ts`): the database layer serves the login's
- * committed file instead, and the dry run needs no login, so neither may reach it statically.
+ * The modules that build `Qti` and its author login when they are evaluated
+ * (`#pantry/qti/schema.ts`, `#pantry/qti/logins.ts`): the database layer serves the login's
+ * committed file instead, and the dry run needs no login, so neither may reach them statically.
  */
-const loginForbidden = ["#pantry/qti/own-login.ts"];
+const loginForbidden = ["#pantry/qti/logins.ts", "#pantry/qti/schema.ts"];
 
 /**
  * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648

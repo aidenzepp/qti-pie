@@ -23,7 +23,7 @@ import { Duration, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { datumText } from "#pantry/test/predicates.ts";

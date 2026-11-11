@@ -11,22 +11,11 @@
  * (decision 441, "AL5 attribute count").
  */
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
-import type { MediaPolicy } from "#pantry/db/install.ts";
 import { lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
-import { qtiLevelsOf } from "#pantry/qti/schema.ts";
+import { mediaLawsByName } from "#pantry/qti/media.ts";
 import { statedInParts } from "#pantry/test/oracle-laws.ts";
 import { namedLaws, statedLaws } from "#pantry/test/law-namer.ts";
-
-/**
- * A package-media install's policy, whose schema states the media laws: `Media data`, `Media
- * foreign`, `Media path`, `Media style` and `Media type`, the last over its extensions, and `Entry
- * used`. This
- * package's own install has no policy and states none of them, so they are counted as stated where
- * a policy states them.
- */
-const probePolicy: MediaPolicy = { media: { svg: "image/svg+xml" } };
 
 /**
  * The laws no module names a statement of, each stated by grizzle's own structure: the statement
@@ -68,7 +57,7 @@ const unstated = (stated: ReadonlySet<string>): readonly LawName[] =>
  */
 const statedByModules = (): ReadonlySet<string> =>
   new Set([
-    ...[...namedLaws, ...qtiLevelsOf(Option.some(probePolicy)).lawsByName].flatMap((byName) =>
+    ...[...namedLaws, mediaLawsByName].flatMap((byName) =>
       Object.entries(byName).flatMap(([name, statements]) => (statements.length > 0 ? [name] : [])),
     ),
     ...statedLaws().map(([, name]) => name),

@@ -98,6 +98,7 @@ import {
   natural,
   on,
   ordered,
+  pg,
   relation,
   select,
   str,
@@ -205,6 +206,58 @@ export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${nc
 export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
 
 /**
+ * The characters the URL Standard strips before a URL, the C0 controls and the space, as the body
+ * of a character class. NUL is left out: no XML document holds it, and grizzle admits no pattern
+ * that does.
+ *
+ * @see {@link https://url.spec.whatwg.org/#c0-control | URL Standard, C0 control}
+ */
+export const leadingStripped = String.raw`\u{1}-\u{20}`;
+
+/**
+ * The ASCII tab and newline the URL Standard removes from anywhere in a URL, as the body of a
+ * character class.
+ *
+ * @see {@link https://url.spec.whatwg.org/#ascii-tab-or-newline | URL Standard, ASCII tab or newline}
+ */
+export const tabOrNewline = String.raw`\t\n\r`;
+
+/**
+ * An address that uses the `data:` scheme, as the URL Standard reads a scheme: past the leading C0
+ * controls and spaces it strips, the letters `data` in any case, any tab or newline among them
+ * removed, and the colon that ends a scheme.
+ *
+ * @see {@link https://url.spec.whatwg.org/#scheme-state | URL Standard, scheme state}
+ */
+export const dataScheme = Compute.pattern<string>(
+  `^[${leadingStripped}]*[dD][${tabOrNewline}]*[aA][${tabOrNewline}]*[tT][${tabOrNewline}]*[aA][${tabOrNewline}]*:`,
+);
+
+/**
+ * A token of an address list that uses the `data:` scheme: at the list's start or after the
+ * whitespace that separates its tokens, which a token never holds.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#atomic-vs-list | XML Schema 1.0 Part 2, §2.5.1.2 List datatypes}
+ */
+const dataToken = Compute.pattern<string>(
+  `(?:^|[${tabOrNewline} ])[${leadingStripped}]*[dD][aA][tT][aA]:`,
+);
+
+/**
+ * A style that makes the player fetch, or could spell a fetch past this pattern, in any case: CSS's
+ * `url(`, an `@import`, `image-set(` (`-webkit-image-set(` among them) and `src(`, each of which
+ * takes an address as a plain string, and any backslash, which begins a CSS escape, so no escaped
+ * spelling such as `\75 rl(` names a function the pattern does not read.
+ *
+ * @see {@link https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point | CSS Syntax 3, consume an escaped code point}
+ * @see {@link https://www.w3.org/TR/css-images-4/#image-set-notation | CSS Images 4, image-set()}
+ * @see {@link https://www.w3.org/TR/css-values-4/#urls | CSS Values 4, src()}
+ */
+const styleFetch = Compute.pattern(
+  String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`,
+);
+
+/**
  * One attribute of an element, at its slot among the element's attributes in source order, which
  * keeps the attributes' order for byte fidelity.
  *
@@ -218,9 +271,16 @@ export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
  * - **drawn:** `at`, and the counts of its three families, `openName`, `idrefs` and `entities`;
  * - **accumulated** by grizzle: `kind`, `version`, `document`, `governor` and `documentType`, its
  *   element's, along the owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this
- *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation.
+ *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation;
+ * - **generated** by PostgreSQL from `lexical`, the three facts of an address a package-media level
+ *   reads (`#pantry/qti/media.ts`): `dataScheme`, whether it uses the `data:` scheme
+ *   ({@link dataScheme}); `dataToken`, whether a token of it does, as an address list's would
+ *   ({@link dataToken}); and `styleFetch`, whether it spells a CSS fetch ({@link styleFetch}). A
+ *   level over `Qti` reads a lower relation only through a query, and a query matches no text its
+ *   type leaves unbounded, as `lexical` is; a generated field reads any text, so the facts are
+ *   fields of the row, and no law of `Qti` reads them.
  */
-export const Attribute = relation(
+export const Attribute = relation.generated(
   "Attribute",
   {
     at: drawn(natural),
@@ -243,6 +303,28 @@ export const Attribute = relation(
     version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
   ["node", "id"],
+  (a) => ({
+    dataScheme: generated(
+      pg.boolean,
+      Compute.cond(
+        Compute.matches(a.lexical, dataScheme),
+        Compute.literal(pg.boolean, true),
+        false,
+      ),
+    ),
+    dataToken: generated(
+      pg.boolean,
+      Compute.cond(Compute.matches(a.lexical, dataToken), Compute.literal(pg.boolean, true), false),
+    ),
+    styleFetch: generated(
+      pg.boolean,
+      Compute.cond(
+        Compute.matches(a.lexical, styleFetch),
+        Compute.literal(pg.boolean, true),
+        false,
+      ),
+    ),
+  }),
 );
 
 /**

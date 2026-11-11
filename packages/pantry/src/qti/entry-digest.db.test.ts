@@ -21,7 +21,7 @@ import { describe } from "vitest";
 import { importDir } from "#pantry/test/import-dir.ts";
 import type { EntryRow } from "#pantry/package/record.ts";
 import { authorWorkloadsOf } from "#pantry/qti/logins.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { Entry } from "#pantry/qti/package.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";

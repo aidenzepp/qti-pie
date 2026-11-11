@@ -24,7 +24,7 @@ import { Duration, Effect, FileSystem, Formatter, Option, Predicate } from "effe
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { cyclePackageOf, cycles, includerCounts, tails } from "#pantry/test/inclusion-cycles.ts";
 import type { CycleCase } from "#pantry/test/inclusion-cycles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";

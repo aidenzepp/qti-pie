@@ -35,7 +35,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 
 import { MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   judged,

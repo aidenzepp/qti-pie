@@ -4,7 +4,7 @@
  * writer inserts each, and the merge unions each by the one part of a relation it reads, its name.
  *
  * The list is held to the schema both ways. The type checker holds {@link writtenRelations} to
- * grizzle's `InsertAllRowsOf<QtiSchema>`: a name it lacks or one it does not take fails the build.
+ * grizzle's `InsertAllRowsOf<typeof Qti>`: a name it lacks or one it does not take fails the build.
  * `roster.test.ts` holds it to `insertableNamesOf(Qti)` and to the relations the builders and the
  * writer write with a real package. A relation a module adds to the schema fails both until its
  * name is listed here.
@@ -15,14 +15,14 @@
  */
 import type { InsertAllRowsOf } from "@bjornpagen/grizzle";
 import { Struct } from "effect";
-import type { QtiSchema } from "#pantry/qti/schema.ts";
+import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * A relation an import writes directly: one `insertAll` takes over `Qti` at its top level, every
  * stored relation of `Qti` but an ordered family's member (`Attribute`, `Namespace`, `Entry` and
  * the like), which is written nested at its owner's count field.
  */
-export type WrittenName = keyof InsertAllRowsOf<QtiSchema>;
+export type WrittenName = keyof InsertAllRowsOf<typeof Qti>;
 
 /**
  * Every relation an import writes directly, by its name, each as the name the merge reads

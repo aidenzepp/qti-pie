@@ -18,7 +18,7 @@ import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Array as Arr, Function as Fn, Option, Order } from "effect";
 import type { LawNamesFile, RefusalLaw } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bucketOf, schemaLawIdsOf, schemaLawNameOf } from "#pantry/test/law-namer.ts";
 
 // GRIZZLE-PENDING: Q3. lawKeyOf would key a law's id by its law; until then the id is found by

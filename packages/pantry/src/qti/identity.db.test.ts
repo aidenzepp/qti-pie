@@ -51,7 +51,7 @@ import {
   SsmlAttribute,
   SsmlScope,
 } from "#pantry/qti/identity.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,

@@ -49,7 +49,8 @@ import { HrefParams, packageLawsByName, Sha256Hex } from "#pantry/qti/package.ts
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
-import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
+import { queryLawsByName } from "#pantry/qti/queries.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { ruleOrder } from "#pantry/import/rules.ts";
@@ -143,6 +144,9 @@ export const namedBy = (
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
+ * - An attribute's three address facts, `dataScheme`, `dataToken` and `styleFetch`, are a pattern's
+ *   match of its lexical form, defined on every text: never NULL, named by the package-media law
+ *   that reads each (`#pantry/qti/media.ts`).
  * - An entry's `digest` is the SHA-256 of its `content`, `Compute.sha256`, defined on every bytes
  *   value: never NULL, so it is named by the law of its relation's rows, "Entry family".
  * - A key text's compared form is its lexical form collapsed (a manifest's and a resource's
@@ -174,6 +178,8 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "SectionSelection.select",
   ),
   ...namedBy("value domain", "StatisticDate.date"),
+  ...namedBy("Media data", "Attribute.dataScheme", "Attribute.dataToken"),
+  ...namedBy("Media style", "Attribute.styleFetch"),
   ...namedBy(
     "E1 derived",
     "DocumentLang.value",
@@ -555,8 +561,7 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
 
 /**
  * The modules that name their laws where they state them, each a {@link LawsByName}: the stored
- * level's, then the groups built with `Qti` (`#pantry/qti/own.ts` `builtLawsByName`), its policy's
- * and each domain's rules over the queries (`#pantry/qti/queries.ts`).
+ * level's, then each domain's rules over the queries (`#pantry/qti/queries.ts` `queryLawsByName`).
  */
 export const namedLaws: readonly LawsByName[] = [
   nodeLawsByName,
@@ -577,7 +582,7 @@ export const namedLaws: readonly LawsByName[] = [
   dataSsmlLawsByName,
   mathmlLawsByName,
   testLawsByName,
-  ...builtLawsByName,
+  ...queryLawsByName,
 ];
 
 /**
