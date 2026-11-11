@@ -77,7 +77,7 @@ else, so no other module of `src/` resolves from outside the package. Every expo
 | `XmlVersionUnread` | error type | A document's stored XML version is no XML version, so no declaration can be written |
 | `AssembleError` | error type | A document's rows do not assemble into one document: `RootMissing`, `RowMissing` or `RowsOutsideImage` |
 
-The eleven published relations are exports too: [Published relations](#published-relations) lists them. A refusal is a
+The thirteen published relations are exports too: [Published relations](#published-relations) lists them. A refusal is a
 verdict value, never an error: the programs fail only for what is not about the package, with the platform's error,
 grizzle's own error, or pantry's errors above. The TSDoc on each name in `src/index.ts` is its reference.
 
@@ -90,6 +90,7 @@ every other relation of `Qti`, is internal and changes with pantry.
 | Relation | Key | Published fields |
 | --- | --- | --- |
 | `Package` | `id` | `id`, `name` |
+| `Entry` | `package`, `at` | `package`, `at`, `path`, `content` |
 | `Document` | `node` | `node`, `package`, `path`, `documentType`, `rootKind` |
 | `TestDocument` | `node` | `node`, `package`, `path`, `rootKind` |
 | `Named` | `node` | `node`, `document`, `identifier`, `kind`, `parent`, `part` |
@@ -99,11 +100,14 @@ every other relation of `Qti`, is internal and changes with pantry.
 | `TestFlag` | `node`, `name` | `node`, `name`, `value` |
 | `ItemRefDocument` | `node` | `node`, `document`, `package`, `path` |
 | `DeclarationIdentifier` | `node` | `node`, `document`, `identifier`, `declarationKind` |
+| `ReferencePath` | `node`, `name` | `node`, `name`, `document`, `package`, `kind`, `path` |
 | `BaseType` | roster | Its handles, which an app's `closedId(BaseType)` columns name |
 
 A section's visibility is its `TestFlag` row named `visible`. QTI requires the attribute on every section, so every
 section has that row. A document's `documentType` is `manifest` for the manifest, and the type of the manifest resource
-that lists it for any other document.
+that lists it for any other document. An item's media is found by path: a reference's `ReferencePath` row holds its
+resolved `path` in its `package`, and that package's `Entry` row with the same `path` holds the file's bytes as
+`content`.
 
 A published field's type is part of the contract, and a closed id carries its roster's handle names. A `BaseType`
 handle is typed as a plain `string`, so `PublishedRow<"BaseType">` does not narrow its `id` to the roster's handles.

@@ -23,10 +23,12 @@ const runtimeNames: readonly string[] = [
   "DeclarationIdentifier",
   "Document",
   "DocumentNotFound",
+  "Entry",
   "ItemRefDocument",
   "Named",
   "Package",
   "PackageNotFound",
+  "ReferencePath",
   "Section",
   "SectionMember",
   "SectionSelection",
@@ -61,8 +63,9 @@ interface ContractEntry {
 /**
  * The published relations' contract, spec section 2.2 on the schema #55 brought: each relation's
  * key and published fields, `Document`'s type field named `documentType` and `Section` without
- * `visible`, which is its `TestFlag` row named `visible` (decision 503), and `BaseType`, a roster
- * published with its handles and no fields.
+ * `visible`, which is its `TestFlag` row named `visible` (decision 503), `Entry` and
+ * `ReferencePath` with every field they declare (operator ruling 6a456d85), and `BaseType`, a
+ * roster published with its handles and no fields.
  */
 const publishedContract = {
   BaseType: { kind: "roster" },
@@ -76,6 +79,11 @@ const publishedContract = {
     key: ["node"],
     kind: "relation",
   },
+  Entry: {
+    fields: ["package", "at", "path", "content"],
+    key: ["package", "at"],
+    kind: "relation",
+  },
   ItemRefDocument: {
     fields: ["node", "document", "package", "path"],
     key: ["node"],
@@ -87,6 +95,11 @@ const publishedContract = {
     kind: "relation",
   },
   Package: { fields: ["id", "name"], key: ["id"], kind: "relation" },
+  ReferencePath: {
+    fields: ["node", "name", "document", "package", "kind", "path"],
+    key: ["node", "name"],
+    kind: "relation",
+  },
   Section: {
     fields: [
       "node",

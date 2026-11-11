@@ -1,7 +1,8 @@
 /**
  * The author role: the one world qti-pie opens, holding every stored relation of `Qti` whole and
- * writing every one of them (plan §1.8; the W5 amendment's A, the privilege ruling), built over the
- * `Qti` schema value it is handed.
+ * inserting into every one of them (plan §1.8), by Bjorn's ruling of 2026-11-10 that the author
+ * role holds SELECT and INSERT only, no UPDATE and no DELETE, built over the `Qti` schema value it
+ * is handed.
  */
 import { role, wholeEntriesOf, writableNamesOf } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
@@ -9,11 +10,14 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * Build the author role over a `Qti` schema: a full role holding every stored relation and every
- * roster whole and writing every stored relation. Its entries are grizzle's `wholeEntriesOf(qti)`,
- * which leaves out the closed relations, no role's entries: every law that reads one is the
- * schema's, and holds whoever writes. A roster has no view, and every query reads its handles as
- * codes. Its write list is `writableNamesOf(qti)`, the stored relations in the schema's order. No
- * relation is `mutable`, so the role holds no UPDATE: each package is inserted once.
+ * roster whole and inserting into every stored relation. Its entries are grizzle's
+ * `wholeEntriesOf(qti)`, which leaves out the closed relations, no role's entries: every law that
+ * reads one is the schema's, and holds whoever writes. A roster has no view, and every query reads
+ * its handles as codes. Its insert list is `writableNamesOf(qti)`, the stored relations in the
+ * schema's order, stated as `insert` in place of `write`, so the role holds SELECT and INSERT on
+ * them and no UPDATE or DELETE anywhere: each package is inserted once, a direct UPDATE or DELETE
+ * through the role is 42501, and a ChangeSet of it that would update or delete is refused when it
+ * compiles (`OutsideRole`, kind `insert`).
  *
  * Built once per schema value: grizzle puts a role in one login only, so the author login
  * (`#pantry/qti/logins.ts` `authorLogin`) and every caller that opens a `Db` or builds a ChangeSet
@@ -24,7 +28,7 @@ import type { QtiSchema } from "#pantry/qti/schema.ts";
  * @see https://github.com/bjornpagen/grizzle/blob/89e94c040262c587065e84df42829a2f12d9f0c3/README.md#L2097-L2105
  */
 export const authorRole = Fn.memoize((qti: QtiSchema) =>
-  role(qti, "author", wholeEntriesOf(qti), { write: writableNamesOf(qti) }),
+  role(qti, "author", wholeEntriesOf(qti), { insert: writableNamesOf(qti) }),
 );
 
 /**

@@ -61,11 +61,10 @@ export const RefusedKind = Schema.Literals(Object.values(refusedKinds));
  * the law table gives it, absent for a law the table does not hold. A program reads which law broke
  * by its `name`, or by its `installed` name where the table names none.
  *
- * The text is no JSON: `Formatter.format` writes a literal's absent type as `undefined` and a
- * bigint as `1n`. The law stays display text because grizzle has no encoder or decoder of its
- * `Law` or its IR, and will never have one, as its owner ruled on 2026-11-08: the database is the
- * whole constraint engine, so a refusal prints what the database states, each law's display text
- * and its installed name.
+ * The text is no JSON: `Formatter.format` writes a bigint as `1n`. The law stays display text
+ * because grizzle has no encoder or decoder of its `Law` or its IR, and will never have one, as its
+ * owner ruled on 2026-11-08: the database is the whole constraint engine, so a refusal prints what
+ * the database states, each law's display text and its installed name.
  */
 export const RefusedLaw = Schema.Struct({
   installed: Schema.optionalKey(Schema.String),

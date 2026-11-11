@@ -143,7 +143,7 @@ export const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
                 kind: "compare" as const,
                 left: termOf(field),
                 op: "eq" as const,
-                right: { kind: "literal" as const, type: undefined, value },
+                right: { kind: "literal" as const, value },
               })),
             },
             terms: [termOf(first), ...rest.map(termOf)],
