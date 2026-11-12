@@ -8,7 +8,7 @@
         {
           "type": "object",
           "properties": {
-            "outcome": { "type": "string", "enum": ["accepted", "no-change"] },
+            "outcome": { "type": "string", "enum": ["accepted", "no-change", "replaced"] },
             "package": { "type": "string" }
           },
           "required": ["outcome", "package"],

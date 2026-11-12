@@ -768,7 +768,7 @@ export const lawTable = {
   "Package key": {
     rule: "reachability",
     source:
-      "plan §1.6: one Package row per manifest identifier, the key every row of the package holds; a different package under a stored identifier is refused on its keys",
+      "plan §1.6: one Package row per manifest identifier, the key every row of the package holds; a different package under a stored identifier replaces the stored one, its rows deleted and the new ones inserted as one set difference (logins.ts replaceWrite)",
   },
   "Picture source srcset": {
     rule: "source-srcset",

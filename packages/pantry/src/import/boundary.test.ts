@@ -154,7 +154,7 @@ const crossings: ByStep = [
     ],
   ],
   // S10 takes out of each module the code of the other side, which no export can carry across:
-  // `ingest` with its login's members (the types of `importWrite` and `packageOf` in
+  // `ingest` with its login's members (the types of `replaceWrite` and `entryDigestsOf` in
   // `qti/logins.ts`, which type the author `Db`'s workload it applies through), retries and refusal
   // report out of `import/package.ts`; the row type with its relations out of `import/write.ts` into the
   // schema, where the author login's workload reads them; the reader's refusal out of `package/refusal-origin.ts` beside `ruleOfError` in `import/rules.ts`,

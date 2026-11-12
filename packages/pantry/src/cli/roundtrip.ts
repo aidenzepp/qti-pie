@@ -94,7 +94,8 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  * entry the export lacks, `extra` for one only the export writes, or the first differing byte.
  *
  * A package the database already holds, the same bytes under its manifest identifier, imports
- * unchanged, and the stored package is exported and compared as one just imported is.
+ * unchanged, and one under a stored identifier with other bytes replaces the stored package; either
+ * way the stored package is exported and compared as one just imported is.
  *
  * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
  * only once the new export is written and compared.

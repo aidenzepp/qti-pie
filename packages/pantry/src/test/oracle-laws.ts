@@ -190,7 +190,7 @@ export const hostlessLaws = {
   "Package identifier":
     "its ManifestId row holds the manifest's identifier as written, whose collapse the importer writes as the package's key and every row's package (decision 457 (3)); a package's text can make no copy disagree with what it copies",
   "Package key":
-    "its one row per package is keyed by its manifest identifier, which every row of the package holds; one package's text states it once, so no package text can repeat or omit it, and a different package under a stored identifier is the database's refusal alone",
+    "its one row per package is keyed by its manifest identifier, which every row of the package holds; one package's text states it once, so no package text can repeat or omit it, and a different package under a stored identifier replaces the stored one, never a refusal",
   "Reference overlay":
     "its rows (DocumentDirectory, XmlBase, Reference, ReferencePath) are each document's directory and each reference's copy, which the importer writes and resolves from the tree (CP 1.2 (b) and (d), reading 102); the host writes no such row, and the laws a package can break over its references are the oracle's Href form, File exists and Stimulus ref target",
   "Test overlay":

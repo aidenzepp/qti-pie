@@ -19,30 +19,34 @@ around them. There is no pantry runtime: the application opens its own connectio
 | --- | --- |
 | `qti/schema.ts` | `Qti`, the one schema constant, every relation public and typed on `Qti.relations` |
 | `qti/media.ts` | `QtiMedia`, the package-media level to stack with `schema.extend`; its policy is `MediaType` rows |
-| `qti/roles.ts`, `qti/logins.ts` | `Author`, `AuthorApp`, and `importWrite`, the import's write program |
+| `qti/roles.ts`, `qti/logins.ts` | `Author`, `AuthorApp`, and `replaceWrite`, the import's write program |
 | `import/read.ts` | `readPackage`: one read, bytes to documents, files by path and referenced paths |
-| `import/program.ts` | `importRowsOf`: the rows a read package is written as, for `importWrite` |
-| `import/package.ts` | `importPackage(db.workload, pkg)`: `importRowsOf` applied through an author `Db`'s `importWrite`, with retries |
+| `import/program.ts` | `importRowsOf`: the rows a read package is written as, for `replaceWrite` |
+| `import/package.ts` | `importPackage(db.workload, pkg)`: `importRowsOf` applied through an author `Db`'s `replaceWrite`, with retries |
 | `import/refusal.ts`, `vocab/laws.ts` | `lawNameOf`, `rulesOf` and `lawTable`: a refused law's QTI rule |
 | `export/scan.ts`, `export/render.ts` | `documentScan` and `entriesOf` (grizzle queries), `documentScanOf(document)`, and `documentXml(rows)` |
 | `db/install.ts` | `MediaPolicySchema`, which parses `policy.json`, `{ "media": { "<extension>": "<type>" } }` |
 
-An application imports a package in its own transaction:
+An application writes its import through `replaceWrite`, in its own transaction:
 
 ```ts
 const pkg = yield* readPackage(dir)
-const { insert, packageId } = yield* importRowsOf(pkg)
+const { insert, package: identifier } = yield* importRowsOf(pkg)
 const db = yield* Db.open(AuthorServed.roles.author, {})
-const outcome = yield* db.workload.importWrite.apply({ insert }, {})
+const outcome = yield* db.workload.replaceWrite.apply({ insert }, { package: identifier })
 ```
 
-A refusal is grizzle's `invariant-rejected` outcome; `rulesOf(outcome.refused.laws)` names its QTI rules.
+`replaceWrite` deletes the rows stored under the package's manifest identifier and inserts the package's, which grizzle
+plans as one set difference: the rows both hold stay as they are. A new package is `accepted` with no row deleted, the
+same package again is `no-change`, and a changed one is `accepted` with the rows it deleted counted. A refusal is
+grizzle's `invariant-rejected` outcome; `rulesOf(outcome.refused.laws)` names its QTI rules.
 
 Or it imports one with its retries, its read-back of an unanswered commit and its named refusal, through its author
-`Db`'s workload, over `AuthorApp` or `MediaAuthorApp` (`qti/media.ts`) alike:
+`Db`'s workload, over `AuthorApp` or `MediaAuthorApp` (`qti/media.ts`) alike. Its outcome is `accepted`, `no-change`
+or `replaced`, a changed package under a stored identifier:
 
 ```ts
-const packageId = yield* importPackage(db.workload, pkg)
+const { outcome, package: identifier } = yield* importPackage(db.workload, pkg)
 ```
 
 An application reads a document inside its own read with `documentScanOf`, the scan `documentScan` pages, unpaged,

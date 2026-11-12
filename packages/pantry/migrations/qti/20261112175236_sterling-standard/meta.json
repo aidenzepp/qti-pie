@@ -5916,7 +5916,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__data_ssml_property_ix_member_name_package_path_v26pxk2mtw\" ON \"qti\".\"data_ssml_property\" USING btree (\"member\", \"name\", \"package\", \"path\", \"start\")"
+						"statement": "CREATE INDEX \"__data_ssml_property_ix_package_member_name_path_clipt2ssbl\" ON \"qti\".\"data_ssml_property\" USING btree (\"package\", \"member\", \"name\", \"path\", \"start\")"
 					},
 					{
 						"kind": "statement",
@@ -6304,7 +6304,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__map_key_type_ix_base_type_package_path_mapping_32zdpvz2gr\" ON \"qti\".\"map_key_type\" USING btree (\"base_type\", \"package\", \"path\", \"mapping\")"
+						"statement": "CREATE INDEX \"__map_key_type_ix_package_base_type_path_mapping_ynyjphvkjn\" ON \"qti\".\"map_key_type\" USING btree (\"package\", \"base_type\", \"path\", \"mapping\")"
 					},
 					{
 						"kind": "statement",
@@ -6732,7 +6732,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__reading_declaration_ix_declaration_document_form_zuxj3aws6v\" ON \"qti\".\"reading_declaration\" USING btree (\"declaration_document\", \"form\", \"package\", \"source\", \"decl_base_types\", \"decl_cardinalities\", \"declaration\", \"declaration_kind\", \"assembly\")"
+						"statement": "CREATE INDEX \"__reading_declaration_ix_package_declaration_6iz6t2dfnk\" ON \"qti\".\"reading_declaration\" USING btree (\"package\", \"declaration_document\", \"form\", \"source\", \"decl_base_types\", \"decl_cardinalities\", \"declaration\", \"declaration_kind\", \"assembly\")"
 					},
 					{
 						"kind": "statement",
@@ -27118,7 +27118,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__data_ssml_property_ix_member_name_package_path_v26pxk2mtw\" IS 'btree index DataSsmlProperty(member, name, package, path, start)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__data_ssml_property_ix_package_member_name_path_clipt2ssbl\" IS 'btree index DataSsmlProperty(package, member, name, path, start)'"
 					},
 					{
 						"kind": "statement",
@@ -27506,7 +27506,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__map_key_type_ix_base_type_package_path_mapping_32zdpvz2gr\" IS 'btree index MapKeyType(baseType, package, path, mapping)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__map_key_type_ix_package_base_type_path_mapping_ynyjphvkjn\" IS 'btree index MapKeyType(package, baseType, path, mapping)'"
 					},
 					{
 						"kind": "statement",
@@ -27934,7 +27934,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__reading_declaration_ix_declaration_document_form_zuxj3aws6v\" IS 'btree index ReadingDeclaration(declarationDocument, form, package, source, declBaseTypes, declCardinalities, declaration, declarationKind, assembly)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__reading_declaration_ix_package_declaration_6iz6t2dfnk\" IS 'btree index ReadingDeclaration(package, declarationDocument, form, source, declBaseTypes, declCardinalities, declaration, declarationKind, assembly)'"
 					},
 					{
 						"kind": "statement",
@@ -32314,7 +32314,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "8eb09acfd6ef557a28bc5191bf1034c04108321285041744774b0f5eff833088"
+		"target": "a5713507fb308c4d02307b00b54e37def7d2d401904a5058474788005a482925"
 	},
-	"seal": "b1809800b8ad11c3d971c0ccec9033b887fbef70777a6c7fda6f0b2faaca9a30"
+	"seal": "9b3c25edd1a3674cc4db21529809eba6a02acbda350b088683a70a50d9bebc9d"
 }

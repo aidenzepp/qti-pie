@@ -9604,7 +9604,7 @@ COMMENT ON INDEX "qti"."__count_bound_ix_package_x_4_gjipbao_7_path_woijp53lx6" 
 
 COMMENT ON INDEX "qti"."__count_bound_ix_package_y_4_jwhqbt_3_c_path_3_lplsr_cbqbnw55jg" IS 'btree index CountBound(__package_y4jwhqbt3c, __path_3lplsr4cxi, __start_i6ax5sd6v2, __choices_figr66khyk)';
 
-COMMENT ON INDEX "qti"."__data_ssml_property_ix_member_name_package_path_v26pxk2mtw" IS 'btree index DataSsmlProperty(member, name, package, path, start)';
+COMMENT ON INDEX "qti"."__data_ssml_property_ix_package_member_name_path_clipt2ssbl" IS 'btree index DataSsmlProperty(package, member, name, path, start)';
 
 COMMENT ON INDEX "qti"."__data_ssml_property_ix_package_path_start_member_a63c4h5rgl" IS 'btree index DataSsmlProperty(package, path, start, member, memberName)';
 
@@ -9798,7 +9798,7 @@ COMMENT ON INDEX "qti"."__map_key_items_ix_package_path_mapping_ordered_bu3n2kir
 
 COMMENT ON INDEX "qti"."__map_key_items_ix_package_path_mapping_unordered_yoc7rxcbv5" IS 'btree index MapKeyItems(package, path, mapping, unordered)';
 
-COMMENT ON INDEX "qti"."__map_key_type_ix_base_type_package_path_mapping_32zdpvz2gr" IS 'btree index MapKeyType(baseType, package, path, mapping)';
+COMMENT ON INDEX "qti"."__map_key_type_ix_package_base_type_path_mapping_ynyjphvkjn" IS 'btree index MapKeyType(package, baseType, path, mapping)';
 
 COMMENT ON INDEX "qti"."__mapping_ix_package_nb_6_s_24_lbvy_path_wibt_6_fzcm_ghc5ilh53d" IS 'btree index Mapping(__package_nb6s24lbvy, __path_wibt6fzcm4, __start_knfgyygrxk)';
 
@@ -10012,7 +10012,7 @@ COMMENT ON INDEX "qti"."__reading_declaration_ix_package_ujww_52_sjfo_aumnbklufa
 
 COMMENT ON INDEX "qti"."__reading_declaration_ix_package_wu_32_pxylui_rekymddpzn" IS 'btree index ReadingDeclaration(__package_wu32pxylui, __assembly_k2akboys45, __path_u34szm7sgp, __start_qig7wy2tmx, __attribute_5iljhx7ndq, __form_rs3xtjqw6s, __split_4pnlupb6im)';
 
-COMMENT ON INDEX "qti"."__reading_declaration_ix_declaration_document_form_zuxj3aws6v" IS 'btree index ReadingDeclaration(declarationDocument, form, package, source, declBaseTypes, declCardinalities, declaration, declarationKind, assembly)';
+COMMENT ON INDEX "qti"."__reading_declaration_ix_package_declaration_6iz6t2dfnk" IS 'btree index ReadingDeclaration(package, declarationDocument, form, source, declBaseTypes, declCardinalities, declaration, declarationKind, assembly)';
 
 COMMENT ON INDEX "qti"."__record_field_ix_package_vcjcfjcpnu_path_dq_7_hlds_xw25uxw5vy" IS 'btree index RecordField(__package_vcjcfjcpnu, __path_dq7hlds3kc, __start_7bngp2cdcn, __identifier_lexical_dewsflk2g3)';
 

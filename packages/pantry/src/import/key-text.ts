@@ -1,5 +1,5 @@
 /**
- * The text of a row's key in a keyed set, which every input of the author login's `importWrite`
+ * The text of a row's key in a keyed set, which every input of the author login's `replaceWrite`
  * ChangeSet is keyed by (`#pantry/import/write.ts`), and which the overlay builders and the
  * package's own rows key theirs by alike.
  */

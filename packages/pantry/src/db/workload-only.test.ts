@@ -106,7 +106,7 @@ describe("pantry's programs on a database", () => {
     assert.deepStrictEqual(adHocCalls(planted), ["session.apply", "session.get"]);
     assert.deepStrictEqual(
       adHocCalls(
-        "const db = yield* Db.open(Author, {});\nyield* db.workload.importWrite.apply(rows, {});",
+        "const db = yield* Db.open(Author, {});\nyield* db.workload.replaceWrite.apply(rows, params);",
       ),
       [],
     );

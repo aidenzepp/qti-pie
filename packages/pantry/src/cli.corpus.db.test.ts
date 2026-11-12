@@ -103,9 +103,8 @@ const texts = (facts: readonly { readonly text: string }[]): readonly string[] =
  * second, finds the importer's package stored and answers no-change under the same identifier.
  *
  * Three pairs of accepted corpus zips share a manifest identifier (CONTRACT section 5), so a case
- * meets the package of an earlier case under its own identifier. The import replaces it (grizzle's
- * set-difference replace, GRIZZLE-PENDING(WHOLEDEL)); until that lands the later zip of each pair
- * is refused on `Package`'s key, and its verdict differs from the committed file's.
+ * meets the package of an earlier case under its own identifier, and the import replaces it
+ * (`replaceWrite` of `#pantry/qti/logins.ts`, grizzle's set-difference replace).
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;

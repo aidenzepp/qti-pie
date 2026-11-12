@@ -117,7 +117,7 @@ import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { Attribute, OpenAttribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { authorReads, authorWrites, importWrite } from "#pantry/qti/logins.ts";
+import { authorReads, authorWrites, replaceWrite } from "#pantry/qti/logins.ts";
 import { Node } from "#pantry/qti/node.ts";
 import {
   Entry,
@@ -599,8 +599,8 @@ export const QtiMedia = schema.extend(
  * does, and no relation of the policy: {@link MediaType} is written through a role of its own, one
  * that writes nothing a READ COMMITTED reader reads ({@link QtiMediaPolicy}). grizzle's `write`
  * grants SELECT, INSERT and DELETE on each table it names, and no UPDATE, since no relation of
- * `Qti` is mutable: the import inserts a package's rows, and the replace deletes them under the
- * package's identifier and inserts the new ones (`replaceWrite`).
+ * `Qti` is mutable: the import's replace deletes a package's stored rows under its identifier and
+ * inserts the new ones, keeping the rows both hold (`replaceWrite`).
  *
  * Over `QtiMedia`, a refusal by a media law is the law's own, `every` with the row's key as its
  * witness where the host judges the row; over `Qti`, it is `{ kind: "above", level: "QtiMedia",
@@ -619,19 +619,16 @@ export type MediaAuthorRole = typeof MediaAuthor;
 /**
  * The author application's login over {@link QtiMedia}, over {@link MediaAuthor}, with the
  * workloads `AuthorApp` of `#pantry/qti/logins.ts` holds, `authorReads`, then the import's write,
- * `importWrite`: every program is over `Qti`, so its served file holds the same members. It bears
+ * `replaceWrite`: every program is over `Qti`, so its served file holds the same members. It bears
  * `AuthorApp`'s name, so grizzle writes it as `migrations/<root>/served/author_app.json`. An
  * application's grizzle config lists this or `AuthorApp`, never both, since their names convert
  * alike. An application that writes rows of its own beside a package's in one transaction declares
  * its own role over its own level instead, writing `authorWrites` beside its relations, and
- * composes `replaceWrite` of a package's rows with its own writes (`ChangeSet.union`,
- * `ChangeSet.sequence`) into its one ChangeSet.
+ * composes `replaceWrite` with its own writes (`ChangeSet.union`, `ChangeSet.sequence`) into its
+ * one ChangeSet.
  */
-// GRIZZLE-PENDING(WHOLEDEL): `replaceWrite` is a function of a package's rows, and a function is no
-// workload member; once grizzle's set-difference replace has a rowless, served form, it joins
-// `importWrite` in the write workload.
 export const MediaAuthorApp = login(QtiMedia, "author_app", [MediaAuthor], {
-  workload: [workload(MediaAuthor, authorReads), workload(MediaAuthor, { importWrite })],
+  workload: [workload(MediaAuthor, authorReads), workload(MediaAuthor, { replaceWrite })],
 });
 
 /**

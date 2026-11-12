@@ -98,8 +98,9 @@ export const programOf = Effect.fn("import.programOf")(function* programOf(
 
 /**
  * The rows one package is written as, in the shape the import's write program takes them
- * (`importWrite` of `#pantry/qti/logins.ts`): `insert`, one array of rows per relation an import
- * writes, and `package`, the manifest identifier its `Package` row is keyed by.
+ * (`replaceWrite` of `#pantry/qti/logins.ts`): `insert`, one array of rows per relation an import
+ * writes, and `package`, the manifest identifier its `Package` row is keyed by, the parameter its
+ * deletes select the stored rows by.
  */
 export interface ImportRows {
   readonly insert: ReturnType<typeof packageFactsOf>;
@@ -112,7 +113,8 @@ export interface ImportRows {
  *
  * ```ts
  * const rows = yield * importRowsOf(pkg);
- * const outcome = yield * db.workload.importWrite.apply({ insert: rows.insert }, {});
+ * const outcome =
+ *   yield * db.workload.replaceWrite.apply({ insert: rows.insert }, { package: rows.package });
  * ```
  *
  * It opens no database and judges no law: every law is the database's, and a refusal is grizzle's

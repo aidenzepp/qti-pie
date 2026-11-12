@@ -1,5 +1,5 @@
 /**
- * The rows one package is written as, the facts the author login's `importWrite` ChangeSet applies
+ * The rows one package is written as, the facts the author login's `replaceWrite` ChangeSet applies
  * (`#pantry/qti/logins.ts`; plan W5, Q5.15; the W5 amendment's A, C5, C13, C19 and C21;
  * rows-first.md §1 and §2).
  *
@@ -788,10 +788,10 @@ const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
 
 /**
  * Read one package's facts, the rows of each relation of its inputs as `insertAll` takes them: each
- * keyed set's rows, in the order the set holds them. They are what the author login's `importWrite`
- * member applies (`db.workload.importWrite.apply(facts, {})`), which grizzle checks as each
- * relation's insert checks its rows. The rows are a set: no order of them changes what the write
- * holds or which law refuses it.
+ * keyed set's rows, in the order the set holds them. They are what the author login's
+ * `replaceWrite` member inserts (`db.workload.replaceWrite.apply({ insert: facts }, { package })`),
+ * which grizzle checks as each relation's insert checks its rows. The rows are a set: no order of
+ * them changes what the write holds or which law refuses it.
  *
  * @param inputs - The package's inputs.
  * @returns The facts, one array of rows per relation.

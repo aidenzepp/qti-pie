@@ -15,7 +15,7 @@
  * every overlay's.
  */
 import type { InsertAllRowsOf } from "@bjornpagen/grizzle";
-import { Record as Rec, Struct } from "effect";
+import { Struct } from "effect";
 import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -322,93 +322,3 @@ export const overlayRelations = Struct.omit(writtenRelations, [
   "Package",
   ...documentLayerNames,
 ]);
-
-/**
- * The relations an import writes directly that are a counted family's members, each a row of its
- * own relation: a replace deletes each with its family's owner, since grizzle deletes what a family
- * nests under the row it deletes (G2), so it states no delete of its own.
- */
-export const familyMemberNames = [
-  "AriaValue",
-  "Attribute",
-  "AttributeEntity",
-  "BindingName",
-  "BodyXmlLang",
-  "BranchResolution",
-  "BranchRule",
-  "BranchShuffle",
-  "CatalogRef",
-  "Choice",
-  "ChoiceInteraction",
-  "CnPartText",
-  "CnSlot",
-  "DeclarationBaseType",
-  "DeclarationCardinality",
-  "DocumentId",
-  "File",
-  "GapInteraction",
-  "Hottext",
-  "IdrefTarget",
-  "InstanceName",
-  "LeastCount",
-  "LomLanguage",
-  "LomStringLanguage",
-  "MappingItemRefType",
-  "MasteryValue",
-  "MathAlignGroup",
-  "MathArgument",
-  "MathQualifier",
-  "MostCount",
-  "Named",
-  "Namespace",
-  "NormalMaximum",
-  "NormalMinimum",
-  "OpenAttribute",
-  "OpenAttributeEntity",
-  "Operand",
-  "PciModuleForm",
-  "PlacedBinding",
-  "PlacedBodyXmlLang",
-  "PlacedCatalogRef",
-  "PlacedChoice",
-  "PlacedHottext",
-  "PlacedId",
-  "PlacedIdref",
-  "PlacedReference",
-  "PlacedShareTarget",
-  "PlacedVariableRef",
-  "PlacedXmlLang",
-  "Reading",
-  "RecordField",
-  "SectionContextName",
-  "SectionContextRef",
-  "SectionFeedbackName",
-  "SectionFeedbackRef",
-  "SectionMember",
-  "SectionPrintedName",
-  "SectionPrintedRef",
-  "SectionTemplateName",
-  "SectionTemplateRef",
-  "SiteTarget",
-  "SsmlAttribute",
-  "TestReference",
-  "VariableRef",
-  "XmlLang",
-] as const satisfies readonly WrittenName[];
-
-/**
- * The package's top relations, by name, each with the fields a replace's delete selects its rows
- * by, a query over the package (`replaceWrite` of `#pantry/qti/logins.ts`): a tree by its root, and
- * every other relation no family nests by its whole row. A family's members leave with their owner
- * ({@link familyMemberNames}).
- */
-// GRIZZLE-PENDING(WHOLEDEL): the replace's deletes read this once grizzle deletes a tree by its root
-// and a family's members with their owner; until then `replaceWrite` inserts alone.
-export const deletedBy = {
-  ...Rec.map(
-    Struct.omit(writtenRelations, [...familyMemberNames, "Instance", "Node"]),
-    () => "row" as const,
-  ),
-  Instance: ["package", "assembly"],
-  Node: ["package", "path"],
-} as const;

@@ -6,7 +6,7 @@
  * oracle reads every document, `readProgram` yields a write program over exactly the documents the
  * oracle read. `#pantry/test/gen/assembly.test.ts` holds the same packages' rows to reading 87.
  *
- * The write program itself is the author login's `importWrite` member, one ChangeSet over every
+ * The write program itself is the author login's `replaceWrite` member, one ChangeSet over every
  * relation an import writes, whatever the package (`#pantry/qti/logins.ts`); `grizzle generate`
  * compiles it into the served file and `grizzle check` holds the file to it.
  */

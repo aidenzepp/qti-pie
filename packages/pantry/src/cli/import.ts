@@ -6,8 +6,9 @@ import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 import type { importPackage } from "#pantry/import/package.ts";
 
 /**
- * What an import's write did: stored the package, or found it stored already, the same bytes under
- * its manifest identifier (`#pantry/import/package.ts` `importPackage`).
+ * What an import's write did: stored the package, found it stored already, the same bytes under
+ * its manifest identifier, or replaced the package stored under that identifier
+ * (`#pantry/import/package.ts` `importPackage`).
  */
 type ImportOutcome = Effect.Success<ReturnType<typeof importPackage>>["outcome"];
 
@@ -19,17 +20,22 @@ type ImportOutcome = Effect.Success<ReturnType<typeof importPackage>>["outcome"]
 const outcomeText = {
   accepted: "imported",
   "no-change": "unchanged",
+  replaced: "replaced",
 } as const satisfies Readonly<Record<ImportOutcome, string>>;
 
 /**
  * The importer's outcomes, {@link outcomeText}'s keys, as the literals `--output json` prints.
  */
-const importOutcomes = ["accepted", "no-change"] as const satisfies readonly ImportOutcome[];
+const importOutcomes = [
+  "accepted",
+  "no-change",
+  "replaced",
+] as const satisfies readonly ImportOutcome[];
 
 /**
  * What `import` returns under `--output json` when the database holds the package: its manifest
- * identifier, which names it to `export`, and whether this import stored it (`accepted`) or found
- * it stored already (`no-change`).
+ * identifier, which names it to `export`, and whether this import stored it (`accepted`), found it
+ * stored already (`no-change`), or replaced the package stored under its identifier (`replaced`).
  */
 const ImportStored = Schema.Struct({
   outcome: Schema.Literals(importOutcomes),
@@ -56,12 +62,11 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
 
 /**
  * Import the package in `dir`, a directory or a `.zip` file, then print its manifest identifier and
- * whether it was imported or unchanged. A package the database already holds, the same bytes under
- * its identifier, is unchanged, which is success. A different package under a stored identifier is
- * refused on the package's key, the honest answer until the import replaces it: grizzle's replace
- * by set difference is pending (GRIZZLE-PENDING(WHOLEDEL)), and the outcome it adds joins
- * {@link outcomeText}, which fails to compile until it does. Under `--dry-run` it reads and checks
- * the package, prints how much it holds and stores nothing.
+ * whether it was imported, unchanged or replaced ({@link outcomeText}). A package the database
+ * already holds, the same bytes under its identifier, is unchanged, which is success. A different
+ * package under a stored identifier replaces the stored one, as one set difference of their rows:
+ * the rows both hold stay as they are. Under `--dry-run` it reads and checks the package, prints
+ * how much it holds and stores nothing.
  *
  * A dry run is the import's own read (`previewPackage`): the package read, its documents shredded
  * and every row built, and nothing written. It does not open the database, so the database's laws
@@ -125,7 +130,7 @@ export const importCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import the package in <dir>, a directory or a .zip file, and print its manifest identifier, imported or, when the database already holds the same package, unchanged (writes the database; with --dry-run it reads and checks the package, writes nothing, and the database's own checks do not run)",
+    "Import the package in <dir>, a directory or a .zip file, and print its manifest identifier: imported; unchanged, when the database already holds the same package; or replaced, when it holds another package under that identifier (writes the database; with --dry-run it reads and checks the package, writes nothing, and the database's own checks do not run)",
   ),
   Command.withExamples([
     { command: "qti import ./my-package", description: "Import an unzipped package" },

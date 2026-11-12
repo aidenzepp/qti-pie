@@ -368,7 +368,7 @@ const uncompiledHelp =
  * What to do next after an import whose commit got no answer and whose read-back failed
  * (`CommitUnresolved` of `#pantry/import/package.ts`): the package may be stored. Importing it
  * again is safe, since a package is keyed by its manifest identifier: the same package again is
- * unchanged, and a different one under a stored identifier is refused.
+ * unchanged, and a different one under a stored identifier is replaced.
  */
 const commitUnresolvedHelp =
   "The package may have been stored. Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then look for the package by the manifest identifier the message names (`qti export --dry-run <dir> <identifier>`), or import it again: the same package again is unchanged, never a second copy.";

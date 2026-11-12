@@ -1,6 +1,6 @@
 /**
  * A package applied through the author login as the database tests apply one: its import program
- * read, one edit of its inputs, and the login's `importWrite` member applied to its facts; and the
+ * read, one edit of its inputs, and the login's `replaceWrite` member applied to its facts; and the
  * laws a refusal is matched against. A test judges its own package by its manifest identifier
  * ({@link packageStored}), never by a count of every stored package, so it holds beside another
  * file's imports.
@@ -29,7 +29,10 @@ export const applyEdited = (
     const program = yield* readProgram(dir);
     const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
     const [applied, outcome] = yield* Effect.timed(
-      db.workload.importWrite.apply({ insert: packageFactsOf(edit(program.inputs)) }, {}),
+      db.workload.replaceWrite.apply(
+        { insert: packageFactsOf(edit(program.inputs)) },
+        { package: program.package },
+      ),
     );
 
     yield* Effect.log("import apply", { applyMillis: Duration.toMillis(applied), dir });

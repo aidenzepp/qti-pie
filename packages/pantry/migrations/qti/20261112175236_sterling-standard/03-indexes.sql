@@ -114,7 +114,7 @@ CREATE INDEX "__count_bound_ix_package_x_4_gjipbao_7_path_woijp53lx6" ON "qti"."
 
 CREATE INDEX "__count_bound_ix_package_y_4_jwhqbt_3_c_path_3_lplsr_cbqbnw55jg" ON "qti"."count_bound" USING btree ("__package_y4jwhqbt3c", "__path_3lplsr4cxi", "__start_i6ax5sd6v2", "__choices_figr66khyk");
 
-CREATE INDEX "__data_ssml_property_ix_member_name_package_path_v26pxk2mtw" ON "qti"."data_ssml_property" USING btree ("member", "name", "package", "path", "start");
+CREATE INDEX "__data_ssml_property_ix_package_member_name_path_clipt2ssbl" ON "qti"."data_ssml_property" USING btree ("package", "member", "name", "path", "start");
 
 CREATE INDEX "__data_ssml_property_ix_package_path_start_member_a63c4h5rgl" ON "qti"."data_ssml_property" USING btree ("package", "path", "start", "member", "member_name");
 
@@ -308,7 +308,7 @@ CREATE INDEX "__map_key_items_ix_package_path_mapping_ordered_bu3n2kirim" ON "qt
 
 CREATE INDEX "__map_key_items_ix_package_path_mapping_unordered_yoc7rxcbv5" ON "qti"."map_key_items" USING btree ("package", "path", "mapping", "unordered");
 
-CREATE INDEX "__map_key_type_ix_base_type_package_path_mapping_32zdpvz2gr" ON "qti"."map_key_type" USING btree ("base_type", "package", "path", "mapping");
+CREATE INDEX "__map_key_type_ix_package_base_type_path_mapping_ynyjphvkjn" ON "qti"."map_key_type" USING btree ("package", "base_type", "path", "mapping");
 
 CREATE INDEX "__mapping_ix_package_nb_6_s_24_lbvy_path_wibt_6_fzcm_ghc5ilh53d" ON "qti"."mapping" USING btree ("__package_nb6s24lbvy", "__path_wibt6fzcm4", "__start_knfgyygrxk");
 
@@ -522,7 +522,7 @@ CREATE INDEX "__reading_declaration_ix_package_ujww_52_sjfo_aumnbklufa" ON "qti"
 
 CREATE INDEX "__reading_declaration_ix_package_wu_32_pxylui_rekymddpzn" ON "qti"."reading_declaration" USING btree ("__package_wu32pxylui", "__assembly_k2akboys45", "__path_u34szm7sgp", "__start_qig7wy2tmx", "__attribute_5iljhx7ndq", "__form_rs3xtjqw6s", "__split_4pnlupb6im");
 
-CREATE INDEX "__reading_declaration_ix_declaration_document_form_zuxj3aws6v" ON "qti"."reading_declaration" USING btree ("declaration_document", "form", "package", "source", "decl_base_types", "decl_cardinalities", "declaration", "declaration_kind", "assembly");
+CREATE INDEX "__reading_declaration_ix_package_declaration_6iz6t2dfnk" ON "qti"."reading_declaration" USING btree ("package", "declaration_document", "form", "source", "decl_base_types", "decl_cardinalities", "declaration", "declaration_kind", "assembly");
 
 CREATE INDEX "__record_field_ix_package_vcjcfjcpnu_path_dq_7_hlds_xw25uxw5vy" ON "qti"."record_field" USING btree ("__package_vcjcfjcpnu", "__path_dq7hlds3kc", "__start_7bngp2cdcn", "__identifier_lexical_dewsflk2g3");
 

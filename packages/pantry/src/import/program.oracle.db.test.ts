@@ -14,7 +14,7 @@
  * admits. A corruption no written type admits (a gap in a family's slots, a wrong count, a junk
  * accumulator) cannot be written through the API at all; those are the slices' direct-SQL cases.
  *
- * Each case also logs how long its apply takes: the author login's `importWrite` member, compiled
+ * Each case also logs how long its apply takes: the author login's `replaceWrite` member, compiled
  * once by `grizzle generate` into the login's served file, applied to the package's facts.
  */
 import { CommitUnknown } from "@bjornpagen/grizzle";

@@ -2276,7 +2276,7 @@ const usageMember = "qtiv3-examples/packaging/usageData/usageData.zip";
  * The manifest identifier of each corpus package whose variants the lease imports into one
  * database, by its tarball member: `simple`'s, which 1EdTech's `svg` shares, `sharedMedia`'s and
  * `usageData`'s. A package is keyed by its manifest identifier (`#pantry/qti/package.ts`), so two
- * variants under one identifier would be one package twice, the second refused on the key; each
+ * variants under one identifier would be one package twice, the second replacing the first; each
  * variant holds its own ({@link variantOf}).
  */
 const copiedIdentifiers: ReadonlyMap<string, string> = new Map([

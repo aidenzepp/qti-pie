@@ -211,7 +211,8 @@ const readFailures: readonly ReadError[] = [
 ];
 
 /**
- * What the read-back of a `CommitUnknown` can answer: the package row, no row, or a failure.
+ * What the read-back of a `CommitUnknown` can answer: the package's entries as the apply wrote
+ * them, other entries, or a failure.
  */
 type ReadBack =
   | { readonly kind: "present" }
@@ -228,21 +229,16 @@ const readBacks: readonly ReadBack[] = [
 ];
 
 /**
- * The read a {@link ReadBack} stands for, as `db.get` of the package row would answer it.
+ * The read a {@link ReadBack} stands for, as the comparison of the stored entries with the
+ * package's would answer it: whether the database holds the package as the apply wrote it.
  *
  * @param readBack - The read-back.
  * @returns The stub of the read.
  */
-const stubRead = (
-  readBack: ReadBack,
-): Effect.Effect<Option.Option<{ readonly identifier: string }>, ReadError> =>
+const stubRead = (readBack: ReadBack): Effect.Effect<boolean, ReadError> =>
   readBack.kind === "fails"
     ? Effect.fail(readBack.failure)
-    : Effect.succeed(
-        readBack.kind === "present"
-          ? Option.some({ identifier: readBackIdentifier })
-          : Option.none(),
-      );
+    : Effect.succeed(readBack.kind === "present");
 
 /**
  * Name a {@link ReadBack}, for an assertion's message.
