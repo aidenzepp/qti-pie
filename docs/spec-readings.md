@@ -17,7 +17,7 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    only what a package cannot represent or accepting only what it cannot check, for the cause it names.
 
    Limits that refuse valid content:
-   - **Key-text bound** (`key-text-bound`): a text a key holds is at most 2,587 UTF-8 bytes, what a PostgreSQL B-tree
+   - **Key-text bound** (`key-text-bound`): a text a key holds is at most 858 UTF-8 bytes, what a PostgreSQL B-tree
      entry leaves it beside the widest key's other columns (reading 133, with its copies in readings 2 and 60).
    - **Element depth** (`element-depth`): at most 256 elements are open at once, the bound `@qti-pie/crust`'s reader
      keeps for pantry and plate alike (`defaultElementDepth`, as in `xmllint`). XML and QTI set no depth; the bound
@@ -272,7 +272,7 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      checked, as the oracle's "MathML cn form" checks it (`src/test/oracle.ts`), nor, under a `base` outside 2 to 36,
      are its `double` and `hexdouble` parts, which the oracle reads in any base. A `cn` of any other `type` is text in
      both. A row that carries the part count alone would lift it;
-   - a `cn` whose `type` or `base` is longer than the key-text bound (2,587 UTF-8 bytes, `keyTextBytes`,
+   - a `cn` whose `type` or `base` is longer than the key-text bound (858 UTF-8 bytes, `keyTextBytes`,
      `src/qti/limits.ts`) is refused under "Key text bound", as every key-text copy is (`CnAttribute`,
      `src/qti/mathml-cn.ts`; findings row 24), though the XSD bounds neither attribute's length;
    - rows the host states that no statement refutes: a `MathCn` row's empty `typeLexical` or `baseLexical` says the
@@ -654,7 +654,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float and
     never stores one as an infinity, and it compares and computes integer results exactly. A value a key holds is the
     one exception, as a text rather than an integer: a `qti-value`'s or `qti-base-value`'s folded text and a `map-key`
-    are copied into keys, and so are held to reading 133's key-text bound, 2,587 UTF-8 bytes. This reading is about
+    are copied into keys, and so are held to reading 133's key-text bound, 858 UTF-8 bytes. This reading is about
     values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of its own
     holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and location. An
     attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where QTI's types make a result a float,
@@ -923,7 +923,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
       law from it. The fold's running text rides the tree's predecessor and last axes, so it is a column of their keys,
       and grizzle refuses at compile a key whose B-tree entry can pass PostgreSQL's `BTMaxItemSize`
       (`UnrepresentableKey`). So the running text and `stringValue` are `keyText` (`src/qti/limits.ts`), bounded to
-      reading 133's key-text bound, 2,587 UTF-8 bytes (`keyTextBytes`), what grizzle's `keyTextBytes` leaves beside the
+      reading 133's key-text bound, 858 UTF-8 bytes (`keyTextBytes`), what grizzle's `keyTextBytes` leaves beside the
       widest key's other columns, and a folded value past the bound is refused by `keyText`'s pattern on the fold's
       text, by name: a stated limit of the representation, not this reading's law. The corpus (28 packages, 353
       documents) holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of the
@@ -1644,8 +1644,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
       (U+02D0), so `ːa` is refused and `aː` is accepted.
 
     libxml2 2.9.13's `xmllint` gives the same verdict on each of these. The production states no length, so a name of
-    any length is valid. A name a key holds is held to reading 133's key-text bound (2,587 UTF-8 bytes), an open
-    attribute's local name, which a key holds beside a namespace name, to 1,329 bytes and a namespace prefix to 2,665:
+    any length is valid. A name a key holds is held to reading 133's key-text bound (858 UTF-8 bytes), an open
+    attribute's local name, which a key holds beside a namespace name, to 457 bytes and a namespace prefix to 936:
     stated limits of the representation, not of `xs:NCName`. Every type derived from `xs:NCName` reads it so: `xs:ID`,
     `xs:IDREF`, `xs:ENTITY` and QTI's identifier types, and the bare variable reference that names a declaration.
     Reading 55 is not changed by this: a `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow
@@ -2610,26 +2610,28 @@ against it. A reading that is not an information-model-over-XSD case says which 
      codes, and `%q`, `2f%` and `%` are still refused under `attribute-lexical`; reading 171 adds `d` to the listed
      codes.
 
-133. **A key text holds at most 2,587 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
+133. **A key text holds at most 858 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
      specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
      value's lexical form (readings 45 and 94 state that the productions state no length). pantry's representation still
      refuses one past a bound, because grizzle puts every text that takes part in a cross-row equality in a B-tree key,
      and PostgreSQL refuses a B-tree entry above `BTMaxItemSize`, 2,704 bytes at `BLCKSZ` 8192 (`nbtree.h`). Such a text
      is copied into a field of type `keyText` (`src/qti/limits.ts`). keyText is grizzle's byte refinement,
-     `str.bytes(keyTextBytes(widestTextKey), any text)`, at most 2,587 UTF-8 bytes, which is what grizzle's own rule,
-     `keyTextBytes`, leaves beside the widest key's other fields: the tree's predecessor axis on `Node`, a uuid, five
-     naturals and a closed id beside the string value's running text. That's about 2,587 ASCII, 1,293 two-byte, 862 CJK
-     or 646 astral characters. `limits.test.ts` holds the bound to `keyTextBytes` exactly. The one bound applies evenly:
-     every text the schema copies into a keyText field counts against it, so a `<p id>` past 2,587 bytes is refused just
+     `str.bytes(keyTextBytes(widestTextKey), any text)`, at most 858 UTF-8 bytes, which is what grizzle's own rule,
+     `keyTextBytes`, leaves beside the widest key's other fields: the tree's predecessor axis on `Node`, its two
+     identity texts (`package` and `path`), six naturals and a closed id beside the string value's running text, the
+     three texts sharing the entry evenly. That's about 858 ASCII, 429 two-byte, 286 CJK or 214 astral characters. `limits.test.ts` holds the bound to `keyTextBytes` exactly. The one bound applies evenly:
+     every text the schema copies into a keyText field counts against it, so a `<p id>` past 858 bytes is refused just
      as a resource identifier past it is, by the oracle's "Key text bound" (rule `key-text-bound`) and by the database
      under the same rule: the import writes the copy's row whatever its length, as it writes every copy (no host-side
      pre-filter leaves an over-long copy out), and keyText's own check refuses it. `src/test/keys.oracle.test.ts` holds
      the database's rule, read from the import's rows, to the oracle's. The law oracle reads the list of such copies
      from the schema's statements (`src/test/key-copies.ts`), and `src/test/keys.oracle.test.ts` holds its verdict to
      the import's rows in 1-, 2-, 3- and 4-byte scripts. The bound is no part of the text's type, as a pattern isn't, so
-     the copy of an unbounded attribute value meets it in a containment. An entry path holds the key text's 2,587 bytes.
-     An open attribute's local name and its namespace name share their key, `(node, uri, local)`, evenly: 1,329 bytes
-     each. A namespace prefix holds 2,665 bytes, what its key `Namespace(node, prefix)` leaves beside the element's id.
+     the copy of an unbounded attribute value meets it in a containment. A package's manifest identifier and an entry's
+     path, the two identity texts every key over a document or an element holds, hold 858 bytes each (`identityBytes`).
+     An open attribute's local name and its namespace name share their key, `(package, path, start, uri, local)`, evenly:
+     457 bytes each. A namespace prefix holds 936 bytes, what its key `Namespace(package, path, start, prefix)` leaves
+     beside the element's place.
 
      The bound is in UTF-8 bytes, as Bjorn ruled, and in no other measure: grizzle 27c4cd2 gives the byte bound
      as a refinement, `str.bytes(n, pattern)`, after a text contract proved unable to be a copy's target
@@ -2716,27 +2718,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      stays optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
      for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under Bjorn's standing ruling of
      2026-11-05 that the spec wins.)
-137. **An element's attributes and its namespace declarations are kept in the order they are written, the export
-     writes each family back in that order, and no law reads either order.** XML 1.0 says "Note that the order of
-     attribute specifications in a start-tag or empty-element tag is not significant" (section 3.1). The XML
-     Information Set gives an element its [attributes], "An unordered set of attribute information items, one for
-     each of the attributes (specified or defaulted from the DTD) of this element. Namespace declarations do not
-     appear in this set", and its [namespace attributes], "An unordered set of attribute information items, one for
-     each of the namespace declarations" (section 2.2). Canonical XML 1.0 imposes "Lexicographic order ... on the
-     namespace declarations and attributes of each element" (section 1.1), every namespace node before every
-     attribute node (section 2.2). So the order means nothing, and keeping it is fidelity alone: each attribute is
-     stored at its slot among its element's attributes as written (`Attribute.at`), and each declaration at its slot
-     among its element's declarations (`Namespace.at`); the export writes an element's declarations, in their order,
-     then its attributes, in theirs. The one order not kept is the interleaving of the two families, which the
-     Information Set holds as two properties: a declaration written after an attribute is exported before it, and
-     Canonical XML, the equality the export promises, sorts both. No law reads either order: a package's verdict, the
-     rule its refusal is named by and the breaches it is refused for are functions of each element's attributes and
+137. **Superseded by the operator's ruling of 2026-11-11: an element's attributes and its namespace declarations are
+     sets, with no source-order position, and the export writes them in Canonical XML's order.** The XML Information
+     Set gives an element its [attributes], "An unordered set of attribute information items, one for each of the
+     attributes (specified or defaulted from the DTD) of this element. Namespace declarations do not appear in this
+     set", and its [namespace attributes], "An unordered set of attribute information items, one for each of the
+     namespace declarations" (section 2.2), and XML 1.0 says "Note that the order of attribute specifications in a
+     start-tag or empty-element tag is not significant" (section 3.1). So pantry stores neither order: `Attribute` is
+     keyed by its element and its name, `(package, path, start, name)`, `OpenAttribute` by its element and its
+     expanded name, `(package, path, start, uri, local)`, and `Namespace` by its element and its prefix, `(package,
+     path, start, prefix)`, each a counted family of its element with no `at`. The export writes an element's
+     namespace declarations by prefix, then its attributes by namespace name and then local name, Canonical XML 1.0's
+     order ("Lexicographic order ... on the namespace declarations and attributes of each element", section 1.1, every
+     namespace node before every attribute node, section 2.2), so a round trip is equal to its source under Canonical
+     XML, and byte-identical only where the source wrote that order. No law reads either order: a package's verdict,
+     the rule its refusal is named by and the breaches it is refused for are functions of each element's attributes and
      declarations as sets. Where several of an element's attributes have no representation, the codec refuses the
-     first of them by namespace name and then local name, Canonical XML's keys, never the first written, so `<div
-     foo="1" data-="x">` and `<div data-="x" foo="1">` are both refused under `unmodeled-vocabulary`, for `data-`.
-     Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
-     and plate alike. This is not a case of documents in conflict. (Bjorn's ruling of 2026-11-06 that attribute and
-     namespace-declaration order is kept as written, from RV seat AO.)
+     first of them by namespace name and then local name, Canonical XML's keys, so `<div foo="1" data-="x">` and `<div
+     data-="x" foo="1">` are both refused under `unmodeled-vocabulary`, for `data-`. This binds pantry and plate alike.
+     This is not a case of documents in conflict. (The operator's ruling of 2026-11-11, under the QTI-identity cutover,
+     superseding Bjorn's ruling of 2026-11-06, from RV seat AO, that attribute and namespace-declaration order was kept
+     as written and exported in that order.)
 
 **R6-hexdouble** (a proposal for the operator; numbered at integration). A MathML `cn` of type `hexdouble` holds
 exactly 16 hexadecimal digits, in either case, kept as written. The definition of the type is the 64-bit pattern of a
