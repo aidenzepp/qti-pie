@@ -4,7 +4,13 @@ import { begin } from "#plate/begin.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import type { SessionTest } from "#plate/codec/session.ts";
-import { boundedStore, newSessionId, sessionStore } from "#plate/dev/store.ts";
+import {
+  boundedStore,
+  nextAttempt,
+  sessionId,
+  sessionInstance,
+  sessionStore,
+} from "#plate/dev/store.ts";
 import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
 import { attr, doc, el } from "#plate/document/source.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
@@ -46,7 +52,7 @@ const owner: SessionTest = {
  * A one-item session of {@link owner} under an id: the item presented, processed once and holding
  * responses saved since, an integer beyond 2^53 and a NULL among them.
  *
- * @param id The session id, which is the session's instance.
+ * @param id The session's instance.
  * @returns The session.
  */
 const sessionOf = (id: string): TestSession => ({
@@ -82,19 +88,29 @@ const sessionOf = (id: string): TestSession => ({
 });
 
 /**
- * The entry the playground holds for a session it started under an id.
+ * The entry the playground holds for an attempt at the fixture's test.
  *
- * @param id The session id.
- * @returns The entry, its session in the stored form.
+ * @param attempt The attempt.
+ * @returns The entry, its session in the stored form, started under the attempt's instance.
  */
-const entryOf = (id: string): SessionEntry => ({
+const entryOf = (attempt: number): SessionEntry => ({
+  attempt,
   packageLocation: "fixtures/m2",
-  session: Result.getOrThrow(encodeSession(sessionOf(id))),
+  session: Result.getOrThrow(encodeSession(sessionOf(sessionInstance(attempt)))),
   testHref: owner.test.document,
 });
 
 /**
- * Store an entry for each of a number of new ids, in order.
+ * The id the playground stores an attempt at the fixture's test under.
+ *
+ * @param attempt The attempt.
+ * @returns The id.
+ */
+const idOf = (attempt: number): string =>
+  sessionId({ attempt, package: "m2", test: owner.test.document });
+
+/**
+ * Store the next attempt at the fixture's test, a number of times, in order.
  *
  * @param store The store.
  * @param count How many entries to store.
@@ -102,10 +118,10 @@ const entryOf = (id: string): SessionEntry => ({
  */
 const fill = (store: SessionStore, count: number): readonly string[] =>
   Array.from({ length: count }, () => {
-    const id = newSessionId();
-    store.set(id, entryOf(id));
+    const attempt = nextAttempt(store, entryOf(0));
+    store.set(idOf(attempt), entryOf(attempt));
 
-    return id;
+    return idOf(attempt);
   });
 
 describe("sessionStore", () => {
@@ -125,7 +141,7 @@ describe("sessionStore", () => {
     const store = sessionStore();
     const [first = "", second = ""] = fill(store, 100);
 
-    store.set(first, entryOf(first));
+    store.set(first, entryOf(1));
     fill(store, 1);
 
     assert.isTrue(Option.isNone(store.get(first)));
@@ -134,8 +150,8 @@ describe("sessionStore", () => {
 
   it("gives back an entry whose session decodes to the session it was given", () => {
     const store = sessionStore();
-    const id = newSessionId();
-    store.set(id, entryOf(id));
+    const id = idOf(1);
+    store.set(id, entryOf(1));
 
     const held = store.get(id);
 
@@ -145,7 +161,7 @@ describe("sessionStore", () => {
       assert.strictEqual(held.value.testHref, owner.test.document);
       assert.deepStrictEqual(
         decodeSession(held.value.session, owner),
-        Result.succeed(sessionOf(id)),
+        Result.succeed(sessionOf(sessionInstance(1))),
       );
     }
   });
@@ -225,15 +241,37 @@ describe("boundedStore", () => {
   );
 });
 
-describe("newSessionId", () => {
-  it("draws distinct ids, each s- and a UUID, an NCName that checkInstance passes", () => {
-    const ids = Array.from({ length: 1000 }, () => newSessionId());
-    const uuid = /^s-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u;
+describe("sessionId", () => {
+  it("writes a session's package, test and attempt, each percent-encoded, joined by /", () => {
+    assert.strictEqual(
+      sessionId({ attempt: 2, package: "a b", test: "tests/t.xml" }),
+      "a%20b/tests%2Ft.xml/2",
+    );
+  });
+});
+
+describe("sessionInstance", () => {
+  it("names attempts 1 to 1000 apart, each an NCName that checkInstance passes", () => {
+    const instances = Array.from({ length: 1000 }, (_, index) => sessionInstance(index + 1));
 
     assert.deepStrictEqual(
-      ids.filter((id) => !uuid.test(id) || !isNcName(id) || Option.isSome(checkInstance(id))),
+      instances.filter((token) => !isNcName(token) || Option.isSome(checkInstance(token))),
       [],
     );
-    assert.strictEqual(new Set(ids).size, 1000);
+    assert.strictEqual(new Set(instances).size, 1000);
+  });
+});
+
+describe("nextAttempt", () => {
+  it("gives 1 for a test the store holds no session of, and one past the highest it holds", () => {
+    const store = sessionStore();
+    const other = { packageLocation: "fixtures/other", testHref: owner.test.document };
+
+    assert.strictEqual(nextAttempt(store, entryOf(0)), 1);
+    store.set(idOf(1), entryOf(1));
+    store.set(idOf(3), entryOf(3));
+
+    assert.strictEqual(nextAttempt(store, entryOf(0)), 4);
+    assert.strictEqual(nextAttempt(store, other), 1);
   });
 });

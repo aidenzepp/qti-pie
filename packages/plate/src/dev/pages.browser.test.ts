@@ -6,7 +6,6 @@
  * Expected values come from the code the playground runs: the verdict cache it reads, the part
  * table, `message`, `verdictTable` and `ledgerHtml`.
  */
-import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll } from "@effect/vitest";
@@ -27,6 +26,7 @@ import { Playground, eachEngine, playgroundLayer, withPage } from "#plate/test/b
 import { elementsOf, itemTarget } from "#plate/test/playground-page.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
  * The corpus paths of the documents these tests open: BG007's Choice, the refused CAT test, and
@@ -84,14 +84,7 @@ const ledgerLayer = (folder: string): PlaygroundLayer =>
 /**
  * The scratch folder this file owns, under the package's git-ignored `work/browser-test/`.
  */
-const scratch = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  "browser-test",
-  `pages-${randomUUID()}`,
-);
+const scratch = scratchFolder("pages-", "browser-test");
 
 /**
  * The scratch folder that holds no `ledger.json`.

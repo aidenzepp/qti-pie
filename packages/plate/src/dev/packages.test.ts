@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +24,7 @@ import type { Element, Node } from "#plate/emit/node.ts";
 import type { PackageVerdict } from "#plate/package/open.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
  * The origin every request is made against; the route never opens it.
@@ -280,16 +280,10 @@ const headersBesidesType = (response: Response): readonly (readonly [string, str
 
 /**
  * The scratch folder this run owns, under the package's git-ignored `work/`, holding the crafted
- * corpus root and a folder beside it. Its name is new for each run, so two runs at once never share
+ * corpus root and a folder beside it. `mkdtemp` names it, so two runs at once never share
  * or remove each other's files.
  */
-const scratch = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  `packages-test-${randomUUID()}`,
-);
+const scratch = scratchFolder("packages-test-");
 
 /**
  * The crafted corpus root: the package `htmlitem`, whose item document is named `items/q.html`,

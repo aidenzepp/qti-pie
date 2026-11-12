@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
@@ -7,18 +6,13 @@ import { groupVerdicts, verdictCache, verdictOrder } from "#plate/dev/listing.ts
 import type { Opener } from "#plate/dev/listing.ts";
 import { CorpusFileUnreadable } from "#plate/document/corpus.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
- * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
- * each run, so two runs at once never share or remove each other's files.
+ * The scratch folder this run owns, under the package's git-ignored `work/`. `mkdtemp` names
+ * it, so two runs at once never share or remove each other's files.
  */
-const scratch = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  `listing-test-${randomUUID()}`,
-);
+const scratch = scratchFolder("listing-test-");
 
 /**
  * The members the scratch corpus root holds, in the document set's order.

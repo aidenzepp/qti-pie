@@ -181,14 +181,14 @@ const meets: Readonly<Record<InstanceRequirement, (token: string) => boolean>> =
  * Check an instance token: an opaque token, unique per page, that scopes an item instance's ids
  * and entry names.
  *
- * A lowercase UUID passes, as do React's `useId()` forms `_r_1_` (React 19.2 and later) and `:r1:`
- * (React 18 and 19.0); React 19.1's `«r1»` does not, so its caller passes a token of their own.
+ * A host's own key for the item's use passes, such as `sitting-42.1`, as do React's `useId()`
+ * forms `_r_1_` (React 19.2 and later) and `:r1:` (React 18 and 19.0); React 19.1's `«r1»` does
+ * not, so its caller passes a token of their own.
  *
  * Two tokens that each pass can still collide when one extends the other after a `.` or `-`, such
  * as `a` and `a.b`: an id joins the token to a response identifier with `-`, an entry name joins
  * them with `.`, and an identifier may itself hold both, so instance `a` with response `b.X` posts
- * under the same name as instance `a.b` with response `X`. Unique tokens of one length, such as
- * UUIDs, never do.
+ * under the same name as instance `a.b` with response `X`. Unique tokens of one length never do.
  *
  * @example
  *   checkInstance("_r_1_"); // Option.none()
@@ -206,8 +206,8 @@ export const checkInstance = (token: string): Option.Option<InstanceRequirement>
  *
  * The OD-2 placeholder: changing the wire name is this one edit.
  *
- * @param instance The item instance token, one {@link checkInstance} passes, such as a lowercase
- *   UUID.
+ * @param instance The item instance token, one {@link checkInstance} passes, such as
+ *   `sitting-42.1`.
  * @param response The response declaration's identifier.
  * @returns `<instance>.<response>`.
  */
@@ -631,47 +631,28 @@ export interface Partition {
    */
   readonly own: readonly Entry[];
   /**
-   * Entries named for another item instance.
-   */
-  readonly foreign: readonly Entry[];
-  /**
-   * Every other entry: the host's own fields, which the core ignores.
+   * Every other entry, the host's: its own fields and any other instance's, which the core ignores.
    */
   readonly host: readonly Entry[];
 }
 
 /**
- * An entry name another item instance gives when its token is the UUID `render` draws: a UUID, a
- * dot, then the rest of the name.
- */
-const drawnInstanceName =
-  /^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}\./u;
-
-/**
- * Split posted entries into this instance's, other instances', and the host's.
+ * Split posted entries into this instance's and the rest, which are the host's.
  *
- * Only a drawn token has a shape, so a UUID is the one other instance this can recognise; another
- * instance with a token of its own posts what reads as host fields here.
+ * The host names every instance, so only it knows which of the rest another item instance on its
+ * page posted: an entry named for one reads as a host field here, and the host reads it with that
+ * instance's own `partition`.
  *
  * @param entries The posted entries, in order.
  * @param instance This item instance's token, any that {@link checkInstance} passes.
  * @returns The entries in posted order, by owner: a name beginning `<instance>.` is this
- *   instance's; else a name `<uuid>.<anything>` is a foreign instance's; every other name is a
- *   host field.
+ *   instance's; every other name is the host's.
  */
 export const partition = (entries: readonly Entry[], instance: string): Partition => {
   const prefix = `${instance}.`;
-  const owner = ([name]: Entry): keyof Partition => {
-    if (name.startsWith(prefix)) {
-      return "own";
-    }
-
-    return drawnInstanceName.test(name) ? "foreign" : "host";
-  };
 
   return {
-    foreign: entries.filter((entry) => owner(entry) === "foreign"),
-    host: entries.filter((entry) => owner(entry) === "host"),
-    own: entries.filter((entry) => owner(entry) === "own"),
+    host: entries.filter(([name]) => !name.startsWith(prefix)),
+    own: entries.filter(([name]) => name.startsWith(prefix)),
   };
 };

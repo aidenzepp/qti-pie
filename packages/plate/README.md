@@ -7,7 +7,7 @@
 Render QTI 3.0 items and tests for candidates, on the server and in the browser.
 
 plate is a library of parts and pure functions. Only a value you leave out is random: `begin`,
-`startTest` and `score` draw a seed, and `render` draws an instance token. `open` checks a QTI 3.0
+`startTest` and `score` draw a seed. plate draws no identity: you name every instance. `open` checks a QTI 3.0
 document, `render` writes an item as HTML with native form controls, and `score` scores the
 responses that come back. `openPackage` checks a content package, and a test session takes a
 candidate through a test's items. plate renders choice, inline choice, text entry and extended
@@ -59,7 +59,9 @@ const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xm
 const accepted = acceptedItem(verdict);
 if (Option.isSome(accepted)) {
   const configuration = await Effect.runPromise(configure({}));
-  const rendered = render(redact(accepted.value, undefined, configuration), configuration);
+  const rendered = render(redact(accepted.value, undefined, configuration), configuration, {
+    instance: "item-1",
+  });
   if (Result.isSuccess(rendered)) console.log(rendered.success.html);
 }
 ```
@@ -112,7 +114,8 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
   const configuration = await Effect.runPromise(configure({}));
   for (const { items, test } of verdict.accepted.tests.values()) {
     const sitting = Result.gen(function* start() {
-      const instance = `s-${crypto.randomUUID()}`;
+      // Your own key for the sitting: its package, its test and the attempt.
+      const instance = "MANIFEST-1.tests.t.xml.1";
       const session = yield* startTest(test, items, configuration, { instance, now: new Date() });
       const shown = yield* itemView(test, session, configuration, 1);
       const redacted = redact(items.get(shown.ref)!, shown.page, shown.configuration);
@@ -209,7 +212,7 @@ const item = Effect.flatMap(open("item.xml", bytes), acceptedItem);
 
 const page = Effect.gen(function* page() {
   const redacted = yield* redact(yield* item);
-  const rendered = yield* render(redacted);
+  const rendered = yield* render(redacted, { instance: "item-1" });
 
   return rendered.html;
 });
@@ -275,11 +278,11 @@ The tooling's own variables, such as `PLATE_CORPUS_DIR`, are not configuration, 
 
 `startTest` and `advance` take the time from Effect's `Clock`, and `results` takes an item's
 `datestamp` from it when you leave one out, so a test fixes the time with `TestClock`. `begin` and
-`startTest` draw an absent seed, and `render` an absent instance, through `Randomness`, which
-takes its bytes from `crypto.getRandomValues`. A program replaces it with
-`Effect.provideService(Randomness, SecureRandom.make(source))`, and `drawnSeed` and
-`drawnInstance` draw from it too. `score` with no record draws its own seed as the plain function
-does, not through `Randomness`.
+`startTest` draw an absent seed through `Randomness`, which takes its bytes from
+`crypto.getRandomValues`. A program replaces it with
+`Effect.provideService(Randomness, SecureRandom.make(source))`, and `drawnSeed` draws from it too.
+`score` with no record draws its own seed as the plain function does, not through `Randomness`.
+`render` takes the instance from you and draws none.
 
 `StoredRecordSchema`, `StoredTestSessionSchema`, `RedactedJsonSchema`, `ConfigurationSchema` and
 `RefusalSchema` are the Schemas plate reads its data with. Each has a JSON Schema document, draft
@@ -324,9 +327,9 @@ post a closed item's form as rendered. `current` and `itemView` mark a closed it
 what the host decides. A button is disabled when the session does not take its intent, and it
 carries that intent in `data-intent`.
 
-An intent posts under `intentName(instance)`, where `instance` is the session's. When that
-instance is a bare UUID, `partition` calls the intent's entry foreign, so read the intent with
-`decodeIntent` before you refuse foreign entries.
+An intent posts under `intentName(instance)`, where `instance` is the session's. `partition`,
+given an item's instance, calls the intent's entry the host's, so read the intent with
+`decodeIntent` before you refuse the host's entries.
 
 ### A script-free native form post
 
@@ -1330,7 +1333,7 @@ this split. A host that sends the accepted item to the browser sends what `redac
   the template content its variable shows. An answer that an item computes from what it shows can
   be worked out from the page, by the item's design.
 - Each item on a page needs its own instance token, `render`'s `instance` option, so that every
-  form entry name on the page is unique. `render` draws a UUID when you pass none. Two tokens where
+  form entry name on the page is unique. `render` requires it and draws none. Two tokens where
   one extends the other after a `.` or `-`, such as `a` and `a.b`, can collide.
 - A form that holds a Choice carries `autocomplete="off"`, and its pages send `Cache-Control: no-store`.
   HTML does not allow the attribute on a radio or a checkbox, and without both, the browser can

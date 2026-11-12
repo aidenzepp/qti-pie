@@ -1,21 +1,15 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import { corpusDocuments, corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
- * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
- * each run, so two runs at once never share or remove each other's files.
+ * The scratch folder this run owns, under the package's git-ignored `work/`. `mkdtemp` names
+ * it, so two runs at once never share or remove each other's files.
  */
-const scratch = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  `corpus-test-${randomUUID()}`,
-);
+const scratch = scratchFolder("corpus-test-");
 
 /**
  * The corpus root the tests create, holding `a.xml`.

@@ -1,6 +1,5 @@
 import { assert, describe, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Layer, Option, Result } from "effect";
-import { SecureRandom } from "effect/crypto";
 import type { Configuration as PlainConfiguration } from "#plate/configuration.ts";
 import { Configuration } from "#plate/effect/configuration.ts";
 import {
@@ -24,7 +23,6 @@ import {
   score,
 } from "#plate/effect/operations.ts";
 import type { PlateError, Refused } from "#plate/effect/operations.ts";
-import { drawnInstance, Randomness } from "#plate/effect/randomness.ts";
 import * as plain from "#plate/index.ts";
 import type {
   Accepted,
@@ -50,27 +48,6 @@ const startedAt = Date.parse("2026-11-05T10:00:00.000Z");
  * The session instance the fixture's session starts with.
  */
 const instance = "sitting";
-
-/**
- * A test `Randomness` over a fixed byte source: each call returns a fresh array whose byte at index
- * `n` is `n`, so every draw of the same size gives the same bytes.
- */
-const countingBytes = SecureRandom.make((size) =>
-  Uint8Array.from({ length: size }, (_, index) => index % 0x1_00),
-);
-
-/**
- * The instance `drawnInstance` makes from {@link countingBytes}: bytes 0x00 to 0x0f with the UUID
- * v4 version and variant bits set.
- */
-const countedInstance = "00010203-0405-4607-8809-0a0b0c0d0e0f";
-
-/**
- * A test `Randomness` that fails the case the moment anything draws from it.
- */
-const forbiddenBytes = SecureRandom.make(() =>
-  assert.fail("an instance was drawn although the host gave one"),
-);
 
 /**
  * Write the text of a hand-built templated item: one Choice over `A`, `B` and `C` bound to the
@@ -333,13 +310,12 @@ const everyTag = {
 
 describe("the ./effect mirrors", () => {
   it.effect(
-    "render's effect mirror gives the plain render's value under Configuration, drawing nothing for a host instance, and its failure by tag: NotRedacted for a copy",
+    "render's effect mirror gives the plain render's value under Configuration, and its failure by tag: NotRedacted for a copy",
     () =>
       Effect.gen(function* renderMirror() {
         const { configuration, redacted } = yield* fixture();
         const rendered = yield* render(redacted, { instance: "q1" }).pipe(
           configured(configuration),
-          Effect.provideService(Randomness, forbiddenBytes),
         );
         const copy = { ...redacted };
         const refused = yield* Effect.flip(
@@ -354,23 +330,6 @@ describe("the ./effect mirrors", () => {
           refused,
           failed(plain.render(copy, configuration, { instance: "q1" }), "render"),
           "NotRedacted",
-        );
-      }),
-  );
-
-  it.effect(
-    "render's effect mirror with no instance draws it through Randomness: a test reference over fixed bytes gives the instance those bytes make",
-    () =>
-      Effect.gen(function* renderDraws() {
-        const { configuration, redacted } = yield* fixture();
-        const counted = Effect.provideService(Randomness, countingBytes);
-        const rendered = yield* render(redacted).pipe(configured(configuration), counted);
-
-        assert.strictEqual(yield* drawnInstance.pipe(counted), countedInstance);
-        assert.strictEqual(rendered.instance, countedInstance);
-        assert.deepStrictEqual(
-          Result.succeed(rendered),
-          plain.render(redacted, configuration, { instance: countedInstance }),
         );
       }),
   );

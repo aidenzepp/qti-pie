@@ -1,20 +1,22 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, assert, describe, it } from "@effect/vitest";
+import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Option } from "effect";
 import { corpusRoot } from "#plate/document/corpus.ts";
 import type { BodyNode, ExtendedTextInteraction } from "#plate/model/item.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import { instructions, writeWalkCorpus } from "#scripts/walk-corpus.ts";
 
 /**
- * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
- * each run, so two runs at once never share or remove each other's files.
+ * The scratch folder this run owns, under the package's git-ignored `work/`. `mkdtemp` names it, so
+ * two runs at once never share or remove each other's files. The corpus cases make it before they
+ * run, so a run that skips them, as every case here is tagged `corpus`, makes none; until then it
+ * is empty.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "work", `walk-corpus-test-${randomUUID()}`);
+let scratch = "";
 
 /**
  * Reading every corpus member (about 800) to derive the probes runs in seconds here; the bound
@@ -28,11 +30,13 @@ const walkTimeoutMs = 600_000;
  */
 const written = Effect.runSync(
   Effect.cached(
-    writeWalkCorpus.pipe(
-      Effect.provide(
-        ConfigProvider.layerAdd(ConfigProvider.fromUnknown({ PLATE_WALK_CORPUS_DIR: scratch }), {
-          asPrimary: true,
-        }),
+    Effect.suspend(() =>
+      writeWalkCorpus.pipe(
+        Effect.provide(
+          ConfigProvider.layerAdd(ConfigProvider.fromUnknown({ PLATE_WALK_CORPUS_DIR: scratch }), {
+            asPrimary: true,
+          }),
+        ),
       ),
     ),
   ),
@@ -147,11 +151,15 @@ const extendedTexts = (nodes: readonly BodyNode[]): readonly ExtendedTextInterac
     return node.kind === "element" ? extendedTexts(node.children) : [];
   });
 
-afterAll(() => {
-  rmSync(scratch, { force: true, recursive: true });
-});
-
 describe("the walk corpus", { tags: ["corpus"] }, () => {
+  beforeAll(() => {
+    scratch = scratchFolder("walk-corpus-test-");
+  });
+
+  afterAll(() => {
+    rmSync(scratch, { force: true, recursive: true });
+  });
+
   it.effect(
     "open accepts every probe item",
     () =>

@@ -58,7 +58,7 @@ import {
 } from "#plate/dev/sitting.ts";
 import type { Sitting } from "#plate/dev/sitting.ts";
 import { summaryPage } from "#plate/dev/review-page.ts";
-import { newSessionId } from "#plate/dev/store.ts";
+import { nextAttempt, sessionId, sessionInstance } from "#plate/dev/store.ts";
 import type { SessionStore } from "#plate/dev/store.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text, when } from "#plate/emit/node.ts";
@@ -576,10 +576,11 @@ const partIntentNow = (
   );
 
 /**
- * Start a session from a package page's Start post: `startTest` with the playground's
- * configuration, a new store id as the instance, the time now and the playground's seed as the
- * processing seed (none for one `startTest` draws), stored with the package's location and the
- * test's path, then a 303 to the session's page.
+ * Start a session from a package page's Start post: the test's next attempt, then `startTest`
+ * with the playground's configuration, the attempt's instance token, the time now and the
+ * playground's seed as the processing seed (none for one `startTest` draws), stored under the
+ * session's key, its package, test and attempt, with the package's location and the test's path,
+ * then a 303 to the session's page.
  *
  * An id no package has, and a test path the accepted package does not hold, are 404s; a post that
  * is not a form, or names no test, is a 400. A test `startTest` cannot deliver is a developer
@@ -622,7 +623,10 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
     return notFound();
   }
 
-  const id = newSessionId();
+  const where = { packageLocation: found.value.location, testHref: href.value };
+  const attempt = nextAttempt(playground.sessions, where);
+  const id = sessionId({ attempt, package: found.value.id, test: href.value });
+  const instance = sessionInstance(attempt);
   const now = DateTime.toDateUtc(yield* DateTime.now);
   const stored = Result.flatMap(
     startTest(
@@ -630,8 +634,8 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
       test.value.items,
       playground.configuration,
       Option.match(playground.seed, {
-        onNone: () => ({ instance: id, now }),
-        onSome: (seed) => ({ instance: id, now, seed }),
+        onNone: () => ({ instance, now }),
+        onSome: (seed) => ({ instance, now, seed }),
       }),
     ),
     encodeSession,
@@ -640,11 +644,7 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
     return failurePage(stored.failure);
   }
 
-  playground.sessions.set(id, {
-    packageLocation: found.value.location,
-    session: stored.success,
-    testHref: href.value,
-  });
+  playground.sessions.set(id, { ...where, attempt, session: stored.success });
 
   return seeSession(id);
 });

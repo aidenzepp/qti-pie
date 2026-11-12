@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
@@ -22,13 +21,14 @@ import {
   VerdictEntry,
 } from "#scripts/ledger.ts";
 import type { LedgerBuild, LedgerOutcome } from "#scripts/ledger.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
- * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
- * each run, so two runs at once never share or remove each other's files. It stands for the
+ * The scratch folder this run owns, under the package's git-ignored `work/`. `mkdtemp` names
+ * it, so two runs at once never share or remove each other's files. It stands for the
  * package directory: the fixture report names its test files under it.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "work", `ledger-test-${randomUUID()}`);
+const scratch = scratchFolder("ledger-test-");
 
 /**
  * The two-document corpus root under {@link scratch}.

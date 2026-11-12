@@ -4,9 +4,9 @@
  *
  * The library ends at parts and pure functions (rule `a9d04969`): `render` writes the item Root
  * around its body and the modal feedback the record shows, and nothing else, so the form, its
- * submit control, where the Status part goes and every step of a flow are the author's. Its one
- * input that is not a function of its arguments is the instance a render draws when the author
- * passes none. `render` prints everything or nothing: it writes at most the configuration's
+ * submit control, where the Status part goes and every step of a flow are the author's. It draws
+ * nothing: the author names every instance, so the HTML is a function of its arguments. `render`
+ * prints everything or nothing: it writes at most the configuration's
  * `outputBudget` characters of HTML, and an item with a printed variable or a parameter whose text
  * passed its bound, or whose printed text passed the budget `redact` ran under, prints nothing;
  * either way it returns {@link OutputTooLarge} and none of the page, never a part of it. An item
@@ -49,14 +49,14 @@ import type {
   ValidationMessage,
   View,
 } from "#plate/payload.ts";
-import { drawInstance } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
- * The author's inputs to one {@link render}, each optional.
+ * The author's inputs to one {@link render}: the instance, and the rest optional.
  *
- * `parts` replaces parts through the swap invariant. `instance` is the instance token (see
- * {@link checkInstance}), drawn as a lowercase UUID when absent. `names`, `values` and `posted`
+ * `instance` is the instance token (see {@link checkInstance}), the author's own name for this use
+ * of the item, such as the item's place in a sitting the host keys by its own identity; plate never
+ * draws one. `parts` replaces parts through the swap invariant. `names`, `values` and `posted`
  * are keyed by response identifier: the name a response's controls post under
  * (`entryName(instance, response)` when absent), the value they show (NULL when absent), and the
  * strings a refused post sent, which the controls show instead of `values` when `messages` is not
@@ -77,7 +77,7 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  */
 export interface Options {
   readonly disabled?: boolean;
-  readonly instance?: string;
+  readonly instance: string;
   readonly messages?: readonly ValidationMessage[];
   readonly mode?: RenderMode;
   readonly names?: Readonly<Record<string, string>>;
@@ -91,8 +91,8 @@ export interface Options {
  * What {@link render} and {@link renderStatus} return: the part's HTML and the instance token that
  * scopes it.
  *
- * `instance` is the token the render used, the one the author passed or the UUID `render` drew, so
- * the author can hand it to `renderStatus`, `entryName`, `decode` and `partition`.
+ * `instance` is the token the render used, the one the author passed, which the author hands to
+ * `renderStatus`, `entryName`, `decode` and `partition`.
  */
 export interface Rendered {
   readonly html: string;
@@ -125,7 +125,7 @@ const instanceRemedies: Readonly<Record<InstanceSource, string>> = {
   "input.instance":
     'Pass the token the item was rendered with: ASCII letters, digits, "_", ".", ":" and "-", not ending in "-" and holding no "--"',
   "options.instance":
-    'Omit instance to draw a UUID, or pass a token of ASCII letters, digits, "_", ".", ":" and "-" that does not end in "-" and holds no "--"',
+    'Pass a token of ASCII letters, digits, "_", ".", ":" and "-" that does not end in "-" and holds no "--", such as "sitting-42.1"',
 };
 
 /**
@@ -372,7 +372,7 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
 /**
  * Build the view of one render from the author's options.
  *
- * @param instance The checked or drawn instance token.
+ * @param instance The checked instance token.
  * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
  * @returns The view `payload` reads, its mode `answering` when the author names none, holding the
@@ -441,15 +441,12 @@ const interactionRenderer =
 /**
  * Render an item: the item Root around its body and its modal feedback, as HTML.
  *
- * It resolves the overrides once, takes the instance from `options.instance` as given or draws a
- * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
- * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
- * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
- * body, the ModalFeedback parts of the modal feedback the redacted item shows, and the Root. A
- * shuffled Choice is presented in the order the configuration's `seed`, the
- * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
- * form, submit control, title or record. Given the same instance, configuration and inputs, it
- * gives the same HTML, and it returns the instance it used.
+ * It resolves the overrides once, checks the instance `options.instance` names, builds the payload
+ * from the redacted item and the options, and emits the body, the ModalFeedback parts of the modal
+ * feedback the redacted item shows, and the Root. A shuffled Choice is presented in the order the
+ * configuration's `seed`, the instance and its response key give. The Root's `data-mode` names
+ * `options.mode`. It writes no form, submit control, title or record. Given the same instance,
+ * configuration and inputs, it gives the same HTML, and it returns the instance it used.
  *
  * Each package URL of the item, a path inside its package, is written as the address the
  * configuration's `assets` gives the file it names: the URL resolved against the redacted item's
@@ -489,7 +486,7 @@ const interactionRenderer =
  * @param item The item `redact` gave, or `decodeRedacted`: that object itself, never a copy.
  * @param configuration The configuration, which gives the assets, the locale, the heading level,
  *   the seed and the output budget.
- * @param options The author's inputs, none by default.
+ * @param options The author's inputs: the instance, and any of the rest.
  * @returns The Root's HTML and the instance token it used, or {@link NotRedacted} for an item
  *   neither `redact` nor `decodeRedacted` returned, {@link UnknownPart} for an override the part
  *   table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
@@ -503,7 +500,7 @@ const interactionRenderer =
 export const render = (
   item: Redacted,
   configuration: Configuration,
-  options: Options = {},
+  options: Options,
 ): Result.Result<
   Rendered,
   | AssetMissing
@@ -533,9 +530,7 @@ export const render = (
     }
 
     const parts = yield* resolveOverrides(options.parts);
-    const instance = yield* options.instance === undefined
-      ? Result.succeed(drawInstance())
-      : checkedInstance(options.instance, "options.instance");
+    const instance = yield* checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts);
     const built = payload(item, viewOf(instance, configuration, options));
     const missing = missingAsset(built, state);

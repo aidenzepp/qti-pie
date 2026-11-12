@@ -1,6 +1,7 @@
 /**
- * The dev playground's stores: the test sessions it has started and the items it holds open, each
- * under the id it drew for it.
+ * The dev playground's stores: the test sessions it has started, each under its key, and the items
+ * it holds open, each under its corpus path. Nothing here is drawn: a session's key is its package,
+ * its test and its attempt ({@link SessionKey}).
  *
  * The library keeps no session or record of its own (rule `a9d04969`); these stores are the
  * playground's, an example host's. Each lives in memory for the handler's life and keeps at most
@@ -23,10 +24,25 @@ import type { StoredTestSession } from "#plate/codec/session.ts";
 const entryLimit = 100;
 
 /**
- * One session the playground holds: the package the test came from, the test's href in that
- * package, and the session in its stored form.
+ * A test session's key: the package's id among the playground's packages, the test document's
+ * href in that package, and the attempt, 1 for the first session of the test and one more for each
+ * after it.
+ */
+export interface SessionKey {
+  readonly attempt: number;
+  readonly package: string;
+  readonly test: string;
+}
+
+/**
+ * One session the playground holds: its attempt, the package the test came from, the test's href
+ * in that package, and the session in its stored form.
  */
 export interface SessionEntry {
+  /**
+   * The session's attempt at its test, as its {@link SessionKey} gives it.
+   */
+  readonly attempt: number;
   /**
    * Where the package the test belongs to is, as the playground's package routes name it.
    */
@@ -76,7 +92,7 @@ export interface Store<Entry> {
 }
 
 /**
- * The playground's test sessions, by session id.
+ * The playground's test sessions, by session id ({@link sessionId}).
  */
 export type SessionStore = Store<SessionEntry>;
 
@@ -115,11 +131,49 @@ export const boundedStore = <Entry>(): Store<Entry> => {
 export const sessionStore = (): SessionStore => boundedStore();
 
 /**
- * Draw a new session id: `s-` followed by a random UUID.
+ * Write a session's key as the id the store holds it under: the package, the test and the attempt,
+ * each percent-encoded and joined by `/`, which a session's path writes as one segment.
  *
- * The id is an NCName, so it serves as a result's `sessionIdentifier` `identifier`, and an
- * instance token `checkInstance` passes, so it serves as the session's instance.
+ * @example
+ *   sessionId({ attempt: 1, package: "fixture", test: "tests/t.xml" }); // "fixture/tests%2Ft.xml/1"
  *
- * @returns The id, such as `s-1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed`.
+ * @param key The session's key.
+ * @returns The id.
  */
-export const newSessionId = (): string => `s-${crypto.randomUUID()}`;
+export const sessionId = (key: SessionKey): string =>
+  [key.package, key.test, String(key.attempt)].map(encodeURIComponent).join("/");
+
+/**
+ * Name a session's instance token by its attempt: `attempt-<n>`. A page shows one session, so the
+ * attempt names it there; the token is one `checkInstance` passes and an NCName, so it also serves
+ * as a result's `sessionIdentifier` `identifier`.
+ *
+ * @param attempt The session's attempt, from 1.
+ * @returns The instance token, such as `attempt-1`.
+ */
+export const sessionInstance = (attempt: number): string => `attempt-${attempt}`;
+
+/**
+ * Give the attempt the next session of a test takes: one past the highest attempt the store holds
+ * for that package and test, 1 when it holds none.
+ *
+ * @param store The store.
+ * @param test The package's location and the test's href.
+ * @returns The attempt.
+ */
+export const nextAttempt = (
+  store: SessionStore,
+  test: { readonly packageLocation: string; readonly testHref: string },
+): number =>
+  1 +
+  Math.max(
+    0,
+    ...store
+      .ids()
+      .flatMap((id) => Option.toArray(store.get(id)))
+      .filter(
+        (entry) =>
+          entry.packageLocation === test.packageLocation && entry.testHref === test.testHref,
+      )
+      .map((entry) => entry.attempt),
+  );

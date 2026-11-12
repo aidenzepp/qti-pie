@@ -67,11 +67,11 @@ import { validateAgainst } from "#plate/test/xsd.ts";
 const sessionTimeoutMs = 60_000;
 
 /**
- * The session instance every sitting here starts with. It is a UUID, as a host draws one, so
- * `partition` reads an entry named for another item of the session, or for the session's intent,
- * as another instance's.
+ * The session instance every sitting here starts with, named as a host names a sitting: its
+ * package, its test and the attempt. `partition` reads an entry named for another item of the
+ * session, or for the session's intent, as the host's.
  */
-const instance = "4c7e1a2b-9d3f-4e8a-b6c5-0f1e2d3c4b5a";
+const instance = "MANIFEST-1.tests.t.xml.1";
 
 /**
  * The seed the host's configuration carries, which a session keeps as its shuffle seed. Each
@@ -1415,13 +1415,11 @@ describe("the M2 witness: OD-2, two item instances in one form", () => {
         );
 
         assert.deepStrictEqual(partition(entries, first.instance), {
-          foreign: [[text, "seven"]],
-          host: [],
+          host: [[text, "seven"]],
           own: [[choice, "B"]],
         });
         assert.deepStrictEqual(partition(entries, second.instance), {
-          foreign: [[choice, "B"]],
-          host: [],
+          host: [[choice, "B"]],
           own: [[text, "seven"]],
         });
         for (const view of [first, second]) {

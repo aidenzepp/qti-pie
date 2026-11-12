@@ -16,9 +16,7 @@
  * of `vite.browser.config.ts` instead, and does not use the harness.
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import path from "node:path";
 import { layer } from "@effect/vitest";
 import type { Vitest } from "@effect/vitest";
 import { chromium, webkit } from "playwright-core";
@@ -29,6 +27,7 @@ import { listen } from "#plate/dev/listen.ts";
 import type { ListenFailed } from "#plate/dev/listen.ts";
 import type { PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 import { writeWalkCorpus } from "#scripts/walk-corpus.ts";
 import type { ProbeUnderivable, ProbeUnwritable } from "#scripts/walk-corpus.ts";
 
@@ -59,11 +58,6 @@ export const loadCap = 60;
  * The command that downloads the engines, once, into `~/.cache/gr8des/ms-playwright`.
  */
 const browsersCommand = "pnpm --filter @qti-pie/plate browsers";
-
-/**
- * The folder the walk corpus is written under: the package's git-ignored `work/browser-test/`.
- */
-const browserTestDirectory = path.resolve(import.meta.dirname, "..", "..", "work", "browser-test");
 
 /**
  * The failure of a browser run that would start while the 1-minute load average is at
@@ -275,7 +269,7 @@ export const walkCorpusLayer: Layer.Layer<
   WalkCorpus,
   Effect.gen(function* writeWalk() {
     const directory = yield* Effect.acquireRelease(
-      Effect.sync(() => path.join(browserTestDirectory, `walk-corpus-${randomUUID()}`)),
+      Effect.sync(() => scratchFolder("walk-corpus-", "browser-test")),
       (folder) => Effect.promise(() => rm(folder, { force: true, recursive: true })),
     );
     const ambient = yield* ConfigProvider.ConfigProvider;

@@ -125,7 +125,7 @@ export const begin = Effect.fn("plate.begin")(function* begin(
  *   ref that names its document.
  * @param context The sitting.
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
- *   `checkInstance` passes, such as a lowercase UUID.
+ *   `checkInstance` passes, such as `sitting-42`.
  * @param context.seed The processing seed, which keys every value the session's processing draws,
  *   used as given; with none, one is drawn through `Randomness`. Server data: keep it from the
  *   page.

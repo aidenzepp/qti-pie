@@ -4,6 +4,8 @@ import { ConfigProvider, Effect, Layer } from "effect";
 import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
 import type { Handler } from "#plate/dev/page.ts";
 import { testField } from "#plate/dev/packages.ts";
+import { sessionHref } from "#plate/dev/sitting.ts";
+import { sessionId, sessionInstance } from "#plate/dev/store.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
 import type { Intent } from "#plate/session/session.ts";
 
@@ -109,22 +111,24 @@ const record = (route: string, response: Response): Answered => ({
 /**
  * Give the form entry a session page's button posts for an intent.
  *
- * @param id The session id, the session's instance.
+ * @param instance The session's instance token.
  * @param intent The intent.
  * @returns The entry.
  */
-const pressed = (id: string, intent: Intent): Fields => [[intentName(id), encodeIntent(intent)]];
+const pressed = (instance: string, intent: Intent): Fields => [
+  [intentName(instance), encodeIntent(intent)],
+];
 
 /**
  * Give every request a test session's pages take after its Start, in order: the walk through both
  * parts to the summary, the closed test's views and the posts it still takes, then each refusal on
  * the session and review routes.
  *
- * @param id The session id the Start's 303 named.
+ * @param session The session's page, the path the Start's 303 named.
+ * @param instance The session's instance token.
  * @returns The steps.
  */
-const walkFrom = (id: string): readonly Step[] => {
-  const session = `/sessions/${id}`;
+const walkFrom = (session: string, instance: string): readonly Step[] => {
   const confirm = `${session}/confirm`;
 
   return [
@@ -137,14 +141,14 @@ const walkFrom = (id: string): readonly Step[] => {
       target: session,
     },
     {
-      fields: pressed(id, { kind: "next" }),
+      fields: pressed(instance, { kind: "next" }),
       method: "POST",
       route: "the session form's Next",
       status: 303,
       target: session,
     },
     {
-      fields: pressed(id, { kind: "submit-part" }),
+      fields: pressed(instance, { kind: "submit-part" }),
       method: "POST",
       route: "P1's Submit part, to its confirm page",
       status: 303,
@@ -152,7 +156,7 @@ const walkFrom = (id: string): readonly Step[] => {
     },
     { method: "GET", route: "P1's confirm page", status: 200, target: confirm },
     {
-      fields: pressed(id, { kind: "submit-part" }),
+      fields: pressed(instance, { kind: "submit-part" }),
       method: "POST",
       route: "P1's Confirm, which submits the part",
       status: 303,
@@ -165,14 +169,14 @@ const walkFrom = (id: string): readonly Step[] => {
       target: `${session}?notice=part-submitted`,
     },
     {
-      fields: pressed(id, { kind: "next" }),
+      fields: pressed(instance, { kind: "next" }),
       method: "POST",
       route: "the session form's Next in P2",
       status: 303,
       target: session,
     },
     {
-      fields: pressed(id, { kind: "submit-part" }),
+      fields: pressed(instance, { kind: "submit-part" }),
       method: "POST",
       route: "P2's Submit part, to its confirm page",
       status: 303,
@@ -180,7 +184,7 @@ const walkFrom = (id: string): readonly Step[] => {
     },
     { method: "GET", route: "P2's confirm page", status: 200, target: confirm },
     {
-      fields: pressed(id, { kind: "submit-part" }),
+      fields: pressed(instance, { kind: "submit-part" }),
       method: "POST",
       route: "P2's Confirm, which finishes the test",
       status: 303,
@@ -191,7 +195,7 @@ const walkFrom = (id: string): readonly Step[] => {
     { method: "GET", route: "item 1's solution", status: 200, target: `${session}/solution/1` },
     { method: "GET", route: "the results document", status: 200, target: `${session}/results.xml` },
     {
-      fields: pressed(id, { kind: "next" }),
+      fields: pressed(instance, { kind: "next" }),
       method: "POST",
       route: "a session post after the test closed",
       status: 303,
@@ -207,13 +211,13 @@ const walkFrom = (id: string): readonly Step[] => {
       method: "GET",
       route: "an unknown session's page",
       status: 404,
-      target: "/sessions/s-unknown",
+      target: "/sessions/m2%2Ftest.xml%2F99",
     },
     {
       method: "GET",
       route: "an unknown session's confirm page",
       status: 404,
-      target: "/sessions/s-unknown/confirm",
+      target: "/sessions/m2%2Ftest.xml%2F99/confirm",
     },
     {
       fields: [[testField, fixture.test]],
@@ -252,7 +256,7 @@ const walkFrom = (id: string): readonly Step[] => {
       method: "GET",
       route: "an unknown session's results document",
       status: 404,
-      target: "/sessions/s-unknown/results.xml",
+      target: "/sessions/m2%2Ftest.xml%2F99/results.xml",
     },
     { method: "GET", route: "a Start's GET", status: 405, target: `/packages/${fixture.id}/tests` },
     { method: "PUT", route: "a session page's PUT", status: 405, target: session },
@@ -280,9 +284,12 @@ describe("dev/page.ts: the test session's response headers", () => {
           target: `/packages/${fixture.id}/tests`,
         });
         const location = started.headers.get("location") ?? "";
-        assert.match(location, /^\/sessions\/s-[\da-f-]{36}$/u);
+        assert.strictEqual(
+          location,
+          sessionHref(sessionId({ attempt: 1, package: fixture.id, test: fixture.test })),
+        );
 
-        const steps = walkFrom(location.slice("/sessions/".length));
+        const steps = walkFrom(location, sessionInstance(1));
         const answered: Answered[] = [record("a Start", started)];
         for (const step of steps) {
           answered.push(record(step.route, yield* send(handle, step)));

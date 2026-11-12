@@ -8,7 +8,8 @@ import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { openDirectory, packageCache, testField } from "#plate/dev/packages.ts";
 import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
-import { sessionStore } from "#plate/dev/store.ts";
+import { sessionId, sessionInstance, sessionStore } from "#plate/dev/store.ts";
+import { sessionHref } from "#plate/dev/sitting.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
 import type { SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme } from "#plate/dev/theme.ts";
@@ -422,14 +423,28 @@ const seeOther = (outcome: Page | Response): string => {
  * Require a route's outcome to be the 303 to a session's page that a saved post answers with.
  *
  * @param outcome The route's outcome.
- * @returns The session id the location names.
+ * @returns The session id the location names, its key's package, test and attempt.
  */
 const redirected = (outcome: Page | Response): string => {
   const location = seeOther(outcome);
-  assert.match(location, /^\/sessions\/s-[\da-f-]{36}$/u);
+  assert.match(location, /^\/sessions\/[^/%]+%2F[^/]+%2F\d+$/u);
 
-  return location.slice("/sessions/".length);
+  return decodeURIComponent(location.slice("/sessions/".length));
 };
+
+/**
+ * Give a stored session's instance token: `attempt-<n>`, named for the attempt its key holds.
+ *
+ * @param bench The bench.
+ * @param id The session id.
+ * @returns The instance token.
+ */
+const sessionInstanceOf = (bench: Bench, id: string): string =>
+  sessionInstance(
+    Option.getOrElse(bench.playground.sessions.get(id), () =>
+      assert.fail(`The store holds no session ${id}.`),
+    ).attempt,
+  );
 
 /**
  * Start the bench's sitting as a Start button's post does.
@@ -451,7 +466,7 @@ const start = (bench: Bench) =>
  * @returns The page as the handler writes it.
  */
 const open = (bench: Bench, id: string) =>
-  Effect.map(send(bench, `/sessions/${id}`), (outcome) => shown(bench, outcome, `/sessions/${id}`));
+  Effect.map(send(bench, sessionHref(id)), (outcome) => shown(bench, outcome, sessionHref(id)));
 
 /**
  * Read the page a 303 sends the browser to.
@@ -474,7 +489,7 @@ const follow = (bench: Bench, location: string) =>
  * @returns The route's outcome.
  */
 const press = (bench: Bench, id: string, button: Element, fields: Fields = []) =>
-  send(bench, `/sessions/${id}`, [
+  send(bench, sessionHref(id), [
     [String(button.attrs["name"]), String(button.attrs["value"])],
     ...fields,
   ]);
@@ -489,7 +504,10 @@ const press = (bench: Bench, id: string, button: Element, fields: Fields = []) =
  * @returns The route's outcome.
  */
 const postIntent = (bench: Bench, id: string, intent: Intent, fields: Fields = []) =>
-  send(bench, `/sessions/${id}`, [[intentName(id), encodeIntent(intent)], ...fields]);
+  send(bench, sessionHref(id), [
+    [intentName(sessionInstanceOf(bench, id)), encodeIntent(intent)],
+    ...fields,
+  ]);
 
 /**
  * Give a page's session form.
@@ -501,7 +519,7 @@ const postIntent = (bench: Bench, id: string, intent: Intent, fields: Fields = [
 const sessionForm = (page: Shown, id: string): Element =>
   page.elements.find(
     (element) =>
-      element.tag === "form" && String(element.attrs["action"]).startsWith(`/sessions/${id}#`),
+      element.tag === "form" && String(element.attrs["action"]).startsWith(`${sessionHref(id)}#`),
   ) ?? assert.fail("The page holds no session form.");
 
 /**
@@ -515,7 +533,7 @@ const confirmForm = (page: Shown, id: string): Element =>
   page.elements.find(
     (element) =>
       element.tag === "form" &&
-      String(element.attrs["action"]).startsWith(`/sessions/${id}/confirm#`),
+      String(element.attrs["action"]).startsWith(`${sessionHref(id)}/confirm#`),
   ) ?? assert.fail("The page holds no confirm form.");
 
 /**
@@ -540,7 +558,7 @@ const confirmButton = (page: Shown, id: string, label: string): Element =>
  * @returns The route's outcome.
  */
 const pressConfirm = (bench: Bench, id: string, button: Element) =>
-  send(bench, `/sessions/${id}/confirm`, [
+  send(bench, `${sessionHref(id)}/confirm`, [
     [String(button.attrs["name"]), String(button.attrs["value"])],
   ]);
 
@@ -718,23 +736,23 @@ const confirmed = Effect.fnUntraced(function* confirmed(
 describe("sessionPath", () => {
   it("names a package's Start post, a session's page and its confirm page, and no other path", () => {
     assert.isTrue(sessionPath("/packages/m2/tests"));
-    assert.isTrue(sessionPath("/sessions/s-1"));
-    assert.isTrue(sessionPath("/sessions/s-1/confirm"));
+    assert.isTrue(sessionPath("/sessions/m2%2Ftest.xml%2F1"));
+    assert.isTrue(sessionPath("/sessions/m2%2Ftest.xml%2F1/confirm"));
     assert.isFalse(sessionPath("/packages/m2"));
     assert.isFalse(sessionPath("/packages//tests"));
     assert.isFalse(sessionPath("/packages/m2/tests/x"));
     assert.isFalse(sessionPath("/packages/m2/files/test.xml"));
     assert.isFalse(sessionPath("/sessions"));
     assert.isFalse(sessionPath("/sessions/"));
-    assert.isFalse(sessionPath("/sessions/s-1/review/1"));
-    assert.isFalse(sessionPath("/sessions/s-1/confirm/1"));
+    assert.isFalse(sessionPath("/sessions/m2%2Ftest.xml%2F1/review/1"));
+    assert.isFalse(sessionPath("/sessions/m2%2Ftest.xml%2F1/confirm/1"));
     assert.isFalse(sessionPath("/sessions//confirm"));
   });
 });
 
 describe("routeSessions", () => {
   it.effect(
-    "starts a session from a Start button's post with a 303 to its page, storing the package's location and the test's path",
+    "starts a session from a Start button's post with a 303 to its page, keyed by its package, test and attempt, storing the package's location and the test's path",
     () =>
       Effect.gen(function* started() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
@@ -745,6 +763,9 @@ describe("routeSessions", () => {
         const statusAt = (outcome: Page | Response): number =>
           shown(bench, outcome, "/packages").page.status;
 
+        assert.strictEqual(id, sessionId({ attempt: 1, package: fixture.id, test: fixture.test }));
+        assert.strictEqual(entry.attempt, 1);
+        assert.strictEqual(sessionInstanceOf(bench, id), "attempt-1");
         assert.strictEqual(entry.packageLocation, fixture.location);
         assert.strictEqual(entry.testHref, fixture.test);
         assert.strictEqual(
@@ -765,6 +786,14 @@ describe("routeSessions", () => {
         assert.strictEqual(statusAt(startGet), 405);
         assert.deepStrictEqual(shown(bench, startGet, "/packages").page.headers, { allow: "POST" });
         assert.strictEqual(bench.playground.sessions.size, 1);
+
+        const again = yield* start(bench);
+        assert.strictEqual(
+          again,
+          sessionId({ attempt: 2, package: fixture.id, test: fixture.test }),
+        );
+        assert.strictEqual(sessionInstanceOf(bench, again), "attempt-2");
+        assert.strictEqual(bench.playground.sessions.size, 2);
       }),
   );
 
@@ -807,9 +836,9 @@ describe("routeSessions", () => {
         assert.isDefined(form.attrs["novalidate"]);
         assert.strictEqual(
           form.attrs["action"],
-          `/sessions/${id}#${scopedId(`${id}.1`, "status")}`,
+          `${sessionHref(id)}#${scopedId(`${sessionInstanceOf(bench, id)}.1`, "status")}`,
         );
-        assert.strictEqual(first?.attrs["name"], intentName(id));
+        assert.strictEqual(first?.attrs["name"], intentName(sessionInstanceOf(bench, id)));
         assert.strictEqual(first?.attrs["value"], encodeIntent({ kind: "go", sequenceIndex: 1 }));
         assert.isUndefined(first?.attrs["disabled"]);
         assert.lengthOf(autofocused(page), 0);
@@ -819,9 +848,15 @@ describe("routeSessions", () => {
           const value = String(button.attrs["value"]);
 
           assert.strictEqual(button.attrs["type"], "submit");
-          assert.strictEqual(button.attrs["name"], intentName(id));
+          assert.strictEqual(button.attrs["name"], intentName(sessionInstanceOf(bench, id)));
           assert.deepStrictEqual(
-            Option.map(decodeIntent([[intentName(id), value]], id), encodeIntent),
+            Option.map(
+              decodeIntent(
+                [[intentName(sessionInstanceOf(bench, id)), value]],
+                sessionInstanceOf(bench, id),
+              ),
+              encodeIntent,
+            ),
             Option.some(String(button.attrs["data-intent"])),
           );
         }
@@ -850,8 +885,8 @@ describe("routeSessions", () => {
       Effect.gen(function* awayAndBack() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
-        const choice = entryName(`${id}.1`, "RESPONSE");
-        const typed = entryName(`${id}.2`, "RESPONSE");
+        const choice = entryName(`${sessionInstanceOf(bench, id)}.1`, "RESPONSE");
+        const typed = entryName(`${sessionInstanceOf(bench, id)}.2`, "RESPONSE");
         const [save] = submitButtons(yield* open(bench, id), id);
 
         redirected(yield* press(bench, id, save ?? assert.fail("No save."), [[choice, "B"]]));
@@ -901,13 +936,13 @@ describe("routeSessions", () => {
       Effect.gen(function* refusedMove() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
-        const instance = `${id}.3`;
+        const instance = `${sessionInstanceOf(bench, id)}.3`;
         const choice = entryName(instance, "RESPONSE");
 
         redirected(yield* postIntent(bench, id, { kind: "go", sequenceIndex: 3 }));
 
         const before = bench.playground.sessions.get(id);
-        const target = `/sessions/${id}`;
+        const target = sessionHref(id);
         const page = shown(
           bench,
           yield* postIntent(bench, id, { kind: "next" }, [[choice, "A"]]),
@@ -936,7 +971,7 @@ describe("routeSessions", () => {
       Effect.gen(function* malformed() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
-        const instance = `${id}.2`;
+        const instance = `${sessionInstanceOf(bench, id)}.2`;
         const typed = entryName(instance, "RESPONSE");
 
         redirected(yield* postIntent(bench, id, { kind: "go", sequenceIndex: 2 }));
@@ -948,7 +983,7 @@ describe("routeSessions", () => {
             [typed, "one"],
             [typed, "two"],
           ]),
-          `/sessions/${id}`,
+          sessionHref(id),
         );
         const controls = controlsNamed(page, typed);
         const [control] = controls;
@@ -969,9 +1004,9 @@ describe("routeSessions", () => {
       Effect.gen(function* partSubmit() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
-        const choice = entryName(`${id}.1`, "RESPONSE");
-        const typed = entryName(`${id}.2`, "RESPONSE");
-        const confirmAt = `/sessions/${id}/confirm`;
+        const choice = entryName(`${sessionInstanceOf(bench, id)}.1`, "RESPONSE");
+        const typed = entryName(`${sessionInstanceOf(bench, id)}.2`, "RESPONSE");
+        const confirmAt = `${sessionHref(id)}/confirm`;
 
         redirected(
           yield* press(bench, id, buttonFor(yield* open(bench, id), { kind: "next" }), [
@@ -1012,10 +1047,13 @@ describe("routeSessions", () => {
         );
         assert.strictEqual(form.attrs["method"], "post");
         assert.strictEqual(form.attrs["autocomplete"], "off");
-        assert.strictEqual(form.attrs["action"], `${confirmAt}#${scopedId(`${id}.2`, "status")}`);
+        assert.strictEqual(
+          form.attrs["action"],
+          `${confirmAt}#${scopedId(`${sessionInstanceOf(bench, id)}.2`, "status")}`,
+        );
         for (const button of [confirmPress, returnPress]) {
           assert.strictEqual(button.attrs["type"], "submit");
-          assert.strictEqual(button.attrs["name"], intentName(id));
+          assert.strictEqual(button.attrs["name"], intentName(sessionInstanceOf(bench, id)));
         }
         assert.strictEqual(confirmPress.attrs["value"], encodeIntent({ kind: "submit-part" }));
         assert.lengthOf(autofocused(confirm), 0);
@@ -1028,7 +1066,7 @@ describe("routeSessions", () => {
 
         const location = yield* confirmed(bench, id, back, [[typed, "eight"]]);
         const fourth = yield* follow(bench, location);
-        const status = statusOf(fourth, `${id}.4`);
+        const status = statusOf(fourth, `${sessionInstanceOf(bench, id)}.4`);
 
         assert.strictEqual(fourth.page.status, 200);
         assert.strictEqual(fourth.page.title, itemTitle(fixture, "partSubmitted", 4));
@@ -1053,9 +1091,9 @@ describe("routeSessions", () => {
       Effect.gen(function* refusedElsewhere() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
-        const instance = `${id}.3`;
+        const instance = `${sessionInstanceOf(bench, id)}.3`;
         const ticked = entryName(instance, "RESPONSE");
-        const first = entryName(`${id}.1`, "RESPONSE");
+        const first = entryName(`${sessionInstanceOf(bench, id)}.1`, "RESPONSE");
 
         redirected(yield* postIntent(bench, id, { kind: "go", sequenceIndex: 3 }));
         redirected(
@@ -1074,7 +1112,7 @@ describe("routeSessions", () => {
             yield* press(bench, id, buttonFor(one, { kind: "submit-part" }), [[first, "B"]]),
           ),
         );
-        const target = `/sessions/${id}/confirm`;
+        const target = `${sessionHref(id)}/confirm`;
         const page = shown(
           bench,
           yield* pressConfirm(bench, id, confirmButton(confirm, id, message("en", "confirm"))),
@@ -1119,14 +1157,17 @@ describe("routeSessions", () => {
         const id = yield* start(bench);
 
         const fourth = yield* follow(bench, yield* confirmed(bench, id, yield* open(bench, id)));
-        const [text] = controlsNamed(fourth, entryName(`${id}.4`, "RESPONSE"));
+        const [text] = controlsNamed(
+          fourth,
+          entryName(`${sessionInstanceOf(bench, id)}.4`, "RESPONSE"),
+        );
         assert.strictEqual(fourth.page.title, itemTitle(fixture, "partSubmitted", 4));
         assert.strictEqual(text?.tag, "textarea");
         assert.strictEqual(text?.attrs["autocomplete"], "off");
 
         redirected(yield* press(bench, id, buttonFor(fourth, { kind: "next" })));
 
-        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), `/sessions/${id}`);
+        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), sessionHref(id));
 
         const summary = yield* open(bench, id);
 
@@ -1134,8 +1175,10 @@ describe("routeSessions", () => {
           summary.page.title,
           message("en", "title", { state: message("en", "finished"), title: fixture.title }),
         );
-        assert.deepStrictEqual(autofocused(summary), [statusOf(summary, id)]);
-        assert.strictEqual(redirected(yield* send(bench, `/sessions/${id}/confirm`)), id);
+        assert.deepStrictEqual(autofocused(summary), [
+          statusOf(summary, sessionInstanceOf(bench, id)),
+        ]);
+        assert.strictEqual(redirected(yield* send(bench, `${sessionHref(id)}/confirm`)), id);
         assert.strictEqual(redirected(yield* postIntent(bench, id, { kind: "next" })), id);
       }),
   );
@@ -1149,7 +1192,7 @@ describe("routeSessions", () => {
         const fourth = yield* follow(bench, yield* confirmed(bench, id, yield* open(bench, id)));
 
         redirected(yield* press(bench, id, buttonFor(fourth, { kind: "next" })));
-        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), `/sessions/${id}`);
+        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), sessionHref(id));
 
         const summary = yield* open(bench, id);
         const { session, test } = yield* storedSession(bench, id);
@@ -1199,16 +1242,20 @@ describe("routeSessions", () => {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
         const statusAt = (outcome: Page | Response): number =>
-          shown(bench, outcome, `/sessions/${id}`).page.status;
+          shown(bench, outcome, sessionHref(id)).page.status;
         const headersAt = (outcome: Page | Response) =>
-          shown(bench, outcome, `/sessions/${id}`).page.headers;
-        const unknown = yield* send(bench, "/sessions/s-unknown");
-        const confirmPut = yield* send(bench, `/sessions/${id}/confirm`, undefined, "PUT");
-        const sessionPut = yield* send(bench, `/sessions/${id}`, undefined, "PUT");
+          shown(bench, outcome, sessionHref(id)).page.headers;
+        // A key the store holds no session under: an attempt the bench never started.
+        const absent = sessionHref(
+          sessionId({ attempt: 99, package: fixture.id, test: fixture.test }),
+        );
+        const unknown = yield* send(bench, absent);
+        const confirmPut = yield* send(bench, `${sessionHref(id)}/confirm`, undefined, "PUT");
+        const sessionPut = yield* send(bench, sessionHref(id), undefined, "PUT");
         const notAForm = bench.provide(
           routeSessions(
             bench.playground,
-            new Request(`${origin}/sessions/${id}`, {
+            new Request(`${origin}${sessionHref(id)}`, {
               body: "next",
               headers: { "content-type": "text/plain" },
               method: "POST",
@@ -1218,16 +1265,20 @@ describe("routeSessions", () => {
 
         assert.strictEqual(statusAt(unknown), 404);
         assert.deepStrictEqual(headersAt(unknown), {});
-        assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown", [])), 404);
+        assert.strictEqual(statusAt(yield* send(bench, absent, [])), 404);
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/%E0%A4%A")), 404);
-        assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}/elsewhere`)), 404);
-        assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown/confirm")), 404);
+        assert.strictEqual(statusAt(yield* send(bench, `${sessionHref(id)}/elsewhere`)), 404);
+        assert.strictEqual(statusAt(yield* send(bench, `${absent}/confirm`)), 404);
         assert.strictEqual(statusAt(confirmPut), 405);
         assert.deepStrictEqual(headersAt(confirmPut), { allow: "GET, POST" });
         assert.strictEqual(statusAt(yield* notAForm), 400);
-        assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}`, [])), 400);
+        assert.strictEqual(statusAt(yield* send(bench, sessionHref(id), [])), 400);
         assert.strictEqual(
-          statusAt(yield* send(bench, `/sessions/${id}`, [[intentName(id), "jump"]])),
+          statusAt(
+            yield* send(bench, sessionHref(id), [
+              [intentName(sessionInstanceOf(bench, id)), "jump"],
+            ]),
+          ),
           400,
         );
         assert.strictEqual(statusAt(sessionPut), 405);
@@ -1241,7 +1292,7 @@ describe("routeSessions", () => {
       Effect.gen(function* tierA() {
         const bench = yield* benchOf(caches.guide, guide);
         const id = yield* start(bench);
-        const instance = `${id}.3`;
+        const instance = `${sessionInstanceOf(bench, id)}.3`;
         const choice = entryName(instance, "RESPONSE");
 
         redirected(yield* postIntent(bench, id, { kind: "go", sequenceIndex: 3 }));
@@ -1255,7 +1306,7 @@ describe("routeSessions", () => {
             { kind: "submit-item" },
             ["A", "B", "C", "D"].map((value) => [choice, value] as const),
           ),
-          `/sessions/${id}`,
+          sessionHref(id),
         );
         const status = statusOf(page, instance);
         const said = message("en", "atMost", { n: "3" });
@@ -1293,11 +1344,11 @@ describe("routeSessions", () => {
       Effect.gen(function* tierB() {
         const bench = yield* benchOf(caches.validating, guide);
         const id = yield* start(bench);
-        const instance = `${id}.1`;
+        const instance = `${sessionInstanceOf(bench, id)}.1`;
         const page = shown(
           bench,
           yield* postIntent(bench, id, { kind: "submit-item" }),
-          `/sessions/${id}`,
+          sessionHref(id),
         );
         const status = statusOf(page, instance);
         const controls = controlsNamed(page, entryName(instance, "RESPONSE"));
@@ -1319,7 +1370,7 @@ describe("routeSessions", () => {
       Effect.gen(function* partEnd() {
         const bench = yield* benchOf(caches.guide, guide);
         const id = yield* start(bench);
-        const confirmAt = `/sessions/${id}/confirm`;
+        const confirmAt = `${sessionHref(id)}/confirm`;
 
         assert.strictEqual(seeOther(yield* postIntent(bench, id, { kind: "end-part" })), confirmAt);
 

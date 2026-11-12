@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -30,6 +29,7 @@ import type {
 } from "#plate/index.ts";
 import { readImports, sourceModules } from "#plate/test/imports.ts";
 import * as openEntry from "#plate/validate/open.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
  * The README's opening, rule `17b156bd`: the title, the quoted tagline and the one-line summary,
@@ -183,10 +183,10 @@ const Manifest = Schema.Struct({ license: Schema.String });
 
 /**
  * The scratch folder this run owns, under the package's git-ignored `work/`, where the server
- * action's recipe is written to be imported. Its name is new for each run, so two runs at once
+ * action's recipe is written to be imported. `mkdtemp` names it, so two runs at once
  * never share or remove each other's files.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "work", `readme-test-${randomUUID()}`);
+const scratch = scratchFolder("readme-test-");
 
 /**
  * The item the server action's recipe runs on, written fresh: a Text Entry that reads `RESPONSE`,

@@ -29,12 +29,12 @@ import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 /**
  * The item instance the tests post for.
  */
-const instance = "3f2b8c1e-5a6d-4e7f-9b0a-1c2d3e4f5a6b";
+const instance = "MANIFEST-1.tests.t.xml.1.1";
 
 /**
- * Another item instance's key.
+ * Another item instance's key: the next item of the same sitting.
  */
-const otherInstance = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const otherInstance = "MANIFEST-1.tests.t.xml.1.2";
 
 /**
  * Construct the binding of the response `RESPONSE` for a test.
@@ -958,8 +958,8 @@ describe("checkInstance", () => {
     }
   });
 
-  it("admits React's useId forms, a lowercase UUID and a plain token", () => {
-    for (const token of ["_r_1_", ":r1:", "q1", "a.b", instance, crypto.randomUUID()]) {
+  it("admits React's useId forms, a host's dotted key and a plain token", () => {
+    for (const token of ["_r_1_", ":r1:", "q1", "a.b", instance]) {
       assert.deepStrictEqual(checkInstance(token), Option.none(), token);
     }
   });
@@ -976,28 +976,23 @@ describe("partition", () => {
 
   it("takes a longer token's entry as a host field, not as this instance's", () => {
     const longer: Entry = ["q10.RESPONSE", "A"];
-    assert.deepStrictEqual(partition([longer], "q1"), { foreign: [], host: [longer], own: [] });
+    assert.deepStrictEqual(partition([longer], "q1"), { host: [longer], own: [] });
   });
 
-  it("takes another UUID's entry as foreign, and a name with no dot as a host field", () => {
-    const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "B"];
+  it("takes another instance's entry and a name with no dot as the host's", () => {
+    const other: Entry = [entryName(otherInstance, "RESPONSE"), "B"];
     const bare: Entry = ["RESPONSE", "C"];
-    assert.deepStrictEqual(partition([foreign, bare], "q1"), {
-      foreign: [foreign],
-      host: [bare],
-      own: [],
-    });
+    assert.deepStrictEqual(partition([other, bare], "q1"), { host: [other, bare], own: [] });
   });
 
-  it("detects a foreign key and sets a host field apart", () => {
+  it("sets this instance's entries apart from the host's, in posted order", () => {
     const own: Entry = [entryName(instance, "RESPONSE"), "choiceA"];
-    const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "choiceB"];
+    const other: Entry = [entryName(otherInstance, "RESPONSE"), "choiceB"];
     const host: Entry = ["csrf-token", "abc"];
     const dotted: Entry = ["section.RESPONSE", "x"];
 
-    assert.deepStrictEqual(partition([host, own, foreign, dotted], instance), {
-      foreign: [foreign],
-      host: [host, dotted],
+    assert.deepStrictEqual(partition([host, own, other, dotted], instance), {
+      host: [host, other, dotted],
       own: [own],
     });
   });

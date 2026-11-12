@@ -10,6 +10,24 @@ These entries list the surface of M1 and M2, what M3 adds to it, and each change
 reads the specification. plate is not published, and each of its entry points is unstable until
 M3.
 
+### The host names every instance; plate draws none (2026-11-11)
+
+- `render`'s `instance` option is required, and so is its `options` argument, in `.` and in
+  `./effect`: plate no longer draws a UUID for an item rendered without one. Pass your own key for
+  the item's use, such as its place in a sitting you key by package, test and attempt. The
+  `options.instance` remedy of `InvalidInstance` no longer says "Omit instance to draw a UUID".
+- `drawInstance` (`#plate/seed.ts`) and `drawnInstance` (`./effect`) are gone, with the debug log
+  "an instance was drawn". `Randomness` draws seeds only.
+- `Partition` has no `foreign`: with no drawn shape to know another instance by, `partition` gives
+  this instance's entries as `own` and every other entry, another instance's included, as `host`.
+  Read another instance's entries with that instance's own `partition`.
+- The dev playground draws nothing. A test session is stored under its key, the package's id, the
+  test's href and the attempt (1 for the first session of a test), at `/sessions/<id>`, where the
+  id is the three percent-encoded and joined by `/`; its instance token and its results'
+  `sessionIdentifier` are `attempt-<n>`, issued by the test's address in the playground.
+  `newSessionId` is gone. An opened item is held under its corpus path as its newest sitting,
+  `sitting-<n>`, and the `newInstance` setting is gone.
+
 ### A rubric block outside the candidate's view is left out, not a notice (2026-11-11)
 
 - An item's `qti-rubric-block` whose `view` leaves out `candidate`, such as `view="scorer"`, is no

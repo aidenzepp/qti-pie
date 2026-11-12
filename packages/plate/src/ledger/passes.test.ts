@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, describe, it } from "@effect/vitest";
@@ -7,19 +6,14 @@ import { corpusDocuments } from "#plate/document/corpus.ts";
 import { features } from "#plate/ledger/features.ts";
 import { PassRecord, SessionNote, passes, sessionNotes } from "#plate/ledger/passes.ts";
 import { writeWalkCorpus } from "#scripts/walk-corpus.ts";
+import { scratchFolder } from "#plate/test/scratch.ts";
 
 /**
  * The scratch folder this run's walk corpus is written to, under the package's git-ignored
- * `work/`. Its name is new for each run, so two runs at once never share or remove each other's
+ * `work/`. `mkdtemp` names it, so two runs at once never share or remove each other's
  * files.
  */
-const scratch = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  `passes-test-${randomUUID()}`,
-);
+const scratch = scratchFolder("passes-test-");
 
 /**
  * Reading every corpus member (about 800) to derive the walk corpus runs in seconds here; the bound

@@ -6,14 +6,15 @@ import { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 import type { Intent } from "#plate/session/session.ts";
 
 /**
- * The test session the tests post for, a bare UUID as `render` draws one.
+ * The test session the tests post for, named as a host names a sitting: its package, its test and
+ * the attempt.
  */
-const instance = "3f2b8c1e-5a6d-4e7f-9b0a-1c2d3e4f5a6b";
+const instance = "MANIFEST-1.tests.t.xml.1";
 
 /**
- * Another test session's instance.
+ * Another test session's instance: the next attempt of the same test.
  */
-const otherInstance = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const otherInstance = "MANIFEST-1.tests.t.xml.2";
 
 /**
  * One intent of each kind, `go` at the first and at a later sequence index.
@@ -134,14 +135,13 @@ describe("decodeIntent", () => {
     assert.deepStrictEqual(decodeIntent([posted("next"), posted("next")], instance), Option.none());
   });
 
-  it("reads the intent partition calls foreign for an item of a bare-UUID session", () => {
+  it("reads the intent partition calls the host's for an item of the session", () => {
     const item = `${instance}.1`;
     const intent = posted(encodeIntent({ kind: "go", sequenceIndex: 2 }));
     const response: Entry = [entryName(item, "RESPONSE"), "choiceA"];
 
     assert.deepStrictEqual(partition([response, intent], item), {
-      foreign: [intent],
-      host: [],
+      host: [intent],
       own: [response],
     });
     assert.deepStrictEqual(

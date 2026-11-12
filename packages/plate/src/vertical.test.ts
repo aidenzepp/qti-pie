@@ -599,7 +599,7 @@ describe("the vertical witness over the fixtures", { tags: ["corpus"] }, () => {
           );
 
           assert.lengthOf(slotted(elementsOf([rootOf(rendered.html)]), "item-notice"), 1);
-          assert.deepStrictEqual(posted, { foreign: [], host: [["note", "seen"]], own: [] });
+          assert.deepStrictEqual(posted, { host: [["note", "seen"]], own: [] });
           assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE"), []);
           assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [0]);
         }),

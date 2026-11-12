@@ -5,18 +5,18 @@
  * Each mirror calls its plain function and lifts the plain `Result` with `Effect.fromResult`, so it
  * succeeds and fails exactly as the plain function does given the same arguments, and none
  * re-implements one. What a mirror changes is where the arguments a host passes the plain function
- * come from: the configuration from the {@link Configuration} service, and an instance `render`
- * would draw from {@link drawnInstance}. The rest take the plain parameters and read nothing. The
+ * come from: the configuration from the {@link Configuration} service. The rest take the plain
+ * parameters and read nothing. The
  * session lifecycle (`begin`, `startTest`, `advance`, `results`) is `#plate/effect/session.ts`'s.
  * Nothing outside `src/effect/` imports this module.
  *
  * The mirrors that do an item's or a session's work run in a span named for them, `plate.render`
- * and the rest, whose attributes are identifiers, counts and fixed vocabulary, and log at the debug
- * level, after it, an instance drawn for the caller. No span attribute or log holds a response, a
- * record value, the item's body or HTML, a stored form or a validation message's text, since a
- * program may export its telemetry where the page's data must not go; a failure is recorded by its
- * span, never logged. The short glue (`current`, `itemView`, `permits`, `allowedIntents`,
- * `navigationState`, `renderNavigation`, `decode` and `acceptedItem`) runs in no span of its own.
+ * and the rest, whose attributes are identifiers, counts and fixed vocabulary. No span attribute or
+ * log holds a response, a record value, the item's body or HTML, a stored form or a validation
+ * message's text, since a program may export its telemetry where the page's data must not go; a
+ * failure is recorded by its span, never logged. The short glue (`current`, `itemView`, `permits`,
+ * `allowedIntents`, `navigationState`, `renderNavigation`, `decode` and `acceptedItem`) runs in no
+ * span of its own.
  *
  * @module
  */
@@ -39,7 +39,6 @@ import type {
 } from "#plate/codec/session.ts";
 import type { InvalidConfiguration } from "#plate/configuration.ts";
 import { Configuration } from "#plate/effect/configuration.ts";
-import { drawnInstance } from "#plate/effect/randomness.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import type { UnknownPart } from "#plate/emit/parts.ts";
 import type { MarkupRefused } from "#plate/emit/serialise.ts";
@@ -196,33 +195,20 @@ export type PlateError =
   | UnmappedResponseError;
 
 /**
- * Draw an instance through `Randomness`, and log at the debug level that an instance was drawn,
- * under the item's identifier and never the instance.
+ * Render an item, as the plain `render` does, under the {@link Configuration} service.
  *
- * @param identifier The item's `item.identifier` annotation.
- * @returns The drawn instance.
- */
-const drawnInstanceOf = (identifier: Readonly<Record<string, string>>): Effect.Effect<string> =>
-  Effect.tap(drawnInstance, () =>
-    Effect.logDebug("an instance was drawn").pipe(Effect.annotateLogs(identifier)),
-  );
-
-/**
- * Render an item, as the plain `render` does, under the {@link Configuration} service, drawing an
- * instance through `Randomness` when the host gives none.
- *
- * A host's instance is used as given, and then nothing is drawn. Absent, it is
- * {@link drawnInstance}'s, a lowercase UUID v4 in `drawInstance`'s format, drawn before the plain
- * call, so a render that fails has still drawn one; the same item, configuration, options and drawn
- * bytes give the HTML the plain `render` gives under that instance. Its span, `plate.render`,
- * carries `item.identifier` and `render.mode`, and a drawn instance is logged at the debug level.
+ * The host's instance is used as given; nothing is drawn, so the same item, configuration and
+ * options give the HTML the plain `render` gives. Its span, `plate.render`, carries
+ * `item.identifier` and `render.mode`.
  *
  * @example
- *   render(redacted, { mode: "review" }).pipe(Effect.provide(ConfigurationFromEnv));
- *   // an Effect of the Root's HTML and the instance drawn for it
+ *   render(redacted, { instance: "q1", mode: "review" }).pipe(
+ *     Effect.provide(ConfigurationFromEnv),
+ *   );
+ *   // an Effect of the Root's HTML and the instance q1
  *
  * @param item The item `redact` gave, or `decodeRedacted`: that object itself, never a copy.
- * @param options The author's inputs, none by default.
+ * @param options The author's inputs: the instance, and any of the rest.
  * @returns The Root's HTML and the instance it used, or the plain `render`'s failure:
  *   {@link NotRedacted}, {@link UnknownPart}, {@link InvalidInstance}, {@link AssetMissing},
  *   {@link PartSwapRefused}, {@link InvalidHeadingLevel}, {@link MarkupRefused} or
@@ -230,7 +216,7 @@ const drawnInstanceOf = (identifier: Readonly<Record<string, string>>): Effect.E
  */
 export const render = Effect.fn("plate.render")(function* render(
   item: Redacted,
-  options: Options = {},
+  options: Options,
 ): Effect.fn.Return<
   Rendered,
   | AssetMissing
@@ -243,14 +229,15 @@ export const render = Effect.fn("plate.render")(function* render(
   | UnknownPart,
   Configuration
 > {
-  const identifier = { "item.identifier": item.identifier };
   // The plain render's own default mode, so the attribute names the mode the HTML was written in.
-  yield* Effect.annotateCurrentSpan({ ...identifier, "render.mode": options.mode ?? "answering" });
+  yield* Effect.annotateCurrentSpan({
+    "item.identifier": item.identifier,
+    "render.mode": options.mode ?? "answering",
+  });
 
   const configuration = yield* Configuration;
-  const instance = options.instance ?? (yield* drawnInstanceOf(identifier));
 
-  return yield* Effect.fromResult(plainRender(item, configuration, { ...options, instance }));
+  return yield* Effect.fromResult(plainRender(item, configuration, options));
 });
 
 /**

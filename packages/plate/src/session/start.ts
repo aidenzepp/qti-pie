@@ -102,7 +102,7 @@ export class InvalidSessionInstance extends Data.TaggedError("InvalidSessionInst
    * The token, what it breaks, and what to pass instead.
    */
   override get message(): string {
-    return `The session instance ${JSON.stringify(this.token)} in context.instance ${breaches[this.requirement](this.token)}. Pass a token of ASCII letters, digits, "_", ".", ":" and "-" that does not end in "-" and holds no "--", such as a lowercase UUID.`;
+    return `The session instance ${JSON.stringify(this.token)} in context.instance ${breaches[this.requirement](this.token)}. Pass a token of ASCII letters, digits, "_", ".", ":" and "-" that does not end in "-" and holds no "--", such as "sitting-42".`;
   }
 }
 
@@ -978,7 +978,6 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  *
  * @example
  *   // The instance is the host's own token for the sitting, such as its key in the host's store.
- *   // A page served over plain HTTP has no `crypto.randomUUID`.
  *   startTest(test, items, configuration, { instance: "sitting-42", now: new Date() });
  *   // under a processing seed startTest draws; pass `seed` in the context to give your own
  *
@@ -989,7 +988,7 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  *   seed, none when it has none.
  * @param context The sitting.
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
- *   `checkInstance` passes, such as a lowercase UUID.
+ *   `checkInstance` passes, such as `sitting-42`.
  * @param context.now When the session starts.
  * @param context.seed The processing seed, which keys every value the session's processing draws,
  *   used as given; with none, `startTest` draws one. Server data: keep it from the page.

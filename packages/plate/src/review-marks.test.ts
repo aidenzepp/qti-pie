@@ -266,7 +266,10 @@ const reviewed = (
   accepted: Accepted,
   answers: Responses,
   configuration: Configuration,
-  options: (correct: Responses) => Options = (correct) => ({ mode: "review", solution: correct }),
+  options: (correct: Responses) => Omit<Options, "instance"> = (correct) => ({
+    mode: "review",
+    solution: correct,
+  }),
 ): Element =>
   Result.getOrThrow(
     Result.gen(function* review() {
@@ -288,7 +291,7 @@ const reviewed = (
  *
  * @returns The options: `review`, no solution.
  */
-const withoutSolution = (): Options => ({ mode: "review" });
+const withoutSolution = (): Omit<Options, "instance"> => ({ mode: "review" });
 
 /**
  * List an element and every element below it, in document order.
@@ -658,7 +661,7 @@ describe("review marks against the solution: where they show", () => {
         const accepted = yield* accepting("items/after-01.xml", number);
         const answers = { RESPONSE: typed(3n) };
         const messages = [{ response: "RESPONSE", text: "Enter a number." }];
-        const cases: readonly Options[] = [
+        const cases: readonly Omit<Options, "instance">[] = [
           { mode: "answering" },
           { mode: "solution" },
           { messages, mode: "review", posted: { RESPONSE: ["three"] } },

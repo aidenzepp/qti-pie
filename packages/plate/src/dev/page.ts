@@ -108,7 +108,6 @@ import { message, numeral } from "#plate/messages.ts";
 import { isPackagePath } from "#plate/model/url.ts";
 import type { PackagePath } from "#plate/model/url.ts";
 import type { PackageTest } from "#plate/package/open.ts";
-import { drawInstance } from "#plate/seed.ts";
 import { current } from "#plate/session/start.ts";
 import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
 import type { AcceptedKind, Verdict } from "#plate/validate/verdict.ts";
@@ -128,15 +127,13 @@ export type Handler = (request: Request) => Promise<Response>;
  * processing, given to `startTest` as the context's `seed`, and when absent `startTest` draws one
  * for each session, while the configuration's `seed` orders shuffles only; `tests` is the store
  * that keeps the test sessions, a new one when absent, which a test passes to read a stored
- * session; `newInstance` draws the instance token of each item the playground opens,
- * `drawInstance`'s random UUID when absent, and must give a new token each call, since the
- * playground holds each open item under its token (a test gives a fixed one so a sitting's values
- * follow from its seed alone). They are data; the playground's caches and its config provider are
- * services, which the handler's Layer provides ({@link PlaygroundLayer}).
+ * session. They are data; the playground's caches and its config provider are services, which the
+ * handler's Layer provides ({@link PlaygroundLayer}). The playground names each item it opens by
+ * the item's own identity, its corpus path and the sitting's number ({@link sittingInstance}), so
+ * it draws no instance.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Omit<Configuration, "assets">>;
-  readonly newInstance?: () => string;
   readonly seed?: string;
   readonly tests?: SessionStore;
 }
@@ -262,9 +259,10 @@ interface Shown {
 }
 
 /**
- * One sitting of an opened item, held in the playground's store under its instance token: the
- * accepted document, the record `begin` started or the last `score` returned, in the form the host
- * stores, the scored attempts, and what the last scored page showed.
+ * The newest sitting of an opened item, held in the playground's store under the item's corpus
+ * path: the accepted document, the record `begin` started or the last `score` returned, in the
+ * form the host stores, the scored attempts, what the last scored page showed, and the sitting's
+ * number, 1 for the first open of the path and one more for each open after it.
  */
 interface Session {
   readonly accepted: Accepted;
@@ -272,7 +270,17 @@ interface Session {
   readonly last: Option.Option<Shown>;
   readonly path: string;
   readonly record: StoredRecord;
+  readonly sitting: number;
 }
+
+/**
+ * Name a sitting's instance token by its number: `sitting-<n>`. The store holds one sitting per
+ * corpus path, so the number names it within its item, and the page holds that one item.
+ *
+ * @param sitting The sitting's number, from 1.
+ * @returns The instance token, such as `sitting-1`.
+ */
+const sittingInstance = (sitting: number): string => `sitting-${sitting}`;
 
 /**
  * The failure of building the plain-HTML host: BG007 or the corpus cannot be read, or the host's
@@ -282,7 +290,7 @@ type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | I
 
 /**
  * A playground's state and settings: its theme box's appearance, its open items' sittings, oldest
- * first, its configuration input, how it draws an opened item's instance token, the seed its
+ * first, its configuration input, the seed its
  * sittings begin under and its test sessions process under (none for one `begin` or `startTest`
  * draws), the verdicts of the corpus's members, its packages, its test sessions, and the plain-HTML
  * host, built the first time it is asked for.
@@ -291,7 +299,6 @@ interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Omit<Configuration, "assets">>;
   readonly host: Effect.Effect<HtmlHost, HostFailure>;
-  readonly newInstance: () => string;
   readonly packages: PackageCache;
   readonly seed: Option.Option<string>;
   readonly sessions: Store<Session>;
@@ -458,8 +465,8 @@ const itemAssets = Effect.fn("playground.itemAssets")(function* itemAssets(
  * @returns Whether some open item's directory holds it.
  */
 const inOpenPackage = (playground: Playground, corpusPath: string): boolean =>
-  playground.sessions.ids().some((instance) =>
-    Option.exists(playground.sessions.get(instance), (session) => {
+  playground.sessions.ids().some((held) =>
+    Option.exists(playground.sessions.get(held), (session) => {
       const directory = path.posix.dirname(session.path);
 
       return directory === "." || corpusPath.startsWith(`${directory}/`);
@@ -1003,10 +1010,11 @@ const sessionsInProgress = Effect.fnUntraced(function* sessionsInProgress(
  * reasons, from its cached verdict, or, for an accepted test, section or stimulus, with the page
  * that says what it is and links its package; a path that names no member is not found.
  *
- * Each open of an accepted item is a new sitting: it draws an instance token, begins the sitting's
- * record with `begin` under the playground's seed, or one `begin` draws, and keeps the record in
- * the playground's store. `begin`'s failure cannot occur on a checked item; it answers as a
- * developer error.
+ * Each open of an accepted item is a new sitting, numbered one past the sitting the store holds for
+ * its path and named by {@link sittingInstance}: it begins the sitting's record with `begin` under
+ * the playground's seed, or one `begin` draws, and keeps the record in the playground's store under
+ * the path, in place of the sitting before it. `begin`'s failure cannot occur on a checked item; it
+ * answers as a developer error.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
@@ -1054,7 +1062,11 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
           : rootPage(corpusPath, verdict.kind, yield* packageOfMember(playground, corpusPath));
       }
 
-      const instance = playground.newInstance();
+      const sitting = Option.match(playground.sessions.get(corpusPath), {
+        onNone: () => 1,
+        onSome: (held) => held.sitting + 1,
+      });
+      const instance = sittingInstance(sitting);
       const begun = begin(
         accepted.value,
         Option.match(playground.seed, {
@@ -1066,12 +1078,13 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
         return failurePage(begun.failure);
       }
 
-      playground.sessions.set(instance, {
+      playground.sessions.set(corpusPath, {
         accepted: accepted.value,
         attempts: 0,
         last: Option.none(),
         path: corpusPath,
         record: begun.success,
+        sitting,
       });
 
       return itemPage(
@@ -1111,14 +1124,14 @@ const submit = Effect.fn("playground.submit")(function* submit(
   target: { readonly instance: string; readonly path: string },
 ): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure> {
   const held = Option.filter(
-    playground.sessions.get(target.instance),
-    (sitting) => sitting.path === target.path,
+    playground.sessions.get(target.path),
+    (sitting) => sittingInstance(sitting.sitting) === target.instance,
   );
   if (Option.isNone(held)) {
     return notePage(
       404,
       "Item not open",
-      "This item is no longer open here, perhaps because the server restarted. Open it again from the list.",
+      "This sitting of the item is no longer open here: the item was opened again, or the server restarted. Open it again from the list.",
     );
   }
 
@@ -1186,7 +1199,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
         last: Option.some(shown),
         record: stored,
       };
-      playground.sessions.set(target.instance, next);
+      playground.sessions.set(target.path, next);
 
       return scoredPage({ instance: target.instance, session: next }, configuration, shown);
     },
@@ -1670,8 +1683,8 @@ const answer = (
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input, the sittings' seed and instance tokens, and the test
- *   sessions' store, each optional.
+ * @param settings The configuration input, the sittings' seed, and the test sessions' store, each
+ *   optional.
  * @param layer The verdict and package caches and the config provider; {@link playgroundCaches},
  *   over the process environment, when absent.
  * @returns The handler.
@@ -1691,7 +1704,6 @@ export const createHandler = (
         }),
       ),
     ),
-    newInstance: settings.newInstance ?? drawInstance,
     seed: Option.fromUndefinedOr(settings.seed),
     sessions: boundedStore(),
     tests: settings.tests ?? sessionStore(),

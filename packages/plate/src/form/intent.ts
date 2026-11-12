@@ -4,8 +4,8 @@
  *
  * An intent posts under its test session's instance, and an item of the session posts under
  * `<instance>.<sequence index>`, so the two never share a name. `partition` of
- * `#plate/form/encoding.ts`, given an item's instance, calls the intent entry of a session whose
- * instance is a drawn UUID foreign; {@link decodeIntent} reads it by its own name.
+ * `#plate/form/encoding.ts`, given an item's instance, calls the session's intent entry the
+ * host's; {@link decodeIntent} reads it by its own name.
  *
  * @module
  */

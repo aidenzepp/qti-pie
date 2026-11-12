@@ -1276,7 +1276,7 @@ const fruitItem: Item = {
  * @param options The render's options, beside its instance.
  * @returns The form holding the rendered item.
  */
-const fruitForm = (options: Options) =>
+const fruitForm = (options: Omit<Options, "instance">) =>
   Effect.gen(function* renderFruitForm() {
     const configuration = yield* configure({});
     const { html } = yield* Effect.fromResult(
@@ -1454,7 +1454,7 @@ const answer = "The river floods in spring.";
 /**
  * The render options that restore {@link answer} to the essay.
  */
-const answered: Options = {
+const answered: Omit<Options, "instance"> = {
   values: {
     [essay.response]: {
       baseType: "string",
@@ -1470,7 +1470,7 @@ const answered: Options = {
  * @param options The render's options, beside its instance.
  * @returns The render's result, success or refusal.
  */
-const renderEssay = (options: Options) =>
+const renderEssay = (options: Omit<Options, "instance">) =>
   Effect.gen(function* renderEssayItem() {
     const configuration = yield* configure({});
 

@@ -9,7 +9,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { MarkupRefused } from "#plate/emit/serialise.ts";
-import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
+import { entryName, partition } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
 import type {
@@ -72,7 +72,7 @@ const hiddenMarkers: readonly string[] = markers.filter(
 /**
  * The item instance most renders here pass.
  */
-const instance = "4c7e1a2b-9d3f-4e8a-b6c5-0f1e2d3c4b5a";
+const instance = "MANIFEST-1.tests.t.xml.1.1";
 
 /**
  * Construct a single value.
@@ -526,38 +526,6 @@ const failureOf = <E>(result: Result.Result<Rendered, E>): Option.Option<E> => {
 
   return Result.getFailure(result);
 };
-
-/**
- * A lowercase UUID v4: 32 hex digits in the 8-4-4-4-12 form, the version nibble 4 and the variant
- * nibble 8 to b.
- */
-const uuidV4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/u;
-
-/**
- * Run an effect with `crypto.randomUUID` unreachable, as a page on plain HTTP has it (a browser
- * gives it only in a secure context), and make it reachable again afterwards.
- *
- * In Node `randomUUID` lives on `Crypto.prototype`, so deleting it from `globalThis.crypto` would
- * leave it reachable: this defines an own property, `undefined` and configurable, that shadows it,
- * and deletes that property when the effect ends, however it ends.
- *
- * @param effect The effect to run without `randomUUID`.
- * @returns The effect's result.
- */
-const withoutRandomUuid = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      Object.defineProperty(globalThis.crypto, "randomUUID", {
-        configurable: true,
-        value: undefined,
-      });
-    }),
-    () => effect,
-    () =>
-      Effect.sync(() => {
-        Reflect.deleteProperty(globalThis.crypto, "randomUUID");
-      }),
-  );
 
 /**
  * Give the fields of an {@link InvalidInstance} a render failed with.
@@ -1079,8 +1047,8 @@ describe("render, a shuffled Choice", () => {
         const seeded = yield* Effect.fromResult(
           render(shuffled, yield* configure({ seed: "7" }), { instance }),
         );
-        assert.deepStrictEqual(presentedIn(first), ["P3", "P1", "P0", "P4", "P2"]);
-        assert.deepStrictEqual(presentedIn(seeded), ["P2", "P4", "P3", "P1", "P0"]);
+        assert.deepStrictEqual(presentedIn(first), ["P3", "P4", "P0", "P2", "P1"]);
+        assert.deepStrictEqual(presentedIn(seeded), ["P0", "P4", "P3", "P1", "P2"]);
         assert.notDeepEqual(presentedIn(first), presentedIn(seeded));
       }),
   );
@@ -1133,68 +1101,35 @@ describe("render, the instance token", () => {
     }),
   );
 
-  it.effect("renders React's useId forms, a plain token and a UUID, every id under the token", () =>
-    Effect.gen(function* validTokens() {
-      const configuration = yield* defaults;
-      for (const token of ["_r_1_", ":r1:", "q1", instance]) {
-        const elements = elementsIn(
-          yield* Effect.fromResult(render(redacted, configuration, { instance: token })),
-        );
-        const ids = elements.flatMap((element) => {
-          const { id } = element.attrs;
-
-          return id === undefined || id === true ? [] : [id];
-        });
-        assert.isAbove(ids.length, 3, token);
-        assert.include(ids, `${token}--intro`, token);
-        for (const id of ids) {
-          assert.isTrue(id.startsWith(`${token}-`), `${token}: ${id}`);
-        }
-        assert.lengthOf(controlsOf(elements, token, "RESPONSE"), 3, token);
-      }
-    }),
-  );
-
-  it.effect("draws a lowercase UUID that checkInstance admits when no instance is given", () =>
-    Effect.gen(function* drawnToken() {
-      const configuration = yield* defaults;
-      const [root] = parseHtml((yield* Effect.fromResult(render(redacted, configuration))).html);
-      const id = root?.kind === "element" ? root.attrs["id"] : undefined;
-      assert.isString(id);
-
-      const drawn = String(id).replace(/-item$/u, "");
-      assert.match(drawn, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u);
-      assert.deepStrictEqual(checkInstance(drawn), Option.none());
-    }),
-  );
-
-  it.effect("draws a lowercase UUID v4 with crypto.randomUUID unreachable, as on plain HTTP", () =>
-    withoutRandomUuid(
-      Effect.gen(function* drawnWithoutRandomUuid() {
-        assert.throws(() => {
-          globalThis.crypto.randomUUID();
-        }, TypeError);
-
+  it.effect(
+    "renders React's useId forms, a plain token and a host's dotted key, every id under the token",
+    () =>
+      Effect.gen(function* validTokens() {
         const configuration = yield* defaults;
-        const drawn = yield* Effect.fromResult(render(redacted, configuration));
-        assert.match(drawn.instance, uuidV4);
-        assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+        for (const token of ["_r_1_", ":r1:", "q1", instance]) {
+          const elements = elementsIn(
+            yield* Effect.fromResult(render(redacted, configuration, { instance: token })),
+          );
+          const ids = elements.flatMap((element) => {
+            const { id } = element.attrs;
+
+            return id === undefined || id === true ? [] : [id];
+          });
+          assert.isAbove(ids.length, 3, token);
+          assert.include(ids, `${token}--intro`, token);
+          for (const id of ids) {
+            assert.isTrue(id.startsWith(`${token}-`), `${token}: ${id}`);
+          }
+          assert.lengthOf(controlsOf(elements, token, "RESPONSE"), 3, token);
+        }
       }),
-    ).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          assert.match(globalThis.crypto.randomUUID(), uuidV4);
-        }),
-      ),
-    ),
   );
 
-  it.effect("returns the instance it used, which validates and partitions its entries", () =>
+  it.effect("returns the instance it was given, which validates and partitions its entries", () =>
     Effect.gen(function* returnedToken() {
       const configuration = yield* defaults;
-      const drawn = yield* Effect.fromResult(render(redacted, configuration));
-      assert.match(drawn.instance, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u);
-      assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+      const drawn = yield* Effect.fromResult(render(redacted, configuration, { instance }));
+      assert.strictEqual(drawn.instance, instance);
 
       const elements = elementsIn(drawn);
       assert.strictEqual(elements[0]?.attrs["id"], scopedId(drawn.instance, "item"));
@@ -1211,13 +1146,9 @@ describe("render, the instance token", () => {
         [entryName(drawn.instance, "RESPONSE"), entryName(drawn.instance, "CITY")],
       );
       assert.deepStrictEqual(partition([...posted, host], drawn.instance), {
-        foreign: [],
         host: [host],
         own: posted,
       });
-
-      const passed = yield* Effect.fromResult(render(redacted, configuration, { instance: "q1" }));
-      assert.strictEqual(passed.instance, "q1");
     }),
   );
 });

@@ -66,8 +66,8 @@ const resultNamespace = "http://www.imsglobal.org/xsd/imsqti_result_v3p0";
  * candidate, and one session identifier per entry of `sessions`, each the URI of the system that
  * issued it (`sourceId`) and the identifier it issued.
  *
- * The Results XSD types `sourcedId` and each `identifier` as an NCName, so a bare UUID, which
- * starts with a digit more often than not, does not fit; `s-` followed by a UUID does.
+ * The Results XSD types `sourcedId` and each `identifier` as an NCName, so an identifier that
+ * starts with a digit, such as a bare attempt number, does not fit; `attempt-1` does.
  *
  * Each `sourceId` must be an absolute URI, one `URL.canParse` reads without a base. That is
  * stricter than the XSD, whose `xs:anyURI` admits a relative reference
@@ -115,7 +115,7 @@ export type ContextField = "datestamp" | "identifier" | "sourceId" | "sourcedId"
 const contextRemedies: Readonly<Record<ContextField, string>> = {
   datestamp: "is not a valid date. Pass the Date of the item session's last change",
   identifier:
-    'is not an NCName, which the Results XSD requires. Pass an identifier that starts with a letter or "_" and holds only letters, digits, "-", "_" and ".", such as "s-" followed by a UUID',
+    'is not an NCName, which the Results XSD requires. Pass an identifier that starts with a letter or "_" and holds only letters, digits, "-", "_" and ".", such as "attempt-1"',
   sourceId:
     'is not an absolute URI made of characters XML can carry. Pass the URI of the system that issued the session identifier, such as "http://localhost:5190/", with no control character, U+FFFE, U+FFFF or lone surrogate',
   sourcedId:

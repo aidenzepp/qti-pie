@@ -241,7 +241,7 @@ export const itemHost = (accepted: Accepted, configuration: Configuration): Html
    * @param status What the Status part shows, none before a post.
    * @returns The response.
    */
-  const itemPage = (options: Options, status?: StatusInput): Response => {
+  const itemPage = (options: Omit<Options, "instance">, status?: StatusInput): Response => {
     const rendered = render(redacted, configuration, { ...options, instance });
     const shown = status === undefined ? undefined : renderStatus(status, configuration);
     if (rendered._tag === "Failure") {

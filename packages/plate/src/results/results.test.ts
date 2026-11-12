@@ -59,16 +59,16 @@ const fixtureDirectory = path.resolve(import.meta.dirname, "..", "..", "fixtures
 const bg007 = "QTI3_BPIG_Examples/items/BG007.xml";
 
 /**
- * A UUID that starts with a digit, as about 62% of them do, so it is no NCName by itself.
+ * A bare attempt number, which starts with a digit, so it is no NCName by itself.
  */
-const uuid = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const attemptNumber = "1";
 
 /**
  * The context every valid result is written with: an NCName `sourcedId`, and the playground's
- * session identifier, `s-` and a UUID.
+ * session identifier, `attempt-` and the attempt number.
  */
 const context: ResultContext = {
-  sessions: [{ identifier: `s-${uuid}`, sourceId: "http://localhost:5190/" }],
+  sessions: [{ identifier: `attempt-${attemptNumber}`, sourceId: "http://localhost:5190/" }],
   sourcedId: "candidate-1",
 };
 
@@ -1045,7 +1045,7 @@ describe("results", () => {
         assert.deepStrictEqual(attributesOf(report.context), { sourcedId: "candidate-1" });
         assert.deepStrictEqual(
           childrenNamed(report.context, "sessionIdentifier").map(attributesOf),
-          [{ identifier: `s-${uuid}`, sourceID: "http://localhost:5190/" }],
+          [{ identifier: `attempt-${attemptNumber}`, sourceID: "http://localhost:5190/" }],
         );
       }),
     { tags: ["corpus", "results-xsd"] },
@@ -2070,10 +2070,12 @@ describe("results", () => {
         assert.deepStrictEqual(
           contextFailure(
             input({
-              context: { sessions: [{ identifier: uuid, sourceId: "http://localhost:5190/" }] },
+              context: {
+                sessions: [{ identifier: attemptNumber, sourceId: "http://localhost:5190/" }],
+              },
             }),
           ),
-          Option.some(["identifier", Option.some(0), uuid] as const),
+          Option.some(["identifier", Option.some(0), attemptNumber] as const),
         );
         assert.deepStrictEqual(
           contextFailure(input({ context: { sourcedId: "1candidate" } })),

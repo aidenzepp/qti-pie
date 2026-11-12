@@ -11,7 +11,8 @@ import { openDirectory, packageCache } from "#plate/dev/packages.ts";
 import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
 import { reviewPath, routeReview, summaryPage } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
-import { newSessionId, sessionStore } from "#plate/dev/store.ts";
+import { sessionHref } from "#plate/dev/sitting.ts";
+import { sessionId, sessionInstance, sessionStore } from "#plate/dev/store.ts";
 import { emptyTheme } from "#plate/dev/theme.ts";
 import { readSource } from "#plate/document/read.ts";
 import { walk } from "#plate/document/source.ts";
@@ -56,10 +57,15 @@ const resultsXsd = "imsqti_resultv3p0_v1p0.xsd";
 const oracleTimeoutMs = 120_000;
 
 /**
- * The closed session's id: an `s-` id as `newSessionId` draws one, fixed so that item 3, a shuffled
- * Choice, is presented in an order other than its document's on every run.
+ * The closed session's attempt at the fixture's test, the first, whose instance presents item 3,
+ * a shuffled Choice, in an order other than its document's.
  */
-const closedId = "s-0f8fad5b-d9cb-469f-a165-70867728950e";
+const closedAttempt = 1;
+
+/**
+ * The closed session's id: its key, the fixture package, its test and {@link closedAttempt}.
+ */
+const closedId = sessionId({ attempt: closedAttempt, package: "m2", test: fixture.test });
 
 /**
  * The order item 3's choices take in its document.
@@ -423,7 +429,7 @@ const deliver = (packages: PackageCache, steps: typeof sitting = sitting) =>
         startTest(test.test, test.items, configuration, { instance: id, now: startedAt }),
         (failure) => assert.fail(`startTest refused: ${failure.message}`),
       );
-    let session = start(closedId);
+    let session = start(sessionInstance(closedAttempt));
     let order: readonly string[] = [];
     for (const [index, step] of steps.entries()) {
       if (session.position === 2) {
@@ -456,16 +462,20 @@ const deliver = (packages: PackageCache, steps: typeof sitting = sitting) =>
     assert.strictEqual(session.status, "closed");
 
     const sessions = sessionStore();
-    const store = (id: string, held: TestSession): void => {
+    const store = (attempt: number, held: TestSession): string => {
+      const id = sessionId({ attempt, package: "m2", test: fixture.test });
       sessions.set(id, {
+        attempt,
         packageLocation: fixture.location,
         session: Result.getOrElse(encodeSession(held), (failure) => assert.fail(failure.message)),
         testHref: fixture.test,
       });
+
+      return id;
     };
-    const openId = newSessionId();
-    store(closedId, session);
-    store(openId, start(openId));
+    store(closedAttempt, session);
+
+    const openId = store(closedAttempt + 1, start(sessionInstance(closedAttempt + 1)));
 
     const result: Delivered = {
       closed: { id: closedId, session },
@@ -515,13 +525,13 @@ const shown = (outcome: Page | Response, target: string) => {
 
 describe("reviewPath", () => {
   it("names the review, solution and results paths of a session, and no other", () => {
-    assert.isTrue(reviewPath("/sessions/s-1/review/1"));
-    assert.isTrue(reviewPath("/sessions/s-1/solution/2"));
-    assert.isTrue(reviewPath("/sessions/s-1/results.xml"));
-    assert.isFalse(reviewPath("/sessions/s-1"));
-    assert.isFalse(reviewPath("/sessions/s-1/confirm"));
-    assert.isFalse(reviewPath("/sessions/s-1/review"));
-    assert.isFalse(reviewPath("/sessions/s-1/results.xml/1"));
+    assert.isTrue(reviewPath("/sessions/m2%2Ftest.xml%2F1/review/1"));
+    assert.isTrue(reviewPath("/sessions/m2%2Ftest.xml%2F1/solution/2"));
+    assert.isTrue(reviewPath("/sessions/m2%2Ftest.xml%2F1/results.xml"));
+    assert.isFalse(reviewPath("/sessions/m2%2Ftest.xml%2F1"));
+    assert.isFalse(reviewPath("/sessions/m2%2Ftest.xml%2F1/confirm"));
+    assert.isFalse(reviewPath("/sessions/m2%2Ftest.xml%2F1/review"));
+    assert.isFalse(reviewPath("/sessions/m2%2Ftest.xml%2F1/results.xml/1"));
     assert.isFalse(reviewPath("/packages/m2"));
   });
 });
@@ -530,9 +540,9 @@ describe("routeReview", () => {
   it.effect("shows an item in review with the candidate's values, read-only", () =>
     Effect.gen(function* review() {
       const { closed, playground } = yield* delivered;
-      const target = `/sessions/${closed.id}/review/1`;
+      const target = `${sessionHref(closed.id)}/review/1`;
       const { elements, page } = shown(yield* ask(playground, target), target);
-      const instance = `${closed.id}.1`;
+      const instance = `${closed.session.instance}.1`;
       const choices = controlsNamed(elements, entryName(instance, "RESPONSE"));
 
       assert.strictEqual(page.status, 200);
@@ -554,7 +564,7 @@ describe("routeReview", () => {
       assert.deepStrictEqual(checkedValues(choices), ["A"]);
       assert.isTrue(
         elements.some(
-          (element) => element.tag === "a" && element.attrs["href"] === `/sessions/${closed.id}`,
+          (element) => element.tag === "a" && element.attrs["href"] === sessionHref(closed.id),
         ),
       );
     }),
@@ -563,9 +573,12 @@ describe("routeReview", () => {
   it.effect("shows a text Control in review read-only and still enabled, with its value", () =>
     Effect.gen(function* reviewText() {
       const { closed, playground } = yield* delivered;
-      const target = `/sessions/${closed.id}/review/2`;
+      const target = `${sessionHref(closed.id)}/review/2`;
       const { elements } = shown(yield* ask(playground, target), target);
-      const [control, ...others] = controlsNamed(elements, entryName(`${closed.id}.2`, "RESPONSE"));
+      const [control, ...others] = controlsNamed(
+        elements,
+        entryName(`${closed.session.instance}.2`, "RESPONSE"),
+      );
 
       assert.lengthOf(others, 0);
       assert.strictEqual(control?.attrs["value"], "six");
@@ -577,12 +590,12 @@ describe("routeReview", () => {
   it.effect("keeps a shuffled Choice in the order the candidate saw it", () =>
     Effect.gen(function* keptOrder() {
       const { closed, order, playground } = yield* delivered;
-      const name = entryName(`${closed.id}.3`, "RESPONSE");
+      const name = entryName(`${closed.session.instance}.3`, "RESPONSE");
 
       assert.sameMembers([...order], documentOrder);
       assert.notDeepEqual(order, documentOrder);
       for (const mode of ["review", "solution"]) {
-        const target = `/sessions/${closed.id}/${mode}/3`;
+        const target = `${sessionHref(closed.id)}/${mode}/3`;
         const { elements } = shown(yield* ask(playground, target), target);
         const choices = controlsNamed(elements, name);
 
@@ -601,12 +614,18 @@ describe("routeReview", () => {
   it.effect("shows an item in solution with its correct values, read-only", () =>
     Effect.gen(function* solutionPage() {
       const { closed, playground } = yield* delivered;
-      const choiceTarget = `/sessions/${closed.id}/solution/1`;
+      const choiceTarget = `${sessionHref(closed.id)}/solution/1`;
       const choice = shown(yield* ask(playground, choiceTarget), choiceTarget);
-      const choices = controlsNamed(choice.elements, entryName(`${closed.id}.1`, "RESPONSE"));
-      const textTarget = `/sessions/${closed.id}/solution/2`;
+      const choices = controlsNamed(
+        choice.elements,
+        entryName(`${closed.session.instance}.1`, "RESPONSE"),
+      );
+      const textTarget = `${sessionHref(closed.id)}/solution/2`;
       const entry = shown(yield* ask(playground, textTarget), textTarget);
-      const [control] = controlsNamed(entry.elements, entryName(`${closed.id}.2`, "RESPONSE"));
+      const [control] = controlsNamed(
+        entry.elements,
+        entryName(`${closed.session.instance}.2`, "RESPONSE"),
+      );
 
       assert.strictEqual(choice.page.status, 200);
       assert.isTrue(choice.elements.some((element) => element.attrs["data-mode"] === "solution"));
@@ -624,10 +643,10 @@ describe("routeReview", () => {
         const { closed, playground } = yield* deliver(templatedCache);
         const drawn = printedInteger(closed.session.items[0]?.record.templates["T"]);
         const notice = message("en", "notice", { feature: "qti-printed-variable" });
-        const name = entryName(`${closed.id}.1`, "RESPONSE");
+        const name = entryName(`${closed.session.instance}.1`, "RESPONSE");
 
         for (const mode of ["review", "solution"] as const) {
-          const target = `/sessions/${closed.id}/${mode}/1`;
+          const target = `${sessionHref(closed.id)}/${mode}/1`;
           const { elements, html, page } = shown(yield* ask(playground, target), target);
           const pageText = parseHtml(html).map(textOf).join("");
 
@@ -649,7 +668,7 @@ describe("routeReview", () => {
       Effect.gen(function* markedReview() {
         const { closed, playground } = yield* delivered;
         const page = (n: number) => {
-          const target = `/sessions/${closed.id}/review/${n}`;
+          const target = `${sessionHref(closed.id)}/review/${n}`;
 
           return ask(playground, target).pipe(Effect.map((outcome) => shown(outcome, target)));
         };
@@ -680,8 +699,8 @@ describe("routeReview", () => {
       const { closed, playground } = yield* delivered;
 
       for (const n of [4, 5]) {
-        const solution = `/sessions/${closed.id}/solution/${n}`;
-        const review = `/sessions/${closed.id}/review/${n}`;
+        const solution = `${sessionHref(closed.id)}/solution/${n}`;
+        const review = `${sessionHref(closed.id)}/review/${n}`;
 
         assert.strictEqual(shown(yield* ask(playground, solution), solution).page.status, 404);
         assert.strictEqual(shown(yield* ask(playground, review), review).page.status, 200);
@@ -695,16 +714,16 @@ describe("routeReview", () => {
       Effect.gen(function* notFound() {
         const { closed, open, playground } = yield* delivered;
         const targets = [
-          `/sessions/${open}/review/1`,
-          `/sessions/${open}/solution/1`,
-          "/sessions/s-unknown/review/1",
-          "/sessions/s-unknown/results.xml",
-          `/sessions/${closed.id}/review/0`,
-          `/sessions/${closed.id}/review/6`,
-          `/sessions/${closed.id}/review/01`,
-          `/sessions/${closed.id}/solution/x`,
-          `/sessions/${closed.id}/confirm`,
-          `/sessions/${closed.id}`,
+          `${sessionHref(open)}/review/1`,
+          `${sessionHref(open)}/solution/1`,
+          "/sessions/m2%2Ftest.xml%2F99/review/1",
+          "/sessions/m2%2Ftest.xml%2F99/results.xml",
+          `${sessionHref(closed.id)}/review/0`,
+          `${sessionHref(closed.id)}/review/6`,
+          `${sessionHref(closed.id)}/review/01`,
+          `${sessionHref(closed.id)}/solution/x`,
+          `${sessionHref(closed.id)}/confirm`,
+          sessionHref(closed.id),
         ];
 
         for (const target of targets) {
@@ -721,9 +740,9 @@ describe("routeReview", () => {
     Effect.gen(function* refusedMethod() {
       const { closed, playground } = yield* delivered;
       const targets = [
-        `/sessions/${closed.id}/review/1`,
-        `/sessions/${closed.id}/solution/1`,
-        `/sessions/${closed.id}/results.xml`,
+        `${sessionHref(closed.id)}/review/1`,
+        `${sessionHref(closed.id)}/solution/1`,
+        `${sessionHref(closed.id)}/results.xml`,
       ];
 
       for (const target of targets) {
@@ -736,11 +755,11 @@ describe("routeReview", () => {
   );
 
   it.effect(
-    "answers the session's results as an XML download whose session identifier is the store's id, valid against the Results XSD",
+    "answers the session's results as an XML download whose session identifier is the session's instance, attempt-1, valid against the Results XSD",
     () =>
       Effect.gen(function* resultsDocument() {
         const { closed, playground } = yield* delivered;
-        const outcome = yield* ask(playground, `/sessions/${closed.id}/results.xml`).pipe(
+        const outcome = yield* ask(playground, `${sessionHref(closed.id)}/results.xml`).pipe(
           Effect.map((answered) =>
             answered instanceof Response
               ? answered
@@ -764,7 +783,7 @@ describe("routeReview", () => {
         assert.strictEqual(outcome.headers.get("content-disposition"), "attachment");
         assert.strictEqual(outcome.headers.get("x-content-type-options"), "nosniff");
         assert.strictEqual(outcome.headers.get("cache-control"), "no-store");
-        assert.deepStrictEqual(identifiers, [closed.id]);
+        assert.deepStrictEqual(identifiers, [sessionInstance(closedAttempt)]);
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
     { tags: ["results-xsd"], timeout: oracleTimeoutMs },
@@ -775,7 +794,7 @@ describe("routeReview", () => {
     () =>
       Effect.gen(function* resultsOnceClosed() {
         const { configuration, open, playground, test } = yield* deliver(templatedCache);
-        const target = `/sessions/${open}/results.xml`;
+        const target = `${sessionHref(open)}/results.xml`;
         const held = Option.getOrElse(playground.sessions.get(open), () =>
           assert.fail("The open session is not stored."),
         );
@@ -838,7 +857,7 @@ const summaryShown = (given: Delivered) => {
 
   return shown(
     summaryPage(closed.id, test.test, closed.session, summary, configuration),
-    `/sessions/${closed.id}`,
+    sessionHref(closed.id),
   );
 };
 
@@ -867,14 +886,15 @@ describe("summaryPage", () => {
             ? now
             : assert.fail("The closed session shows an item, not the summary.");
 
-        const target = `/sessions/${closed.id}`;
+        const target = sessionHref(closed.id);
         const { elements, page } = shown(
           summaryPage(closed.id, test.test, closed.session, shownNow, configuration),
           target,
         );
         const status =
-          elements.find((element) => element.attrs["id"] === scopedId(closed.id, "status")) ??
-          assert.fail("No Status region.");
+          elements.find(
+            (element) => element.attrs["id"] === scopedId(closed.session.instance, "status"),
+          ) ?? assert.fail("No Status region.");
         const items = elements.find((element) => element.tag === "ol")?.children ?? [];
         const links = elements.filter((element) => element.tag === "a");
         const hrefOf = (name: string): Option.Option<string> =>

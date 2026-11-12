@@ -1777,11 +1777,11 @@ describe("render", () => {
      * @returns The three renders.
      */
     const calls = (configuration: Configuration): readonly unknown[] => [
-      render(decoded, configuration),
+      render(decoded, configuration, { instance: "q1" }),
       // @ts-expect-error -- the JSON form holds counts as digits and Options as optional keys; decodeRedacted makes the Redacted render takes.
-      render(json, configuration),
+      render(json, configuration, { instance: "q1" }),
       // @ts-expect-error -- an object built by hand passed neither redactItem's allowlist nor decodeRedacted's check.
-      render(handBuilt, configuration),
+      render(handBuilt, configuration, { instance: "q1" }),
     ];
 
     assert.isFunction(calls);

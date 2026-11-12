@@ -14,7 +14,8 @@ import {
 import { Packages, testField } from "#plate/dev/packages.ts";
 import { createHandler, playgroundCaches } from "#plate/dev/page.ts";
 import { postOf, valuesOf } from "#plate/dev/post.ts";
-import { sessionStore } from "#plate/dev/store.ts";
+import { sessionHref } from "#plate/dev/sitting.ts";
+import { sessionId, sessionInstance, sessionStore } from "#plate/dev/store.ts";
 import type { Handler, PlaygroundLayer, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import { h } from "#plate/emit/node.ts";
@@ -1949,10 +1950,22 @@ const fixturePlayground = (): Handler =>
   createHandler({}, variablesLayer({ PLATE_CORPUS_DIR: fixturesRoot }));
 
 /**
- * Start the fixture's test as its Start button's post does.
+ * The store id of the first session a playground starts of the fixture's test: its key, the
+ * fixture package, its test and attempt 1. Its instance is `sessionInstance(1)`, `attempt-1`.
+ */
+const firstFixtureSession = sessionId({
+  attempt: 1,
+  package: fixtureTest.id,
+  test: fixtureTest.href,
+});
+
+/**
+ * Start the fixture's test as its Start button's post does, in a playground that has started no
+ * session of it, so the session is its first attempt.
  *
  * @param handle The handler.
- * @returns The session's page, `/sessions/<sid>`, the 303 sends the browser to.
+ * @returns The session's page, the 303 sends the browser to: the path of
+ *   {@link firstFixtureSession}.
  */
 const startFixture = Effect.fnUntraced(function* startFixture(handle: Handler) {
   const started = yield* post(handle, `/packages/${fixtureTest.id}/tests`, [
@@ -1961,7 +1974,7 @@ const startFixture = Effect.fnUntraced(function* startFixture(handle: Handler) {
   const location = started.response.headers.get("location") ?? "";
 
   assert.strictEqual(started.response.status, 303);
-  assert.match(location, /^\/sessions\/s-[\da-f-]{36}$/u);
+  assert.strictEqual(location, sessionHref(firstFixtureSession));
 
   return location;
 });
@@ -2015,9 +2028,8 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
         const before = yield* get(handle, "/");
         const location = yield* startFixture(handle);
         const started = yield* get(handle, "/");
-        const sid = location.slice("/sessions/".length);
         const moved = yield* post(handle, location, [
-          [intentName(sid), encodeIntent({ kind: "next" })],
+          [intentName(sessionInstance(1)), encodeIntent({ kind: "next" })],
         ]);
         const after = yield* get(handle, "/");
 
@@ -2103,11 +2115,11 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
         const storedUnder = Effect.fnUntraced(function* storedUnder(seed?: string) {
           const tests = sessionStore();
           const settings: PlaygroundSettings = { configuration: { seed: "7" }, tests };
-          const location = yield* startFixture(
+          yield* startFixture(
             createHandler(seed === undefined ? settings : { ...settings, seed }, layer),
           );
 
-          return Option.getOrElse(tests.get(location.slice("/sessions/".length)), () =>
+          return Option.getOrElse(tests.get(firstFixtureSession), () =>
             assert.fail("the playground stored no session"),
           ).session;
         });
@@ -2197,27 +2209,28 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
 const templateDigging = "QTI3_BPIG_Examples/items/template_digging.xml";
 
 /**
- * The instance token the template cases' playgrounds open every item under, so a sitting's values
- * follow from its seed alone.
+ * The instance token a playground names the first sitting of an item, which each template case
+ * opens in a playground of its own, so a sitting's values follow from its seed alone.
  */
-const sittingInstance = "sitting";
+const sittingInstance = "sitting-1";
 
 /**
  * Two seeds under which {@link templateDigging}, opened under {@link sittingInstance}, draws a
- * different value for every template variable and a different correct response, picked under the
- * HMAC-SHA-256 stream (`p8-16a`), so "two sittings show different numbers" cannot fail by chance.
+ * different value for every template variable and a different correct response, which scores 0
+ * against the other's, picked under the HMAC-SHA-256 stream (`p8-16a`), so "two sittings show
+ * different numbers" cannot fail by chance: `sitting-seed-a`, and the first letter after it that
+ * meets all three (`b` gives a correct response the first's scores 1 against).
  */
-const seeds = { first: "sitting-seed-a", second: "sitting-seed-d" } as const;
+const seeds = { first: "sitting-seed-a", second: "sitting-seed-c" } as const;
 
 /**
- * Construct a playground over {@link verdicts} that opens every item under
- * {@link sittingInstance} and begins each sitting's record under a fixed seed.
+ * Construct a playground over {@link verdicts} that begins each sitting's record under a fixed
+ * seed, and names its first sitting of an item {@link sittingInstance}.
  *
  * @param seed The seed.
  * @returns The handler.
  */
-const seeded = (seed: string): Handler =>
-  createHandler({ newInstance: () => sittingInstance, seed }, sharedVerdicts);
+const seeded = (seed: string): Handler => createHandler({ seed }, sharedVerdicts);
 
 /**
  * The accepted document of {@link templateDigging}.

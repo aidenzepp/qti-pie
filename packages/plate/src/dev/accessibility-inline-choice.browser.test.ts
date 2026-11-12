@@ -601,6 +601,7 @@ eachEngine((it, name) => {
             const configuration = yield* configure({});
             const { html } = yield* Effect.fromResult(
               render(redact(view.accepted), configuration, {
+                instance: "q1",
                 mode,
                 values: { [responses.labelled]: view.value },
               }),

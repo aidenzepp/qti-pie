@@ -1,10 +1,10 @@
 /**
- * The randomness the `./effect` operations draw from: {@link Randomness}, with {@link drawnSeed}
- * and {@link drawnInstance}.
+ * The randomness the `./effect` operations draw from: {@link Randomness}, with {@link drawnSeed}.
  *
- * These are the Effect counterparts of `drawSeed` and `drawInstance` (`#plate/seed.ts`): the same
- * formats, drawn from a service a host or a test can replace, where the plain functions read
- * `crypto.getRandomValues` directly. Nothing outside `src/effect/` imports this module.
+ * `drawnSeed` is the Effect counterpart of `drawSeed` (`#plate/seed.ts`): the same format, drawn
+ * from a service a host or a test can replace, where the plain function reads
+ * `crypto.getRandomValues` directly. plate draws no instance: the host names every one. Nothing
+ * outside `src/effect/` imports this module.
  *
  * @module
  */
@@ -17,14 +17,14 @@ import { SecureRandom } from "effect/crypto";
  *
  * It is a `Context.Reference`, not a required service, so it adds nothing to an operation's
  * requirements: an operation runs with no layer and draws from the default, which takes bytes from
- * `crypto.getRandomValues`. Like `#plate/seed.ts` it never uses `crypto.randomUUID`, which a
- * browser gives only in a secure context. The default draws at most 65,536 bytes a call, the
- * `getRandomValues` limit, beyond which the draw dies; plate draws 16. A host or a test replaces it
- * with `Effect.provideService(Randomness, SecureRandom.make(source))`, whose `source` returns a
- * fresh array of exactly the size it is asked for.
+ * `crypto.getRandomValues`, as `#plate/seed.ts` does, which a browser gives in every context. The
+ * default draws at most 65,536 bytes a call, the `getRandomValues` limit, beyond which the draw
+ * dies; plate draws 16. A host or a test replaces it with `Effect.provideService(Randomness,
+ * SecureRandom.make(source))`, whose `source` returns a fresh array of exactly the size it is asked
+ * for.
  *
  * `SecureRandom` is `@stability unstable` in Effect. Effect is pinned to 4.1.2, and the gate pull
- * request of a re-pin runs `randomness.test.ts`, which pins both formats under the default and
+ * request of a re-pin runs `randomness.test.ts`, which pins the seed's format under the default and
  * under a fixed byte source.
  */
 export const Randomness = Context.Reference<SecureRandom.SecureRandom["Service"]>(
@@ -56,9 +56,3 @@ const lowercaseHex = (bytes: Uint8Array): string =>
 export const drawnSeed: Effect.Effect<string> = Randomness.use((random) =>
   Effect.map(random.randomBytes(seedBytes), lowercaseHex),
 );
-
-/**
- * Draw a fresh instance token through {@link Randomness}: its `uuidV4`, a lowercase UUID v4 from 16
- * of its bytes, the format of `drawInstance` (`#plate/seed.ts`), which `checkInstance` admits.
- */
-export const drawnInstance: Effect.Effect<string> = Randomness.use((random) => random.uuidV4());

@@ -370,7 +370,10 @@ const recorded = Effect.fnUntraced(function* recorded() {
 
     const restored = yield* restore(document, scored);
     const redacted = yield* redact(document, restored.record);
-    const rendered = yield* render(redacted, { values: { TEXT: singleString(itemValue) } });
+    const rendered = yield* render(redacted, {
+      instance: "q1",
+      values: { TEXT: singleString(itemValue) },
+    });
     yield* renderStatus({ heading: "scored", instance: rendered.instance });
     yield* checkResponses(document, { TEXT: singleString(itemValue) }, restored.record);
 
@@ -532,7 +535,7 @@ describe("the ./effect operations' spans and logs", () => {
   );
 
   it.effect(
-    "no secret in telemetry: a drawn seed is logged with seed.source and no seed, as is a drawn instance and a datestamp from the Clock",
+    "no secret in telemetry: a drawn seed is logged with seed.source and no seed, as is a datestamp from the Clock",
     () =>
       Effect.gen(function* decisionLogs() {
         const { logs, spans } = yield* recorded();
@@ -541,7 +544,6 @@ describe("the ./effect operations' spans and logs", () => {
 
         assert.deepStrictEqual(logs, [
           { annotations: { ...item, ...drawnSeed }, message: "a seed was drawn" },
-          { annotations: item, message: "an instance was drawn" },
           { annotations: item, message: "the datestamp came from the Clock" },
           {
             annotations: { "test.identifier": testIdentifier, ...drawnSeed },
@@ -552,7 +554,6 @@ describe("the ./effect operations' spans and logs", () => {
           spans.flatMap((span) => span.events.map(([name]) => ({ event: name, span: span.name }))),
           [
             { event: "a seed was drawn", span: "plate.begin" },
-            { event: "an instance was drawn", span: "plate.render" },
             { event: "the datestamp came from the Clock", span: "plate.results" },
             { event: "a seed was drawn", span: "plate.startTest" },
           ],

@@ -58,7 +58,7 @@ export {
   score,
 } from "#plate/effect/operations.ts";
 
-export { drawnInstance, drawnSeed, Randomness } from "#plate/effect/randomness.ts";
+export { drawnSeed, Randomness } from "#plate/effect/randomness.ts";
 
 export {
   ConfigurationJsonSchema,

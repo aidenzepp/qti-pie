@@ -252,8 +252,9 @@ const itemPage = (
 
 /**
  * Answer with the results document of a sitting's session: `results` over the session, the test
- * and the items it was started with, under the store's `s-` id as the session identifier and the
- * playground's origin as the system that issued it, as an XML download.
+ * and the items it was started with, under the session's instance token, `attempt-<n>`, as the
+ * session identifier and the test's address in the playground, which numbers its attempts, as the
+ * system that issued it, as an XML download.
  *
  * {@link routeReview} calls it only for a closed session: the document reports each presented
  * item's template variables, which can give an answer away, so a candidate who types the address
@@ -266,7 +267,14 @@ const itemPage = (
 const resultsAnswer = (sitting: Sitting, origin: string): Page | Response =>
   Result.match(
     results({
-      context: { sessions: [{ identifier: sitting.id, sourceId: `${origin}/` }] },
+      context: {
+        sessions: [
+          {
+            identifier: sitting.session.instance,
+            sourceId: `${origin}/packages/${encodeURIComponent(sitting.package.id)}/tests/${sitting.entry.testHref.split("/").map(encodeURIComponent).join("/")}`,
+          },
+        ],
+      },
       items: sitting.test.items,
       kind: "test",
       session: sitting.entry.session,
@@ -464,13 +472,13 @@ const outcomesPart = (
  *   // when shown is Result.succeed({ kind: "summary", … }):
  *   summaryPage(sid, test, session, shown.success, configuration);
  *
- * @param id The session id, the store's `s-` id, which is also the session's instance.
+ * @param id The session id, the store's key for it (`sessionId` of `#plate/dev/store.ts`).
  * @param test The test the session was started from.
  * @param session The closed session.
  * @param summary The summary `current` gives for it.
  * @param configuration The playground's configuration, which gives the locale.
  * @returns The page, titled "Finished: {test title}", or a developer error's page when the Status
- *   part cannot be rendered with the id as its instance.
+ *   part cannot be rendered with the session's instance.
  */
 export const summaryPage = (
   id: string,
@@ -512,7 +520,10 @@ export const summaryPage = (
   });
 
   return Result.match(
-    renderStatus({ autofocus: true, heading: "testFinished", instance: id }, configuration),
+    renderStatus(
+      { autofocus: true, heading: "testFinished", instance: session.instance },
+      configuration,
+    ),
     {
       onFailure: failurePage,
       onSuccess: (status) =>
