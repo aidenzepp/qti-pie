@@ -30,10 +30,11 @@
  * (decision 123), so its value is read collapsed; `tolerance` is a list, its items split at XML
  * whitespace.
  *
- * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
- * states it: from `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key
- * (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the selection's node serves
- * the copy's reverse probe. Every copied text that takes part in a cross-row equality is `keyText`
+ * Every overlay row is keyed by its element's place, `(package, path, start)`, the key `Node` holds
+ * it by. Every copy of an attribute into an overlay follows C18 the other way round, as
+ * `identity.ts` states it: from `select(Attribute, φ)` into the overlay, keyed by `Attribute`'s key
+ * `(package, path, start, name)` once the selection fixes the name, whose index serves the copy's
+ * reverse probe. Every copied text that takes part in a cross-row equality is `keyText`
  * (`#pantry/qti/limits.ts`). Every check is named by its oracle law (`#pantry/test/oracle.ts`
  * `LawName`) with spaces written as underscores.
  *
@@ -61,12 +62,11 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
-import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
-import { integerForm, keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, integerForm, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { equalRoundedMode, roundingKinds, roundingModes } from "#pantry/vocab/terms/operators.ts";
 
@@ -120,69 +120,84 @@ export const positivePattern = Compute.pattern(
 );
 
 /**
- * A rounding operator, keyed by its node: one row for every `qti-equal-rounded` and every
- * `qti-round-to`, its {@link nodeRef} tuple, whether it writes `rounding-mode` (`modeWritten`), and
- * its {@link RoundingHolds}, which {@link RoundingFigures} and {@link RoundingMode} prove: it has
- * the one exactly where its `holds` says, and {@link RoundingModeFigures} exactly where it is
- * `both`.
+ * A rounding operator, keyed by its element's place: one row for every `qti-equal-rounded` and
+ * every `qti-round-to`, its {@link nodeRef} tuple, whether it writes `rounding-mode`
+ * (`modeWritten`), and its {@link RoundingHolds}, which {@link RoundingFigures} and
+ * {@link RoundingMode} prove: it has the one exactly where its `holds` says, and
+ * {@link RoundingModeFigures} exactly where it is `both`.
  */
 export const Rounding = relation(
   "Rounding",
   {
-    document: uuid,
     holds: closedId(RoundingHolds),
     kind: closedId(NodeKind),
     modeWritten: pg.boolean,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A rounding operator's `figures`, keyed by its node, where it writes one: `figuresLexical` as
- * written, copied from the attribute, and `figures`, that form collapsed, which the database
- * derives.
+ * A rounding operator's `figures`, keyed by its element's place, where it writes one:
+ * `figuresLexical` as written, copied from the attribute, and `figures`, that form collapsed, which
+ * the database derives.
  */
 export const RoundingFigures = relation.generated(
   "RoundingFigures",
-  { figuresLexical: keyText, node: uuid },
-  ["node"],
+  { figuresLexical: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
   (f) => ({
     figures: generated(keyText, Compute.cast(Compute.collapse(f.figuresLexical), keyText)),
   }),
 );
 
 /**
- * A rounding operator's mode in force, keyed by its node, where it has one: its `rounding-mode`
- * where it writes one (`modeWritten`, copied from the attribute), else {@link equalRoundedMode} on a
- * `qti-equal-rounded`. A `qti-round-to` that writes none has none, which AL3 refuses.
+ * A rounding operator's mode in force, keyed by its element's place, where it has one: its
+ * `rounding-mode` where it writes one (`modeWritten`, copied from the attribute), else
+ * {@link equalRoundedMode} on a `qti-equal-rounded`. A `qti-round-to` that writes none has none,
+ * which AL3 refuses.
  */
 export const RoundingMode = relation(
   "RoundingMode",
-  { kind: closedId(NodeKind), mode: keyText, modeWritten: pg.boolean, node: uuid },
-  ["node"],
+  {
+    kind: closedId(NodeKind),
+    mode: keyText,
+    modeWritten: pg.boolean,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A rounding operator that has both a `figures` and a mode in force, keyed by its node: the
+ * A rounding operator that has both a `figures` and a mode in force, keyed by its element's place:
+ * the
  * `both` arm of its {@link Rounding} row's `holds`, which grizzle's `alternatives` states, with its
  * {@link RoundingFigures}' `figures` and its {@link RoundingMode}'s `mode`, the two reading 119
  * judges together ({@link roundingFigures}).
  */
 export const RoundingModeFigures = relation(
   "RoundingModeFigures",
-  { figures: keyText, mode: keyText, node: uuid },
-  ["node"],
+  {
+    figures: keyText,
+    mode: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * One `qti-equal`'s `tolerance`, keyed by the element's node.
+ * One `qti-equal`'s `tolerance`, keyed by the element's place.
  *
- * - **copied from the attribute:** `node` and `lexical`, the value as written;
+ * - **copied from the attribute:** `package`, `path`, `start` and `lexical`, the value as written;
  * - **drawn:** `tokens`, its {@link ToleranceToken} count;
  * - **accumulated:** `tokenText`, the end of its tokens' concatenation.
  */
@@ -190,11 +205,13 @@ export const Tolerance = relation(
   "Tolerance",
   {
     lexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     tokenText: accumulated(keyText, ""),
     tokens: drawn(natural),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -205,7 +222,7 @@ export const Tolerance = relation(
  * - **the host's:** `before`, `token` and `after`;
  * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
  *   domain refuses a piece past the bound;
- * - **the family's group:** `node`, the `qti-equal`;
+ * - **the family's group:** `package`, `path` and `start`, the `qti-equal`'s place;
  * - **drawn:** `at`;
  * - **accumulated:** `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
@@ -215,12 +232,14 @@ export const ToleranceToken = relation.generated(
     after: Space,
     at: drawn(natural),
     before: Space,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
+    start: natural,
     token: keyText,
   },
-  ["node", "at"],
+  ["package", "path", "start", "at"],
   (x) => ({
     piece: generated(keyText, Compute.concat(Compute.concat(x.before, x.token), x.after)),
   }),
@@ -242,7 +261,10 @@ export const operatorRelations = {
 /**
  * Each `tolerance`'s values in order, counted by `Tolerance.tokens`.
  */
-const toleranceTokenFamily = ordered(on(ToleranceToken, "node", "at"), fin(Tolerance, "tokens"));
+const toleranceTokenFamily = ordered(
+  on(ToleranceToken, "package", "path", "start", "at"),
+  fin(Tolerance, "tokens"),
+);
 
 /**
  * The rounding operators, every one of which has its {@link Rounding} row.
@@ -253,14 +275,14 @@ const roundingNodes = select(Node, (n) => n.in(n.kind, roundingKinds));
  * A rounding operator's `figures`, the source of {@link RoundingFigures}.
  */
 const figuresAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.in(a.kind, roundingKinds), a.eq(a.name, "figures")),
+  a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "figures")),
 );
 
 /**
  * A rounding operator's `rounding-mode`, the source of a written {@link RoundingMode}.
  */
 const modeAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.in(a.kind, roundingKinds), a.eq(a.name, "rounding-mode")),
+  a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "rounding-mode")),
 );
 
 /**
@@ -287,7 +309,7 @@ const modedRoundings = select(Rounding, (r) => r.in(r.holds, ["mode", "both"]));
  * A `qti-equal`'s `tolerance`, the source of {@link Tolerance}.
  */
 const toleranceAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "qti-equal"), a.eq(a.name, "tolerance")),
+  a.and(a.eq(a.kind, "qti-equal"), a.eq(a.name, "tolerance")),
 );
 
 /**
@@ -339,7 +361,10 @@ const roundingFigures = check("Rounding_figures", RoundingModeFigures, (m) =>
  * `tolerance-mode` is `absolute` or `relative` has a {@link Tolerance} row, which exists exactly
  * where it writes `tolerance`.
  */
-export const toleranceRequired = contained(on(rangeModeAttributes, "node"), on(Tolerance, "node"));
+export const toleranceRequired = contained(
+  on(rangeModeAttributes, "package", "path", "start"),
+  on(Tolerance, "package", "path", "start"),
+);
 
 /**
  * Reading 121's count (law "Equal tolerance", rule `P36`; info §5.46.2: "The tolerance consists of
@@ -360,8 +385,8 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
 /**
  * Every statement over the operator overlays, each `check` named by its oracle law:
  *
- * - **Rounding:** each row on its node's {@link nodeRef} tuple, one for every rounding operator; its
- *   `holds` proved by its `figures` (both ways) and its mode in force (`E1_derived`), and its
+ * - **Rounding:** each row on its element's {@link nodeRef} tuple, one for every rounding operator;
+ *   its `holds` proved by its `figures` (both ways) and its mode in force (`E1_derived`), and its
  *   `modeWritten` by its `rounding-mode` (both ways); its `figures` copied into
  *   {@link RoundingFigures} and collapsed, its mode in force into {@link RoundingMode}, written or
  *   the default; its `both` arm, {@link RoundingModeFigures}, an `alternatives` arm, copying both;
@@ -374,11 +399,17 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
 export const operatorLawsByName = {
   "E1 derived": [
     contained(
-      on(Rounding, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Rounding, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(roundingNodes, "id"), on(Rounding, "node")),
-    mirrors(on(modeAttributes, "node"), on(writtenModes, "node")),
+    contained(
+      on(roundingNodes, "package", "path", "start"),
+      on(Rounding, "package", "path", "start"),
+    ),
+    mirrors(
+      on(modeAttributes, "package", "path", "start"),
+      on(writtenModes, "package", "path", "start"),
+    ),
     check("E1_derived", Rounding, (r) =>
       r.and(
         r.in(r.kind, roundingKinds),
@@ -396,16 +427,28 @@ export const operatorLawsByName = {
       ),
     ),
     contained(
-      on(figuresAttributes, "node", "lexical"),
-      on(RoundingFigures, "node", "figuresLexical"),
+      on(figuresAttributes, "package", "path", "start", "lexical"),
+      on(RoundingFigures, "package", "path", "start", "figuresLexical"),
     ),
-    contained(on(RoundingFigures, "node"), on(figuresAttributes, "node")),
-    mirrors(on(RoundingFigures, "node"), on(figuredRoundings, "node")),
-    contained(on(modeAttributes, "node", "lexical"), on(writtenModesInForce, "node", "mode")),
-    mirrors(on(RoundingMode, "node"), on(modedRoundings, "node")),
     contained(
-      on(RoundingMode, "node", "kind", "modeWritten"),
-      on(Rounding, "node", "kind", "modeWritten"),
+      on(RoundingFigures, "package", "path", "start"),
+      on(figuresAttributes, "package", "path", "start"),
+    ),
+    mirrors(
+      on(RoundingFigures, "package", "path", "start"),
+      on(figuredRoundings, "package", "path", "start"),
+    ),
+    contained(
+      on(modeAttributes, "package", "path", "start", "lexical"),
+      on(writtenModesInForce, "package", "path", "start", "mode"),
+    ),
+    mirrors(
+      on(RoundingMode, "package", "path", "start"),
+      on(modedRoundings, "package", "path", "start"),
+    ),
+    contained(
+      on(RoundingMode, "package", "path", "start", "kind", "modeWritten"),
+      on(Rounding, "package", "path", "start", "kind", "modeWritten"),
     ),
     check("E1_derived", RoundingMode, (m) =>
       m.or(
@@ -414,16 +457,28 @@ export const operatorLawsByName = {
       ),
     ),
     alternatives(Rounding, "holds", RoundingHolds, { both: RoundingModeFigures }),
-    contained(on(RoundingModeFigures, "node", "figures"), on(RoundingFigures, "node", "figures")),
-    contained(on(RoundingModeFigures, "node", "mode"), on(RoundingMode, "node", "mode")),
-    contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
-    contained(on(Tolerance, "node"), on(toleranceAttributes, "node")),
+    contained(
+      on(RoundingModeFigures, "package", "path", "start", "figures"),
+      on(RoundingFigures, "package", "path", "start", "figures"),
+    ),
+    contained(
+      on(RoundingModeFigures, "package", "path", "start", "mode"),
+      on(RoundingMode, "package", "path", "start", "mode"),
+    ),
+    contained(
+      on(toleranceAttributes, "package", "path", "start", "lexical"),
+      on(Tolerance, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(Tolerance, "package", "path", "start"),
+      on(toleranceAttributes, "package", "path", "start"),
+    ),
     toleranceTokenFamily,
     fold(
       toleranceTokenFamily,
       Monoid.concat,
-      on(ToleranceToken, "node", "piece", "piecesWas", "piecesAfter"),
-      on(Tolerance, "node", "tokenText"),
+      on(ToleranceToken, "package", "path", "start", "piece", "piecesWas", "piecesAfter"),
+      on(Tolerance, "package", "path", "start", "tokenText"),
     ),
     check("E1_derived", Tolerance, (t) =>
       t.or(

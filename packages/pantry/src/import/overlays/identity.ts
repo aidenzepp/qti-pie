@@ -17,7 +17,6 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
-import type { DocumentType } from "#pantry/grammar/install.ts";
 import {
   attributeRows,
   grammar,
@@ -25,12 +24,14 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { lowerAscii, stringValuesOf } from "#pantry/import/overlays/metadata.ts";
 import { piecesOf, tokensOf } from "#pantry/import/pieces.ts";
 import { foldAt, governorOf } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
+import type { DocumentPlace, Place } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { AttributeRow, FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { AttributeRow, FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledLang,
   BodyXmlLang,
@@ -61,27 +62,17 @@ import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * Where a document stands in its package, as this builder reads it: the part of the importer's
- * `NodeIds` (Q5.15) it needs beside the document's view.
+ * `DocumentPlace` it needs beside the document's view. `assembled` says whether its IDREFs resolve
+ * per instance (spec reading 117); `documentType` whether its LOM records are read
+ * (`recordDocumentTypes`); `package` and `path`, its {@link Place}, are every row's.
  */
-export interface IdentityIds {
-  /**
-   * Whether the document is in an assembly (`Document.assembled`), so its IDREFs resolve per
-   * instance (spec reading 117).
-   */
-  readonly assembled: boolean;
-  /**
-   * The document's type, `manifest` for the manifest, else the resource's that lists it: its LOM
-   * records are read where it is of a type a package's records are read from
-   * (`recordDocumentTypes`).
-   */
-  readonly documentType: (typeof DocumentType.handles)[number];
-}
+export type IdentityIds = Pick<DocumentPlace, "assembled" | "documentType" | "package" | "path">;
 
 /**
- * One IDREF token of an element's text as its element's family nests it: without the `node` the
- * nesting supplies, nor the `at` the family draws.
+ * One IDREF token of an element's text as its element's family nests it: without the element's
+ * `package`, `path` and `start` the nesting supplies, nor the `at` the family draws.
  */
-export type TextIdrefInsert = Omit<Addition<typeof TextIdref>, "node">;
+export type TextIdrefInsert = Omit<Addition<typeof TextIdref>, "package" | "path" | "start">;
 
 /**
  * An element whose text is of an identity type, with its IDREF tokens nested at its count field.
@@ -92,8 +83,8 @@ type IdentityTextRow = Addition<typeof IdentityText> & {
 
 /**
  * A document's identity rows, one keyed set per relation: each map from the text of a row's key to
- * the row as its writer writes it. A node-keyed overlay's key text is its node's id; a projection's
- * is its heading's values in key order, as a JSON array.
+ * the row as its writer writes it, the key's values in key order as a JSON array, the document's
+ * `package` and `path` first.
  */
 export interface IdentityRows {
   readonly BodyXmlLang: ReadonlyMap<string, Addition<typeof BodyXmlLang>>;
@@ -132,6 +123,13 @@ export interface PlacedLanguageRows {
   readonly PlacedBodyXmlLang: ReadonlyMap<string, Addition<typeof PlacedBodyXmlLang>>;
   readonly PlacedXmlLang: ReadonlyMap<string, Addition<typeof PlacedXmlLang>>;
 }
+
+/**
+ * The document node's position in its document: the scope of an element no scope element holds,
+ * the parent a document's root element names, and a test assembly's copy of a placed document
+ * (`PlacedId.copy`).
+ */
+const documentNode = 0n;
 
 /**
  * The installed `ValueIdentity`, keyed by domain: the identity type of each value domain that has
@@ -187,14 +185,6 @@ const toolLabelled: ReadonlySet<string> = new Set(toolLabelKinds);
  * The kind of a MathML `share`, whose `src` of the form `#id` is a {@link ShareFragment}.
  */
 const shareKind = "m:share";
-
-/**
- * Write the key text of a projection's row.
- *
- * @param values - The heading's values, in the relation's key order.
- * @returns Their JSON array.
- */
-const headingKey = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
  * Read an element's governor, `Node.governor` (`#pantry/import/fold.ts` `governorOf`).
@@ -261,25 +251,26 @@ const textIdentityOf = (element: NodeRow<Composed>): Option.Option<string> =>
   Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governorOfElement(element)}`));
 
 /**
- * A document's tree as the builders below read it: its flat rows, its document node and root kind,
- * each node a row names, each node's string value, and each element's attributes by name.
+ * A document's tree as the builders below read it: its place in its package, its flat rows and root
+ * kind, each node by its position, each node's string value, and each element's attributes by
+ * name.
  */
 interface Tree {
-  readonly document: NodeId;
   /**
    * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction among the rest, the
    * document node's its context's (spec reading 117).
    */
   readonly folds: Folds;
   /**
-   * Read the node a row of the tree names, its element or its parent, which `flatten` writes
-   * before every row that names it.
+   * Read the node at a position of the document, an element a row names or its parent, which
+   * `flatten` writes before every row that names it.
    */
-  readonly nodeAt: (id: NodeId) => NodeRow<Composed>;
+  readonly nodeAt: (start: bigint) => NodeRow<Composed>;
+  readonly place: Place;
   readonly rootKind: Addition<typeof LabelUse>["rootKind"];
   readonly rows: FlatRows<Composed>;
-  readonly stringValueOf: (node: NodeId) => string;
-  readonly valueOf: (node: NodeId, name: string) => string | undefined;
+  readonly stringValueOf: (start: bigint) => string;
+  readonly valueOf: (start: bigint, name: string) => string | undefined;
 }
 
 /**
@@ -310,26 +301,27 @@ const admitted = (tree: Tree, element: NodeRow<Composed>): boolean =>
  * @param tree - The document's tree.
  * @param element - The element that carries the ID.
  * @param lexical - The ID's lexical form.
- * @param owner - The element its binding names: the attribute's element, or the text's parent.
+ * @param owner - The position of the element its binding names: the attribute's element, or the
+ *   text's parent.
  * @returns The row, none where the form names nothing.
  */
 const documentIdOf = (
   tree: Tree,
   element: NodeRow<Composed>,
   lexical: string,
-  owner: NodeId,
+  owner: bigint,
 ): Option.Option<Addition<typeof DocumentId>> =>
   Option.map(
     Option.liftPredicate(piecesOf(lexical), ({ value }) => isNcName(value)),
     ({ lead, trail, value }) => ({
+      ...tree.place,
       admitted: admitted(tree, element),
       after: trail,
       before: lead,
-      document: tree.document,
       id: value,
       lexical,
-      node: element.id,
       owner,
+      start: element.start,
     }),
   );
 
@@ -341,18 +333,20 @@ const documentIdOf = (
  * @returns The rows, each by its key text.
  */
 const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUse"> => {
-  const { document, rootKind } = tree;
+  const { place, rootKind } = tree;
   const documentIds = new Map<string, Addition<typeof DocumentId>>();
   const labels = new Map<string, Addition<typeof LabelUse>>();
 
   for (const attribute of tree.rows.attributes) {
-    const element = tree.nodeAt(attribute.node);
-    const { lexical, name, node } = attribute;
+    const element = tree.nodeAt(attribute.start);
+    const { lexical, name, start } = attribute;
+    const at = keyTextOf(place.package, place.path, start);
     // An element's first ID-typed attribute whose value names something is its ID; XML Schema
-    // gives it no second, which "DocumentId key"'s key over the ID-typed attributes' node refuses.
-    if (holdsId(attribute, element) && !documentIds.has(node)) {
-      for (const id of Option.toArray(documentIdOf(tree, element, lexical, node))) {
-        documentIds.set(node, id);
+    // gives it no second, which "DocumentId key"'s key over the ID-typed attributes' element
+    // refuses.
+    if (holdsId(attribute, element) && !documentIds.has(at)) {
+      for (const id of Option.toArray(documentIdOf(tree, element, lexical, start))) {
+        documentIds.set(at, id);
       }
     }
 
@@ -361,7 +355,7 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
       (toolLabelled.has(element.kind) ||
         (element.kind === itemKind && element.version === labelledRootVersion))
     ) {
-      labels.set(node, { document, node, rootKind });
+      labels.set(at, { ...place, rootKind, start });
     }
   }
 
@@ -375,27 +369,28 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
  *
  * @param tree - The document's tree.
  * @param assembled - Whether the document is in an assembly, as {@link IdrefTarget}'s is.
- * @returns The rows, each by its node.
+ * @returns The rows, each by its key text.
  */
 const shareFragmentsOf = (
   tree: Tree,
   assembled: boolean,
 ): Map<string, Addition<typeof ShareFragment>> => {
+  const { place } = tree;
   const fragments = new Map<string, Addition<typeof ShareFragment>>();
 
-  for (const { lexical, name, node } of tree.rows.attributes) {
+  for (const { lexical, name, start } of tree.rows.attributes) {
     if (
       name === "src" &&
       lexical.length > 1 &&
       lexical.startsWith("#") &&
-      tree.nodeAt(node).kind === shareKind
+      tree.nodeAt(start).kind === shareKind
     ) {
-      fragments.set(node, {
+      fragments.set(keyTextOf(place.package, place.path, start), {
+        ...place,
         assembled,
-        document: tree.document,
         id: lexical.slice(1),
-        node,
         src: lexical,
+        start,
       });
     }
   }
@@ -409,34 +404,36 @@ const shareFragmentsOf = (
  * element's parent.
  *
  * @param tree - The document's tree.
- * @returns The rows, each by its node's id.
+ * @returns The rows, each by its key text.
  */
 const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText"> => {
+  const { place } = tree;
   const documentIds = new Map<string, Addition<typeof DocumentId>>();
   const identityTexts = new Map<string, IdentityTextRow>();
 
   for (const node of tree.rows.nodes) {
-    const text = tree.stringValueOf(node.id);
     const found = textIdentityOf(node);
     if (Option.isNone(found)) {
       continue;
     }
 
+    const at = keyTextOf(place.package, place.path, node.start);
+    const text = tree.stringValueOf(node.start);
     const identity = found.value;
-    identityTexts.set(node.id, {
-      document: tree.document,
+    identityTexts.set(at, {
+      ...place,
       governor: governorOfElement(node),
       idrefs: identity === "ID" ? [] : tokensOf(text),
       kind: node.kind,
       lexical: text,
-      node: node.id,
       owner: node.parent,
+      start: node.start,
       version: node.version,
     });
 
     if (identity === "ID") {
       for (const id of Option.toArray(documentIdOf(tree, node, text, node.parent))) {
-        documentIds.set(node.id, id);
+        documentIds.set(at, id);
       }
     }
   }
@@ -458,6 +455,7 @@ const lomRowsOf = (
   tree: Tree,
   ids: IdentityIds,
 ): Pick<IdentityRows, "LomLanguage" | "ResourceLomLanguageSet"> => {
+  const { place } = tree;
   const lomLanguages = new Map<string, Addition<typeof LomLanguage>>();
   const lomSets = new Map<string, Addition<typeof ResourceLomLanguageSet>>();
   const rows = { LomLanguage: lomLanguages, ResourceLomLanguageSet: lomSets };
@@ -467,10 +465,20 @@ const lomRowsOf = (
 
   for (const node of tree.rows.nodes) {
     if (node.kind === "lom:language" && tree.nodeAt(node.parent).kind === "lom:general") {
-      const text = tree.stringValueOf(node.id);
+      const text = tree.stringValueOf(node.start);
       const tag = lowerAscii(text);
-      lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
-      lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
+      lomLanguages.set(keyTextOf(place.package, place.path, node.start), {
+        ...place,
+        general: node.parent,
+        lang: text,
+        start: node.start,
+        tag,
+      });
+      lomSets.set(keyTextOf(place.package, place.path, node.parent, tag), {
+        ...place,
+        general: node.parent,
+        lang: tag,
+      });
     }
   }
 
@@ -495,11 +503,11 @@ const ssmlReads: ReadonlyMap<
 ]);
 
 /**
- * The walk from an element up to its scope root, the element first, and the scope it ends at: the
- * scope root, or the document node where none holds the element.
+ * The walk from an element up to its scope root, the element first, and the position of the scope
+ * it ends at: the scope root's, or the document node's where none holds the element.
  */
 interface ScopeWalk {
-  readonly scope: NodeId;
+  readonly scope: bigint;
   readonly walk: readonly NodeRow<Composed>[];
 }
 
@@ -511,19 +519,19 @@ interface ScopeWalk {
  * @param tree - The document's tree.
  * @param element - The element.
  * @param scopeKind - The kind of element that is its own scope.
- * @returns The walk, the element first, and its scope: the element of that kind it ends at, or the
- *   document node where none holds the element.
+ * @returns The walk, the element first, and its scope: the position of the element of that kind it
+ *   ends at, or of the document node where none holds the element.
  */
 const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string): ScopeWalk => {
   const walk: NodeRow<Composed>[] = [];
   for (let at = element; ; at = tree.nodeAt(at.parent)) {
     walk.push(at);
     if (at.kind === scopeKind) {
-      return { scope: at.id, walk };
+      return { scope: at.start, walk };
     }
 
-    if (at.parent === tree.document) {
-      return { scope: tree.document, walk };
+    if (at.parent === documentNode) {
+      return { scope: documentNode, walk };
     }
   }
 };
@@ -531,8 +539,8 @@ const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string):
 /**
  * Build the rows a document's SSML attributes give (spec reading 3): each read attribute's
  * `SsmlAttribute`, its value its lexical form collapsed, placed in its element's fragment; each
- * element on the
- * walk up to that fragment its `SsmlScope`; and each fragment's values, by kind, once each.
+ * element on the walk up to that fragment its `SsmlScope`; and each fragment's values, by kind,
+ * once each.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its key text.
@@ -540,6 +548,7 @@ const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string):
 const ssmlRowsOf = (
   tree: Tree,
 ): Pick<IdentityRows, "FragmentValue" | "SsmlAttribute" | "SsmlScope"> => {
+  const { place } = tree;
   const attributes = new Map<string, Addition<typeof SsmlAttribute>>();
   const scopes = new Map<string, Addition<typeof SsmlScope>>();
   const values = new Map<string, Addition<typeof FragmentValue>>();
@@ -552,34 +561,35 @@ const ssmlRowsOf = (
 
     const { scope: fragment, walk } = scopeWalkOf(tree, element, "ssml:speak");
     for (const name of read.names) {
-      const lexical = tree.valueOf(element.id, name);
+      const lexical = tree.valueOf(element.start, name);
       if (lexical === undefined) {
         continue;
       }
 
       const value = collapse(lexical);
-      attributes.set(headingKey([element.id, name]), {
+      attributes.set(keyTextOf(place.package, place.path, element.start, name), {
+        ...place,
         fragment,
         kind: element.kind,
         lexical,
         name,
-        node: element.id,
         refers: read.refers,
+        start: element.start,
         value,
       });
-      values.set(headingKey([fragment, element.kind, value]), {
+      values.set(keyTextOf(place.package, place.path, fragment, element.kind, value), {
+        ...place,
         fragment,
         kind: element.kind,
         value,
       });
 
       for (const node of walk) {
-        scopes.set(node.id, {
-          document: tree.document,
+        scopes.set(keyTextOf(place.package, place.path, node.start), {
+          ...place,
           fragment,
           kind: node.kind,
-          nearest: foldAt(tree.folds, node.id).nearest,
-          node: node.id,
+          nearest: foldAt(tree.folds, node.start).nearest,
           parent: node.parent,
           start: node.start,
           version: node.version,
@@ -592,10 +602,10 @@ const ssmlRowsOf = (
 };
 
 /**
- * Build the rows a document's `xml:lang`s give: each one's `XmlLang`, its `scope` its nearest
- * `qti-catalog-info` or the document (reading R9-c); each element on the walk up to that scope its
- * `CatalogScope`; and each form once, as a `DocumentLang`, where an element outside every catalog
- * carries it, since R26 counts no other.
+ * Build the rows a document's `xml:lang`s give: each one's `XmlLang`, its `scope` the position of
+ * its nearest `qti-catalog-info` or of the document node (reading R9-c); each element on the walk
+ * up to that scope its `CatalogScope`; and each form once, as a `DocumentLang`, where an element
+ * outside every catalog carries it, since R26 counts no other.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its key text.
@@ -603,34 +613,34 @@ const ssmlRowsOf = (
 const langRowsOf = (
   tree: Tree,
 ): Pick<IdentityRows, "BodyXmlLang" | "CatalogScope" | "DocumentLang" | "XmlLang"> => {
-  const { document } = tree;
+  const { place } = tree;
   const scopes = new Map<string, Addition<typeof CatalogScope>>();
   const xmlLangs = new Map<string, Addition<typeof XmlLang>>();
   const bodyLangs = new Map<string, Addition<typeof BodyXmlLang>>();
   const documentLangs = new Map<string, Addition<typeof DocumentLang>>();
 
-  for (const { lexical, name, node } of tree.rows.attributes) {
+  for (const { lexical, name, start } of tree.rows.attributes) {
     if (name !== "xml:lang") {
       continue;
     }
 
-    const { scope, walk } = scopeWalkOf(tree, tree.nodeAt(node), "qti-catalog-info");
-    xmlLangs.set(node, { document, lang: lexical, node, scope });
-    if (scope === document) {
-      bodyLangs.set(node, { document, lang: lexical, node });
-      documentLangs.set(headingKey([document, lexical]), { document, lang: lexical });
+    const at = keyTextOf(place.package, place.path, start);
+    const { scope, walk } = scopeWalkOf(tree, tree.nodeAt(start), "qti-catalog-info");
+    xmlLangs.set(at, { ...place, lang: lexical, scope, start });
+    if (scope === documentNode) {
+      bodyLangs.set(at, { ...place, lang: lexical, start });
+      documentLangs.set(keyTextOf(place.package, place.path, lexical), { ...place, lang: lexical });
     }
 
-    for (const at of walk) {
-      scopes.set(at.id, {
-        document,
-        kind: at.kind,
-        nearest: foldAt(tree.folds, at.id).nearest,
-        node: at.id,
-        parent: at.parent,
+    for (const node of walk) {
+      scopes.set(keyTextOf(place.package, place.path, node.start), {
+        ...place,
+        kind: node.kind,
+        nearest: foldAt(tree.folds, node.start).nearest,
+        parent: node.parent,
         scope,
-        start: at.start,
-        version: at.version,
+        start: node.start,
+        version: node.version,
       });
     }
   }
@@ -646,38 +656,41 @@ const langRowsOf = (
 /**
  * Build a document's identity rows.
  *
- * Each overlay holds one row per element it describes, keyed by the element's node, and each
- * projection one row per value, so a value an element repeats is one row. A copied text past
- * `keyText`'s bound keeps its row, whatever its length: `keyText`'s own check refuses it in the
- * database under "Key text bound", the one rule a key text past its bound is refused by, as the law
- * oracle names it.
+ * Each overlay holds one row per element it describes, keyed by the element, `(package, path,
+ * start)`, and each projection one row per value, so a value an element repeats is one row. A
+ * copied text past `keyText`'s bound keeps its row, whatever its length: `keyText`'s own check
+ * refuses it in the database under "Key text bound", the one rule a key text past its bound is
+ * refused by, as the law oracle names it.
  *
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), whose interaction an included fragment's nodes take as their nearest.
  * @param ids - Where it stands in its package.
  * @returns Every identity relation's rows.
+ * @throws {Error} When a row of the document names a position its document holds no node at, which
+ *   `flatten` rules out: a defect of the caller, never of the document.
  */
 export const rowsOf = (view: DocumentView, ids: IdentityIds): IdentityRows => {
   const { rows } = view;
-  const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const place: Place = { package: ids.package, path: ids.path };
+  const lexicals = new Map(rows.attributes.map((row) => [`${row.start} ${row.name}`, row.lexical]));
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
   const tree: Tree = {
-    document: rows.document.node,
     folds: view.folds,
-    nodeAt: (id) => {
-      const node = byId.get(id);
+    nodeAt: (start) => {
+      const node = byStart.get(start);
       if (node === undefined) {
         throw new Error(
-          `A row of the document names node ${id}, which the document holds no row of, but flatten writes every node before a row that names it. Read the rows flatten writes as it writes them.`,
+          `A row of ${ids.path} names the node at ${String(start)}, which the document holds no row of, but flatten writes every node before a row that names it. Read the rows flatten writes as it writes them.`,
         );
       }
 
       return node;
     },
+    place,
     rootKind: view.tree.root.kind,
     rows,
     stringValueOf: stringValuesOf(rows),
-    valueOf: (node, name) => lexicals.get(`${node} ${name}`),
+    valueOf: (start, name) => lexicals.get(`${start} ${name}`),
   };
   const attributed = attributeRowsOf(tree);
   const texts = textRowsOf(tree);
@@ -685,7 +698,7 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): IdentityRows => {
   const shares = shareFragmentsOf(tree, ids.assembled);
   const targets = [
     ...rows.attributes.flatMap((attribute) =>
-      holdsIdref(attribute, tree.nodeAt(attribute.node))
+      holdsIdref(attribute, tree.nodeAt(attribute.start))
         ? tokensOf(attribute.lexical).map(({ token }) => token)
         : [],
     ),
@@ -700,16 +713,16 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): IdentityRows => {
     ...ssmlRowsOf(tree),
     DocumentId: documentIds,
     IdBinding: new Map(
-      [...documentIds.values()].map(({ admitted: bound, document, id, owner }) => [
-        headingKey([document, id, owner]),
-        { admitted: bound, document, id, owner },
+      [...documentIds.values()].map(({ admitted: bound, id, owner }) => [
+        keyTextOf(place.package, place.path, id, owner),
+        { ...place, admitted: bound, id, owner },
       ]),
     ),
     IdentityText: texts.IdentityText,
     IdrefTarget: new Map(
       targets.map((id) => [
-        headingKey([tree.document, id]),
-        { assembled: ids.assembled, document: tree.document, id },
+        keyTextOf(place.package, place.path, id),
+        { ...place, assembled: ids.assembled, id },
       ]),
     ),
     ShareFragment: shares,
@@ -744,21 +757,62 @@ const joined = <Left, Right, Key>(
 };
 
 /**
- * Collect every instance of an assembly's tree, its root's own included.
+ * One instance of an assembly as the placements read it: its assembly, `(package, assembly)` and
+ * its kind, its own position `instance` in the assembly's instance tree, and the path of the
+ * document it places.
+ */
+interface Placement {
+  readonly assembly: InstanceRoot["assembly"];
+  readonly assemblyKind: InstanceRoot["assemblyKind"];
+  readonly document: InstanceRoot["document"];
+  readonly instance: bigint;
+  readonly package: InstanceRoot["package"];
+}
+
+/**
+ * Number every instance of an assembly's tree by its pre-order position, `Instance.start`, as the
+ * instance tree draws it: the root 0, then each child's subtree in slot order.
  *
  * @param root - The assembly's root instance.
- * @returns Each instance.
+ * @returns Each instance's placement, in pre-order.
  */
-const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoot)[] => {
-  const found: (InstanceMember | InstanceRoot)[] = [];
-  const stack: (InstanceMember | InstanceRoot)[] = [root];
-  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    found.push(next);
-    stack.push(...next.children);
+const placementsOf = (root: InstanceRoot): readonly Placement[] => {
+  const found: Placement[] = [];
+  const pending: (InstanceMember | InstanceRoot)[] = [root];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    found.push({
+      assembly: root.assembly,
+      assemblyKind: root.assemblyKind,
+      document: next.document,
+      instance: BigInt(found.length),
+      package: root.package,
+    });
+    pending.push(...next.children.toReversed());
   }
 
   return found;
 };
+
+/**
+ * The key a placement and a document's row meet at: the document, `(package, path)`.
+ *
+ * @param document - The document's identity.
+ * @param document.package - Its package.
+ * @param document.path - Its path.
+ * @returns The key text.
+ */
+const documentKey = (document: { readonly package: string; readonly path: string }): string =>
+  keyTextOf(document.package, document.path);
+
+/**
+ * The key a placement meets its document's rows at ({@link documentKey}): its package and the path
+ * of the document it places.
+ *
+ * @param placement - The placement.
+ * @returns The key text.
+ */
+const placementKey = (placement: Placement): string =>
+  documentKey({ package: placement.package, path: placement.document });
 
 /**
  * Build a package's placed IDs and IDREF targets (spec reading 117): under each instance of each
@@ -779,48 +833,52 @@ export const placedIdRowsOf = (input: {
   readonly instances: Iterable<InstanceRoot>;
   readonly targets: Iterable<Addition<typeof IdrefTarget>>;
 }): PlacedIdRows => {
-  const placements = [...input.instances].flatMap((root) =>
-    instancesOf(root).map((instance) => ({ instance, root })),
-  );
+  const placements = [...input.instances].flatMap(placementsOf);
   const placed = new Map<string, Addition<typeof PlacedId>>();
   const assembled = new Map<string, Addition<typeof AssembledId>>();
   const placedTargets = new Map<string, Addition<typeof PlacedIdref>>();
-  for (const [{ instance, root }, { document, id, node, owner }] of joined(
+  for (const [placement, { id, owner, path, start }] of joined(
     placements,
     input.ids,
-    (placement) => placement.instance.document,
-    (row) => row.document,
+    placementKey,
+    documentKey,
   )) {
-    const copy = root.assemblyKind === testKind ? instance.document : instance.id;
-    placed.set(headingKey([instance.id, node]), {
-      assembly: root.assembly,
-      assemblyKind: root.assemblyKind,
+    const { assembly, assemblyKind, instance } = placement;
+    const copy = assemblyKind === testKind ? documentNode : instance;
+    placed.set(keyTextOf(placement.package, assembly, instance, start), {
+      assembly,
+      assemblyKind,
       copy,
-      document,
       id,
-      instance: instance.id,
-      node,
+      instance,
       owner,
+      package: placement.package,
+      path,
+      start,
     });
-    assembled.set(headingKey([root.assembly, id, owner, copy]), {
-      assembly: root.assembly,
+    assembled.set(keyTextOf(placement.package, assembly, id, path, owner, copy), {
+      assembly,
       copy,
       id,
       owner,
+      package: placement.package,
+      path,
     });
   }
 
-  for (const [{ instance, root }, { document, id }] of joined(
+  for (const [placement, { id, path }] of joined(
     placements,
     input.targets,
-    (placement) => placement.instance.document,
-    (row) => row.document,
+    placementKey,
+    documentKey,
   )) {
-    placedTargets.set(headingKey([instance.id, id]), {
-      assembly: root.assembly,
-      document,
+    const { assembly, instance } = placement;
+    placedTargets.set(keyTextOf(placement.package, assembly, instance, id), {
+      assembly,
       id,
-      instance: instance.id,
+      instance,
+      package: placement.package,
+      path,
     });
   }
 
@@ -844,33 +902,17 @@ export const placedLanguageRowsOf = (
   const placed = new Map<string, Addition<typeof PlacedXmlLang>>();
   const placedBody = new Map<string, Addition<typeof PlacedBodyXmlLang>>();
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
-  for (const [{ instance, root }, { lang, node, scope }] of joined(
-    [...instances].flatMap((assembly) =>
-      assembly.assemblyKind === itemKind
-        ? instancesOf(assembly).map((member) => ({ instance: member, root: assembly }))
-        : [],
-    ),
+  for (const [{ assembly, instance, package: pkg }, { lang, path, scope, start }] of joined(
+    [...instances].flatMap((root) => (root.assemblyKind === itemKind ? placementsOf(root) : [])),
     documents.flatMap((rows) => [...rows.XmlLang.values()]),
-    (placement) => placement.instance.document,
-    (carrier) => carrier.document,
+    (placement) => documentKey({ package: placement.package, path: placement.document }),
+    documentKey,
   )) {
-    placed.set(headingKey([instance.id, node]), {
-      assembly: root.assembly,
-      document: instance.document,
-      instance: instance.id,
-      lang,
-      node,
-      scope,
-    });
-    if (scope === instance.document) {
-      placedBody.set(headingKey([instance.id, node]), {
-        assembly: root.assembly,
-        document: instance.document,
-        instance: instance.id,
-        lang,
-        node,
-      });
-      assembled.set(headingKey([root.assembly, lang]), { assembly: root.assembly, lang });
+    const at = keyTextOf(pkg, assembly, instance, start);
+    placed.set(at, { assembly, instance, lang, package: pkg, path, scope, start });
+    if (scope === documentNode) {
+      placedBody.set(at, { assembly, instance, lang, package: pkg, path, start });
+      assembled.set(keyTextOf(pkg, assembly, lang), { assembly, lang, package: pkg });
     }
   }
 

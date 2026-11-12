@@ -14,7 +14,7 @@
  *   name.
  * - **The rows hold what the oracle says the package meets.** Every law the import's rows break on
  *   the host (`#pantry/test/gen/genetic/host-laws.ts`) is a law the oracle raises, a key text past
- *   its bound included, and no row names a uuid the program did not mint.
+ *   its bound included.
  * - **The oracle raises only what the rows break.** A law the oracle raises whose every statement the
  *   host evaluated over the rows, and found held, is a law the database would not raise; and a key
  *   text the oracle finds past its bound in a field of a relation the import writes, no field the
@@ -42,7 +42,6 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { kindNamer } from "#pantry/test/gen/genetic/corpus.ts";
 import type { Judgment } from "#pantry/test/gen/genetic/engine.ts";
 import {
@@ -76,7 +75,6 @@ import { refusedOf } from "#pantry/test/law-names.ts";
  *   the first law of it they break (`broken`, as an `invariant-rejected` outcome names it), and its
  *   witness;
  * - `oracle-only-law`: the oracle raises a law the import's rows were judged to hold;
- * - `dangling-uuid`: a row names a uuid the program did not mint;
  * - `noise-moved`: a side's verdict moved when the package took a noise no law reads
  *   (`#pantry/test/gen/genetic/noise.ts`);
  * - `lone-refusal`: the oracle breaks one law alone, and the most specific rule of the refusal the
@@ -104,12 +102,6 @@ export type Disagreement = (
       readonly side: "import" | "oracle";
     }
   | { readonly detail: string; readonly kind: "import-died" | "oracle-died" }
-  | {
-      readonly field: string;
-      readonly kind: "dangling-uuid";
-      readonly relation: string;
-      readonly value: string;
-    }
   | { readonly importRule: string; readonly kind: "codec-rule"; readonly oracleRule: string }
   | {
       readonly importRule: string;
@@ -319,7 +311,6 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
  *   selections alone;
  * - `oracle-only-law`: the law the oracle raises, by its name;
  * - `lone-refusal`: the lone law, the rule the import named and its witness;
- * - `dangling-uuid`: the uuid field;
  * - The codec's: the rules each side refused under;
  * - `noise-moved`: the side and the noise;
  * - `import-died`, `oracle-died`: the first line of how the side died, cut to 120 characters.
@@ -335,7 +326,6 @@ export type Signature = (
       readonly witness: string;
     }
   | { readonly detail: string; readonly kind: "import-died" | "oracle-died" }
-  | { readonly field: string; readonly kind: "dangling-uuid"; readonly relation: string }
   | { readonly importRule: string; readonly kind: "codec-import-only" }
   | { readonly importRule: string; readonly kind: "codec-rule"; readonly oracleRule: string }
   | { readonly kind: "codec-oracle-only"; readonly oracleRule: string }
@@ -357,13 +347,6 @@ const plainSignatureOf = (disagreement: Disagreement): Signature => {
       return {
         detail: disagreement.detail.split("\n")[0]?.slice(0, 120) ?? "",
         kind: disagreement.kind,
-      };
-    }
-    case "dangling-uuid": {
-      return {
-        field: disagreement.field,
-        kind: disagreement.kind,
-        relation: disagreement.relation,
       };
     }
     case "codec-rule": {
@@ -496,9 +479,6 @@ const shownPlainSignature = (signature: Signature): string => {
     case "oracle-died": {
       return `${signature.kind}: ${signature.detail}`;
     }
-    case "dangling-uuid": {
-      return `${signature.kind}: ${signature.relation}.${signature.field}`;
-    }
     case "codec-rule": {
       return `${signature.kind}: import ${signature.importRule}, oracle ${signature.oracleRule}`;
     }
@@ -550,9 +530,6 @@ export const shownDisagreement = (disagreement: Disagreement): string => {
     case "import-died":
     case "oracle-died": {
       return `${disagreement.kind}: ${disagreement.detail}`;
-    }
-    case "dangling-uuid": {
-      return `dangling-uuid: the import writes ${disagreement.relation}.${disagreement.field} = ${disagreement.value}, an id it never minted`;
     }
     case "codec-rule": {
       return `codec-rule: the import refuses before any row under ${disagreement.importRule}, the oracle's codec under ${disagreement.oracleRule}`;
@@ -635,37 +612,6 @@ type ImportSide =
   | { readonly kind: "refused"; readonly rule: string };
 
 /**
- * A mint of one candidate's ids, and the ids it drew.
- */
-interface Mint {
-  readonly mint: () => NodeId;
-  readonly minted: ReadonlySet<string>;
-}
-
-/**
- * Mint the ids of one candidate's program in order, as `1000000n-0000-4000-8000-000000000000`
- * numbered from 1, recording each, so the program is the same on every run and its rows can be
- * held to the ids it drew.
- *
- * @returns The mint.
- */
-const mintOf = (): Mint => {
-  const minted = new Set<string>();
-  let next = 0;
-
-  return {
-    mint: (): NodeId => {
-      next += 1;
-      const id: NodeId = `${(0x10_00_00_00 + next).toString(16)}-0000-4000-8000-000000000000`;
-      minted.add(id);
-
-      return id;
-    },
-    minted,
-  };
-};
-
-/**
  * Name the element kind and the document a breach broke at: the last step of its node path, and
  * the root kind of its document.
  *
@@ -683,8 +629,8 @@ const placeOf = (breach: Breach, roots: ReadonlyMap<string, string>): string => 
 
 /**
  * Each side's verdict on one package as the metamorphic relation compares it: the oracle's codec
- * rule, or the laws it raises; the import's codec rule, or the laws its rows break with the bound
- * and the uuids they name.
+ * rule, or the laws it raises; the import's codec rule, or the laws its rows break with the
+ * bound.
  */
 export interface Summary {
   readonly import: string;
@@ -716,12 +662,10 @@ const oracleSideOf = (exit: Exit.Exit<OracleJudgment>): OracleSide => {
  * Read the import's side of a package.
  *
  * @param exit - The program `readProgram` built, or its refusal or death.
- * @param minted - The ids its program drew.
  * @returns The side.
  */
 const importSideOf = (
   exit: Exit.Exit<{ readonly inputs: PackageInputs }, { readonly _tag: string }>,
-  minted: ReadonlySet<string>,
 ): ImportSide =>
   Exit.match(exit, {
     onFailure: (cause): ImportSide => {
@@ -732,7 +676,7 @@ const importSideOf = (
         : { detail: Cause.pretty(cause), kind: "died" };
     },
     onSuccess: (program): ImportSide => ({
-      host: hostVerdictOf(program.inputs, minted),
+      host: hostVerdictOf(program.inputs),
       kind: "built",
     }),
   });
@@ -838,7 +782,6 @@ const importFeatures = (side: ImportSide): Feature[] => {
             `i:${lawTable[law].rule} @ ${witness.split(" ")[0] ?? ""}`,
         ),
         ...(side.host.overLong.size > 0 ? ["i:key-text-bound @ bound" as const] : []),
-        ...(side.host.dangling.length > 0 ? ["i:dangling @ uuid" as const] : []),
       ];
     }
     default: {
@@ -913,8 +856,7 @@ const filledFields: ReadonlySet<string> = new Set([
 /**
  * Compare the laws the import's rows break on the host with the laws the oracle raises: each law
  * the rows break that the oracle does not raise, each law the oracle raises whose statements the
- * rows were judged to hold, a key text past its bound on one side alone, and each uuid the rows
- * name that the program did not mint.
+ * rows were judged to hold, and a key text past its bound on one side alone.
  *
  * @param breaches - The oracle's breaches.
  * @param host - The host's verdict over the import's rows.
@@ -973,17 +915,7 @@ const rowDisagreements = (
     ];
   });
 
-  return [
-    ...host.dangling.map(({ field, relation, value }): Disagreement => ({
-      field,
-      kind: "dangling-uuid",
-      relation,
-      value,
-    })),
-    ...importOnly,
-    ...overLong,
-    ...oracleOnly,
-  ];
+  return [...importOnly, ...overLong, ...oracleOnly];
 };
 
 /**
@@ -1068,12 +1000,8 @@ const summaryOf = (oracle: OracleSide, side: ImportSide): Summary => {
     return { import: side.kind === "refused" ? `refused ${side.rule}` : "died", oracle: ofOracle };
   }
 
-  const { broken, dangling, overLong } = side.host;
-  const laws = [
-    ...broken.keys(),
-    ...(overLong.size > 0 ? ["key text bound"] : []),
-    ...dangling.map(({ field, relation }) => `${relation}.${field}`),
-  ];
+  const { broken, overLong } = side.host;
+  const laws = [...broken.keys(), ...(overLong.size > 0 ? ["key text bound"] : [])];
 
   return { import: `built ${laws.toSorted().join(", ")}`, oracle: ofOracle };
 };
@@ -1117,11 +1045,10 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
   const dir = `${bench.directory}/c${String(index)}`;
   yield* writePackage(entries, dir);
 
-  const { mint, minted } = mintOf();
-  const read = yield* Effect.exit(readProgram(dir, mint));
+  const read = yield* Effect.exit(readProgram(dir));
   yield* fs.remove(dir, { recursive: true });
 
-  const side = importSideOf(read, minted);
+  const side = importSideOf(read);
   const died: readonly Disagreement[] = [
     ...(oracle.kind === "died" ? [{ detail: oracle.detail, kind: "oracle-died" as const }] : []),
     ...(side.kind === "died" ? [{ detail: side.detail, kind: "import-died" as const }] : []),

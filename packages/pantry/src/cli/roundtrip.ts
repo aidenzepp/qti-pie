@@ -27,7 +27,9 @@ const outcomeKinds = [
 
 /**
  * How one entry of the export compares with the package: equal as canonical XML, equal byte for
- * byte, or different, with `at` saying where.
+ * byte, or different, with `at` saying where. The first two are equal: an export writes each
+ * element's namespace declarations and attributes in Canonical XML's order, so an entry that wrote
+ * them in another order comes back `canonical-equal`, the same document.
  */
 const RoundtripOutcome = Schema.Union([
   Schema.Struct({ kind: Schema.Literal(outcomeKinds[0]) }),
@@ -41,12 +43,13 @@ const RoundtripOutcome = Schema.Union([
 const RoundtripEntry = Schema.Struct({ outcome: RoundtripOutcome, path: Schema.String });
 
 /**
- * What `roundtrip` prints under `--output jsonl` after its entries: everything but them.
+ * What `roundtrip` prints under `--output jsonl` after its entries: everything but them, the
+ * package named by its manifest identifier.
  */
 const RoundtripSummary = Schema.Struct({
   differing: Schema.Int,
   export_dir: Schema.String,
-  package_id: Schema.String,
+  package: Schema.String,
 });
 
 /**
@@ -85,9 +88,13 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  * The comparison is the exporter's `compareExported`: the record the import wrote, every entry's
  * bytes as it read them, against the entries the export of the stored package wrote, path by path,
  * so the stored documents are scanned once. An entry is `byte-identical` when its bytes come back
- * exactly, `canonical-equal` when an XML entry's bytes differ but its canonical forms agree, and
- * otherwise differs, `at` saying where: `missing` for an entry the export lacks, `extra` for one
- * only the export writes, or the first differing byte.
+ * exactly and `canonical-equal` when an XML entry's bytes differ but its canonical forms agree, as
+ * they do for a document that wrote its attributes or namespace declarations in another order than
+ * Canonical XML's: both are equal. Any other entry differs, `at` saying where: `missing` for an
+ * entry the export lacks, `extra` for one only the export writes, or the first differing byte.
+ *
+ * A package the database already holds, the same bytes under its manifest identifier, imports
+ * unchanged, and the stored package is exported and compared as one just imported is.
  *
  * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
  * only once the new export is written and compared.
@@ -138,7 +145,7 @@ export const roundtripCommand = Command.make(
       return;
     }
 
-    const { packageId, report } = yield* withAuthorApp(
+    const { identifier, report } = yield* withAuthorApp(
       () =>
         Promise.all([
           import("#pantry/db/layer.ts"),
@@ -151,12 +158,12 @@ export const roundtripCommand = Command.make(
           const db = yield* authorDb;
           const stored = yield* importPackage(db.workload, yield* readPackage(dir));
           const compared = yield* replaceWith(exportDir, (written) =>
-            Effect.flatMap(exportPackage(stored, written), (entries) =>
-              compareExported(stored, entries),
+            Effect.flatMap(exportPackage(stored.package, written), (entries) =>
+              compareExported(stored.package, entries),
             ),
           );
 
-          return { packageId: stored, report: compared };
+          return { identifier: stored.package, report: compared };
         }),
     );
 
@@ -165,13 +172,13 @@ export const roundtripCommand = Command.make(
 
     yield* emitSuccess(mode, {
       command: "roundtrip",
-      data: { differing, entries: report, export_dir: exportDir, package_id: packageId },
+      data: { differing, entries: report, export_dir: exportDir, package: identifier },
       dataSchema: RoundtripData,
       ok: differing === 0,
       stream: {
         lineSchema: RoundtripEntry,
         lines: report,
-        summary: { differing, export_dir: exportDir, package_id: packageId },
+        summary: { differing, export_dir: exportDir, package: identifier },
         summarySchema: RoundtripSummary,
       },
       text: renderReport(report),

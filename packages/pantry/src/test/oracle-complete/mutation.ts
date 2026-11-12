@@ -27,7 +27,6 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts, PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -369,8 +368,7 @@ export const filesOf = (entries: PackageEntries): readonly PackageFile[] =>
     .toSorted((left, right) => Order.String(left.path, right.path));
 
 /**
- * Read, shred and fold one entry of a package as the oracle does a listed document, its node ids
- * numbered for the document.
+ * Read, shred and fold one entry of a package as the oracle does a listed document.
  *
  * @param entries - The package.
  * @param path - The document's path.
@@ -382,13 +380,5 @@ export const foldedDocument = (entries: PackageEntries, path: string, grammar: C
     const xml = yield* Effect.orDie(readXml(encoder.encode(textOf(entries, path))));
     const tree = yield* Effect.orDie(shred(xml, baseVersion, shredGrammarOf(grammar)));
 
-    return yield* Effect.orDie(
-      Effect.fromResult(
-        fold(
-          tree,
-          (index): NodeId => `00000000-0000-4000-8001-${index.toString(16).padStart(12, "0")}`,
-          foldGrammarOf(grammar),
-        ),
-      ),
-    );
+    return yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
   });

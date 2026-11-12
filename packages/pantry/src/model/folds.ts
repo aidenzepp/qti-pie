@@ -63,13 +63,12 @@
 import { Option, Result, Schema } from "effect";
 import { step as enter } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry, AncestrySets } from "#pantry/grammar/ancestry.ts";
-import { openClasses } from "#pantry/grammar/kinds.ts";
 import { documentFamily, flatten } from "#pantry/model/xdm.ts";
 import type {
   AttributeRow,
   FlatRows,
-  NodeId,
   NodeRow,
+  OpenAttributeRow,
   XdmChild,
   XdmDocument,
   XdmDocumentChild,
@@ -166,9 +165,9 @@ export interface FoldGrammar<V extends XdmVocabulary> {
  */
 export class ChildUnadmitted extends Schema.TaggedError<ChildUnadmitted>()("ChildUnadmitted", {
   kind: Schema.String,
-  node: Schema.String,
   parent: Schema.String,
   reason: Schema.Literals(["unadmitted", "unfollowed"]),
+  start: Schema.BigInt,
   version: Schema.String,
 }) {
   /**
@@ -176,8 +175,8 @@ export class ChildUnadmitted extends Schema.TaggedError<ChildUnadmitted>()("Chil
    */
   override get message(): string {
     return this.reason === "unadmitted"
-      ? `Node ${this.node}, of kind ${this.kind}, sits under a ${this.parent}, which admits no ${this.kind} in ${this.version}, so it has no fold. Move it under a kind that admits it, or remove it.`
-      : `Node ${this.node}, of kind ${this.kind}, sits under a ${this.parent} where no position of its content model that names ${this.kind} follows its predecessor in ${this.version}, so it has no fold. Reorder the ${this.parent}'s children to its content model.`;
+      ? `The node at ${String(this.start)}, of kind ${this.kind}, sits under a ${this.parent}, which admits no ${this.kind} in ${this.version}, so it has no fold. Move it under a kind that admits it, or remove it.`
+      : `The node at ${String(this.start)}, of kind ${this.kind}, sits under a ${this.parent} where no position of its content model that names ${this.kind} follows its predecessor in ${this.version}, so it has no fold. Reorder the ${this.parent}'s children to its content model.`;
   }
 }
 
@@ -188,10 +187,9 @@ export class ChildUnadmitted extends Schema.TaggedError<ChildUnadmitted>()("Chil
 export class AttributeUnadmitted extends Schema.TaggedError<AttributeUnadmitted>()(
   "AttributeUnadmitted",
   {
-    at: Schema.BigInt,
     kind: Schema.String,
     name: Schema.String,
-    node: Schema.String,
+    start: Schema.BigInt,
     version: Schema.String,
   },
 ) {
@@ -199,7 +197,7 @@ export class AttributeUnadmitted extends Schema.TaggedError<AttributeUnadmitted>
    * The attribute, its element, and the repair.
    */
   override get message(): string {
-    return `The attribute ${this.name} at slot ${String(this.at)} of node ${this.node} is on a ${this.kind}, which admits no ${this.name} in ${this.version}, so it has no position. Remove it, or carry it on a kind that admits it.`;
+    return `The attribute ${this.name} of the node at ${String(this.start)} is on a ${this.kind}, which admits no ${this.name} in ${this.version}, so it has no position. Remove it, or carry it on a kind that admits it.`;
   }
 }
 
@@ -209,8 +207,7 @@ export class AttributeUnadmitted extends Schema.TaggedError<AttributeUnadmitted>
 export type FoldRefusal = AttributeUnadmitted | ChildUnadmitted;
 
 /**
- * A set of positions among the names an element's kind admits (D8): an element's `attrs` and an
- * attribute's `attrsWas`.
+ * A set of positions among the names an element's kind admits (D8): an element's `attrs`.
  */
 export type Positions = ReadonlySet<number>;
 
@@ -218,7 +215,7 @@ export type Positions = ReadonlySet<number>;
  * An `AttributeName` handle as an attribute row carries it: a closed name, or the class of an open
  * one.
  */
-type NameHandle<V extends XdmVocabulary> = AttributeRow<V>["name"];
+type NameHandle<V extends XdmVocabulary> = AttributeRow<V>["name"] | OpenAttributeRow["class"];
 
 /**
  * A children family's fold after one slot: the content automaton's state, the last position a child
@@ -251,11 +248,11 @@ export interface NodeDerived extends Slot {
  */
 export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
   /**
-   * The number of the node's attributes.
+   * The number of the node's closed attributes.
    */
   readonly attributes: bigint;
   /**
-   * The positions of the node's attributes' names among those its kind admits (D8): its attribute
+   * The positions of the node's closed attributes' names among those its kind admits (D8): their
    * family's end value, empty when it has none.
    */
   readonly attrs: Positions;
@@ -271,10 +268,6 @@ export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
    * The fields PostgreSQL derives; a write leaves them out.
    */
   readonly derived: NodeDerived;
-  /**
-   * The id of the node's document node.
-   */
-  readonly document: NodeId;
   readonly elementChildren: bigint;
   readonly elementsWas: bigint;
   /**
@@ -292,18 +285,19 @@ export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
    */
   readonly namespaces: bigint;
   /**
-   * The nearest interaction above the node, or the document node when there is none.
+   * The position of the nearest interaction above the node, or the document node's, 0, when there
+   * is none.
    */
-  readonly nearest: NodeId;
+  readonly nearest: bigint;
   readonly nearestKind: XdmKind<V>;
+  /**
+   * The number of the node's open-class attributes.
+   */
+  readonly openAttributes: bigint;
   readonly parentAncestry: Ancestry;
   readonly parentKind: XdmKind<V>;
-  readonly parentNearest: NodeId;
+  readonly parentNearest: bigint;
   readonly parentNearestKind: XdmKind<V>;
-  /**
-   * The parent's `start`, which a first child's `start` is one past (T3); the document node's own.
-   */
-  readonly parentStart: bigint;
   /**
    * The node's string value as its children write it: its text, whitespace and entity-reference
    * children's characters in order, each reference as `&name;`, as an attribute's lexical form
@@ -321,21 +315,10 @@ export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
 }
 
 /**
- * An attribute's `Attribute` row with every field the host writes: its owner's `kind`, `governs`,
- * `version` and `document`, and its predecessor's `attrs`.
+ * What an attribute row carries of its element beside its own fields: its owner's `kind`,
+ * `governs` and `version`, the copies its family's owner axis holds.
  */
-export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V> {
-  /**
-   * The positions of the names of the attributes before this one on its element, empty at the
-   * first.
-   */
-  readonly attrsWas: Positions;
-  /**
-   * The field PostgreSQL derives, `attrsWas | {position}` for a closed name and `attrsWas` for an
-   * open class, which the fold steps over no position of (C9); a write leaves it out.
-   */
-  readonly derived: { readonly attrs: Positions };
-  readonly document: NodeId;
+interface OwnerCopies<V extends XdmVocabulary> {
   /**
    * The owner's governing type, which with its kind decides the attribute's position and domain
    * (spec reading 84), none where no named type governs it.
@@ -346,6 +329,17 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
 }
 
 /**
+ * A closed attribute's `Attribute` row with every field the host writes: its owner's copies.
+ */
+export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V>, OwnerCopies<V> {}
+
+/**
+ * An open attribute's `OpenAttribute` row with every field the host writes: its owner's copies.
+ */
+export interface FoldedOpenAttribute<V extends XdmVocabulary>
+  extends OpenAttributeRow, OwnerCopies<V> {}
+
+/**
  * A document's rows with every field the host writes: {@link flatten}'s rows, with its node and
  * attribute rows folded. Every list is in `flatten`'s order, so the rows are a document's
  * `FlatRows` as they are.
@@ -353,6 +347,7 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
 export interface FoldedRows<V extends XdmVocabulary> extends FlatRows<V> {
   readonly attributes: readonly FoldedAttribute<V>[];
   readonly nodes: readonly FoldedNode<V>[];
+  readonly openAttributes: readonly FoldedOpenAttribute<V>[];
 }
 
 /**
@@ -370,6 +365,7 @@ type Head<V extends XdmVocabulary> = Omit<
   | "first"
   | "last"
   | "namespaces"
+  | "openAttributes"
   | "stringValue"
 >;
 
@@ -434,9 +430,9 @@ const derive = <V extends XdmVocabulary>(
       onFailure: (reason) =>
         new ChildUnadmitted({
           kind: row.kind,
-          node: row.id,
           parent: parentKind,
           reason,
+          start: row.start,
           version: row.version,
         }),
       onSuccess: (state) => ({
@@ -478,14 +474,12 @@ const sentinelOf = <V extends XdmVocabulary>(
   ...row,
   ...wasOf(emptyFold),
   derived: { ...emptyFold, ancestry: enter(grammar.ancestry, noFlags, row.kind) },
-  document: row.id,
-  nearest: row.id,
+  nearest: row.start,
   nearestKind: row.kind,
   parentAncestry: noFlags,
   parentKind: row.kind,
-  parentNearest: row.id,
+  parentNearest: row.start,
   parentNearestKind: row.kind,
-  parentStart: row.start,
 });
 
 /**
@@ -507,16 +501,14 @@ const headOf = <V extends XdmVocabulary>(
   Result.map(derive(grammar, row, parent.kind, parent.derived.ancestry, was), (derived) => ({
     ...row,
     ...(holds(grammar.interaction, parent.kind)
-      ? { nearest: parent.id, nearestKind: parent.kind }
+      ? { nearest: parent.start, nearestKind: parent.kind }
       : { nearest: parent.nearest, nearestKind: parent.nearestKind }),
     ...wasOf(was),
     derived,
-    document: parent.document,
     parentAncestry: parent.derived.ancestry,
     parentKind: parent.kind,
     parentNearest: parent.nearest,
     parentNearestKind: parent.nearestKind,
-    parentStart: parent.start,
   }));
 
 /**
@@ -525,13 +517,14 @@ const headOf = <V extends XdmVocabulary>(
 type Walked<V extends XdmVocabulary> = XdmDocument<V> | XdmChild<V> | XdmDocumentChild<V>;
 
 /**
- * A node's families as the tree nests them: its children, and how many attributes and namespace
- * declarations it holds.
+ * A node's families as the tree nests them: its children, and how many closed and open attributes
+ * and namespace declarations it holds.
  */
 interface Families<V extends XdmVocabulary> {
   readonly attributes: number;
   readonly children: readonly (XdmChild<V> | XdmDocumentChild<V>)[];
   readonly namespaces: number;
+  readonly openAttributes: number;
 }
 
 /**
@@ -625,16 +618,19 @@ const ownCharactersOf = <V extends XdmVocabulary>(node: Walked<V>): string =>
 const familiesOf = <V extends XdmVocabulary>(node: Walked<V>): Families<V> => {
   switch (node._tag) {
     case "document": {
-      return { attributes: 0, children: documentFamily(node), namespaces: 0 };
+      return { attributes: 0, children: documentFamily(node), namespaces: 0, openAttributes: 0 };
     }
     case "element":
     case "foreign-element":
     case "no-namespace-element":
     case "own-namespace-element": {
+      const closed = node.attributes.filter(({ name }) => name._tag === "closed").length;
+
       return {
-        attributes: node.attributes.length,
+        attributes: closed,
         children: node.children,
         namespaces: node.namespaces.length,
+        openAttributes: node.attributes.length - closed,
       };
     }
     case "doctype":
@@ -643,7 +639,7 @@ const familiesOf = <V extends XdmVocabulary>(node: Walked<V>): Families<V> => {
     case "comment":
     case "pi":
     case "entityRef": {
-      return { attributes: 0, children: [], namespaces: 0 };
+      return { attributes: 0, children: [], namespaces: 0, openAttributes: 0 };
     }
     default: {
       return node satisfies never;
@@ -676,7 +672,14 @@ interface Pending<V extends XdmVocabulary> {
 interface Met<V extends XdmVocabulary> {
   readonly counts: Pick<
     FoldedNode<V>,
-    "attributes" | "attrs" | "children" | "first" | "last" | "namespaces" | "stringValue"
+    | "attributes"
+    | "attrs"
+    | "children"
+    | "first"
+    | "last"
+    | "namespaces"
+    | "openAttributes"
+    | "stringValue"
   >;
   readonly family: Folding<V>;
 }
@@ -687,14 +690,12 @@ interface Met<V extends XdmVocabulary> {
  *
  * The walk reads each node's children from the tree, where they are nested, and its row and its
  * attributes' rows from `flatten`'s, which number the nodes in the same document order and list
- * each element's attributes together, in slot order. It visits the nodes in that order with its
- * own stack, so each child is folded from its parent's head and its predecessor's fold in hand, a
- * family's end values are its last child's fold, and a tree of any depth folds without recursion,
- * in time linear in its rows.
+ * each element's closed and open attributes together, in the document order of their elements. It
+ * visits the nodes in that order with its own stack, so each child is folded from its parent's head
+ * and its predecessor's fold in hand, a family's end values are its last child's fold, and a tree
+ * of any depth folds without recursion, in time linear in its rows.
  *
  * @param document - The tree to fold.
- * @param idOf - Draws the id of the row numbered by its argument, as `flatten` reads it: called
- *   once per node, in document order, then once per attribute.
  * @param grammar - The closed relations the folds read.
  * @returns The document's rows, nodes and attributes folded, every list in `flatten`'s order; or the
  *   refusal of the first child, in document order, its parent does not admit, or the first
@@ -702,52 +703,51 @@ interface Met<V extends XdmVocabulary> {
  */
 export const fold = <V extends XdmVocabulary>(
   document: XdmDocument<V>,
-  idOf: (index: number) => NodeId,
   grammar: FoldGrammar<V>,
 ): Result.Result<FoldedRows<V>, FoldRefusal> =>
   Result.gen(function* foldDocument() {
-    const rows = flatten(document, idOf);
-    const self = rows.document.node;
+    const rows = flatten(document);
     const met: Met<V>[] = [];
     const attributes: FoldedAttribute<V>[] = [];
+    const openAttributes: FoldedOpenAttribute<V>[] = [];
     const stack: Pending<V>[] = [];
+    const positionOf = (head: Head<V>, name: NameHandle<V>) =>
+      Result.fromOption(
+        grammar.attributePosition({
+          governs: head.governs,
+          kind: head.kind,
+          name,
+          version: head.version,
+        }),
+        () =>
+          new AttributeUnadmitted({
+            kind: head.kind,
+            name,
+            start: head.start,
+            version: head.version,
+          }),
+      );
     const visit = (node: Walked<V>, head: Head<V>): Result.Result<void, AttributeUnadmitted> =>
       Result.gen(function* visitNode() {
         const families = familiesOf(node);
+        const copies = { governs: head.governs, kind: head.kind, version: head.version };
         let attrs: Positions = new Set();
         for (
           let row = rows.attributes[attributes.length];
-          row !== undefined && row.node === head.id;
+          row !== undefined && row.start === head.start;
           row = rows.attributes[attributes.length]
         ) {
-          const { at, name } = row;
-          const position = yield* Result.fromOption(
-            grammar.attributePosition({
-              governs: head.governs,
-              kind: head.kind,
-              name,
-              version: head.version,
-            }),
-            () =>
-              new AttributeUnadmitted({
-                at,
-                kind: head.kind,
-                name,
-                node: head.id,
-                version: head.version,
-              }),
-          );
-          const next = openClasses.some((open) => open === name) ? attrs : adding(attrs, position);
-          attributes.push({
-            ...row,
-            attrsWas: attrs,
-            derived: { attrs: next },
-            document: head.document,
-            governs: head.governs,
-            kind: head.kind,
-            version: head.version,
-          });
-          attrs = next;
+          attrs = adding(attrs, yield* positionOf(head, row.name));
+          attributes.push({ ...row, ...copies });
+        }
+
+        for (
+          let row = rows.openAttributes[openAttributes.length];
+          row !== undefined && row.start === head.start;
+          row = rows.openAttributes[openAttributes.length]
+        ) {
+          yield* positionOf(head, row.class);
+          openAttributes.push({ ...row, ...copies });
         }
 
         const family: Folding<V> = { owner: head, was: emptyFold };
@@ -758,6 +758,7 @@ export const fold = <V extends XdmVocabulary>(
             children: BigInt(families.children.length),
             ...endsOf(ownCharactersOf(node)),
             namespaces: BigInt(families.namespaces),
+            openAttributes: BigInt(families.openAttributes),
             stringValue: families.children.map(charactersOf).join(""),
           },
           family,
@@ -773,9 +774,8 @@ export const fold = <V extends XdmVocabulary>(
         at: 0n,
         end: BigInt(rows.nodes.length),
         governs: Option.none(),
-        id: self,
         kind: document._tag,
-        parent: self,
+        parent: 0n,
         prefix: "",
         start: 0n,
         version: document.version,
@@ -800,5 +800,6 @@ export const fold = <V extends XdmVocabulary>(
         ...endOf(family.was),
         ...counts,
       })),
+      openAttributes,
     };
   });

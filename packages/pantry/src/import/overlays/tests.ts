@@ -23,7 +23,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import { Bits } from "@bjornpagen/grizzle";
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
@@ -35,7 +35,7 @@ import { piecesOf } from "#pantry/import/pieces.ts";
 import type { ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledName,
   BranchResolution,
@@ -82,8 +82,9 @@ import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * Where one document stands in its package, as this builder reads it beside the document's view:
- * its package's id, its entry's path, and the document nodes of its package by their paths, which a
- * site's href names. It is the part of the importer's `NodeIds` (Q5.15) this builder reads.
+ * its package's manifest identifier, its entry's path, and the documents and entries of its package
+ * by their paths, which a site's href names. It is the part of the importer's `DocumentPlace`
+ * (Q5.15) this builder reads.
  */
 export interface TestIds {
   /**
@@ -92,7 +93,6 @@ export interface TestIds {
    * or that a site names.
    */
   readonly assembled: boolean;
-  readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
    * The document's type, the resource's that lists it, which each site copies from its include's
    * node.
@@ -102,8 +102,8 @@ export interface TestIds {
    * Whether the package holds an entry at a path.
    */
   readonly entryAt: (path: string) => boolean;
-  readonly package: Uuid;
-  readonly path: string;
+  readonly package: Addition<typeof Site>["package"];
+  readonly path: Addition<typeof Site>["path"];
   /**
    * The document a site's href names, with its root's kind and context, none where the path names
    * no listed document.
@@ -113,8 +113,9 @@ export interface TestIds {
 
 /**
  * One document's overlay rows, one keyed set per relation: each map from the text of a row's key
- * to the row as its writer writes it. A row keyed by its node is keyed by its node's id; one keyed
- * by its node and a name by the two as a JSON array.
+ * within its document to the row as its writer writes it. A row keyed by its element is keyed by
+ * its element's start; one keyed by its element and a name by the two as a JSON array; the
+ * document's own row by its path.
  */
 export interface TestRows {
   readonly BranchRule: ReadonlyMap<string, Addition<typeof BranchRule>>;
@@ -190,18 +191,18 @@ const splicesAt = (
   site.kind === includeKind && among(splicingParents, site.parentKind) && placesAt(site, root);
 
 /**
- * One document as the builders read it: its flat rows and the indexes over them.
+ * One document as the builders read it: its flat rows and the indexes over them, each node by its
+ * start.
  */
 interface View {
   /**
    * Each node's attributes by name, a node that writes none absent.
    */
-  readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
+  readonly attributes: ReadonlyMap<bigint, ReadonlyMap<string, string>>;
   /**
    * Each node's kind, and its children in document order, every node held.
    */
-  readonly byId: ReadonlyMap<NodeId, Held>;
-  readonly document: NodeId;
+  readonly byStart: ReadonlyMap<bigint, Held>;
   /**
    * Each node's fold under the document's context: its ancestry and nearest interaction among
    * them.
@@ -223,17 +224,17 @@ interface Held {
  * Read a node of the document: total, since {@link testViewOf} holds every node, each parent before
  * its children.
  *
- * @param byId - The document's nodes.
- * @param id - The id of a node of the document.
+ * @param byStart - The document's nodes.
+ * @param start - The start of a node of the document.
  * @returns The node as the view holds it.
- * @throws {Error} When the document holds no node of that id: a defect of the caller, which read a
- *   node of another document, or a parent before it was held.
+ * @throws {Error} When the document holds no node at that start: a defect of the caller, which read
+ *   a node of another document, or a parent before it was held.
  */
-const heldAt = (byId: ReadonlyMap<NodeId, Held>, id: NodeId): Held => {
-  const held = byId.get(id);
+const heldAt = (byStart: ReadonlyMap<bigint, Held>, start: bigint): Held => {
+  const held = byStart.get(start);
   if (held === undefined) {
     throw new Error(
-      `Node ${id} is no node of the document read so far, and the view holds each node of its document, each parent before its children. Read each node in its own document's view, in document order.`,
+      `No node of the document read so far starts at ${start}, and the view holds each node of its document, each parent before its children. Read each node in its own document's view, in document order.`,
     );
   }
 
@@ -251,23 +252,22 @@ const heldAt = (byId: ReadonlyMap<NodeId, Held>, id: NodeId): Held => {
  */
 const testViewOf = (document: DocumentView, ids: TestIds): View => {
   const { rows } = document;
-  const byId = new Map<NodeId, Held>();
+  const byStart = new Map<bigint, Held>();
   for (const node of rows.nodes) {
-    byId.set(node.id, { children: [], kind: node.kind });
-    if (node.parent !== node.id) {
-      heldAt(byId, node.parent).children.push(node);
+    byStart.set(node.start, { children: [], kind: node.kind });
+    if (node.parent !== node.start) {
+      heldAt(byStart, node.parent).children.push(node);
     }
   }
 
   return {
     attributes: new Map(
-      [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
-        ([node, held]) =>
-          [node, new Map(held.map(({ lexical, name }) => [name, lexical] as const))] as const,
+      [...Map.groupBy(rows.attributes, ({ start }) => start)].map(
+        ([start, held]) =>
+          [start, new Map(held.map(({ lexical, name }) => [name, lexical] as const))] as const,
       ),
     ),
-    byId,
-    document: rows.document.node,
+    byStart,
     folds: document.folds,
     ids,
     rows,
@@ -283,7 +283,7 @@ const testViewOf = (document: DocumentView, ids: TestIds): View => {
  * @returns Its lexical form, none where the node writes no such attribute.
  */
 const valueOf = (view: View, node: NodeRow<Composed>, name: string): Option.Option<string> =>
-  Option.fromNullishOr(view.attributes.get(node.id)?.get(name));
+  Option.fromNullishOr(view.attributes.get(node.start)?.get(name));
 
 /**
  * Read a node's parent's kind: the document node's own for the document node, its own parent.
@@ -293,17 +293,17 @@ const valueOf = (view: View, node: NodeRow<Composed>, name: string): Option.Opti
  * @returns Its parent's kind.
  */
 const parentKindOf = (view: View, node: NodeRow<Composed>): Kind =>
-  heldAt(view.byId, node.parent).kind;
+  heldAt(view.byStart, node.parent).kind;
 
 /**
  * Read a node's children, in document order.
  *
  * @param view - The document.
- * @param id - The node's id.
+ * @param start - The node's start.
  * @returns Its children, none for a leaf.
  */
-const childrenOf = (view: View, id: NodeId): readonly NodeRow<Composed>[] =>
-  heldAt(view.byId, id).children;
+const childrenOf = (view: View, start: bigint): readonly NodeRow<Composed>[] =>
+  heldAt(view.byStart, start).children;
 
 /**
  * A node's {@link nodeRef}-shaped tuple, as every overlay of it copies it.
@@ -313,13 +313,26 @@ const childrenOf = (view: View, id: NodeId): readonly NodeRow<Composed>[] =>
  * @returns Its tuple.
  */
 const tupleOf = (view: View, node: NodeRow<Composed>) => ({
-  document: view.document,
   kind: node.kind,
-  nearest: foldAt(view.folds, node.id).nearest,
-  node: node.id,
+  nearest: foldAt(view.folds, node.start).nearest,
+  package: view.ids.package,
   parent: node.parent,
+  path: view.ids.path,
   start: node.start,
   version: node.version,
+});
+
+/**
+ * The fields that name an element of the document: its package, its document's path and its start.
+ *
+ * @param view - The document.
+ * @param node - The node.
+ * @returns Its key's fields.
+ */
+const placeOf = (view: View, node: NodeRow<Composed>) => ({
+  package: view.ids.package,
+  path: view.ids.path,
+  start: node.start,
 });
 
 /**
@@ -351,7 +364,7 @@ const tokenCarriers: Readonly<Record<TokenName, readonly string[]>> = {
  * Write a document's tokens: each identifier and target, split around its collapsed value.
  *
  * @param view - The document.
- * @returns The rows, by `[node, name]`.
+ * @returns The rows, by `[start, name]`.
  */
 const tokensOf = (view: View): ReadonlyMap<string, Addition<typeof TestToken>> =>
   new Map(
@@ -361,8 +374,8 @@ const tokensOf = (view: View): ReadonlyMap<string, Addition<typeof TestToken>> =
           ? Option.toArray(valueOf(view, node, name)).map(
               (lexical) =>
                 [
-                  keyOf([node.id, name]),
-                  { ...piecesOf(lexical), lexical, name, node: node.id },
+                  keyOf([String(node.start), name]),
+                  { ...piecesOf(lexical), ...placeOf(view, node), lexical, name },
                 ] as const,
             )
           : [],
@@ -374,7 +387,7 @@ const tokensOf = (view: View): ReadonlyMap<string, Addition<typeof TestToken>> =
  * Write a document's flags: each `xs:boolean` the laws read, on the kind that carries it.
  *
  * @param view - The document.
- * @returns The rows, by `[node, name]`.
+ * @returns The rows, by `[start, name]`.
  */
 const flagsOf = (view: View): ReadonlyMap<string, Addition<typeof TestFlag>> =>
   new Map(
@@ -384,12 +397,12 @@ const flagsOf = (view: View): ReadonlyMap<string, Addition<typeof TestFlag>> =>
           ? Option.toArray(valueOf(view, node, name)).map(
               (lexical) =>
                 [
-                  keyOf([node.id, name]),
+                  keyOf([String(node.start), name]),
                   {
+                    ...placeOf(view, node),
                     kind: node.kind,
                     lexical,
                     name,
-                    node: node.id,
                     parentKind: parentKindOf(view, node),
                     value: Option.contains(booleanOf(lexical), true),
                   },
@@ -406,7 +419,10 @@ const flagsOf = (view: View): ReadonlyMap<string, Addition<typeof TestFlag>> =>
 interface Scope {
   readonly looseChain: boolean;
   readonly mixes: boolean;
-  readonly part: NodeId;
+  /**
+   * The start of the test part it sits in, 0 (the document node's) where none does.
+   */
+  readonly part: bigint;
   readonly replacing: boolean;
 }
 
@@ -416,7 +432,7 @@ interface Scope {
 interface Above {
   readonly parentLooseChain: boolean;
   readonly parentMixes: boolean;
-  readonly part: NodeId;
+  readonly part: bigint;
   readonly replaced: boolean;
 }
 
@@ -425,16 +441,16 @@ interface Above {
  * each after the sections above it.
  *
  * @param scopes - The sections' scopes so far.
- * @param section - A section's id.
+ * @param section - A section's start.
  * @returns Its scope.
  * @throws {Error} When the section has no scope yet: a defect of the caller, which read a section
  *   before it, or a node of another document.
  */
-const scopeAt = (scopes: ReadonlyMap<NodeId, Scope>, section: NodeId): Scope => {
+const scopeAt = (scopes: ReadonlyMap<bigint, Scope>, section: bigint): Scope => {
   const scope = scopes.get(section);
   if (scope === undefined) {
     throw new Error(
-      `Section ${section} has no scope yet, and the sections' scopes are read in document order, each section's before its descendants'. Read the scope of a section of this document after the section.`,
+      `The section at ${section} has no scope yet, and the sections' scopes are read in document order, each section's before its descendants'. Read the scope of a section of this document after the section.`,
     );
   }
 
@@ -443,8 +459,8 @@ const scopeAt = (scopes: ReadonlyMap<NodeId, Scope>, section: NodeId): Scope => 
 
 /**
  * Read the scope a node sits in, from its parent: a section's own, a test part's (the part, no
- * replacement and no drawn order), or the document's (no part, and a loose chain that reaches the
- * section that places the document).
+ * replacement and no drawn order), or the document's (no part, 0, and a loose chain that reaches
+ * the section that places the document).
  *
  * @param view - The document.
  * @param scopes - The sections' scopes so far, in document order.
@@ -453,7 +469,7 @@ const scopeAt = (scopes: ReadonlyMap<NodeId, Scope>, section: NodeId): Scope => 
  */
 const aboveOf = (
   view: View,
-  scopes: ReadonlyMap<NodeId, Scope>,
+  scopes: ReadonlyMap<bigint, Scope>,
   node: NodeRow<Composed>,
 ): Above => {
   const parentKind = parentKindOf(view, node);
@@ -470,7 +486,7 @@ const aboveOf = (
 
   return parentKind === partKind
     ? { parentLooseChain: false, parentMixes: false, part: node.parent, replaced: false }
-    : { parentLooseChain: true, parentMixes: false, part: view.document, replaced: false };
+    : { parentLooseChain: true, parentMixes: false, part: 0n, replaced: false };
 };
 
 /**
@@ -514,7 +530,7 @@ const flagOr = (flag: FlagOf, node: NodeRow<Composed>, name: keyof typeof flagDe
  */
 interface Sections {
   readonly rows: ReadonlyMap<string, Addition<typeof Section>>;
-  readonly scopes: ReadonlyMap<NodeId, Scope>;
+  readonly scopes: ReadonlyMap<bigint, Scope>;
 }
 
 /**
@@ -523,13 +539,13 @@ interface Sections {
  *
  * @param view - The document.
  * @param flag - Each node's flags.
- * @returns The rows, by node, and each section's scope.
+ * @returns The rows, by start, and each section's scope.
  */
 const sectionsOf = (view: View, flag: FlagOf): Sections => {
   const rows = new Map<string, Addition<typeof Section>>();
-  const scopes = new Map<NodeId, Scope>();
+  const scopes = new Map<bigint, Scope>();
   const childOf = (node: NodeRow<Composed>, kind: string) =>
-    Option.fromNullishOr(childrenOf(view, node.id).find((child) => child.kind === kind));
+    Option.fromNullishOr(childrenOf(view, node.start).find((child) => child.kind === kind));
 
   for (const node of view.rows.nodes.filter(({ kind }) => kind === sectionKind)) {
     const above = aboveOf(view, scopes, node);
@@ -553,8 +569,8 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
       part: above.part,
       replacing: above.replaced || withReplacement,
     };
-    scopes.set(node.id, scope);
-    rows.set(node.id, {
+    scopes.set(node.start, scope);
+    rows.set(String(node.start), {
       ...tupleOf(view, node),
       keepTogether,
       loose,
@@ -589,7 +605,7 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
 const namedOf = (
   view: View,
   token: TokenOf,
-  scopes: ReadonlyMap<NodeId, Scope>,
+  scopes: ReadonlyMap<bigint, Scope>,
 ): ReadonlyMap<string, Addition<typeof Named>> =>
   new Map(
     view.rows.nodes
@@ -601,11 +617,11 @@ const namedOf = (
           // A section's own order and loose chain; every other kind's are false (`Named`).
           const own =
             node.kind === sectionKind
-              ? scopeAt(scopes, node.id)
+              ? scopeAt(scopes, node.start)
               : { looseChain: false, mixes: false };
 
           return [
-            node.id,
+            String(node.start),
             {
               ...tupleOf(view, node),
               end: node.end,
@@ -613,7 +629,7 @@ const namedOf = (
               looseChain: own.looseChain,
               mixes: own.mixes,
               parentKind: parentKindOf(view, node),
-              part: isPart ? node.id : above.part,
+              part: isPart ? node.start : above.part,
               replaced: !isPart && above.replaced,
             },
           ] as const;
@@ -637,7 +653,7 @@ const membersOf = (view: View, flag: FlagOf): ReadonlyMap<string, Addition<typeo
         const { parent, ...tuple } = tupleOf(view, node);
 
         return [
-          node.id,
+          String(node.start),
           { ...tuple, required: flagOr(flag, node, "required"), section: parent },
         ] as const;
       }),
@@ -670,7 +686,7 @@ const selectionsOf = (
           );
 
           return [
-            node.id,
+            String(node.start),
             {
               ...tupleOf(view, node),
               members: BigInt(parts.length),
@@ -702,7 +718,10 @@ const orderingsOf = (
       .filter(({ kind }) => kind === orderingKind)
       .map(
         (node) =>
-          [node.id, { ...tupleOf(view, node), shuffle: flagOr(flag, node, "shuffle") }] as const,
+          [
+            String(node.start),
+            { ...tupleOf(view, node), shuffle: flagOr(flag, node, "shuffle") },
+          ] as const,
       ),
   );
 
@@ -718,9 +737,10 @@ const isSite = (view: View, node: NodeRow<Composed>): boolean =>
   isSiteKind(node.kind, parentKindOf(view, node));
 
 /**
- * An item ref's or a site's href, resolved as its `ReferencePath` is: its node and kind, its
- * package, the path it is compared by, whether that is the entry path it names (`resolved`), and
- * whether it resolves outside the package (`external`), as its `Reference`'s scope says. An href
+ * An item ref's or a site's href, resolved as its `ReferencePath` is: its element (`package`,
+ * `path`, `start`) and kind, `target`, the path it is compared by, in the element's own package,
+ * whether that is the entry path it names (`resolved`), and whether it resolves outside the package
+ * (`external`), as its `Reference`'s scope says. An href
  * this representation does not resolve is compared by its path as written, as a manifest href is
  * (`comparedPathOf`, reading 102), and no `ReferencePath` holds it, so "Href form" refuses an item
  * ref's; a site's has no {@link SitePath}, and an external one marks its {@link Site} `external`.
@@ -728,10 +748,11 @@ const isSite = (view: View, node: NodeRow<Composed>): boolean =>
 export interface ResolvedHref {
   readonly external: boolean;
   readonly kind: string;
-  readonly node: NodeId;
-  readonly package: Uuid;
-  readonly path: string;
+  readonly package: TestIds["package"];
+  readonly path: TestIds["path"];
   readonly resolved: boolean;
+  readonly start: bigint;
+  readonly target: string;
 }
 
 /**
@@ -741,7 +762,7 @@ export interface ResolvedHref {
  * no document, which its site's existence law refuses ("Include target", spec reading 115).
  *
  * @param view - The document.
- * @returns The hrefs, by node.
+ * @returns The hrefs, by start.
  */
 const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
   const resolve = hrefResolverOf(view.rows, view.ids.path);
@@ -750,17 +771,16 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
     view.rows.nodes.flatMap((node) =>
       node.kind === itemRefKind || isSite(view, node)
         ? Option.toArray(valueOf(view, node, "href")).map((lexical) => {
-            const resolution = resolve(node.id, lexical);
+            const resolution = resolve(node.start, lexical);
 
             return [
-              node.id,
+              String(node.start),
               {
+                ...placeOf(view, node),
                 external: resolution.scope === "external",
                 kind: node.kind,
-                node: node.id,
-                package: view.ids.package,
-                path: comparedPathOf(resolution, lexical),
                 resolved: Option.isSome(entryPathOf(resolution)),
+                target: comparedPathOf(resolution, lexical),
               },
             ] as const;
           })
@@ -794,7 +814,7 @@ export const itemRefPathsOf = (document: DocumentView, ids: TestIds): readonly R
 const sitesOf = (
   view: View,
   hrefs: ReadonlyMap<string, ResolvedHref>,
-  scopes: ReadonlyMap<NodeId, Scope>,
+  scopes: ReadonlyMap<bigint, Scope>,
 ): ReadonlyMap<string, Addition<typeof Site>> =>
   new Map(
     view.rows.nodes.flatMap((node) => {
@@ -807,15 +827,19 @@ const sitesOf = (
 
       return [
         [
-          node.id,
+          String(node.start),
           {
             ...tupleOf(view, node),
-            ancestry: Bits.of(Flag, [...foldAt(view.folds, node.id).ancestry]),
-            children: BigInt(childrenOf(view, node.id).length),
+            ancestry: Bits.of(Flag, [...foldAt(view.folds, node.start).ancestry]),
+            children: BigInt(childrenOf(view, node.start).length),
             documentType: view.ids.documentType,
-            external: hrefs.get(node.id)?.external ?? false,
+            external: hrefs.get(String(node.start))?.external ?? false,
             governor: governorOf(node.version, node.kind, node.governs),
-            nearestKind: foldAt(view.folds, node.id).nearestKind,
+            nearestKind: foldAt(view.folds, node.start).nearestKind,
+            nearestPath: Option.getOrElse(
+              foldAt(view.folds, node.start).nearestPath,
+              () => view.ids.path,
+            ),
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,
             parentMixes: above.parentMixes,
@@ -828,8 +852,8 @@ const sitesOf = (
   );
 
 /**
- * Write each site's {@link SitePath}: its href's package and path, and whether the package holds
- * an entry there, a row only where the site writes an href that resolves to a path of the package.
+ * Write each site's {@link SitePath}: its href's path, and whether the package holds an entry
+ * there, a row only where the site writes an href that resolves to a path of the package.
  * An href that resolves outside the package has none: its site is marked `external`, stored as
  * written and never fetched (spec reading 115).
  *
@@ -846,18 +870,22 @@ const sitePathsOf = (
   new Map(
     [...sites.values()].flatMap((site) =>
       Option.match(
-        Option.filter(Option.fromNullishOr(hrefs.get(site.node)), ({ resolved }) => resolved),
+        Option.filter(
+          Option.fromNullishOr(hrefs.get(String(site.start))),
+          ({ resolved }) => resolved,
+        ),
         {
           onNone: () => [],
           onSome: (href) => [
             [
-              site.node,
+              String(site.start),
               {
-                entry: view.ids.entryAt(href.path),
+                entry: view.ids.entryAt(href.target),
                 kind: site.kind,
-                node: site.node,
-                package: href.package,
-                path: href.path,
+                package: site.package,
+                path: site.path,
+                start: site.start,
+                target: href.target,
               },
             ] as const,
           ],
@@ -867,9 +895,9 @@ const sitePathsOf = (
   );
 
 /**
- * Write each site's {@link SiteTarget}: the document its href's path names, with that document's
- * root kind and context, and the site's fields the target's laws read. A site that writes no href,
- * or whose path names no listed document, has none.
+ * Write each site's {@link SiteTarget}: the path of the document its href's path names, with that
+ * document's root kind and context, and the site's fields the target's laws read. A site that
+ * writes no href, or whose path names no listed document, has none.
  *
  * @param view - The document.
  * @param sites - The document's sites.
@@ -884,29 +912,29 @@ const siteTargetsOf = (
   new Map(
     [...sites.values()].flatMap((site) =>
       Option.match(
-        Option.flatMap(Option.fromNullishOr(paths.get(site.node)), (href) =>
-          Option.map(view.ids.targetAt(href.path), (target) => ({ href, target })),
+        Option.flatMap(Option.fromNullishOr(paths.get(String(site.start))), (href) =>
+          Option.map(view.ids.targetAt(href.target), (target) => ({ href, target })),
         ),
         {
           onNone: () => [],
           onSome: ({ href, target }) => [
             [
-              site.node,
+              String(site.start),
               {
                 ancestry: site.ancestry,
-                document: site.document,
                 kind: site.kind,
                 nearest: site.nearest,
                 nearestKind: site.nearestKind,
-                node: site.node,
-                package: href.package,
+                package: site.package,
                 parentKind: site.parentKind,
-                path: href.path,
+                path: site.path,
                 places: placesAt(site, target.rootKind),
                 splices: splicesAt(site, target.rootKind),
-                target: target.node,
+                start: site.start,
+                target: href.target,
                 targetNearest: target.context.nearest,
                 targetNearestKind: target.context.nearestKind,
+                targetNearestPath: Option.getOrElse(target.context.nearestPath, () => href.target),
                 targetRoot: target.rootKind,
                 version: site.version,
               },
@@ -933,14 +961,16 @@ const inclusionsOf = (
       site.kind === includeKind
         ? [
             [
-              site.node,
+              String(site.start),
               {
                 includeParent: site.parentKind,
-                node: site.node,
+                package: site.package,
                 parentKind: site.parentKind,
+                path: site.path,
                 places: site.places,
                 root: site.targetRoot,
                 splices: site.splices,
+                start: site.start,
                 version: site.version,
               },
             ] as const,
@@ -965,7 +995,7 @@ const rulesOf = (view: View, token: TokenOf): ReadonlyMap<string, Addition<typeo
             .map(
               (target) =>
                 [
-                  node.id,
+                  String(node.start),
                   { ...tupleOf(view, node), parentKind: parentKindOf(view, node), target },
                 ] as const,
             )
@@ -994,7 +1024,8 @@ const mappingsOf = (
               target: token(node, "target-identifier"),
             }),
           ).map(
-            ({ source, target }) => [node.id, { ...tupleOf(view, node), source, target }] as const,
+            ({ source, target }) =>
+              [String(node.start), { ...tupleOf(view, node), source, target }] as const,
           )
         : [],
     ),
@@ -1018,7 +1049,7 @@ const stimulusRefsOf = (
       .filter(({ kind }) => kind === stimulusRefKind)
       .flatMap((node) =>
         Option.toArray(token(node, "identifier")).map(
-          (identifier) => [node.id, { ...tupleOf(view, node), identifier }] as const,
+          (identifier) => [String(node.start), { ...tupleOf(view, node), identifier }] as const,
         ),
       ),
   );
@@ -1051,9 +1082,15 @@ export const rowsOf = (document: DocumentView, ids: TestIds): TestRows => {
   const tokens = tokensOf(view);
   const flags = flagsOf(view);
   const token: TokenOf = (node, name) =>
-    Option.map(Option.fromNullishOr(tokens.get(keyOf([node.id, name]))), ({ value }) => value);
+    Option.map(
+      Option.fromNullishOr(tokens.get(keyOf([String(node.start), name]))),
+      ({ value }) => value,
+    );
   const flag: FlagOf = (node, name) =>
-    Option.map(Option.fromNullishOr(flags.get(keyOf([node.id, name]))), ({ value }) => value);
+    Option.map(
+      Option.fromNullishOr(flags.get(keyOf([String(node.start), name]))),
+      ({ value }) => value,
+    );
   const root = document.tree.root.kind;
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
@@ -1075,17 +1112,7 @@ export const rowsOf = (document: DocumentView, ids: TestIds): TestRows => {
     StimulusRef: stimulusRefsOf(view, token),
     TestDocument: keptIf(
       ids.assembled,
-      new Map([
-        [
-          view.document,
-          {
-            node: view.document,
-            package: ids.package,
-            path: ids.path,
-            rootKind: root,
-          },
-        ],
-      ]),
+      new Map([[ids.path, { package: ids.package, path: ids.path, rootKind: root }]]),
     ),
     TestFlag: flags,
     TestToken: tokens,
@@ -1094,23 +1121,23 @@ export const rowsOf = (document: DocumentView, ids: TestIds): TestRows => {
 };
 
 /**
- * A member instance as its tree writes it: every field its caller writes but its group and root
- * field, with its own children nested.
+ * A member instance as its tree writes it: every field its caller writes but its root fields, with
+ * its own children nested.
  */
-export type InstanceMember = Omit<Addition<typeof Instance>, "assembly" | "parent"> & {
+export type InstanceMember = Omit<Addition<typeof Instance>, "assembly" | "package"> & {
   readonly children: readonly InstanceMember[];
 };
 
 /**
- * An assembly's root instance as its tree writes it: its root field, and its children nested.
+ * An assembly's root instance as its tree writes it: its root fields, and its children nested.
  */
-export type InstanceRoot = Omit<Addition<typeof Instance>, "parent"> & {
+export type InstanceRoot = Addition<typeof Instance> & {
   readonly children: readonly InstanceMember[];
 };
 
 /**
- * A package's assemblies, one keyed set per relation: each root instance by its id, with its tree
- * nested, and each counted member by its key.
+ * A package's assemblies, one keyed set per relation: each root instance by its assembly's path,
+ * with its tree nested, and each counted member by its key within the package, as a JSON array.
  */
 export interface AssembledRows {
   readonly AssembledName: ReadonlyMap<string, Addition<typeof AssembledName>>;
@@ -1130,35 +1157,40 @@ interface AssembledDocument {
 }
 
 /**
- * One instance as the builder walks an assembly: its document and that document's rows, its
- * scope, its parent and its parent's id (a root's own, as the instance tree writes a root's
- * `parent`), the site it is placed at, and its interval in the tree's pre-order, which the tree
- * draws the same way.
+ * One instance as the builder walks an assembly: its document's path and that document's rows,
+ * its scope, its parent, the site it is placed at (its parent's document's, 0 for the root), and
+ * its interval in the tree's pre-order, which the tree draws the same way: `start` is its key.
  */
 interface Walked {
-  readonly document: NodeId;
+  readonly document: string;
   end: number;
-  readonly id: NodeId;
   readonly mixes: boolean;
   readonly parent: Walked | undefined;
-  readonly parentId: NodeId;
-  readonly part: NodeId;
+  readonly part: bigint;
   readonly replaced: boolean;
   readonly rows: TestRows;
-  readonly siteStart: bigint;
+  readonly site: bigint;
   readonly start: number;
 }
 
 /**
  * The walk of one assembly: its root's kind, every document of the package that heads or joins
- * one, the ids it draws, and the instances it has placed, in pre-order.
+ * one by its path, and the instances it has placed, in pre-order.
  */
 interface Walk {
   readonly assemblyKind: Kind;
   readonly byDocument: ReadonlyMap<string, AssembledDocument>;
-  readonly newId: () => NodeId;
   readonly walked: Walked[];
 }
+
+/**
+ * Read an instance's parent's start, as the instance tree draws `parent`: the root's own, 0.
+ *
+ * @param instance - The instance.
+ * @returns Its parent's start.
+ */
+const parentStartOf = (instance: Walked): bigint =>
+  BigInt(instance.parent === undefined ? instance.start : instance.parent.start);
 
 /**
  * Place a document and one child per site of it that places its target (`SiteTarget.places`), each
@@ -1170,15 +1202,15 @@ interface Walk {
  * repeats a document, whose placements would break the assembly's keys.
  *
  * @param walk - The assembly's walk.
- * @param chain - The documents of the instance's ancestors.
+ * @param chain - The paths of the documents of the instance's ancestors.
  * @param parent - The instance's parent, none for the root.
  * @param placed - The document it places.
- * @param fields - The instance's written fields but its children.
+ * @param fields - The instance's written fields but its root fields and its children.
  * @returns The instance as its tree writes it.
  */
 const place = (
   walk: Walk,
-  chain: readonly NodeId[],
+  chain: readonly string[],
   parent: Walked | undefined,
   placed: AssembledDocument,
   fields: Omit<InstanceMember, "children">,
@@ -1186,14 +1218,12 @@ const place = (
   const self: Walked = {
     document: fields.document,
     end: 0,
-    id: fields.id,
     mixes: fields.mixes,
     parent,
-    parentId: parent === undefined ? fields.id : parent.id,
     part: fields.part,
     replaced: fields.replaced,
     rows: placed.rows,
-    siteStart: fields.siteStart,
+    site: fields.site,
     start: walk.walked.length,
   };
   walk.walked.push(self);
@@ -1204,28 +1234,27 @@ const place = (
     Option.toArray(
       Option.flatMap(
         Option.filter(
-          Option.fromNullishOr(self.rows.SiteTarget.get(site.node)),
+          Option.fromNullishOr(self.rows.SiteTarget.get(String(site.start))),
           ({ places }) => places,
         ),
         ({ target }) => Option.fromNullishOr(walk.byDocument.get(target)),
       ),
     )
-      .filter(({ document }) => !closing.has(document.node))
+      .filter(({ document }) => !closing.has(document.path))
       .map((target) =>
         place(walk, [...chain, self.document], self, target, {
           assemblyKind: walk.assemblyKind,
-          document: target.document.node,
-          id: walk.newId(),
+          document: target.document.path,
           mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
-          part: site.part === self.document ? self.part : site.part,
+          part: site.part === 0n ? self.part : site.part,
           replaced: site.replaced || self.replaced,
           rootKind: target.document.rootKind,
-          site: site.node,
+          site: site.start,
+          siteDocument: self.document,
           siteLooseChain: site.parentLooseChain,
           siteMixes: site.parentMixes,
           sitePart: site.part,
           siteReplaced: site.replaced,
-          siteStart: site.start,
         }),
       ),
   );
@@ -1245,7 +1274,7 @@ interface PlacedName {
 }
 
 /**
- * A test's names: each instance's, by `[instance, node]` in the walk's pre-order and each
+ * A test's names: each instance's, by `[instance, start]` in the walk's pre-order and each
  * document's order, and their projection.
  */
 interface Names {
@@ -1254,43 +1283,58 @@ interface Names {
 }
 
 /**
+ * The key text of one name of one instance: the instance's start and the name's.
+ *
+ * @param instance - The instance's start.
+ * @param start - The name's start in the instance's document.
+ * @returns The text.
+ */
+const nameKey = (instance: bigint | number, start: bigint): string =>
+  keyOf([String(instance), String(start)]);
+
+/**
  * Write the names of a test's instances, each a name of its document with its scope in the
  * assembly, and their projection, each written element once.
  *
- * @param assembly - The test's document node.
+ * @param test - The test's `TestDocument` row, whose path names the assembly.
  * @param walk - The test's walk.
- * @returns The names by `[instance, node]`, and the projection by `[assembly, node]`.
+ * @returns The names by `[instance, start]`, and the projection by `[path, start]`.
  */
-const namesOf = (assembly: NodeId, walk: Walk): Names => {
+const namesOf = (test: Addition<typeof TestDocument>, walk: Walk): Names => {
   const names = new Map<string, PlacedName>();
   const assembled = new Map<string, Addition<typeof AssembledName>>();
+  const { package: pkg, path: assembly } = test;
 
   for (const instance of walk.walked) {
     for (const named of instance.rows.Named.values()) {
-      names.set(keyOf([instance.id, named.node]), {
+      names.set(nameKey(instance.start, named.start), {
         instance,
         named,
         row: {
           assembly,
           end: named.end,
           identifier: named.identifier,
-          instance: instance.id,
+          instance: BigInt(instance.start),
           kind: named.kind,
           mixes: named.mixes || (named.looseChain && instance.mixes),
           namedLooseChain: named.looseChain,
           namedMixes: named.mixes,
           namedPart: named.part,
           namedReplaced: named.replaced,
-          node: named.node,
-          part: named.part === instance.document ? instance.part : named.part,
+          package: pkg,
+          parent: named.parent,
+          part: named.part === 0n ? instance.part : named.part,
+          path: instance.document,
           replaced: named.replaced || instance.replaced,
           start: named.start,
         },
       });
-      assembled.set(keyOf([assembly, named.node]), {
+      assembled.set(keyOf([instance.document, String(named.start)]), {
         assembly,
         identifier: named.identifier,
-        node: named.node,
+        package: pkg,
+        path: instance.document,
+        start: named.start,
       });
     }
   }
@@ -1322,7 +1366,7 @@ interface Common {
  * child that holds the target: the target's ancestors among the document's names, walked up until
  * one holds the point.
  *
- * @param names - The assembly's names by `[instance, node]`.
+ * @param names - The assembly's names by `[instance, start]`.
  * @param target - The target's name in its instance.
  * @param point - The source's start in the target's document: its owner's, or its site's.
  * @returns The common name and its branch, or none where no name holds both.
@@ -1334,7 +1378,7 @@ const commonOf = (
 ): Option.Option<Common> => {
   let branch = target;
   for (;;) {
-    const common = names.get(keyOf([branch.instance.id, branch.named.parent]));
+    const common = names.get(nameKey(branch.instance.start, branch.named.parent));
     if (common === undefined) {
       return Option.none();
     }
@@ -1394,27 +1438,37 @@ interface Resolved {
  * instance's count of resolutions refuses it; one whose target names nothing has no target, and the
  * resolution's existence law refuses it ("Branch target").
  *
- * @param names - The assembly's names by `[instance, node]`, in pre-order.
+ * @param test - The test's `TestDocument` row, whose path names the assembly.
+ * @param names - The assembly's names by `[instance, start]`, in pre-order.
  * @param instance - The rule's instance.
  * @param rule - The rule.
  * @returns The resolution, its target and its shuffle, each as its writer writes it, or none.
  */
 const resolutionOf = (
+  test: Addition<typeof TestDocument>,
   names: ReadonlyMap<string, PlacedName>,
   instance: Walked,
   rule: Addition<typeof BranchRule>,
 ): Option.Option<Resolved> =>
   Option.map(
-    Option.fromNullishOr(names.get(keyOf([instance.id, rule.parent]))),
+    Option.fromNullishOr(names.get(nameKey(instance.start, rule.parent))),
     ({ row: owner }) => {
-      const resolution: Addition<typeof BranchResolution> = {
-        instance: instance.id,
+      const at = {
+        assembly: test.path,
+        instance: BigInt(instance.start),
+        package: test.package,
+        rule: rule.start,
+      };
+      const ownerFields = {
         owner: rule.parent,
         ownerEnd: owner.end,
         ownerKind: rule.parentKind,
         ownerPart: owner.part,
-        ownerStart: owner.start,
-        rule: rule.node,
+      };
+      const resolution: Addition<typeof BranchResolution> = {
+        ...at,
+        ...ownerFields,
+        path: instance.document,
         target: rule.target,
       };
       const placed = Arr.head(
@@ -1427,30 +1481,21 @@ const resolutionOf = (
           const via = viaOf(instance, holder);
 
           return {
-            assembly: name.assembly,
-            instance: instance.id,
-            instanceStart: BigInt(instance.start),
-            ownerEnd: owner.end,
-            ownerKind: rule.parentKind,
-            ownerPart: owner.part,
-            ownerStart: owner.start,
-            rule: rule.node,
+            ...at,
+            ...ownerFields,
             target: rule.target,
             targetEnd: name.end,
-            targetInstance: holder.id,
+            targetInstance: BigInt(holder.start),
             targetInstanceEnd: BigInt(holder.end),
-            targetInstanceStart: BigInt(holder.start),
             targetKind: name.kind,
             targetMixes: name.mixes,
-            targetNode: name.node,
             targetPart: name.part,
             targetReplaced: name.replaced,
             targetStart: name.start,
-            via: via.id,
+            via: BigInt(via.start),
             viaEnd: BigInt(via.end),
-            viaParent: via.parentId,
-            viaSiteStart: via.siteStart,
-            viaStart: BigInt(via.start),
+            viaParent: parentStartOf(via),
+            viaSite: via.site,
           } satisfies Addition<typeof BranchTarget>;
         }),
       );
@@ -1458,30 +1503,26 @@ const resolutionOf = (
         Option.flatMap((held) => {
           const holder = held.instance;
           const via = viaOf(instance, holder);
-          const point = holder === instance ? owner.start : via.siteStart;
+          const point = holder === instance ? owner.start : via.site;
 
           return Option.flatMap(commonOf(names, held, point), ({ branch, common }) =>
             common.row.mixes && !holdsPoint(branch.row, point)
               ? Option.some({
-                  assembly: held.row.assembly,
-                  branch: branch.row.node,
+                  ...at,
+                  branch: branch.row.start,
                   branchEnd: branch.row.end,
-                  branchParent: common.row.node,
+                  branchParent: common.row.start,
                   branchPart: branch.row.part,
-                  branchStart: branch.row.start,
-                  common: common.row.node,
+                  common: common.row.start,
                   commonEnd: common.row.end,
                   commonKind: common.row.kind,
                   commonMixes: common.row.mixes,
                   commonPart: common.row.part,
                   commonReplaced: common.row.replaced,
-                  commonStart: common.row.start,
-                  instance: instance.id,
-                  ownerStart: owner.start,
-                  rule: rule.node,
-                  targetInstance: holder.id,
+                  owner: owner.start,
+                  targetInstance: BigInt(holder.start),
                   targetStart: held.row.start,
-                  viaSiteStart: via.siteStart,
+                  viaSite: via.site,
                 } satisfies Addition<typeof BranchShuffle>)
               : Option.none(),
           );
@@ -1497,16 +1538,13 @@ const resolutionOf = (
  * under a test, each instance's names, their projection and its branch rules' resolutions. A
  * document heads an assembly unless an include that splices it names it (`SiteTarget.splices`, spec
  * reading 117): a fragment such an include splices is judged where it is included, in the
- * assemblies of the documents that place it, and never alone.
+ * assemblies of the documents that place it, and never alone. Every instance is named by its
+ * assembly's path and its pre-order start, so the build is a function of the documents alone.
  *
  * @param documents - Every document's rows ({@link rowsOf}) of one package.
- * @param newId - A fresh uuid for each instance but a root, whose id is its document's node.
  * @returns The assemblies' rows.
  */
-export const assembledRowsOf = (
-  documents: readonly TestRows[],
-  newId: () => NodeId,
-): AssembledRows => {
+export const assembledRowsOf = (documents: readonly TestRows[]): AssembledRows => {
   const spliced = new Set(
     documents.flatMap((rows) =>
       [...rows.SiteTarget.values()].filter(({ splices }) => splices).map(({ target }) => target),
@@ -1516,7 +1554,7 @@ export const assembledRowsOf = (
     [...rows.TestDocument.values()].map((document): AssembledDocument => ({ document, rows })),
   );
   const byDocument = new Map(
-    assembledDocuments.map((assembled) => [assembled.document.node, assembled] as const),
+    assembledDocuments.map((assembled) => [assembled.document.path, assembled] as const),
   );
   const roots = new Map<string, InstanceRoot>();
   const names = new Map<string, Addition<typeof InstanceName>>();
@@ -1525,38 +1563,39 @@ export const assembledRowsOf = (
   const targets = new Map<string, Addition<typeof BranchTarget>>();
   const shuffles = new Map<string, Addition<typeof BranchShuffle>>();
 
-  for (const head of assembledDocuments.filter(({ document }) => !spliced.has(document.node))) {
-    const { node, rootKind } = head.document;
-    const walk: Walk = { assemblyKind: rootKind, byDocument, newId, walked: [] };
+  for (const head of assembledDocuments.filter(({ document }) => !spliced.has(document.path))) {
+    const { package: pkg, path, rootKind } = head.document;
+    const walk: Walk = { assemblyKind: rootKind, byDocument, walked: [] };
     const tree = place(walk, [], undefined, head, {
       assemblyKind: rootKind,
-      document: node,
-      id: node,
+      document: path,
       mixes: false,
-      part: node,
+      part: 0n,
       replaced: false,
       rootKind,
-      site: node,
+      site: 0n,
+      siteDocument: path,
       siteLooseChain: false,
       siteMixes: false,
-      sitePart: node,
+      sitePart: 0n,
       siteReplaced: false,
-      siteStart: 0n,
     });
-    roots.set(node, { ...tree, assembly: node });
+    roots.set(path, { ...tree, assembly: path, package: pkg });
 
     if (rootKind === testKind) {
-      const written = namesOf(node, walk);
+      const written = namesOf(head.document, walk);
       for (const [at, { row }] of written.names) {
-        names.set(at, row);
+        names.set(keyOf([path, at]), row);
       }
       for (const [at, row] of written.assembled) {
-        assembled.set(at, row);
+        assembled.set(keyOf([path, at]), row);
       }
       for (const instance of walk.walked) {
         for (const rule of instance.rows.BranchRule.values()) {
-          const at = keyOf([instance.id, rule.node]);
-          for (const resolved of Option.toArray(resolutionOf(written.names, instance, rule))) {
+          const at = keyOf([path, String(instance.start), String(rule.start)]);
+          for (const resolved of Option.toArray(
+            resolutionOf(head.document, written.names, instance, rule),
+          )) {
             resolutions.set(at, resolved.resolution);
             for (const target of Option.toArray(resolved.target)) {
               targets.set(at, target);

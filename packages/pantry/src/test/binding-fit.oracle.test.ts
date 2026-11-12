@@ -18,7 +18,7 @@
  *
  * - Every binding row of the site has exactly one declaration row where a response declaration holds
  *   its name, and none otherwise; each declaration row names that declaration's
- *   `DeclarationIdentifier`, never the nil uuid, and counts its cardinality, 1 where it spells
+ *   `DeclarationIdentifier` by its place in the item, and counts its cardinality, 1 where it spells
  *   one;
  * - Every declaration row has exactly one cardinality row where the declaration spells its
  *   cardinality, carrying the cardinality its `DeclarationCardinality` row holds, and none
@@ -177,7 +177,6 @@ const holds = (site: BindingSite, state: BindingState) =>
     const expected = expectationOf(site, state);
     const entries = bindingCase(base, site, state);
     const program = yield* readProgram(yield* scopedPackage(entries));
-    const item = [...program.inputs.Document.values()].find(({ path }) => path === site.declared);
     const ofSite = <Row extends BindingRow | DeclarationRow>(rows: Iterable<Row>) =>
       [...rows].filter(
         (row) =>
@@ -186,19 +185,17 @@ const holds = (site: BindingSite, state: BindingState) =>
           row.identifier === expected.identifier,
       );
     const bindings: readonly BindingRow[] = [
-      ...ofSite(program.inputs.BoundVariable.values()).filter(
-        ({ document }) => document === item?.node,
-      ),
+      ...ofSite(program.inputs.BoundVariable.values()).filter(({ path }) => path === site.declared),
       ...ofSite(program.inputs.PlacedBinding.values()).filter(
-        ({ assembly }) => assembly === item?.node,
+        ({ assembly }) => assembly === site.declared,
       ),
     ];
     const declarations: readonly DeclarationRow[] = [
       ...ofSite(program.inputs.BindingDeclaration.values()).filter(
-        ({ document }) => document === item?.node,
+        ({ path }) => path === site.declared,
       ),
       ...ofSite(program.inputs.PlacedBindingDeclaration.values()).filter(
-        ({ assembly }) => assembly === item?.node,
+        ({ assembly }) => assembly === site.declared,
       ),
     ];
 
@@ -210,7 +207,11 @@ const holds = (site: BindingSite, state: BindingState) =>
     );
 
     const bindingKey = (row: BaseTypeRow | CardinalityRow | DeclarationRow): string =>
-      JSON.stringify(["instance" in row ? row.instance : "", row.node, row.attribute]);
+      JSON.stringify(
+        "instance" in row
+          ? [row.assembly, String(row.instance), String(row.start), row.attribute]
+          : [row.path, String(row.start), row.attribute],
+      );
     const declaredKeys = new Set(declarations.map(bindingKey));
     const cardinalities: readonly CardinalityRow[] = [
       ...program.inputs.BindingCardinality.values(),
@@ -223,13 +224,13 @@ const holds = (site: BindingSite, state: BindingState) =>
     );
 
     const declared = [...program.inputs.DeclarationIdentifier.values()].find(
-      ({ document, identifier, declarationKind }) =>
-        document === item?.node &&
+      ({ declarationKind, identifier, path }) =>
+        path === site.declared &&
         identifier === expected.identifier &&
         declarationKind === "qti-response-declaration",
     );
     for (const row of declarations) {
-      assert.strictEqual(row.declaration, declared?.node, `${label}: the row's declaration`);
+      assert.strictEqual(row.declaration, declared?.start, `${label}: the row's declaration`);
       assert.strictEqual(
         row.cardinalities,
         expected.typed ? 1n : 0n,
@@ -239,7 +240,7 @@ const holds = (site: BindingSite, state: BindingState) =>
     for (const row of cardinalities) {
       assert.strictEqual(
         row.declaration,
-        declared?.node,
+        declared?.start,
         `${label}: the cardinality's declaration`,
       );
       assert.strictEqual(row.cardinality, expected.held, `${label}: the row's cardinality`);
@@ -291,7 +292,7 @@ const holds = (site: BindingSite, state: BindingState) =>
     );
     assert.isFalse(
       [...program.inputs.DeclarationCardinality.values()].some(
-        ({ node }) => node === declared?.node,
+        ({ path, start }) => path === site.declared && start === declared?.start,
       ),
       `${label}: a DeclarationCardinality row stands for a declaration whose cardinality is unwritten or spells nothing`,
     );

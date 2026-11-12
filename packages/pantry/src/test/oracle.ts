@@ -99,6 +99,7 @@ import type {
   FoldRefusal,
   FoldedAttribute,
   FoldedNode,
+  FoldedOpenAttribute,
   FoldedRows,
   NodeDerived,
   Positions,
@@ -108,8 +109,8 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { ShredGrammar } from "#pantry/model/shred.ts";
 import { flatten, handlePrefixOf } from "#pantry/model/xdm.ts";
 import type {
-  NodeId,
   NodeRow,
+  OpenAttributeRow,
   XdmChild,
   XdmClosedElement,
   XdmDocument,
@@ -147,6 +148,7 @@ import {
   collapsed,
   contentLawOf,
   contentOf,
+  grouped,
   integerOf,
   isOpenClass,
   pathOf,
@@ -801,13 +803,13 @@ const positionOf = (
  * @returns The string value.
  */
 const stringValueOf = (view: View, node: FoldedNode<Composed>): string =>
-  (view.childrenOf.get(node.id) ?? [])
+  (view.childrenOf.get(node.start) ?? [])
     .map((child) => {
       if (child.kind === "text" || child.kind === "ws") {
-        return view.textOf.get(child.id) ?? "";
+        return view.textOf.get(child.start) ?? "";
       }
 
-      return child.kind === "entityRef" ? `&${view.entityOf.get(child.id) ?? ""};` : "";
+      return child.kind === "entityRef" ? `&${view.entityOf.get(child.start) ?? ""};` : "";
     })
     .join("");
 
@@ -821,10 +823,10 @@ const stringValueOf = (view: View, node: FoldedNode<Composed>): string =>
  */
 const ownCharactersOf = (view: View, node: FoldedNode<Composed> | undefined): string => {
   if (node?.kind === "text" || node?.kind === "ws") {
-    return view.textOf.get(node.id) ?? "";
+    return view.textOf.get(node.start) ?? "";
   }
 
-  return node?.kind === "entityRef" ? `&${view.entityOf.get(node.id) ?? ""};` : "";
+  return node?.kind === "entityRef" ? `&${view.entityOf.get(node.start) ?? ""};` : "";
 };
 
 /**
@@ -842,7 +844,7 @@ const namespaceOf = (
   node: FoldedNode<Composed>,
 ): Option.Option<string> =>
   isForeignKind(node.kind)
-    ? Option.fromNullishOr(view.foreignNamespaceOf.get(node.id))
+    ? Option.fromNullishOr(view.foreignNamespaceOf.get(node.start))
     : Option.map(
         grammar.kinds.elementName.lookup({ kind: node.kind }),
         ({ namespace }) => namespace,
@@ -875,12 +877,12 @@ const attributeClasses = {
 } as const;
 
 /**
- * Decide whether a node's merged copy of its parent is its parent's fields: `document`,
- * `version`, `parentKind`, `parentStart`, `parentAncestry`, `parentNearest` and
- * `parentNearestKind` (trees.md §6).
+ * Decide whether a node's merged copy of its parent is its parent's fields: `version`,
+ * `parentKind`, `parentAncestry`, `parentNearest` and `parentNearestKind` (trees.md §6). Its
+ * `parent` is the parent's `start`, so the parent read at it holds it of itself.
  *
  * @param node - The node.
- * @param parent - Its parent's row, none when no row holds the id.
+ * @param parent - Its parent's row, none when no row is at its `parent`.
  * @returns Whether every copied field is its parent's.
  */
 const parentCopied = (
@@ -888,10 +890,8 @@ const parentCopied = (
   parent: FoldedNode<Composed> | undefined,
 ): boolean =>
   parent !== undefined &&
-  node.document === parent.document &&
   node.version === parent.version &&
   node.parentKind === parent.kind &&
-  node.parentStart === parent.start &&
   sameSet(node.parentAncestry, parent.derived.ancestry) &&
   node.parentNearest === parent.nearest &&
   node.parentNearestKind === parent.nearestKind;
@@ -909,17 +909,17 @@ const elementChildrenOf = (
   node: FoldedNode<Composed>,
   elements: ReadonlySet<string>,
 ): readonly FoldedNode<Composed>[] =>
-  (view.childrenOf.get(node.id) ?? []).filter(({ kind }) => elements.has(kind));
+  (view.childrenOf.get(node.start) ?? []).filter(({ kind }) => elements.has(kind));
 
 /**
  * Read an element's closed attribute as written and collapsed ({@link collapsed}).
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's closed name.
  * @returns Its collapsed lexical form, or none when the element carries no such attribute.
  */
-const collapsedValueOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
+const collapsedValueOf = (view: View, node: bigint, name: string): Option.Option<string> =>
   Option.map(valueOf(view, node, name), collapsed);
 
 /**
@@ -958,7 +958,7 @@ const cnPartsOf = (
 ): readonly CnPart[] => {
   const raw: { judged: boolean; text: string }[] = [{ judged: true, text: "" }];
 
-  for (const child of view.childrenOf.get(node.id) ?? []) {
+  for (const child of view.childrenOf.get(node.start) ?? []) {
     const last = raw.at(-1);
     if (last === undefined) {
       continue;
@@ -967,7 +967,7 @@ const cnPartsOf = (
     if (child.kind === "m:sep") {
       raw.push({ judged: true, text: "" });
     } else if (child.kind === "text" || child.kind === "ws") {
-      last.text += view.textOf.get(child.id) ?? "";
+      last.text += view.textOf.get(child.start) ?? "";
     } else if (child.kind === "entityRef" || elements.has(child.kind)) {
       last.judged = false;
     }
@@ -989,7 +989,7 @@ const cnPartsOf = (
  */
 const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string => {
   for (const above of ancestorsOf(view, node)) {
-    const written = collapsedValueOf(view, above.id, "dir");
+    const written = collapsedValueOf(view, above.start, "dir");
     if (Option.isSome(written) && (written.value === "ltr" || written.value === "rtl")) {
       return written.value;
     }
@@ -1013,7 +1013,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
  */
 const changesDirection = (view: View, node: FoldedNode<Composed>): boolean =>
   Option.exists(
-    collapsedValueOf(view, node.id, "dir"),
+    collapsedValueOf(view, node.start, "dir"),
     (written) =>
       (written === "ltr" || written === "rtl") && written !== inheritedDirectionOf(view, node),
   );
@@ -1025,22 +1025,22 @@ const changesDirection = (view: View, node: FoldedNode<Composed>): boolean =>
  * @param view - The document.
  * @param node - The `maction`.
  * @param elements - The kinds that are elements.
- * @returns The id of the selected child, none when `selection` is no whole number or is out of
- *   range.
+ * @returns The `start` of the selected child, none when `selection` is no whole number or is out
+ *   of range.
  */
 const selectedChildOf = (
   view: View,
   node: FoldedNode<Composed>,
   elements: ReadonlySet<string>,
-): Option.Option<NodeId> => {
-  const rank = Option.match(collapsedValueOf(view, node.id, "selection"), {
+): Option.Option<bigint> => {
+  const rank = Option.match(collapsedValueOf(view, node.start, "selection"), {
     onNone: () => 1,
     onSome: (text) => (/^[0-9]+$/u.test(text) ? Number(text) : Number.NaN),
   });
 
   return Option.map(
     Option.fromNullishOr(elementChildrenOf(view, node, elements)[rank - 1]),
-    ({ id }) => id,
+    ({ start }) => start,
   );
 };
 
@@ -1098,7 +1098,10 @@ const placeOfGroup = (
   const shown = between.every(
     (above, index) =>
       above.kind !== "m:maction" ||
-      Option.exists(selectedChildOf(view, above, elements), (id) => id === path[index]?.id),
+      Option.exists(
+        selectedChildOf(view, above, elements),
+        (start) => start === path[index]?.start,
+      ),
   );
 
   return shown
@@ -1166,10 +1169,10 @@ const contentOfCell = (
  *
  * @param view - The document.
  * @param node - The node.
- * @returns The id of its nearest `speak`, none outside every one.
+ * @returns The `start` of its nearest `speak`, none outside every one.
  */
-const fragmentOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined =>
-  [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "ssml:speak")?.id;
+const fragmentOf = (view: View, node: FoldedNode<Composed>): bigint | undefined =>
+  [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "ssml:speak")?.start;
 
 /**
  * What one SSML fragment defines: its lexicons' `xml:id`s and how many of its marks hold each
@@ -1184,32 +1187,32 @@ interface Fragment {
 /**
  * The fragments of each document, computed once per document.
  */
-const fragmentCache = new WeakMap<View, ReadonlyMap<NodeId, Fragment>>();
+const fragmentCache = new WeakMap<View, ReadonlyMap<bigint, Fragment>>();
 
 /**
- * Collect what each SSML fragment of a document defines, by its `speak`'s id.
+ * Collect what each SSML fragment of a document defines, by its `speak`'s `start`.
  *
  * @param view - The document.
  * @returns The fragments.
  */
-const fragmentsOf = (view: View): ReadonlyMap<NodeId, Fragment> => {
+const fragmentsOf = (view: View): ReadonlyMap<bigint, Fragment> => {
   const held = fragmentCache.get(view);
   if (held !== undefined) {
     return held;
   }
 
-  const lexicons = new Map<NodeId, Set<string>>();
-  const marks = new Map<NodeId, Map<string, number>>();
+  const lexicons = new Map<bigint, Set<string>>();
+  const marks = new Map<bigint, Map<string, number>>();
   for (const node of view.members) {
     const fragment = fragmentOf(view, node);
     if (fragment !== undefined && node.kind === "ssml:lexicon") {
-      for (const id of Option.toArray(valueOf(view, node.id, "xml:id"))) {
+      for (const id of Option.toArray(valueOf(view, node.start, "xml:id"))) {
         lexicons.set(fragment, (lexicons.get(fragment) ?? new Set()).add(collapsed(id)));
       }
     }
 
     if (fragment !== undefined && node.kind === "ssml:mark") {
-      for (const name of Option.toArray(valueOf(view, node.id, "name"))) {
+      for (const name of Option.toArray(valueOf(view, node.start, "name"))) {
         const counted = marks.get(fragment) ?? new Map<string, number>();
         counted.set(collapsed(name), (counted.get(collapsed(name)) ?? 0) + 1);
         marks.set(fragment, counted);
@@ -1220,9 +1223,9 @@ const fragmentsOf = (view: View): ReadonlyMap<NodeId, Fragment> => {
   const fragments = new Map(
     view.members
       .filter(({ kind }) => kind === "ssml:speak")
-      .map(({ id }): readonly [NodeId, Fragment] => [
-        id,
-        { lexicons: lexicons.get(id) ?? new Set(), marks: marks.get(id) ?? new Map() },
+      .map(({ start }): readonly [bigint, Fragment] => [
+        start,
+        { lexicons: lexicons.get(start) ?? new Set(), marks: marks.get(start) ?? new Map() },
       ]),
   );
   fragmentCache.set(view, fragments);
@@ -1235,10 +1238,10 @@ const fragmentsOf = (view: View): ReadonlyMap<NodeId, Fragment> => {
  *
  * @param view - The document.
  * @param node - The node.
- * @returns The id of its nearest `table`, none where no `table` holds it.
+ * @returns The `start` of its nearest `table`, none where no `table` holds it.
  */
-const tableOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined =>
-  [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "table")?.id;
+const tableOf = (view: View, node: FoldedNode<Composed>): bigint | undefined =>
+  [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "table")?.start;
 
 /**
  * An NCName, `xs:NCName` as the value domains compile it: the form of a bare variable reference,
@@ -1255,10 +1258,10 @@ const nameForm = new RegExp(
 /**
  * The header ids of each document's tables, computed once per document.
  */
-const tableHeaderCache = new WeakMap<View, ReadonlyMap<NodeId, ReadonlySet<string>>>();
+const tableHeaderCache = new WeakMap<View, ReadonlyMap<bigint, ReadonlySet<string>>>();
 
 /**
- * Collect the ids of the `th`s that take part in each table of a document, by the table's id,
+ * Collect the ids of the `th`s that take part in each table of a document, by the table's `start`,
  * each id collapsed (an `xs:ID`'s whiteSpace) and an NCName ({@link nameForm}): an `id` outside
  * `xs:ID`'s lexical space is no ID value, so a cell's `headers` token names no header by it (spec
  * reading 156).
@@ -1266,17 +1269,17 @@ const tableHeaderCache = new WeakMap<View, ReadonlyMap<NodeId, ReadonlySet<strin
  * @param view - The document.
  * @returns Each table's header ids; a table no `th` with an ID takes part in holds none.
  */
-const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> => {
+const tableHeadersOf = (view: View): ReadonlyMap<bigint, ReadonlySet<string>> => {
   const held = tableHeaderCache.get(view);
   if (held !== undefined) {
     return held;
   }
 
-  const headers = new Map<NodeId, Set<string>>();
+  const headers = new Map<bigint, Set<string>>();
   for (const node of view.members) {
     const table = node.kind === "th" ? tableOf(view, node) : undefined;
     if (table !== undefined) {
-      for (const id of Option.toArray(valueOf(view, node.id, "id")).map(collapsed)) {
+      for (const id of Option.toArray(valueOf(view, node.start, "id")).map(collapsed)) {
         if (nameForm.test(id)) {
           headers.set(table, (headers.get(table) ?? new Set()).add(id));
         }
@@ -1308,7 +1311,9 @@ const heldRoot = (grammar: ComposedGrammar, view: View, node: FoldedNode<Compose
         parent: node.parentKind,
         version: node.version,
       }),
-      name: Option.fromNullishOr(view.rows.openElementNames.find((row) => row.node === node.id)),
+      name: Option.fromNullishOr(
+        view.rows.openElementNames.find((row) => row.start === node.start),
+      ),
     }),
     ({ held, name }) => new RegExp(held.names, patternFlags).test(expandedText(name)),
   );
@@ -1343,6 +1348,26 @@ const enclosedChoices: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Read an attribute's admission cell: its domain, use and position under its owner's (version,
+ * kind, governing type), its governor's `GovernedAttribute` cell where one governs the owner, else
+ * its kind's `AttributeAdmission` cell.
+ *
+ * @param laws - The grammar's tables.
+ * @param attribute - The attribute row.
+ * @returns The cell, none for a name its owner does not admit.
+ */
+const admissionOf = (
+  laws: Laws,
+  attribute: Pick<JudgedAttribute, "governs" | "kind" | "name" | "version">,
+) =>
+  governedAdmission(laws.grammar.attributes, {
+    governs: attribute.governs,
+    kind: attribute.kind,
+    name: attribute.name,
+    version: attribute.version,
+  });
+
+/**
  * The laws of §1.3 and §1.5 over node rows, in the plan's notation and order, after the key of
  * `Node`, then N7's content laws: `Last` at the last slot, `Counted`'s bounds and `ChildBarredBy`.
  *
@@ -1353,7 +1378,8 @@ const enclosedChoices: ReadonlySet<string> = new Set([
  */
 const nodeLaws: readonly NodeLaw[] = [
   {
-    breaks: (node, { repeated }) => unless(!repeated.has(node), () => ({})),
+    breaks: (node, { startTaken }) =>
+      unless(!startTaken.has(node), () => ({ start: String(node.start) })),
     law: "Node key",
     over: "nodes",
   },
@@ -1365,30 +1391,27 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node) =>
-      unless((node.parent === node.id) === (node.start === 0n), () => ({
-        parent: node.parent,
+      unless((node.parent === node.start) === (node.start === 0n), () => ({
+        parent: String(node.parent),
         start: String(node.start),
       })),
     law: "T2 root",
     over: "nodes",
   },
   {
-    breaks: (node, { self }) =>
+    breaks: (node) =>
       unless(
         node.start > 0n ||
-          (node.id === self &&
-            node.at === 0n &&
-            node.parent === node.id &&
-            node.document === node.id &&
-            node.nearest === node.id &&
+          (node.at === 0n &&
+            node.parent === 0n &&
+            node.nearest === 0n &&
             node.nearestKind === node.kind &&
             node.parentAncestry.size === 0),
         () => ({
           at: String(node.at),
-          document: node.document,
-          nearest: node.nearest,
+          nearest: String(node.nearest),
           nearestKind: node.nearestKind,
-          parent: node.parent,
+          parent: String(node.parent),
           parentAncestry: spaced(node.parentAncestry),
         }),
       ),
@@ -1398,7 +1421,7 @@ const nodeLaws: readonly NodeLaw[] = [
   {
     breaks: (node, { bySlot }) => {
       const missing = Array.from({ length: Number(node.children) }, (_, at) => BigInt(at)).filter(
-        (at) => !bySlot.has(slotKey(node.id, at)),
+        (at) => !bySlot.has(slotKey(node.start, at)),
       );
 
       return unless(missing.length === 0, () => ({
@@ -1410,12 +1433,12 @@ const nodeLaws: readonly NodeLaw[] = [
     over: "nodes",
   },
   {
-    breaks: (node, { byId }) => {
-      const parent = byId.get(node.parent);
+    breaks: (node, { byStart }) => {
+      const parent = byStart.get(node.parent);
 
       return unless(parent !== undefined && node.at < parent.children, () => ({
         at: String(node.at),
-        parent: node.parent,
+        parent: String(node.parent),
         parentChildren: String(parent?.children ?? 0n),
       }));
     },
@@ -1423,16 +1446,15 @@ const nodeLaws: readonly NodeLaw[] = [
     over: "members",
   },
   {
-    breaks: (node, { byId }) => {
-      const parent = byId.get(node.parent);
+    breaks: (node, { byStart }) => {
+      const parent = byStart.get(node.parent);
 
       return unless(
-        parentCopied(node, parent) && (node.at > 0n || node.start === node.parentStart + 1n),
+        parentCopied(node, parent) && (node.at > 0n || node.start === node.parent + 1n),
         () => ({
           at: String(node.at),
-          parent: node.parent,
-          parentStart: String(node.parentStart),
-          parentStartHeld: parent === undefined ? "" : String(parent.start),
+          parent: String(node.parent),
+          parentHeld: String(parent !== undefined),
           start: String(node.start),
         }),
       );
@@ -1462,7 +1484,7 @@ const nodeLaws: readonly NodeLaw[] = [
         return Option.none();
       }
 
-      const last = bySlot.get(slotKey(node.id, node.children - 1n));
+      const last = bySlot.get(slotKey(node.start, node.children - 1n));
 
       return unless(last !== undefined && last.end === node.end, () => ({
         end: String(node.end),
@@ -1595,7 +1617,7 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, { bySlot }) => {
-      const last = bySlot.get(slotKey(node.id, node.children - 1n));
+      const last = bySlot.get(slotKey(node.start, node.children - 1n));
 
       return unless(
         node.children === 0n || (last !== undefined && sameSlot(endOf(node), last.derived)),
@@ -1626,10 +1648,10 @@ const nodeLaws: readonly NodeLaw[] = [
           ? node.nearest === node.parent && node.nearestKind === node.parentKind
           : node.nearest === node.parentNearest && node.nearestKind === node.parentNearestKind,
         () => ({
-          nearest: node.nearest,
+          nearest: String(node.nearest),
           nearestKind: node.nearestKind,
-          parent: node.parent,
-          parentNearest: node.parentNearest,
+          parent: String(node.parent),
+          parentNearest: String(node.parentNearest),
         }),
       ),
     law: "N8 nearest",
@@ -1640,35 +1662,46 @@ const nodeLaws: readonly NodeLaw[] = [
     breaks: (node, view, { grammar }) =>
       unless(
         !enclosedChoices.has(node.kind) ||
-          Option.isNone(valueOf(view, node.id, "identifier")) ||
+          Option.isNone(valueOf(view, node.start, "identifier")) ||
           Option.isSome(grammar.kinds.interaction.lookup({ kind: node.nearestKind })),
-        () => ({ nearest: node.nearest, nearestKind: node.nearestKind }),
+        () => ({ nearest: String(node.nearest), nearestKind: node.nearestKind }),
       ),
     law: "N8 nearest",
     over: "members",
   },
   {
     breaks: (node, view) => {
-      const rows = view.attributesOf.get(node.id)?.length ?? 0;
+      const rows = view.attributesOf.get(node.start)?.length ?? 0;
+      const openRows = view.openAttributesOf.get(node.start)?.length ?? 0;
 
-      return unless(BigInt(rows) === node.attributes, () => ({
-        attributes: String(node.attributes),
-        rows: String(rows),
-      }));
+      return unless(
+        BigInt(rows) === node.attributes && BigInt(openRows) === node.openAttributes,
+        () => ({
+          attributes: String(node.attributes),
+          openAttributes: String(node.openAttributes),
+          openRows: String(openRows),
+          rows: String(rows),
+        }),
+      );
     },
     law: "AL2 count",
     over: "nodes",
   },
   {
-    breaks: (node, view) => {
-      const last = view.attributesOf.get(node.id)?.at(-1);
+    // AL2's fold: `attrs` is the union of its closed attributes' positions, a counted family's end.
+    breaks: (node, view, laws) => {
+      const positions: Positions = new Set(
+        (view.attributesOf.get(node.start) ?? []).flatMap((attribute) =>
+          Option.toArray(admissionOf(laws, attribute)).map(({ position }) => position),
+        ),
+      );
 
-      return unless(sameSet(node.attrs, last?.derived.attrs ?? new Set()), () => ({
+      return unless(sameSet(node.attrs, positions), () => ({
         attrs: spaced(node.attrs),
-        lastAttrs: spaced(last?.derived.attrs ?? new Set()),
+        positions: spaced(positions),
       }));
     },
-    law: "AL2 last slot",
+    law: "AL2 fold",
     over: "nodes",
   },
   {
@@ -1682,11 +1715,11 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, view) => {
-      const declared = view.rows.namespaces.filter((row) => row.node === node.id);
+      const declared = view.rows.namespaces.filter((row) => row.start === node.start);
 
       return unless(
         BigInt(declared.length) === node.namespaces &&
-          declared.every((row, at) => row.at === BigInt(at)),
+          new Set(declared.map(({ prefix }) => prefix)).size === declared.length,
         () => ({
           declarations: String(declared.length),
           namespaces: String(node.namespaces),
@@ -1704,11 +1737,11 @@ const nodeLaws: readonly NodeLaw[] = [
           parents.includes(node.parentKind) &&
           holding.includes(node.version) &&
           Option.exists(
-            valueOf(view, node.id, attribute),
+            valueOf(view, node.start, attribute),
             (lexical) => collapsed(lexical) === value,
           ),
       );
-      const parent = view.byId.get(node.parent);
+      const parent = view.byStart.get(node.parent);
 
       return unless(
         rule === undefined ||
@@ -1760,7 +1793,7 @@ const nodeLaws: readonly NodeLaw[] = [
             positionOf(laws, node.version, node.kind, node.governs, name),
             (held) => node.attrs.has(held),
           );
-          const barred = (view.childrenOf.get(node.id) ?? []).filter((child) =>
+          const barred = (view.childrenOf.get(node.start) ?? []).filter((child) =>
             Option.contains(admittedPosition(laws.grammar)(childKeyOf(child)), Number(position)),
           );
 
@@ -1778,8 +1811,8 @@ const nodeLaws: readonly NodeLaw[] = [
         return Option.none();
       }
 
-      const uri = view.foreignNamespaceOf.get(node.id);
-      const parent = view.byId.get(node.parent);
+      const uri = view.foreignNamespaceOf.get(node.start);
+      const parent = view.byStart.get(node.parent);
       const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
 
       return unless(
@@ -1798,26 +1831,25 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, view, { grammar }) => {
-      const owned = (view.attributesOf.get(node.id) ?? []).filter(
-        ({ name }) => name === "no-namespace" || name === "own-namespace" || name === "foreign",
+      const owned = (view.openAttributesOf.get(node.start) ?? []).filter(
+        (attribute) =>
+          attribute.class === "no-namespace" ||
+          attribute.class === "own-namespace" ||
+          attribute.class === "foreign",
       );
       if (owned.length === 0) {
         return Option.none();
       }
 
       const against = Option.getOrElse(namespaceOf(view, grammar, node), () => "");
-      const wrong = owned.filter((attribute) => {
-        const row = view.openNameOf.get(attribute.id);
-
-        return (
-          row === undefined || attributeClasses[classAgainst(row.uri, against)] !== attribute.name
-        );
-      });
+      const wrong = owned.filter(
+        (attribute) => attributeClasses[classAgainst(attribute.uri, against)] !== attribute.class,
+      );
 
       return unless(wrong.length === 0, () => ({
         elementNamespace: against,
         wrong: wrong
-          .map(({ at, id, name }) => `${String(at)}:${name}:${view.openNameOf.get(id)?.uri ?? ""}`)
+          .map((attribute) => `${attribute.local}:${attribute.class}:${attribute.uri}`)
           .join(" "),
       }));
     },
@@ -1829,7 +1861,7 @@ const nodeLaws: readonly NodeLaw[] = [
       unless(
         !isForeignKind(node.kind) ||
           Option.isNone(governorOf(laws.grammar.attributes, node)) ||
-          !(view.childrenOf.get(node.id) ?? []).some(({ kind }) => laws.elements.has(kind)),
+          !(view.childrenOf.get(node.start) ?? []).some(({ kind }) => laws.elements.has(kind)),
         () => governsKeys(node.governs),
       ),
     law: "Foreign simple content",
@@ -1862,7 +1894,7 @@ const nodeLaws: readonly NodeLaw[] = [
       unless(
         node.kind !== "source" ||
           node.parentKind !== "picture" ||
-          Option.isSome(valueOf(view, node.id, "srcset")),
+          Option.isSome(valueOf(view, node.start, "srcset")),
         () => ({}),
       ),
     law: "Picture source srcset",
@@ -1875,7 +1907,7 @@ const nodeLaws: readonly NodeLaw[] = [
       unless(
         node.kind !== "source" ||
           (node.parentKind !== "audio" && node.parentKind !== "video") ||
-          Option.isSome(valueOf(view, node.id, "src")),
+          Option.isSome(valueOf(view, node.start, "src")),
         () => ({}),
       ),
     law: "Media source src",
@@ -1889,11 +1921,11 @@ const nodeLaws: readonly NodeLaw[] = [
         return Option.none();
       }
 
-      const written = valueOf(view, node.id, "kind");
+      const written = valueOf(view, node.start, "kind");
 
       return unless(
         Option.getOrElse(written, () => "subtitles") !== "subtitles" ||
-          Option.isSome(valueOf(view, node.id, "srclang")),
+          Option.isSome(valueOf(view, node.start, "srclang")),
         () => ({ trackKind: Option.getOrElse(written, () => "") }),
       );
     },
@@ -1959,14 +1991,17 @@ const nodeLaws: readonly NodeLaw[] = [
         return Option.none();
       }
 
-      const type = Option.getOrElse(collapsedValueOf(view, node.id, "type"), () => cnDefaultType);
+      const type = Option.getOrElse(
+        collapsedValueOf(view, node.start, "type"),
+        () => cnDefaultType,
+      );
       const forms = cnForms.get(type);
       if (forms === undefined) {
         return Option.none();
       }
 
       const parts = cnPartsOf(view, node, elements);
-      const base = Option.getOrElse(collapsedValueOf(view, node.id, "base"), () => "10");
+      const base = Option.getOrElse(collapsedValueOf(view, node.start, "base"), () => "10");
       const keys = { base, type };
       if (parts.length !== forms.length) {
         return Option.some({
@@ -2005,7 +2040,10 @@ const nodeLaws: readonly NodeLaw[] = [
       }
 
       const children = elementChildrenOf(view, node, elements).length;
-      const selection = Option.getOrElse(collapsedValueOf(view, node.id, "selection"), () => "1");
+      const selection = Option.getOrElse(
+        collapsedValueOf(view, node.start, "selection"),
+        () => "1",
+      );
       const out = children === 0 || (/^[0-9]+$/u.test(selection) && Number(selection) > children);
 
       return out ? Option.some({ children: String(children), selection }) : Option.none();
@@ -2019,7 +2057,8 @@ const nodeLaws: readonly NodeLaw[] = [
         ? Option.flatMap(placeOfGroup(view, node, elements), ({ cell, through }) =>
             Option.match(through, {
               onNone: () => Option.none(),
-              onSome: (stopper) => Option.some({ cell: pathOf(view, cell.id), through: stopper }),
+              onSome: (stopper) =>
+                Option.some({ cell: pathOf(view, cell.start), through: stopper }),
             }),
           )
         : Option.none(),
@@ -2039,7 +2078,7 @@ const nodeLaws: readonly NodeLaw[] = [
       );
 
       return judged && first !== undefined && first.kind !== "m:maligngroup"
-        ? Option.some({ cell: pathOf(view, node.id), first: first.kind })
+        ? Option.some({ cell: pathOf(view, node.start), first: first.kind })
         : Option.none();
     },
     law: "MathML align first",
@@ -2048,13 +2087,16 @@ const nodeLaws: readonly NodeLaw[] = [
   {
     breaks: (node, view) =>
       node.kind === "ssml:lookup"
-        ? Option.flatMap(valueOf(view, node.id, "ref"), (ref) => {
+        ? Option.flatMap(valueOf(view, node.start, "ref"), (ref) => {
             const fragment = fragmentOf(view, node);
 
             return unless(
               fragment !== undefined &&
                 (fragmentsOf(view).get(fragment)?.lexicons ?? new Set()).has(collapsed(ref)),
-              () => ({ fragment: fragment ?? "", ref: collapsed(ref) }),
+              () => ({
+                fragment: fragment === undefined ? "" : String(fragment),
+                ref: collapsed(ref),
+              }),
             );
           })
         : Option.none(),
@@ -2067,9 +2109,9 @@ const nodeLaws: readonly NodeLaw[] = [
         return Option.none();
       }
 
-      const marks = fragmentsOf(view).get(node.id)?.marks ?? new Map<string, number>();
+      const marks = fragmentsOf(view).get(node.start)?.marks ?? new Map<string, number>();
       const unmarked = ["startmark", "endmark"].flatMap((name) =>
-        Option.toArray(valueOf(view, node.id, name))
+        Option.toArray(valueOf(view, node.start, name))
           .map(collapsed)
           .filter((mark) => marks.get(mark) !== 1)
           .map((mark) => `${name}=${mark}:${String(marks.get(mark) ?? 0)}`),
@@ -2101,7 +2143,7 @@ const nodeLaws: readonly NodeLaw[] = [
             onSome: (declared) => ({ declared }),
           }),
           ...governsKeys(node.governs),
-          value: Option.getOrElse(valueOf(view, node.id, "xsi:type"), () => ""),
+          value: Option.getOrElse(valueOf(view, node.start, "xsi:type"), () => ""),
         }),
       ),
     law: "XsiType derived",
@@ -2129,7 +2171,7 @@ const nodeLaws: readonly NodeLaw[] = [
     breaks: (node, view, { grammar }) =>
       (isForeignKind(node.kind) ? node.governs : Option.none<string>()).pipe(
         Option.flatMap((governs) => {
-          const parent = view.byId.get(node.parent);
+          const parent = view.byStart.get(node.parent);
           const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
           const type = Option.match(expandedNameOf(governs), {
             onNone: () => "",
@@ -2279,21 +2321,58 @@ const isIdref = (domain: ValueDomain): boolean =>
   Option.exists(domain.identity, (type) => type === "IDREF" || type === "IDREFS");
 
 /**
- * Read an attribute's admission cell: its domain, use and position under its owner's (version,
- * kind, governing type), its governor's `GovernedAttribute` cell where one governs the owner, else
- * its kind's `AttributeAdmission` cell.
- *
- * @param laws - The grammar's tables.
- * @param attribute - The attribute row.
- * @returns The cell, none for a name its owner does not admit.
+ * An attribute as the attribute laws read it: a closed attribute's `Attribute` row, or an
+ * open-class attribute's `OpenAttribute` row under its class, with its owner's kind, governing
+ * type and version, and, for an open one, its expanded name.
  */
-const admissionOf = (laws: Laws, attribute: FoldedAttribute<Composed>) =>
-  governedAdmission(laws.grammar.attributes, {
-    governs: attribute.governs,
-    kind: attribute.kind,
-    name: attribute.name,
-    version: attribute.version,
-  });
+interface JudgedAttribute {
+  readonly governs: Option.Option<string>;
+  readonly kind: string;
+  readonly lexical: string;
+  /**
+   * The closed name's handle, or the open class.
+   */
+  readonly name: string;
+  readonly open: Option.Option<{ readonly local: string; readonly uri: string }>;
+  readonly prefix: string;
+  readonly start: bigint;
+  readonly version: Composed["version"];
+}
+
+/**
+ * Read a closed attribute's row as the laws read it.
+ *
+ * @param attribute - The row.
+ * @returns The attribute.
+ */
+const closedJudged = (attribute: FoldedAttribute<Composed>): JudgedAttribute => ({
+  governs: attribute.governs,
+  kind: attribute.kind,
+  lexical: attribute.lexical,
+  name: attribute.name,
+  open: Option.none(),
+  prefix: attribute.prefix,
+  start: attribute.start,
+  version: attribute.version,
+});
+
+/**
+ * Read an open-class attribute's row as the laws read it: under its class, with its copies of its
+ * owner's kind, governing type and version.
+ *
+ * @param attribute - The row.
+ * @returns The attribute.
+ */
+const openJudged = (attribute: FoldedOpenAttribute<Composed>): JudgedAttribute => ({
+  governs: attribute.governs,
+  kind: attribute.kind,
+  lexical: attribute.lexical,
+  name: attribute.class,
+  open: Option.some({ local: attribute.local, uri: attribute.uri }),
+  prefix: attribute.prefix,
+  start: attribute.start,
+  version: attribute.version,
+});
 
 /**
  * Read an attribute's value domain: the domain of its `AttributeAdmission` cell, compiled.
@@ -2302,7 +2381,10 @@ const admissionOf = (laws: Laws, attribute: FoldedAttribute<Composed>) =>
  * @param attribute - The attribute row.
  * @returns The domain and its pattern, none for a name its kind does not admit.
  */
-const compiledOf = (laws: Laws, attribute: FoldedAttribute<Composed>) =>
+const compiledOf = (
+  laws: Laws,
+  attribute: Pick<JudgedAttribute, "governs" | "kind" | "name" | "version">,
+) =>
   Option.flatMap(admissionOf(laws, attribute), ({ domain }) =>
     Option.fromNullishOr(laws.domains.get(domain)),
   );
@@ -2485,14 +2567,14 @@ const emptyTextOf = (laws: Laws, node: FoldedNode<Composed>): boolean =>
 const idsOf = (
   view: View,
   laws: Laws,
-): readonly { readonly id: string; readonly node: NodeId; readonly owner: NodeId }[] => [
+): readonly { readonly id: string; readonly node: bigint; readonly owner: bigint }[] => [
   ...view.rows.attributes.flatMap((attribute) =>
     Option.exists(
       compiledOf(laws, attribute),
       (held) =>
         (isId(held.domain) || isContextIdentifier(attribute)) && inDomain(held, attribute.lexical),
     )
-      ? [{ id: collapsed(attribute.lexical), node: attribute.node, owner: attribute.node }]
+      ? [{ id: collapsed(attribute.lexical), node: attribute.start, owner: attribute.start }]
       : [],
   ),
   ...view.rows.nodes.flatMap((node) =>
@@ -2500,7 +2582,7 @@ const idsOf = (
       checkedTextOf(laws, node),
       (held) => isId(held.domain) && inDomain(held, node.stringValue),
     )
-      ? [{ id: collapsed(node.stringValue), node: node.id, owner: node.parent }]
+      ? [{ id: collapsed(node.stringValue), node: node.start, owner: node.parent }]
       : [],
   ),
 ];
@@ -2526,13 +2608,13 @@ const fragmentOfSrc = (src: string): Option.Option<string> =>
  */
 const shareFragmentOf = (view: View, node: FoldedNode<Composed>): Option.Option<string> =>
   node.kind === "m:share"
-    ? Option.flatMap(collapsedValueOf(view, node.id, "src"), fragmentOfSrc)
+    ? Option.flatMap(collapsedValueOf(view, node.start, "src"), fragmentOfSrc)
     : Option.none();
 
 /**
  * The `m:share` elements that dominate themselves, by document.
  */
-const dominatingSharesCache = new WeakMap<View, ReadonlySet<NodeId>>();
+const dominatingSharesCache = new WeakMap<View, ReadonlySet<bigint>>();
 
 /**
  * Find the `m:share` elements on a cycle of domination: an element dominates its children and, when
@@ -2542,35 +2624,35 @@ const dominatingSharesCache = new WeakMap<View, ReadonlySet<NodeId>>();
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
- * @returns The ids of the shares from which their own element can be reached.
+ * @returns The `start`s of the shares from which their own element can be reached.
  */
-const dominatingSharesOf = (view: View, laws: Laws): ReadonlySet<NodeId> => {
+const dominatingSharesOf = (view: View, laws: Laws): ReadonlySet<bigint> => {
   const held = dominatingSharesCache.get(view);
   if (held !== undefined) {
     return held;
   }
 
   const owners = Map.groupBy(idsOf(view, laws), ({ id }) => id);
-  const targetsOf = (node: FoldedNode<Composed>): readonly NodeId[] =>
+  const targetsOf = (node: FoldedNode<Composed>): readonly bigint[] =>
     Option.match(shareFragmentOf(view, node), {
       onNone: () => [],
       onSome: (fragment) => (owners.get(fragment) ?? []).map(({ owner }) => owner),
     });
   const dominates = (share: FoldedNode<Composed>): boolean => {
-    const seen = new Set<NodeId>();
+    const seen = new Set<bigint>();
     const pending = [...targetsOf(share)];
 
     for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
-      if (id === share.id) {
+      if (id === share.start) {
         return true;
       }
 
       if (!seen.has(id)) {
         seen.add(id);
 
-        const at = view.byId.get(id);
+        const at = view.byStart.get(id);
         pending.push(
-          ...(view.childrenOf.get(id) ?? []).map((child) => child.id),
+          ...(view.childrenOf.get(id) ?? []).map((child) => child.start),
           ...(at === undefined ? [] : targetsOf(at)),
         );
       }
@@ -2581,7 +2663,7 @@ const dominatingSharesOf = (view: View, laws: Laws): ReadonlySet<NodeId> => {
   const found = new Set(
     view.members
       .filter((node) => Option.isSome(shareFragmentOf(view, node)) && dominates(node))
-      .map(({ id }) => id),
+      .map(({ start }) => start),
   );
   dominatingSharesCache.set(view, found);
 
@@ -2591,43 +2673,18 @@ const dominatingSharesOf = (view: View, laws: Laws): ReadonlySet<NodeId> => {
 /**
  * Decide whether an attribute's copy of its owner is its owner's fields (AL1).
  *
- * @param attribute - The attribute row.
- * @param owner - Its owner's node row, none when no row holds its id.
- * @returns Whether its kind, governing type, version and document are its owner's.
+ * @param attribute - The attribute, as the laws read it.
+ * @param owner - Its owner's node row, none when no row is at its `start`.
+ * @returns Whether its kind, governing type and version are its owner's.
  */
 const ownerCopied = (
-  attribute: FoldedAttribute<Composed>,
+  attribute: JudgedAttribute,
   owner: FoldedNode<Composed> | undefined,
 ): boolean =>
   owner !== undefined &&
   owner.kind === attribute.kind &&
   Equal.equals(owner.governs, attribute.governs) &&
-  owner.version === attribute.version &&
-  owner.document === attribute.document;
-
-/**
- * Decide whether an attribute's fold is its predecessor's with its own position (AL2): an open
- * class's position is one for many names, which the fold steps over no position of (the W5
- * amendment's C9), so its `attrs` is its `attrsWas`.
- *
- * @param attribute - The attribute row.
- * @param slot - Its slot among its owner's attributes.
- * @param before - Its predecessor, none for the first.
- * @param position - Its position, empty for a name its kind does not admit.
- * @returns Whether its slot, `attrsWas` and `attrs` are as the fold derives them.
- */
-const attributeFolded = (
-  attribute: FoldedAttribute<Composed>,
-  slot: number,
-  before: FoldedAttribute<Composed> | undefined,
-  position: Positions,
-): boolean =>
-  attribute.at === BigInt(slot) &&
-  sameSet(attribute.attrsWas, before?.derived.attrs ?? new Set<number>()) &&
-  sameSet(
-    attribute.derived.attrs,
-    isOpenClass(attribute.name) ? attribute.attrsWas : attribute.attrsWas.union(position),
-  );
+  owner.version === attribute.version;
 
 /**
  * The prefixes no attribute in a namespace other than the XML namespace is written with: none,
@@ -2675,21 +2732,20 @@ const referencesOf = (
 ];
 
 /**
- * Evaluate the laws of §1.5 over a document's attribute rows: AL1's admission cell and owner copy,
- * AL2's masked distinctness, N5's first slot and AL2's fold, each value domain, and each IDREF
+ * Evaluate the laws of §1.5 over a document's attribute rows, closed and open alike: AL1's
+ * admission cell and owner copy, the prefix, AL2's distinctness, each value domain, and each IDREF
  * token's target.
  *
  * An attribute's domain and position are its `AttributeAdmission` cell's, under its owner's
- * (version, kind), and its `attrs` is `attrsWas | bit(x)`, `x` the position. AL2's distinctness is
- * `(attrsWas & bit(x) & ~open) = 0` (fin.md §16): a name already held is refused unless it is an
- * open class, whose many names share one position. An attribute with no cell has no domain and no
- * position, so AL1 refuses it and nothing derives from it.
+ * (version, kind), an open-class attribute's under its class. AL2's distinctness is `Attribute`'s
+ * key, `(package, path, start, name)`: a closed name written twice on one element is refused, and
+ * an open class, whose many names share one handle, is keyed by its expanded name instead
+ * (`OpenAttribute`'s key, AL4). An attribute with no cell has no domain and no position, so AL1
+ * refuses it and nothing derives from it.
  *
  * An element's breaches are listed law by law, in the order an attribute's laws are evaluated, and
- * each law's in attribute order, so an element's first breach, whose rule {@link verdictOf} names,
- * is a function of its attributes as a set, the same in whatever order the element writes them
- * (spec reading 137): one attribute's `value domain` comes before another's `Idref target` on one
- * element, whichever of the two is written first.
+ * each law's in attribute order, closed attributes before open ones, so an element's first breach,
+ * whose rule {@link verdictOf} names, is a function of its attributes as a set (spec reading 137).
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -2703,21 +2759,36 @@ const attributeBreaches = (
   assembled: ReadonlySet<string>,
 ): readonly Breach[] => {
   const ids = new Set([...idsOf(view, laws).map(({ id }) => id), ...assembled]);
+  const opens = grouped(view.rows.openAttributes, ({ start }) => start);
+  const owners = [...new Set([...view.attributesOf.keys(), ...opens.keys()])];
 
-  return [...view.attributesOf].flatMap(([owner, owned]) => {
-    const node = view.byId.get(owner);
+  return owners.flatMap((owner) => {
+    const node = view.byStart.get(owner);
     const at = pathOf(view, owner);
+    const owned = [
+      ...(view.attributesOf.get(owner) ?? []).map((attribute) => ({
+        attribute: closedJudged(attribute),
+        row: Option.some(attribute),
+      })),
+      ...(opens.get(owner) ?? []).map((attribute) => ({
+        attribute: openJudged(attribute),
+        row: Option.none<FoldedAttribute<Composed>>(),
+      })),
+    ];
 
-    const found = owned.map((attribute, slot): readonly (readonly Breach[])[] => {
+    const found = owned.map(({ attribute, row }, slot): readonly (readonly Breach[])[] => {
       const breach = (law: LawName, keys: Keys = {}): Breach => ({
         document: view.path,
         keys: {
-          at: String(attribute.at),
           ...governsKeys(attribute.governs),
           kind: attribute.kind,
           name: attribute.name,
           node: at,
           version: attribute.version,
+          ...Option.match(attribute.open, {
+            onNone: () => ({}),
+            onSome: ({ local, uri }) => ({ local, uri }),
+          }),
           ...keys,
         },
         law,
@@ -2725,39 +2796,22 @@ const attributeBreaches = (
       const { lexical } = attribute;
       const admitted = admissionOf(laws, attribute);
       const compiled = compiledOf(laws, attribute);
-      const before = owned[slot - 1];
-      const x: Positions = new Set(Option.toArray(admitted).map(({ position }) => position));
-      // AL2's distinctness is the closed attributes' key, (node, name): an earlier attribute of the
-      // element of the same closed name repeats it.
       const repeated =
-        !isOpenClass(attribute.name) &&
-        owned.slice(0, slot).some((earlier) => earlier.name === attribute.name);
+        Option.isNone(attribute.open) &&
+        owned.slice(0, slot).some((earlier) => earlier.attribute.name === attribute.name);
 
       return [
         Option.isSome(admitted) ? [] : [breach("AL1 admission")],
         prefixAgrees(attribute) ? [] : [breach("Attribute prefix", { prefix: attribute.prefix })],
-        ownerCopied(attribute, node)
+        ownerCopied(attribute, node) && laws.elements.has(node?.kind ?? "document")
           ? []
           : [
               breach("AL1 owner", {
-                ownerDocument: node?.document ?? "",
                 ownerKind: node?.kind ?? "",
                 ownerVersion: node?.version ?? "",
               }),
             ],
         repeated ? [breach("AL2 distinct")] : [],
-        attribute.at > 0n || attribute.attrsWas.size === 0
-          ? []
-          : [breach("N5 first slot", { attrsWas: spaced(attribute.attrsWas) })],
-        attributeFolded(attribute, slot, before, x) && Option.isSome(admitted)
-          ? []
-          : [
-              breach("AL2 fold", {
-                attrs: spaced(attribute.derived.attrs),
-                attrsWas: spaced(attribute.attrsWas),
-                predecessorAttrs: spaced(before?.derived.attrs ?? new Set()),
-              }),
-            ],
         Option.exists(compiled, (held) => !held.regex.test(lexical))
           ? [breach("value domain", { lexical })]
           : [],
@@ -2772,9 +2826,13 @@ const attributeBreaches = (
             ],
           },
         ),
-        referencesOf(attribute, compiled)
-          .filter((token) => !ids.has(token))
-          .map((token) => breach("Idref target", { token })),
+        Option.match(row, {
+          onNone: () => [],
+          onSome: (closedRow) =>
+            referencesOf(closedRow, compiled)
+              .filter((token) => !ids.has(token))
+              .map((token) => breach("Idref target", { token })),
+        }),
       ];
     });
 
@@ -2802,10 +2860,10 @@ const overKeyText = (value: string): boolean => utf8Length(value) > keyTextBytes
  */
 const charsOf = (view: View, node: FoldedNode<Composed>): string => {
   if (node.kind === "text" || node.kind === "ws") {
-    return view.textOf.get(node.id) ?? "";
+    return view.textOf.get(node.start) ?? "";
   }
 
-  const entity = node.kind === "entityRef" ? view.entityOf.get(node.id) : undefined;
+  const entity = node.kind === "entityRef" ? view.entityOf.get(node.start) : undefined;
 
   return entity === undefined ? "" : `&${entity};`;
 };
@@ -2833,9 +2891,7 @@ const documentTypeOf = (view: View, laws: Laws): string => {
     return "manifest";
   }
 
-  const roots = view.rows.nodes.filter(
-    ({ id, parent }) => parent === view.self && id !== view.self,
-  );
+  const roots = view.rows.nodes.filter(({ parent, start }) => parent === 0n && start !== 0n);
 
   return (
     laws.grammar.package.rootOfType.rows.find(({ root }) => roots.some(({ kind }) => kind === root))
@@ -2880,7 +2936,7 @@ const nodeFieldsOf = (
   documentType: string,
   laws: Laws,
 ): DocumentRows["Node"] => {
-  const parent = view.byId.get(node.parent);
+  const parent = view.byStart.get(node.parent);
 
   return {
     chars: charsOf(view, node),
@@ -2904,8 +2960,8 @@ const nodeFieldsOf = (
  * @param copy - The copy.
  * @param rows - The document's attributes and nodes, each with the fields a copy reads.
  * @param rows.attributes - Each attribute's node and fields.
- * @param rows.children - Each node's children's fields, by the node's id.
- * @param rows.nodes - Each node's id and fields.
+ * @param rows.children - Each node's children's fields, by the node's `start`.
+ * @param rows.nodes - Each node's `start` and fields.
  * @returns The texts, each with its node, in document order.
  */
 const copiedTexts = (
@@ -2913,12 +2969,12 @@ const copiedTexts = (
   rows: {
     readonly attributes: readonly {
       readonly fields: DocumentRows["Attribute"];
-      readonly node: NodeId;
+      readonly node: bigint;
     }[];
-    readonly children: ReadonlyMap<NodeId, readonly DocumentRows["Node"][]>;
-    readonly nodes: readonly { readonly fields: DocumentRows["Node"]; readonly node: NodeId }[];
+    readonly children: ReadonlyMap<bigint, readonly DocumentRows["Node"][]>;
+    readonly nodes: readonly { readonly fields: DocumentRows["Node"]; readonly node: bigint }[];
   },
-): readonly { readonly node: NodeId; readonly value: string }[] => {
+): readonly { readonly node: bigint; readonly value: string }[] => {
   if (copy.source === "Attribute") {
     return rows.attributes
       .filter(({ fields }) => copy.holds(fields))
@@ -2942,9 +2998,9 @@ const copiedTexts = (
  * declaration's and every other attribute a containment or a check copies, and the string value of
  * each element whose text is checked or copied), and the document's path (`Document.path`); as
  * namespace names (`namespaceText`), an open attribute's namespace and its element's
- * (`OpenAttributeName.uri`, `OpenAttributeName.elementNamespace`) and a foreign element's
+ * (`OpenAttribute.uri`, `OpenAttribute.elementNamespace`) and a foreign element's
  * (`OpenElementName.namespace`); and as a local name, an open attribute's
- * (`OpenAttributeName.local`).
+ * (`OpenAttribute.local`).
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -2956,14 +3012,13 @@ const keyTexts = (
 ): readonly {
   readonly bound: number;
   readonly field: string;
-  readonly node?: NodeId;
+  readonly node?: bigint;
   readonly value: string;
 }[] => {
-  const nodeOfAttribute = new Map(view.rows.attributes.map(({ id, node }) => [id, node]));
   const documentType = documentTypeOf(view, laws);
   const nodes = view.rows.nodes.map((node) => ({
     fields: nodeFieldsOf(view, node, documentType, laws),
-    node: node.id,
+    node: node.start,
   }));
   const fieldsOf = new Map(nodes.map(({ fields, node }) => [node, fields]));
   const rows = {
@@ -2976,12 +3031,12 @@ const keyTexts = (
         name: attribute.name,
         version: attribute.version,
       },
-      node: attribute.node,
+      node: attribute.start,
     })),
     children: new Map(
       [...view.childrenOf].map(([parent, children]) => [
         parent,
-        children.flatMap(({ id }) => Option.toArray(Option.fromNullishOr(fieldsOf.get(id)))),
+        children.flatMap(({ start }) => Option.toArray(Option.fromNullishOr(fieldsOf.get(start)))),
       ]),
     ),
     nodes,
@@ -2997,38 +3052,41 @@ const keyTexts = (
         value,
       })),
     ),
-    ...view.rows.attributes.flatMap((attribute) =>
-      isOpenClass(attribute.name)
-        ? Option.toArray(
-            Option.flatMap(Option.fromNullishOr(view.byId.get(attribute.node)), (node) =>
-              namespaceOf(view, laws.grammar, node),
-            ),
-          ).map((value) => ({
-            bound: namespaceBytes,
-            field: "OpenAttributeName.elementNamespace",
-            node: attribute.node,
-            value,
-          }))
-        : [],
-    ),
-    ...view.rows.openNames.flatMap(({ attribute, local, uri }) => {
-      const node = nodeOfAttribute.get(attribute);
-
-      return node === undefined
-        ? []
-        : [
-            { bound: namespaceBytes, field: "OpenAttributeName.uri", node, value: uri },
-            { bound: localNameBytes, field: "OpenAttributeName.local", node, value: local },
-          ];
-    }),
-    ...view.rows.openElementNames.map(({ namespace, node }) => ({
+    ...view.rows.openAttributes.flatMap(({ local, start, uri }) => [
+      ...Option.toArray(
+        Option.flatMap(Option.fromNullishOr(view.byStart.get(start)), (node) =>
+          namespaceOf(view, laws.grammar, node),
+        ),
+      ).map((value) => ({
+        bound: namespaceBytes,
+        field: "OpenAttribute.elementNamespace",
+        node: start,
+        value,
+      })),
+      { bound: namespaceBytes, field: "OpenAttribute.uri", node: start, value: uri },
+      { bound: localNameBytes, field: "OpenAttribute.local", node: start, value: local },
+    ]),
+    ...view.rows.openElementNames.map(({ namespace, start }) => ({
       bound: namespaceBytes,
       field: "OpenElementName.namespace",
-      node,
+      node: start,
       value: namespace,
     })),
   ];
 };
+
+/**
+ * The text of an open attribute's key within its document, or of an entity reference's that names
+ * one: its owner's `start`, then its expanded name.
+ *
+ * @param attribute - The attribute's key fields.
+ * @param attribute.local - Its local name.
+ * @param attribute.start - Its owner's position.
+ * @param attribute.uri - Its namespace name.
+ * @returns The key text.
+ */
+const openKey = ({ local, start, uri }: Pick<OpenAttributeRow, "local" | "start" | "uri">) =>
+  JSON.stringify([String(start), uri, local]);
 
 /**
  * Evaluate the laws over a document as a whole: one document node, the children family's key,
@@ -3061,16 +3119,13 @@ const wholeBreaches = (
     { law: "entityRef arm", nodes: "entityRef", rows: rows.entityRefs },
     { law: "doctype arm", nodes: "doctype", rows: rows.doctypes },
   ] as const;
-  const ownerOf = new Map(rows.attributes.map(({ id, node }) => [id, node] as const));
-  const openKeys = new Set(
-    rows.attributes.filter(({ name }) => isOpenClass(name)).map(({ id }) => id),
+  const closedKeys = new Set(
+    rows.attributes.map(({ name, start }) => JSON.stringify([String(start), name])),
   );
-  const attributeById = new Map(rows.attributes.map((attribute) => [attribute.id, attribute]));
-  const openNameKeys = rows.openNames.map(({ attribute }) => attribute);
-  const openNameIds = rows.openNames.map(
-    ({ attribute, local, uri }) => `${ownerOf.get(attribute) ?? attribute} {${uri}}${local}`,
+  const openKeys = new Set(rows.openAttributes.map(openKey));
+  const foreign = new Set(
+    rows.nodes.filter(({ kind }) => isForeignKind(kind)).map(({ start }) => start),
   );
-  const foreign = new Set(rows.nodes.filter(({ kind }) => isForeignKind(kind)).map(({ id }) => id));
   const documentNodes = rows.nodes.filter(({ start }) => start === 0n).length;
   const ids = new Set([...idsOf(view, laws).map(({ id }) => id), ...assembled]);
 
@@ -3087,68 +3142,69 @@ const wholeBreaches = (
           }),
         ]),
     ...arms.flatMap(({ law, nodes: kind, rows: armRows }) => {
-      const nodes = new Set(rows.nodes.filter((node) => node.kind === kind).map(({ id }) => id));
-      const held = armRows.map(({ node }) => node);
+      const nodes = new Set(
+        rows.nodes.filter((node) => node.kind === kind).map(({ start }) => start),
+      );
+      const held = armRows.map(({ start }) => start);
 
       return sameSet(nodes, new Set(held)) && held.length === nodes.size
         ? []
         : [breach(law, { nodes: String(nodes.size), rows: String(held.length) })];
     }),
-    // The Document row's node is the document node, the row at start 0. The view's own `self` is
-    // read from the Document row, so the law compares the row with the tree, never with itself.
-    ...(rows.nodes.some(({ id, start }) => start === 0n && id === rows.document.node)
-      ? []
-      : [
-          breach("Document", {
-            documentRow: rows.document.node,
-            self: rows.nodes.find(({ start }) => start === 0n)?.id ?? "",
-          }),
-        ]),
-    ...rows.attributes
-      .filter(({ node }) => !laws.elements.has(view.byId.get(node)?.kind ?? "document"))
-      .map(({ at, node }) =>
-        breach("AL1 owner", {
-          at: String(at),
-          node: pathOf(view, node),
-          ownerKind: view.byId.get(node)?.kind ?? "",
+    ...rows.attributeEntities
+      .filter(({ name, start }) => !closedKeys.has(JSON.stringify([String(start), name])))
+      .map(({ name, offset, start }) =>
+        breach("AttributeEntity owner", {
+          attribute: name,
+          offset: String(offset),
+          start: String(start),
         }),
       ),
-    ...rows.attributeEntities
-      .filter(({ attribute }) => !ownerOf.has(attribute))
-      .map(({ attribute, offset }) =>
-        breach("AttributeEntity owner", { attribute, offset: String(offset) }),
+    ...rows.openAttributeEntities
+      .filter((entity) => !openKeys.has(openKey(entity)))
+      .map(({ local, offset, start, uri }) =>
+        breach("AttributeEntity owner", {
+          attribute: `{${uri}}${local}`,
+          offset: String(offset),
+          start: String(start),
+        }),
       ),
-    ...(sameSet(openKeys, new Set(openNameKeys)) && openNameKeys.length === openKeys.size
-      ? []
-      : [
-          breach("AL4 open names", {
-            openAttributes: String(openKeys.size),
-            openNames: String(openNameKeys.length),
-          }),
-        ]),
-    ...(new Set(openNameIds).size === openNameIds.length
-      ? []
-      : [
-          breach("AL4 open name key", {
-            distinct: String(new Set(openNameIds).size),
-            openNames: String(openNameIds.length),
-          }),
-        ]),
-    ...rows.openNames.flatMap(({ attribute, local }) => {
-      const named = attributeById.get(attribute);
-      const kind = (named === undefined ? undefined : view.byId.get(named.node))?.kind ?? "";
+    ...rows.attributes
+      .filter(({ name }) => isOpenClass(name))
+      .map(({ name, start }) =>
+        breach("AL4 open names", { name, node: pathOf(view, start), open: "true" }),
+      ),
+    ...rows.openAttributes
+      .filter((attribute) => !isOpenClass(attribute.class))
+      .map((attribute) =>
+        breach("AL4 open names", {
+          name: attribute.class,
+          node: pathOf(view, attribute.start),
+          open: "false",
+        }),
+      ),
+    ...rows.openAttributes
+      .filter((attribute, at) =>
+        rows.openAttributes.slice(0, at).some((earlier) => openKey(earlier) === openKey(attribute)),
+      )
+      .map(({ local, start, uri }) =>
+        breach("AL4 open name key", { local, node: pathOf(view, start), uri }),
+      ),
+    ...rows.openAttributes.flatMap((attribute) => {
+      const { local } = attribute;
+      const kind = view.byStart.get(attribute.start)?.kind ?? "";
       const broken =
-        named?.name === "data-*"
+        attribute.class === "data-*"
           ? !dataName.test(local)
-          : named?.name === "no-namespace" && !isForeignKind(kind) && local.startsWith("data-");
+          : attribute.class === "no-namespace" && !isForeignKind(kind) && local.startsWith("data-");
 
-      return broken ? [breach("AL4 data name", { class: named?.name ?? "", kind, local })] : [];
+      return broken ? [breach("AL4 data name", { class: attribute.class, kind, local })] : [];
     }),
-    ...rows.openNames.flatMap(({ attribute, local }) => {
-      const named = attributeById.get(attribute);
-      const owner = named === undefined ? undefined : view.byId.get(named.node);
+    ...rows.openAttributes.flatMap((attribute) => {
+      const { local } = attribute;
+      const owner = view.byStart.get(attribute.start);
       const declared =
-        named?.name === "data-*" &&
+        attribute.class === "data-*" &&
         owner !== undefined &&
         Option.isSome(
           governedAdmission(laws.grammar.attributes, {
@@ -3161,7 +3217,7 @@ const wholeBreaches = (
 
       return declared ? [breach("AL4 declared data name", { kind: owner.kind, local })] : [];
     }),
-    ...(sameSet(foreign, new Set(rows.openElementNames.map(({ node }) => node))) &&
+    ...(sameSet(foreign, new Set(rows.openElementNames.map(({ start }) => start))) &&
     rows.openElementNames.length === foreign.size
       ? []
       : [
@@ -3170,13 +3226,13 @@ const wholeBreaches = (
             names: String(rows.openElementNames.length),
           }),
         ]),
-    ...rows.openElementNames.flatMap(({ local, namespace, node }) =>
+    ...rows.openElementNames.flatMap(({ local, namespace, start }) =>
       namespace === mathmlNamespace
-        ? [breach("MathML foreign element", { local, namespace, node: pathOf(view, node) })]
+        ? [breach("MathML foreign element", { local, namespace, node: pathOf(view, start) })]
         : [],
     ),
-    ...rows.openElementNames.flatMap(({ local, namespace, node }) => {
-      const row = view.byId.get(node);
+    ...rows.openElementNames.flatMap(({ local, namespace, start }) => {
+      const row = view.byStart.get(start);
       const named =
         row === undefined
           ? []
@@ -3200,7 +3256,7 @@ const wholeBreaches = (
               kinds: spaced(named),
               local,
               namespace,
-              node: pathOf(view, node),
+              node: pathOf(view, start),
             }),
           ];
     }),
@@ -3216,7 +3272,7 @@ const wholeBreaches = (
             breach("TextDomain", {
               ...governsKeys(node.governs),
               kind: node.kind,
-              node: pathOf(view, node.id),
+              node: pathOf(view, node.start),
               value: node.stringValue,
               version: node.version,
             }),
@@ -3233,7 +3289,7 @@ const wholeBreaches = (
                   bound: String(value),
                   facet,
                   lexical: node.stringValue,
-                  node: pathOf(view, node.id),
+                  node: pathOf(view, node.start),
                 }),
               ],
             },
@@ -3249,7 +3305,7 @@ const wholeBreaches = (
                 ...governsKeys(node.governs),
                 kind: node.kind,
                 name: `the text of ${node.kind}`,
-                node: pathOf(view, node.id),
+                node: pathOf(view, node.start),
                 token,
                 version: node.version,
               }),
@@ -3261,8 +3317,8 @@ const wholeBreaches = (
       Option.match(shareFragmentOf(view, node), {
         onNone: () => [],
         onSome: (target) =>
-          dominatingSharesOf(view, laws).has(node.id)
-            ? [breach("MathML share cycle", { share: pathOf(view, node.id), target })]
+          dominatingSharesOf(view, laws).has(node.start)
+            ? [breach("MathML share cycle", { share: pathOf(view, node.start), target })]
             : [],
       }),
     ),
@@ -3280,8 +3336,8 @@ const wholeBreaches = (
     // (Namespaces in XML 1.0 §3, §2.1), judged by the oracle's own reading of Appendix A's grammar.
     ...rows.namespaces
       .filter(({ uri }) => !isUriReference(uri))
-      .map(({ at, node, prefix, uri }) =>
-        breach("Namespace name", { at: String(at), node: pathOf(view, node), prefix, uri }),
+      .map(({ prefix, start, uri }) =>
+        breach("Namespace name", { node: pathOf(view, start), prefix, uri }),
       ),
   ];
 };
@@ -3310,11 +3366,11 @@ export { contentLawOf } from "#pantry/test/oracle-view.ts";
  * outside its domain, `1abc`, or `-1` for a count, has none.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's closed name.
  * @returns Its integer, or none when the element does not write it inside its domain.
  */
-const typedIntegerOf = (view: View, node: NodeId, name: string): Option.Option<bigint> =>
+const typedIntegerOf = (view: View, node: bigint, name: string): Option.Option<bigint> =>
   Option.flatMap(typedValueOf(view, node, name), integerOf);
 
 /**
@@ -3370,7 +3426,7 @@ const baseTypeOf = (
 ): Option.Option<string> =>
   declaration === undefined
     ? Option.none()
-    : typedValueOf(overlay.view, declaration.id, "base-type");
+    : typedValueOf(overlay.view, declaration.start, "base-type");
 
 /**
  * Hold a declared type to a law's one admitted base type, where the declaration has a base type:
@@ -3409,7 +3465,7 @@ const typeBreach = (
 const cardinalityOf = (
   overlay: Overlay,
   declaration: FoldedNode<Composed>,
-): Option.Option<string> => typedValueOf(overlay.view, declaration.id, "cardinality");
+): Option.Option<string> => typedValueOf(overlay.view, declaration.start, "cardinality");
 
 /**
  * Hold a declaration that holds a mapping or an area mapping to no record (§2.11.1.5: a mapping
@@ -3668,8 +3724,8 @@ const countAttribute = (
   node: FoldedNode<Composed>,
   name: string,
 ): Option.Option<bigint> =>
-  Option.isSome(valueOf(overlay.view, node.id, name))
-    ? typedIntegerOf(overlay.view, node.id, name)
+  Option.isSome(valueOf(overlay.view, node.start, name))
+    ? typedIntegerOf(overlay.view, node.start, name)
     : Option.flatMap(
         Option.fromNullishOr(overlay.laws.defaults.get(`${node.version} ${node.kind} ${name}`)),
         integerOf,
@@ -3699,7 +3755,7 @@ const namedBy = (
     .filter(({ kind }) => kind === node.kind)
     .flatMap(({ attribute, spelling }) =>
       Option.toArray(
-        valueOf(overlay.view, node.id, attribute).pipe(Option.flatMap(referenced[spelling])),
+        valueOf(overlay.view, node.start, attribute).pipe(Option.flatMap(referenced[spelling])),
       ).map((identifier) => ({
         attribute,
         identifier,
@@ -3853,7 +3909,7 @@ const overlayLaws: readonly ((
     // each of which must have the value of an ID of a 'th' tag taking part in the same table"
     // (info §5.140.1), the table its nearest; a cell no table holds takes part in none.
     node.kind === "td" || node.kind === "th"
-      ? Option.toArray(valueOf(overlay.view, node.id, "headers")).flatMap((headers) => {
+      ? Option.toArray(valueOf(overlay.view, node.start, "headers")).flatMap((headers) => {
           const tokens = headers.split(/[\t\n\r ]+/u).filter((token) => token !== "");
           const table = tableOf(overlay.view, node);
           const held =
@@ -3886,13 +3942,16 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const atSlot = (parent: NodeId, at: bigint): readonly string[] =>
+    const atSlot = (parent: bigint, at: bigint): readonly string[] =>
       Array.from(ownCharactersOf(view, view.bySlot.get(slotKey(parent, at))), String);
     const positions: readonly (readonly [string, string | undefined])[] = [
       ["before it", node.at > 0n ? atSlot(node.parent, node.at - 1n).at(-1) : undefined],
       ["after it", atSlot(node.parent, node.at + 1n)[0]],
-      ["at its start", atSlot(node.id, 0n)[0]],
-      ["at its end", node.children > 0n ? atSlot(node.id, node.children - 1n).at(-1) : undefined],
+      ["at its start", atSlot(node.start, 0n)[0]],
+      [
+        "at its end",
+        node.children > 0n ? atSlot(node.start, node.children - 1n).at(-1) : undefined,
+      ],
     ];
 
     return positions
@@ -3907,8 +3966,8 @@ const overlayLaws: readonly ((
     // Reading 105: a usage value that names its base type holds a lexical form of it, read as
     // element content is (reading 7), where it forms part of a record, that is, writes a
     // fieldIdentifier (usage data binding §2.6.5.1); one outside a record is untyped text.
-    node.kind === "ud:value" && Option.isSome(valueOf(overlay.view, node.id, "fieldIdentifier"))
-      ? Option.toArray(valueOf(overlay.view, node.id, "baseType")).flatMap((baseType) => {
+    node.kind === "ud:value" && Option.isSome(valueOf(overlay.view, node.start, "fieldIdentifier"))
+      ? Option.toArray(valueOf(overlay.view, node.start, "baseType")).flatMap((baseType) => {
           const text = stringValueOf(overlay.view, node);
 
           return typedTextHolds(baseType, text)
@@ -3926,7 +3985,7 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const terms = view.childrenOf.get(node.id) ?? [];
+    const terms = view.childrenOf.get(node.start) ?? [];
     const value = terms.find(({ kind }) => kind === "lom:value");
     const source = terms.find(({ kind }) => kind === "lom:source");
     const term = value === undefined ? "" : collapsed(stringValueOf(view, value));
@@ -3948,7 +4007,7 @@ const overlayLaws: readonly ((
     }
 
     return bindingNames.flatMap((attribute): readonly Finding[] => {
-      const bound = typedValueOf(overlay.view, node.id, attribute);
+      const bound = typedValueOf(overlay.view, node.start, attribute);
       if (Option.isNone(bound)) {
         return [];
       }
@@ -4012,8 +4071,8 @@ const overlayLaws: readonly ((
     // R10-a: a portable custom interaction names its module by `module`, by a
     // `qti-interaction-modules` child, or by both; one with neither names none.
     node.kind === "qti-portable-custom-interaction" &&
-    Option.isNone(valueOf(overlay.view, node.id, "module")) &&
-    !(overlay.view.childrenOf.get(node.id) ?? []).some(
+    Option.isNone(valueOf(overlay.view, node.start, "module")) &&
+    !(overlay.view.childrenOf.get(node.start) ?? []).some(
       ({ kind }) => kind === "qti-interaction-modules",
     )
       ? [{ keys: {}, law: "PCI module source" }]
@@ -4026,7 +4085,7 @@ const overlayLaws: readonly ((
         // Reading 18: a counted bound binds only where its least is written, and then a most of
         // 0 is a count below it; every other bound reads an unwritten least as its default, or 0,
         // and a most of 0 as no limit (reading 76).
-        const written = Option.isSome(valueOf(overlay.view, node.id, min));
+        const written = Option.isSome(valueOf(overlay.view, node.start, min));
         if (zero === "counted" && !written) {
           return [];
         }
@@ -4035,7 +4094,7 @@ const overlayLaws: readonly ((
         const least = Option.getOrElse(countAttribute(overlay, node, min), () => 0n);
         const choices = Option.map(choiceCount.lookup({ kind: node.kind }), ({ choice }) =>
           BigInt(
-            (overlay.view.childrenOf.get(node.id) ?? []).filter(({ kind }) => kind === choice)
+            (overlay.view.childrenOf.get(node.start) ?? []).filter(({ kind }) => kind === choice)
               .length,
           ),
         );
@@ -4108,7 +4167,7 @@ const overlayLaws: readonly ((
     // the other half alone, since its own law refuses the attribute (spec reading 158).
     if (
       node.kind !== "qti-response-declaration" ||
-      !(overlay.view.childrenOf.get(node.id) ?? []).some(({ kind }) => kind === "qti-mapping")
+      !(overlay.view.childrenOf.get(node.start) ?? []).some(({ kind }) => kind === "qti-mapping")
     ) {
       return [];
     }
@@ -4125,7 +4184,7 @@ const overlayLaws: readonly ((
     ];
   },
   (node, overlay) => {
-    const children = overlay.view.childrenOf.get(node.id) ?? [];
+    const children = overlay.view.childrenOf.get(node.start) ?? [];
     const baseType = baseTypeOf(overlay, node);
     // A declaration whose cardinality is unwritten or outside its domain has its tables, but no
     // cardinality for a law over them to read (the declarations overlay's `typedDeclarationOf`;
@@ -4169,13 +4228,13 @@ const overlayLaws: readonly ((
     // A mapping of a declaration with no base type, a record's or one whose base type spells
     // nothing, reads its keys in none: each is its lexical form alone, and no type judges it (lane
     // NIL's audit, B12; spec reading 158).
-    const baseType = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
+    const baseType = baseTypeOf(overlay, overlay.view.byStart.get(node.parent));
     const seen = new Set<string>();
 
-    return (overlay.view.childrenOf.get(node.id) ?? [])
+    return (overlay.view.childrenOf.get(node.start) ?? [])
       .filter(({ kind }) => kind === "qti-map-entry")
-      .flatMap(({ id }): readonly Finding[] => {
-        const key = Option.getOrUndefined(valueOf(overlay.view, id, "map-key"));
+      .flatMap(({ start }): readonly Finding[] => {
+        const key = Option.getOrUndefined(valueOf(overlay.view, start, "map-key"));
         if (key === undefined) {
           return [];
         }
@@ -4213,11 +4272,11 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const baseType = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
+    const baseType = baseTypeOf(overlay, overlay.view.byStart.get(node.parent));
     const values = [
-      ...Option.toArray(valueOf(overlay.view, node.id, "default-value")),
-      ...(overlay.view.childrenOf.get(node.id) ?? []).flatMap(({ id }) =>
-        Option.toArray(valueOf(overlay.view, id, "target-value")),
+      ...Option.toArray(valueOf(overlay.view, node.start, "default-value")),
+      ...(overlay.view.childrenOf.get(node.start) ?? []).flatMap(({ start }) =>
+        Option.toArray(valueOf(overlay.view, start, "target-value")),
       ),
     ];
 
@@ -4236,11 +4295,11 @@ const overlayLaws: readonly ((
       Option.isSome(indexesOf(overlay.laws.grammar).sectionPart.lookup({ kind })),
     ).length;
     const replaced = Option.contains(
-      Option.flatMap(typedValueOf(overlay.view, node.id, "with-replacement"), booleanOf),
+      Option.flatMap(typedValueOf(overlay.view, node.start, "with-replacement"), booleanOf),
       true,
     );
 
-    return Option.toArray(typedIntegerOf(overlay.view, node.id, "select"))
+    return Option.toArray(typedIntegerOf(overlay.view, node.start, "select"))
       .filter((count) => !replaced && count > BigInt(parts))
       .map((count): Finding => ({
         keys: { parts: String(parts), select: String(count) },
@@ -4257,8 +4316,8 @@ const overlayLaws: readonly ((
     // names (reading 144); a bound that is no xs:double has no value, and NaN orders against
     // nothing.
     return Option.all([
-      valueOf(overlay.view, node.id, "lower-bound"),
-      valueOf(overlay.view, node.id, "upper-bound"),
+      valueOf(overlay.view, node.start, "lower-bound"),
+      valueOf(overlay.view, node.start, "upper-bound"),
     ]).pipe(
       Option.map(([lower, upper]) => [collapsed(lower), collapsed(upper)] as const),
       Option.filter(
@@ -4278,13 +4337,13 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const mode = Option.getOrElse(valueOf(overlay.view, node.id, "rounding-mode"), () =>
+    const mode = Option.getOrElse(valueOf(overlay.view, node.start, "rounding-mode"), () =>
       node.kind === "qti-equal-rounded" ? "significantFigures" : "",
     );
     const least = roundingLeast.get(mode);
 
     return Option.toArray(
-      Option.flatMap(typedValueOf(overlay.view, node.id, "figures"), figuresInteger),
+      Option.flatMap(typedValueOf(overlay.view, node.start, "figures"), figuresInteger),
     )
       .filter((figures) => least !== undefined && figures < least)
       .map((figures): Finding => ({
@@ -4301,8 +4360,11 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const mode = Option.getOrElse(valueOf(overlay.view, node.id, "tolerance-mode"), () => "exact");
-    const tolerance = valueOf(overlay.view, node.id, "tolerance");
+    const mode = Option.getOrElse(
+      valueOf(overlay.view, node.start, "tolerance-mode"),
+      () => "exact",
+    );
+    const tolerance = valueOf(overlay.view, node.start, "tolerance");
     if (Option.isNone(tolerance)) {
       return mode === "absolute" || mode === "relative"
         ? [{ keys: { count: "", mode, unsigned: "" }, law: "Equal tolerance" }]
@@ -4323,8 +4385,8 @@ const overlayLaws: readonly ((
   },
   (node, overlay) =>
     Option.all([
-      valueOf(overlay.view, node.id, "aria-valuemin"),
-      valueOf(overlay.view, node.id, "aria-valuemax"),
+      valueOf(overlay.view, node.start, "aria-valuemin"),
+      valueOf(overlay.view, node.start, "aria-valuemax"),
     ]).pipe(
       Option.filter(([min, max]) => decimalBelow(max, min)),
       Option.map(([min, max]): Finding => ({
@@ -4335,7 +4397,7 @@ const overlayLaws: readonly ((
     ),
   (node, overlay) => {
     const attribute = cardinalityBounds.get(node.kind);
-    const bound = typedValueOf(overlay.view, node.id, "response-identifier");
+    const bound = typedValueOf(overlay.view, node.start, "response-identifier");
     if (!overlay.isItem || attribute === undefined || Option.isNone(bound)) {
       return [];
     }
@@ -4374,8 +4436,8 @@ const overlayLaws: readonly ((
         ? overlay.view.members.filter(
             (member) =>
               member.kind === "qti-gap" &&
-              member.nearest === node.id &&
-              Option.isSome(valueOf(overlay.view, member.id, "identifier")),
+              member.nearest === node.start &&
+              Option.isSome(valueOf(overlay.view, member.start, "identifier")),
           ).length
         : 0;
 
@@ -4389,7 +4451,7 @@ const overlayLaws: readonly ((
       : [];
   },
   (node, overlay) => {
-    const named = typedValueOf(overlay.view, node.id, "outcome-identifier");
+    const named = typedValueOf(overlay.view, node.start, "outcome-identifier");
     if (
       !(
         overlay.isItem || Option.exists(overlay.laws.testRoot, (kind) => kind === overlay.rootKind)
@@ -4478,7 +4540,7 @@ const overlayLaws: readonly ((
       : [];
   },
   (node, overlay) => {
-    const named = typedValueOf(overlay.view, node.id, "template-identifier");
+    const named = typedValueOf(overlay.view, node.start, "template-identifier");
     if (
       !overlay.isItem ||
       node.kind === "qti-template-variable" ||
@@ -4529,7 +4591,7 @@ const overlayLaws: readonly ((
   (node, overlay) =>
     node.kind === "qti-associable-hotspot" &&
     node.parentKind === "qti-graphic-gap-match-interaction" &&
-    Option.contains(typedValueOf(overlay.view, node.id, "shape"), "default")
+    Option.contains(typedValueOf(overlay.view, node.start, "shape"), "default")
       ? [{ keys: {}, law: "Graphic gap match default hotspot" }]
       : [],
 ];
@@ -4555,7 +4617,7 @@ const overlayBreaches = (
   // nothing (spec readings 152 and 157). A name is the identifier as its type reads it, collapsed.
   const declarations = view.members.flatMap((node) =>
     laws.grammar.references.declarationKind.has(node.kind)
-      ? Option.toArray(typedValueOf(view, node.id, "identifier")).map((name) => ({ name, node }))
+      ? Option.toArray(typedValueOf(view, node.start, "identifier")).map((name) => ({ name, node }))
       : [],
   );
   const declared = new Map(
@@ -4563,7 +4625,7 @@ const overlayBreaches = (
       ([name, held]) => [name, held.map(({ node }) => node)] as const,
     ),
   );
-  const root = view.childrenOf.get(view.self)?.find(({ kind }) => laws.elements.has(kind));
+  const root = view.childrenOf.get(0n)?.find(({ kind }) => laws.elements.has(kind));
   const overlay: Overlay = {
     declared,
     isItem: Option.exists(laws.itemRoot, (kind) => kind === root?.kind),
@@ -4571,12 +4633,12 @@ const overlayBreaches = (
     rootKind: root?.kind ?? "",
     view,
   };
-  const at = (node: NodeId, { keys, law }: Finding): Breach => ({
+  const at = (node: bigint, { keys, law }: Finding): Breach => ({
     document: view.path,
     keys: {
-      kind: view.byId.get(node)?.kind ?? "",
+      kind: view.byStart.get(node)?.kind ?? "",
       node: pathOf(view, node),
-      version: view.byId.get(node)?.version ?? "",
+      version: view.byStart.get(node)?.version ?? "",
       ...keys,
     },
     law,
@@ -4588,15 +4650,17 @@ const overlayBreaches = (
   // 3.0.1 alone (3.0.1's §4.1.3 says it of the item's own label, 3.0.0's does not).
   const missingTools =
     overlay.isItem && root !== undefined
-      ? ["tool-name", "tool-version"].filter((name) => Option.isNone(valueOf(view, root.id, name)))
+      ? ["tool-name", "tool-version"].filter((name) =>
+          Option.isNone(valueOf(view, root.start, name)),
+        )
       : [];
   const labelled =
     missingTools.length === 0
       ? []
       : view.members.filter(
-          ({ id, kind, version }) =>
-            (id === root?.id ? version === "3.0.1" : !readerLabels.has(kind)) &&
-            Option.isSome(valueOf(view, id, "label")),
+          ({ kind, start, version }) =>
+            (start === root?.start ? version === "3.0.1" : !readerLabels.has(kind)) &&
+            Option.isSome(valueOf(view, start, "label")),
         );
   // Reading R9-a: "Use only one card for any particular named support in a catalog" (§5.26.1), a
   // support compared by its collapsed value, and "Only one of the CardEntry instances can have a
@@ -4604,7 +4668,7 @@ const overlayBreaches = (
   const cards = Map.groupBy(
     view.members.flatMap((node) =>
       node.kind === "qti-card"
-        ? Option.toArray(Option.map(valueOf(view, node.id, "support"), collapsed)).map(
+        ? Option.toArray(Option.map(valueOf(view, node.start, "support"), collapsed)).map(
             (support) => ({
               node,
               support,
@@ -4619,7 +4683,7 @@ const overlayBreaches = (
       (node) =>
         node.kind === "qti-card-entry" &&
         Option.contains(
-          Option.flatMap(Option.map(valueOf(view, node.id, "default"), collapsed), booleanOf),
+          Option.flatMap(Option.map(valueOf(view, node.start, "default"), collapsed), booleanOf),
           true,
         ),
     ),
@@ -4632,21 +4696,21 @@ const overlayBreaches = (
   // "Idref target" reads it: one the schema does not check, or an empty one, names nothing.
   const catalogIds = new Set([
     ...[...ids].flatMap(([id, held]) =>
-      held.some(({ node }) => view.byId.get(node)?.kind === "qti-catalog") ? [id] : [],
+      held.some(({ node }) => view.byStart.get(node)?.kind === "qti-catalog") ? [id] : [],
     ),
     ...assembledCatalogs,
   ]);
   // Reading 177: a closed `data-ssml` holds one JSON object Data-SSML 1.0 admits, which the database
   // judges over the rows the importer reads the value into ("Data SSML").
   const ssmlValues = view.members.flatMap((node) =>
-    (view.attributesOf.get(node.id) ?? [])
+    (view.attributesOf.get(node.start) ?? [])
       .filter((attribute) => attribute.name === "data-ssml")
       .flatMap((attribute) =>
         Option.toArray(dataSsmlBreachOf(attribute.lexical)).map((path) => ({ node, path })),
       ),
   );
   const catalogRefs = view.members.flatMap((node) =>
-    (view.attributesOf.get(node.id) ?? [])
+    (view.attributesOf.get(node.start) ?? [])
       .filter(
         (attribute) =>
           attribute.name === "data-catalog-idref" &&
@@ -4666,7 +4730,7 @@ const overlayBreaches = (
         view.members.flatMap((node) =>
           Option.isSome(laws.grammar.kinds.interaction.lookup({ kind: node.kind }))
             ? bindingNames.flatMap((attribute) =>
-                Option.toArray(typedValueOf(view, node.id, attribute)).map((identifier) => ({
+                Option.toArray(typedValueOf(view, node.start, attribute)).map((identifier) => ({
                   identifier,
                   node,
                 })),
@@ -4684,7 +4748,7 @@ const overlayBreaches = (
   // variable: no declaration of its document and, in an item, no built-in variable.
   const choices = view.members.flatMap((node) =>
     choiceClasses.has(node.kind)
-      ? Option.toArray(typedValueOf(overlay.view, node.id, "identifier")).map((identifier) => ({
+      ? Option.toArray(typedValueOf(overlay.view, node.start, "identifier")).map((identifier) => ({
           identifier,
           node,
         }))
@@ -4692,7 +4756,7 @@ const overlayBreaches = (
   );
   const choiceNames = Map.groupBy(choices, ({ identifier, node }) => `${node.kind} ${identifier}`);
   const classFound = new Set(
-    [...choiceNames.values()].flatMap((held) => held.slice(1).map(({ node }) => node.id)),
+    [...choiceNames.values()].flatMap((held) => held.slice(1).map(({ node }) => node.start)),
   );
   const sharedNames = Map.groupBy(choices, ({ identifier }) => identifier);
   const variableOf = (identifier: string): string | undefined => {
@@ -4721,44 +4785,46 @@ const overlayBreaches = (
         }),
       );
     }),
-    ...labelled.map(({ id }) =>
-      at(id, { keys: { missing: missingTools.join(" ") }, law: "Label tools" }),
+    ...labelled.map(({ start }) =>
+      at(start, { keys: { missing: missingTools.join(" ") }, law: "Label tools" }),
     ),
     ...[...cards.values()].flatMap((held) =>
       held.slice(1).map(({ node, support }) =>
-        at(node.id, {
-          keys: { first: pathOf(view, held[0]?.node.id ?? node.id), support },
+        at(node.start, {
+          keys: { first: pathOf(view, held[0]?.node.start ?? node.start), support },
           law: "Card support",
         }),
       ),
     ),
     ...[...designated.values()].flatMap((held) =>
       held.slice(1).map((node) =>
-        at(node.id, {
-          keys: { first: pathOf(view, held[0]?.id ?? node.id) },
+        at(node.start, {
+          keys: { first: pathOf(view, held[0]?.start ?? node.start) },
           law: "Card default entry",
         }),
       ),
     ),
     ...catalogRefs.map(({ node, token }) =>
-      at(node.id, { keys: { token }, law: "Catalog reference" }),
+      at(node.start, { keys: { token }, law: "Catalog reference" }),
     ),
-    ...ssmlValues.map(({ node, path }) => at(node.id, { keys: { path }, law: "Data SSML" })),
+    ...ssmlValues.map(({ node, path }) => at(node.start, { keys: { path }, law: "Data SSML" })),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
-        at(node.id, {
-          keys: { first: pathOf(view, held[0]?.node.id ?? node.id), identifier },
+        at(node.start, {
+          keys: { first: pathOf(view, held[0]?.node.start ?? node.start), identifier },
           law: "Binding unique",
         }),
       ),
     ),
     ...[...declared].flatMap(([identifier, nodes]) =>
-      nodes.slice(1).map(({ id }) => at(id, { keys: { identifier }, law: "Declaration key" })),
+      nodes
+        .slice(1)
+        .map(({ start }) => at(start, { keys: { identifier }, law: "Declaration key" })),
     ),
     ...[...choiceNames.values()].flatMap((held) =>
       held.slice(1).map(({ identifier, node }) =>
-        at(node.id, {
-          keys: { first: pathOf(view, held[0]?.node.id ?? node.id), identifier },
+        at(node.start, {
+          keys: { first: pathOf(view, held[0]?.node.start ?? node.start), identifier },
           law: "Choice identifier key",
         }),
       ),
@@ -4768,21 +4834,21 @@ const overlayBreaches = (
     ...[...sharedNames.values()].flatMap((held) =>
       held
         .slice(1)
-        .filter(({ node }) => !classFound.has(node.id))
+        .filter(({ node }) => !classFound.has(node.start))
         .map(({ identifier, node }) =>
-          at(node.id, {
-            keys: { first: pathOf(view, held[0]?.node.id ?? node.id), identifier },
+          at(node.start, {
+            keys: { first: pathOf(view, held[0]?.node.start ?? node.start), identifier },
             law: "Choice identifier key",
           }),
         ),
     ),
     ...choices.flatMap(({ identifier, node }) =>
       Option.toArray(Option.fromUndefinedOr(variableOf(identifier))).map((variable) =>
-        at(node.id, { keys: { identifier, variable }, law: "Choice not variable" }),
+        at(node.start, { keys: { identifier, variable }, law: "Choice not variable" }),
       ),
     ),
     ...view.members.flatMap((node) =>
-      overlayLaws.flatMap((law) => law(node, overlay).map((finding) => at(node.id, finding))),
+      overlayLaws.flatMap((law) => law(node, overlay).map((finding) => at(node.start, finding))),
     ),
   ];
 };
@@ -4816,10 +4882,10 @@ export const documentBreaches = (
         Option.toArray(law.breaks(node, view, laws)).map((keys): Breach => ({
           document: path,
           keys: {
-            id: node.id,
             kind: node.kind,
-            node: pathOf(view, node.id),
+            node: pathOf(view, node.start),
             parentKind: node.parentKind,
+            start: String(node.start),
             version: node.version,
             ...keys,
           },
@@ -4937,23 +5003,25 @@ const resourcesOf = (manifest: View, grammar: ComposedGrammar): readonly Resourc
   manifest.members
     .filter(({ kind }) => kind === "cp:resource")
     .map((node) => {
-      const type = Option.getOrElse(valueOf(manifest, node.id, "type"), () => "");
+      const type = Option.getOrElse(valueOf(manifest, node.start, "type"), () => "");
 
-      const href = valueOf(manifest, node.id, "href");
+      const href = valueOf(manifest, node.start, "href");
 
       return {
-        files: (manifest.childrenOf.get(node.id) ?? [])
+        files: (manifest.childrenOf.get(node.start) ?? [])
           .filter(({ kind }) => kind === "cp:file")
-          .flatMap(({ id }) =>
-            Option.toArray(valueOf(manifest, id, "href")).map((lexical) =>
-              resolvedAt(manifest, id, lexical),
+          .flatMap(({ start }) =>
+            Option.toArray(valueOf(manifest, start, "href")).map((lexical) =>
+              resolvedAt(manifest, start, lexical),
             ),
           ),
         handle: Option.liftPredicate(type, (value) => grammar.package.resourceType.has(value)),
         href,
-        identifier: collapsed(Option.getOrElse(valueOf(manifest, node.id, "identifier"), () => "")),
+        identifier: collapsed(
+          Option.getOrElse(valueOf(manifest, node.start, "identifier"), () => ""),
+        ),
         node,
-        resolved: href.pipe(Option.map((lexical) => resolvedAt(manifest, node.id, lexical))),
+        resolved: href.pipe(Option.map((lexical) => resolvedAt(manifest, node.start, lexical))),
         type,
       };
     });
@@ -5027,7 +5095,7 @@ const typingResource = (
 const descendantTexts = (view: View, node: FoldedNode<Composed>, kind: string): readonly string[] =>
   view.members
     .filter((member) => member.kind === kind && ancestorsOf(view, member).includes(node))
-    .map(({ id }) => collapsed(contentOf(view, id)));
+    .map(({ start }) => collapsed(contentOf(view, start)));
 
 /**
  * The kinds whose `href` names a document merged into the one that holds it (reading 85): a
@@ -5100,9 +5168,9 @@ const inclusionCycles = (
         ...(edges.get(path) ?? []),
         ...view.members
           .filter((member) => merges(grammar, member))
-          .flatMap(({ id }) =>
-            Option.toArray(valueOf(view, id, "href")).flatMap((href) =>
-              Option.toArray(entryPathAt(resolvedAt(view, id, href))),
+          .flatMap(({ start }) =>
+            Option.toArray(valueOf(view, start, "href")).flatMap((href) =>
+              Option.toArray(entryPathAt(resolvedAt(view, start, href))),
             ),
           ),
       ]);
@@ -5188,28 +5256,29 @@ const referenceBreaches = (
             form: "uri" as const,
             lexical,
             member,
-            resolution: resolvedAt(view, member.id, lexical, { whiteSpace }).resolution,
+            resolution: resolvedAt(view, member.start, lexical, { whiteSpace }).resolution,
           };
         }),
     );
     const references = view.members.flatMap((member) =>
-      [...(view.valuesOf.get(member.id) ?? new Map<string, string>())].flatMap(([name, lexical]) =>
-        Option.toArray(
-          grammar.references.referenceAttribute.lookup({
-            kind: member.kind,
-            name,
-            version: member.version,
-          }),
-        ).map(({ form }) => ({
-          field: "ReferencePath.path",
-          form,
-          lexical,
-          member,
-          resolution: resolvedAt(view, member.id, lexical, {
-            srcset: form === "srcset",
-            whiteSpace: hrefWhiteSpaceOf(`${member.version} ${member.kind} ${name}`),
-          }).resolution,
-        })),
+      [...(view.valuesOf.get(member.start) ?? new Map<string, string>())].flatMap(
+        ([name, lexical]) =>
+          Option.toArray(
+            grammar.references.referenceAttribute.lookup({
+              kind: member.kind,
+              name,
+              version: member.version,
+            }),
+          ).map(({ form }) => ({
+            field: "ReferencePath.path",
+            form,
+            lexical,
+            member,
+            resolution: resolvedAt(view, member.start, lexical, {
+              srcset: form === "srcset",
+              whiteSpace: hrefWhiteSpaceOf(`${member.version} ${member.kind} ${name}`),
+            }).resolution,
+          })),
       ),
     );
     const resolved = [...references, ...textReferences];
@@ -5224,17 +5293,17 @@ const referenceBreaches = (
           breach("Href form", {
             href: lexical,
             limit: resolution.scope === "unresolved" ? resolution.limit : "srcset",
-            node: pathOf(view, member.id),
+            node: pathOf(view, member.start),
           }),
         ),
       ...resolved.flatMap(({ member, resolution }) =>
         resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
-          : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
+          : [breach("File exists", { from: pathOf(view, member.start), path: resolution.path })],
       ),
       ...resolved.flatMap(({ field: held, member, resolution }) =>
         pathBoundKeys(resolution, held).map((keys) =>
-          breach("Key text bound", { ...keys, node: pathOf(view, member.id) }),
+          breach("Key text bound", { ...keys, node: pathOf(view, member.start) }),
         ),
       ),
       ...resolved.flatMap(({ member, resolution }) =>
@@ -5244,7 +5313,7 @@ const referenceBreaches = (
           ? []
           : [
               breach("Stimulus ref target", {
-                node: pathOf(view, member.id),
+                node: pathOf(view, member.start),
                 path: resolution.path,
               }),
             ],
@@ -5402,8 +5471,8 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
     return view.members
       .filter((member) => merges(grammar, member))
       .map((node): SiteOf => {
-        const href = valueOf(view, node.id, "href");
-        const resolved = href.pipe(Option.map((lexical) => resolvedAt(view, node.id, lexical)));
+        const href = valueOf(view, node.start, "href");
+        const resolved = href.pipe(Option.map((lexical) => resolvedAt(view, node.start, lexical)));
         const path = resolved.pipe(Option.flatMap(entryPathAt));
 
         return {
@@ -5494,7 +5563,7 @@ const splicedPathsOf = (
  */
 const siteBreach = (site: SiteOf, law: LawName, keys: Keys): Breach => ({
   document: site.document.path,
-  keys: { node: pathOf(site.view, site.node.id), ...keys },
+  keys: { node: pathOf(site.view, site.node.start), ...keys },
   law,
 });
 
@@ -5581,12 +5650,12 @@ const inclusionBreaches = (
         view.members
           .filter(({ kind }) => kind === "xi:include")
           .flatMap((node) =>
-            Option.toArray(valueOf(view, node.id, "href")).flatMap((href) =>
+            Option.toArray(valueOf(view, node.start, "href")).flatMap((href) =>
               href.includes("#")
                 ? [
                     {
                       document: path,
-                      keys: { href, node: pathOf(view, node.id) },
+                      keys: { href, node: pathOf(view, node.start) },
                       law: "Include fragment identifier" as const,
                     },
                   ]
@@ -5801,11 +5870,11 @@ const mergedDocumentsOf = (
  * content body (information model §5.28), so R26 does not count its `xml:lang` (reading R9-c).
  *
  * @param view - The document.
- * @param id - The element's node.
+ * @param id - The element's `start`.
  * @returns Whether the element is in a catalog.
  */
-const inCatalog = (view: View, id: NodeId): boolean => {
-  const element = view.byId.get(id);
+const inCatalog = (view: View, id: bigint): boolean => {
+  const element = view.byStart.get(id);
 
   return (
     element !== undefined &&
@@ -5841,9 +5910,9 @@ const documentLangBreaches = (
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
   const languagesOf = (general: FoldedNode<Composed>): readonly string[] =>
-    (manifest.childrenOf.get(general.id) ?? [])
+    (manifest.childrenOf.get(general.start) ?? [])
       .filter(({ kind }) => kind === "lom:language")
-      .map(({ id }) => caseFolded(contentOf(manifest, id)));
+      .map(({ start }) => caseFolded(contentOf(manifest, start)));
   const spliced = Map.groupBy(
     sitesOf(documents, grammar).flatMap((site) =>
       Option.toArray(splicedTarget(grammar, site)).map((target) => ({
@@ -5864,14 +5933,14 @@ const documentLangBreaches = (
       .flatMap(({ resources }) => resources.filter(({ type }) => lomNamedTypes.has(type)))
       .flatMap((resource) =>
         manifest.members.filter((member) => {
-          const record = manifest.byId.get(member.parent);
-          const owner = record === undefined ? undefined : manifest.byId.get(record.parent);
+          const record = manifest.byStart.get(member.parent);
+          const owner = record === undefined ? undefined : manifest.byStart.get(record.parent);
 
           return (
             member.kind === "lom:general" &&
             record?.kind === "lom:lom" &&
             owner?.kind === "cp:metadata.resource" &&
-            owner.parent === resource.node.id
+            owner.parent === resource.node.start
           );
         }),
       );
@@ -5900,7 +5969,7 @@ const documentLangBreaches = (
             {
               document: path,
               keys: {
-                generals: spaced(missing.map(({ id }) => pathOf(manifest, id))),
+                generals: spaced(missing.map(({ start }) => pathOf(manifest, start))),
                 lang: form,
                 node: "",
               },
@@ -5950,10 +6019,10 @@ const packageBreaches = (
   const entryPaths = new Set(input.files.map(({ path }) => path));
   const fileNodes = manifest.members.flatMap((member) =>
     member.kind === "cp:file"
-      ? Option.toArray(valueOf(manifest, member.id, "href")).map((href) => ({
+      ? Option.toArray(valueOf(manifest, member.start, "href")).map((href) => ({
           href,
           member,
-          resolved: resolvedAt(manifest, member.id, href),
+          resolved: resolvedAt(manifest, member.start, href),
         }))
       : [],
   );
@@ -5969,14 +6038,16 @@ const packageBreaches = (
   }
   const manifestNode = manifest.members.find(({ kind }) => kind === "cp:manifest");
   const manifestId = Option.fromNullishOr(manifestNode).pipe(
-    Option.flatMap(({ id }) => valueOf(manifest, id, "identifier")),
+    Option.flatMap(({ start }) => valueOf(manifest, start, "identifier")),
     Option.map(collapsed),
   );
 
   return [
     ...fileNodes
       .filter(({ resolved }) => resolved.resolution.scope === "unresolved")
-      .map(({ href, member }) => breach("Href form", { href, node: pathOf(manifest, member.id) })),
+      .map(({ href, member }) =>
+        breach("Href form", { href, node: pathOf(manifest, member.start) }),
+      ),
     ...resources.flatMap((resource) =>
       Option.toArray(resource.href)
         .filter(() =>
@@ -5986,7 +6057,7 @@ const packageBreaches = (
           breach("Href form", {
             href,
             identifier: resource.identifier,
-            node: pathOf(manifest, resource.node.id),
+            node: pathOf(manifest, resource.node.start),
           }),
         ),
     ),
@@ -6022,7 +6093,7 @@ const packageBreaches = (
             files: spaced(resource.files.map(({ path }) => path)),
             href,
             identifier: resource.identifier,
-            node: pathOf(manifest, resource.node.id),
+            node: pathOf(manifest, resource.node.start),
           }),
         ),
     ),
@@ -6044,18 +6115,18 @@ const packageBreaches = (
     ...fileNodes.flatMap(({ member, resolved }) =>
       Option.toArray(entryPathAt(resolved))
         .filter((path) => !entryPaths.has(path))
-        .map((path) => breach("File exists", { from: pathOf(manifest, member.id), path })),
+        .map((path) => breach("File exists", { from: pathOf(manifest, member.start), path })),
     ),
     ...resources.flatMap(({ node, resolved }) =>
       Option.toArray(resolved).flatMap(({ resolution }) =>
         pathBoundKeys(resolution, "ResourceHref.path").map((keys) =>
-          breach("Key text bound", { ...keys, node: pathOf(manifest, node.id) }),
+          breach("Key text bound", { ...keys, node: pathOf(manifest, node.start) }),
         ),
       ),
     ),
     ...fileNodes.flatMap(({ member, resolved }) =>
       pathBoundKeys(resolved.resolution, "File.path").map((keys) =>
-        breach("Key text bound", { ...keys, node: pathOf(manifest, member.id) }),
+        breach("Key text bound", { ...keys, node: pathOf(manifest, member.start) }),
       ),
     ),
     ...inclusionCycles(input.documents, grammar).map((chain) =>
@@ -6067,25 +6138,30 @@ const packageBreaches = (
       .map((resource) =>
         breach("Manifest id space", {
           identifier: resource.identifier,
-          node: pathOf(manifest, resource.node.id),
+          node: pathOf(manifest, resource.node.start),
         }),
       ),
     // A dependency's `identifierref` (`xs:IDREF`) and its resource's `identifier` (`xs:ID`) are
     // whiteSpace collapse types, so they compare collapsed: `identifierref=" W"` names `W`
     // (decision 457 (3); IMS Content Packaging 1.2 §6.11.5 B ii).
     ...manifest.members.flatMap((member) => {
-      const resource = manifest.byId.get(member.parent);
-      const ref = collapsedValueOf(manifest, member.id, "identifierref");
+      const resource = manifest.byStart.get(member.parent);
+      const ref = collapsedValueOf(manifest, member.start, "identifierref");
       const own =
         resource === undefined
           ? Option.none()
-          : collapsedValueOf(manifest, resource.id, "identifier");
+          : collapsedValueOf(manifest, resource.start, "identifier");
 
       return member.kind === "cp:dependency" &&
         Option.isSome(ref) &&
         Option.isSome(own) &&
         ref.value === own.value
-        ? [breach("Self dependency", { identifier: ref.value, node: pathOf(manifest, member.id) })]
+        ? [
+            breach("Self dependency", {
+              identifier: ref.value,
+              node: pathOf(manifest, member.start),
+            }),
+          ]
         : [];
     }),
     ...input.documents.flatMap((document): readonly Breach[] => {
@@ -6133,7 +6209,7 @@ const packageBreaches = (
                   onNone: () => ({}),
                   onSome: (id) => ({ identifier: id }),
                 }),
-                node: pathOf(manifest, lom.id),
+                node: pathOf(manifest, lom.start),
               }),
             ];
       });
@@ -6142,18 +6218,6 @@ const packageBreaches = (
     ...referenceBreaches(input.documents, entryPaths, grammar),
   ];
 };
-
-/**
- * Draw the id of a node of one document: a uuid whose groups spell the document's number and the
- * node's, so a breach names its node by its place.
- *
- * @param document - The document's number in its package, the manifest 0.
- * @returns The id of the node numbered by its argument.
- */
-const idsFor =
-  (document: number) =>
-  (index: number): NodeId =>
-    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`;
 
 /**
  * Read one document's bytes as crust's reader does, its refusals named by the rule the importer
@@ -6209,18 +6273,18 @@ const shredDocument = (
  * folded ones: each step from the document node, its own parent, down, as `kind[at]`.
  *
  * @param rows - The document's node rows.
- * @param id - The node's id.
+ * @param start - The node's `start`.
  * @returns The path, `/` for the document node; the walk stops at a node it has already met.
  */
-const rowPathOf = (rows: readonly NodeRow<Composed>[], id: string): string => {
-  const byId = new Map<string, NodeRow<Composed>>(rows.map((row) => [row.id, row]));
+const rowPathOf = (rows: readonly NodeRow<Composed>[], start: bigint): string => {
+  const byStart = new Map(rows.map((row) => [row.start, row] as const));
   const steps: string[] = [];
-  const seen = new Set<string>();
-  let at = byId.get(id);
-  while (at !== undefined && at.parent !== at.id && !seen.has(at.id)) {
-    seen.add(at.id);
+  const seen = new Set<bigint>();
+  let at = byStart.get(start);
+  while (at !== undefined && at.parent !== at.start && !seen.has(at.start)) {
+    seen.add(at.start);
     steps.push(`${at.kind}[${String(at.at)}]`);
-    at = byId.get(at.parent);
+    at = byStart.get(at.parent);
   }
 
   return `/${steps.toReversed().join("/")}`;
@@ -6232,26 +6296,20 @@ const rowPathOf = (rows: readonly NodeRow<Composed>[], id: string): string => {
  *
  * @param path - The document's path in its package.
  * @param tree - The document.
- * @param idOf - The ids its fold drew.
  * @param refusal - The fold's refusal.
  * @returns The breach, at the node the refusal names.
  */
-const refusalBreach = (
-  path: string,
-  tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
-  refusal: FoldRefusal,
-): Breach => {
-  const node = rowPathOf(flatten(tree, idOf).nodes, refusal.node);
+const refusalBreach = (path: string, tree: XdmDocument<Composed>, refusal: FoldRefusal): Breach => {
+  const node = rowPathOf(flatten(tree).nodes, refusal.start);
 
   return refusal._tag === "ChildUnadmitted"
     ? {
         document: path,
         keys: {
-          id: refusal.node,
           kind: refusal.kind,
           node,
           parentKind: refusal.parent,
+          start: String(refusal.start),
           version: refusal.version,
         },
         law: refusal.reason === "unadmitted" ? "N5 admitted" : "N5 Follow",
@@ -6259,7 +6317,6 @@ const refusalBreach = (
     : {
         document: path,
         keys: {
-          at: String(refusal.at),
           kind: refusal.kind,
           name: refusal.name,
           node,
@@ -6289,23 +6346,17 @@ interface Folded {
  * place among its parent's children, as `flatten` numbers them.
  *
  * @param tree - The document.
- * @param idOf - Draws the id of each node, as `fold` reads it.
- * @param node - The node's id, as a fold's refusal names it.
+ * @param node - The node's `start`, as a fold's refusal names it.
  * @returns Its slots below the root, empty for the root itself; none for a node the document does
  *   not hold.
  */
-const slotsTo = (
-  tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
-  node: string,
-): Option.Option<readonly number[]> => {
-  const rows = flatten(tree, idOf);
-  const byId = new Map<string, NodeRow<Composed>>(rows.nodes.map((row) => [row.id, row] as const));
+const slotsTo = (tree: XdmDocument<Composed>, node: bigint): Option.Option<readonly number[]> => {
+  const byStart = new Map(flatten(tree).nodes.map((row) => [row.start, row] as const));
   const slots: number[] = [];
-  let row = byId.get(node);
-  while (row !== undefined && row.parent !== rows.document.node) {
+  let row = byStart.get(node);
+  while (row !== undefined && row.parent !== 0n) {
     slots.unshift(Number(row.at));
-    row = byId.get(row.parent);
+    row = byStart.get(row.parent);
   }
 
   return row === undefined ? Option.none() : Option.some(slots);
@@ -6345,17 +6396,15 @@ const changedAt = <E extends XdmElement<Composed>>(
  * Set aside what a fold refused: the child and its subtree, or the attribute.
  *
  * @param tree - The document.
- * @param idOf - Draws the id of each node, as `fold` reads it.
  * @param refusal - The fold's refusal.
  * @returns The document without it; none where the refused node is the root element, which no
  *   document stands without.
  */
 const withoutRefused = (
   tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
   refusal: FoldRefusal,
 ): Option.Option<XdmDocument<Composed>> =>
-  Option.flatMap(slotsTo(tree, idOf, refusal.node), (slots) => {
+  Option.flatMap(slotsTo(tree, refusal.start), (slots) => {
     if (refusal._tag === "ChildUnadmitted") {
       const parent = slots.slice(0, -1);
       const slot = slots.at(-1);
@@ -6375,7 +6424,9 @@ const withoutRefused = (
       ...tree,
       root: changedAt(tree.root, slots, (element) => ({
         ...element,
-        attributes: element.attributes.filter((_, at) => BigInt(at) !== refusal.at),
+        attributes: element.attributes.filter(
+          ({ name }) => (name._tag === "closed" ? name.handle : name._tag) !== refusal.name,
+        ),
       })),
     });
   });
@@ -6392,7 +6443,6 @@ const withoutRefused = (
  *
  * @param path - The document's path in its package.
  * @param tree - The document.
- * @param idOf - Draws the id of each node, as `fold` reads it.
  * @param grammar - The closed relations the folds read.
  * @param typed - How an attribute's type reads its value.
  * @returns The document's rows and its refusals' breaches.
@@ -6400,20 +6450,19 @@ const withoutRefused = (
 const foldedOf = (
   path: string,
   tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
   grammar: FoldGrammar<Composed>,
   typed: TypedReading,
 ): Folded => {
   const refusals: Breach[] = [];
   let current: Option.Option<XdmDocument<Composed>> = Option.some(tree);
   while (Option.isSome(current)) {
-    const folded = fold(current.value, idOf, grammar);
+    const folded = fold(current.value, grammar);
     if (Result.isSuccess(folded)) {
       return { refusals, view: Option.some(viewOf(path, folded.success, typed)) };
     }
 
-    refusals.push(refusalBreach(path, current.value, idOf, folded.failure));
-    current = withoutRefused(current.value, idOf, folded.failure);
+    refusals.push(refusalBreach(path, current.value, folded.failure));
+    current = withoutRefused(current.value, folded.failure);
   }
 
   return { refusals, view: Option.none() };
@@ -6569,9 +6618,9 @@ const assembliesOf = (
                       keys: {
                         first: `${first.path} ${pathOf(firstView, first.owner)}`,
                         id,
-                        kind: view.byId.get(owner)?.kind ?? "",
+                        kind: view.byStart.get(owner)?.kind ?? "",
                         node: pathOf(view, owner),
-                        version: view.byId.get(owner)?.version ?? "",
+                        version: view.byStart.get(owner)?.version ?? "",
                       },
                       law: "DocumentId key",
                     },
@@ -6588,7 +6637,7 @@ const assembliesOf = (
               .slice(1)
               .flatMap((path) =>
                 (ids.get(path) ?? []).flatMap(({ id, owner }) =>
-                  views.get(path)?.byId.get(owner)?.kind === "qti-catalog" ? [id] : [],
+                  views.get(path)?.byStart.get(owner)?.kind === "qti-catalog" ? [id] : [],
                 ),
               ),
           ),
@@ -6636,7 +6685,7 @@ const splicedIncludeBreaches = (
 
   return Object.values(replaced).flatMap((held) => {
     const [{ view }] = held;
-    const includes = new Set(held.map(({ node }) => pathOf(view, node.id)));
+    const includes = new Set(held.map(({ node }) => pathOf(view, node.start)));
 
     return attributeBreaches(view, laws, assembled(view.path)).filter((breach) =>
       includes.has(breach.keys["node"] ?? ""),
@@ -6679,7 +6728,7 @@ const inPlaceBreaches = (
   );
   const read = new Map(
     documents
-      .flatMap((listed, index): readonly (readonly [string, Folded])[] => {
+      .flatMap((listed): readonly (readonly [string, Folded])[] => {
         if (Option.isNone(listed.folded.view)) {
           return [[listed.path, listed.folded]];
         }
@@ -6697,7 +6746,7 @@ const inPlaceBreaches = (
           root: splicedElement(grammar, byPath, listed.tree.root, listed.path, [listed.path]),
         };
 
-        return [[listed.path, foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed)]];
+        return [[listed.path, foldedOf(listed.path, tree, foldGrammar, typed)]];
       })
       .toReversed(),
   );
@@ -6786,7 +6835,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
       version,
       shredGrammar,
     );
-    const manifest = foldedOf(manifestFile.path, manifestTree, idsFor(0), foldGrammar, typed);
+    const manifest = foldedOf(manifestFile.path, manifestTree, foldGrammar, typed);
     const listing = Option.match(manifest.view, {
       onNone: () => [],
       onSome: (view) => documentsOf(resourcesOf(view, grammar), grammar),
@@ -6814,7 +6863,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
             .flatMap((listed) => (listed.path === path ? [listed.resource] : [])),
         ];
         documents.push({
-          folded: foldedOf(path, tree, idsFor(index + 1), foldGrammar, typed),
+          folded: foldedOf(path, tree, foldGrammar, typed),
           identifier: rootIdentifierOf(tree),
           path,
           resource: typingResource(resources, tree.root.kind, grammar),
@@ -7075,13 +7124,11 @@ const ownLaws = {
   },
   "AL1 owner": {
     explain: (keys) =>
-      field(keys, "ownerDocument") === ""
-        ? `the attribute at slot ${field(keys, "at")} sits on a ${field(keys, "ownerKind") || "missing node"}, which is no element`
-        : `the attribute's owner copy (${field(keys, "kind")}, ${field(keys, "version")}) is not its owner's (${field(keys, "ownerKind")}, ${field(keys, "ownerVersion")}, document ${field(keys, "ownerDocument")})`,
+      `the attribute ${field(keys, "name")}'s owner copy (${field(keys, "kind")}, ${field(keys, "version")}) is not its owner's (${field(keys, "ownerKind") || "missing node"}, ${field(keys, "ownerVersion")}), or its owner is no element`,
   },
   "AL2 count": {
     explain: (keys) =>
-      `attributes ${field(keys, "attributes")} over ${field(keys, "rows")} attribute rows`,
+      `attributes ${field(keys, "attributes")} over ${field(keys, "rows")} attribute rows, open attributes ${field(keys, "openAttributes")} over ${field(keys, "openRows")} open attribute rows`,
     node: true,
   },
   "AL2 distinct": {
@@ -7090,11 +7137,7 @@ const ownLaws = {
   },
   "AL2 fold": {
     explain: (keys) =>
-      `attrs ${inBraces(membersOf(keys["attrs"]))} from attrsWas ${inBraces(membersOf(keys["attrsWas"]))}, where its predecessor's fold is ${inBraces(membersOf(keys["predecessorAttrs"]))}`,
-  },
-  "AL2 last slot": {
-    explain: (keys) =>
-      `attrs ${inBraces(membersOf(keys["attrs"]))}, where its last attribute's fold is ${inBraces(membersOf(keys["lastAttrs"]))}`,
+      `attrs ${inBraces(membersOf(keys["attrs"]))}, where its closed attributes' positions are ${inBraces(membersOf(keys["positions"]))}`,
     node: true,
   },
   "AL3 required": {
@@ -7119,11 +7162,11 @@ const ownLaws = {
   },
   "AL4 open name key": {
     explain: (keys) =>
-      `${field(keys, "openNames")} open names, ${field(keys, "distinct")} distinct by (node, uri, local)`,
+      `the open-class attribute {${field(keys, "uri")}}${field(keys, "local")} is written again on an element that already holds it`,
   },
   "AL4 open names": {
     explain: (keys) =>
-      `${field(keys, "openNames")} open names over ${field(keys, "openAttributes")} open-class attributes`,
+      `${field(keys, "name")} is ${field(keys, "open") === "true" ? "an Attribute row of an open class" : "an OpenAttribute row of a closed name"}, where a closed name is an Attribute and an open class an OpenAttribute`,
   },
   "AL5 attribute count": {
     explain: (keys) =>
@@ -7159,7 +7202,7 @@ const ownLaws = {
   },
   "AttributeEntity owner": {
     explain: (keys) =>
-      `an entity reference at offset ${field(keys, "offset")} of attribute ${field(keys, "attribute")} has no attribute row`,
+      `an entity reference at offset ${field(keys, "offset")} of attribute ${field(keys, "attribute")} at ${field(keys, "start")} has no attribute row`,
   },
   "Binding cardinality": {
     explain: (keys) =>
@@ -7243,10 +7286,6 @@ const ownLaws = {
     explain: (keys) =>
       `${field(keys, "identifier")} is a built-in session variable, which is declared implicitly and must not be declared`,
   },
-  Document: {
-    explain: (keys) =>
-      `the Document row's node ${field(keys, "documentRow")} is not the document node ${field(keys, "self")}`,
-  },
   "Document entry": {
     explain: (keys) =>
       keys["href"] === undefined
@@ -7296,7 +7335,7 @@ const ownLaws = {
   },
   "Foreign attribute class": {
     explain: (keys) =>
-      `${field(keys, "kind")}'s attributes ${inBraces(membersOf(keys["wrong"]))} (slot:class:namespace) are not of the class their namespace has against the element's ${JSON.stringify(field(keys, "elementNamespace"))}: no-namespace for none, own-namespace for the element's, foreign for another`,
+      `${field(keys, "kind")}'s attributes ${inBraces(membersOf(keys["wrong"]))} (local:class:namespace) are not of the class their namespace has against the element's ${JSON.stringify(field(keys, "elementNamespace"))}: no-namespace for none, own-namespace for the element's, foreign for another`,
     node: true,
   },
   "Foreign element class": {
@@ -7473,7 +7512,7 @@ const ownLaws = {
   },
   "N1 sentinel": {
     explain: (keys) =>
-      `the document node sits at slot ${field(keys, "at")} with parent ${field(keys, "parent")}, document ${field(keys, "document")}, nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) and parentAncestry ${inBraces(membersOf(keys["parentAncestry"]))}, where it is its own at slot 0 and sits in no flag`,
+      `the document node sits at slot ${field(keys, "at")} with parent ${field(keys, "parent")}, nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) and parentAncestry ${inBraces(membersOf(keys["parentAncestry"]))}, where it is its own parent and nearest, 0, at slot 0, and sits in no flag`,
     node: true,
   },
   "N2 key": {
@@ -7529,9 +7568,7 @@ const ownLaws = {
   },
   "N5 first slot": {
     explain: (keys) =>
-      keys["attrsWas"] === undefined
-        ? `the first slot copies state ${field(keys, "was")} and ${field(keys, "elementsWas")} elements, where each fold starts at 0`
-        : `the first attribute copies attrs ${inBraces(membersOf(keys["attrsWas"]))}, where the fold starts empty`,
+      `the first slot copies state ${field(keys, "was")} and ${field(keys, "elementsWas")} elements, where each fold starts at 0`,
     node: true,
   },
   "N5 fold": {
@@ -7639,7 +7676,8 @@ const ownLaws = {
       `${field(keys, "node")} binds ${field(keys, "prefix") === "" ? "the default namespace" : `the prefix ${field(keys, "prefix")}`} to ${JSON.stringify(field(keys, "uri"))}, which is no RFC 3986 URI reference`,
   },
   "Node key": {
-    explain: (keys) => `a second row holds the id ${field(keys, "id")}`,
+    explain: (keys) =>
+      `a second node of the document starts at ${field(keys, "start")}, where Node's key (package, path, start) holds one`,
     node: true,
   },
   "One base": {
@@ -7774,7 +7812,7 @@ const ownLaws = {
   },
   "T3 first child": {
     explain: (keys) =>
-      `slot ${field(keys, "at")} starts at ${field(keys, "start")} with parentStart ${field(keys, "parentStart")} under a parent that starts at ${field(keys, "parentStartHeld") || "none"}, where its copy of the parent is the parent's fields and a first child starts one past its parent`,
+      `slot ${field(keys, "at")} starts at ${field(keys, "start")} under the parent at ${field(keys, "parent")}${field(keys, "parentHeld") === "false" ? ", which no row holds" : ""}, where its copy of the parent is the parent's fields and a first child starts one past its parent`,
     node: true,
   },
   "T4 next sibling": {

@@ -32,7 +32,6 @@ import {
 } from "#pantry/test/oracle-view.ts";
 import type { LawBreach, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 import type { OracleLaw } from "#pantry/test/oracle.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { ncNameForm, typedValueHolds } from "#pantry/test/oracle-laws/typed.ts";
 
 /**
@@ -185,11 +184,11 @@ const below = (left: Option.Option<string>, right: Option.Option<string>): boole
  * @returns The breach, none where the range holds.
  */
 const masteryRangeOf = (rows: View, node: Row): readonly Breach[] => {
-  const mastery = valueOf(rows, node.id, "mastery-value");
-  const low = Option.orElse(valueOf(rows, node.id, "normal-minimum"), () =>
+  const mastery = valueOf(rows, node.start, "mastery-value");
+  const low = Option.orElse(valueOf(rows, node.start, "normal-minimum"), () =>
     Option.fromUndefinedOr(normalMinimumByDefault.get(node.version)),
   );
-  const high = valueOf(rows, node.id, "normal-maximum");
+  const high = valueOf(rows, node.start, "normal-maximum");
 
   return below(low, mastery) && below(mastery, high)
     ? []
@@ -226,12 +225,14 @@ const valueSetLawsOf = (
   baseType: Option.Option<string>,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
-  const values = elementsOf(rows, set.id);
-  const fields = values.filter(({ id }) => Option.isSome(valueOf(rows, id, "field-identifier")));
-  const baseTyped = values.filter(({ id }) => Option.isSome(valueOf(rows, id, "base-type")));
+  const values = elementsOf(rows, set.start);
+  const fields = values.filter(({ start }) =>
+    Option.isSome(valueOf(rows, start, "field-identifier")),
+  );
+  const baseTyped = values.filter(({ start }) => Option.isSome(valueOf(rows, start, "base-type")));
   // A record's value is a field, with its field-identifier and its base-type both, and any other
   // variable's value carries neither (§7.46.1, §7.46.2: each is "only used for" a record's field).
-  const whole = fields.filter(({ id }) => Option.isSome(valueOf(rows, id, "base-type")));
+  const whole = fields.filter(({ start }) => Option.isSome(valueOf(rows, start, "base-type")));
   const paired = whole.length === fields.length && whole.length === baseTyped.length;
   const counted = Option.match(cardinality, {
     onNone: () => paired,
@@ -243,7 +244,7 @@ const valueSetLawsOf = (
   });
   const named = Map.groupBy(
     fields.flatMap((value) =>
-      Option.toArray(typedOr(rows, value.id, "field-identifier", "")).map((identifier) => ({
+      Option.toArray(typedOr(rows, value.start, "field-identifier", "")).map((identifier) => ({
         identifier,
         value,
       })),
@@ -281,7 +282,7 @@ const valueSetLawsOf = (
       // 158).
       const typed = cardinality.pipe(
         Option.flatMap((held) =>
-          held === "record" ? typedValueOf(rows, value.id, "base-type") : baseType,
+          held === "record" ? typedValueOf(rows, value.start, "base-type") : baseType,
         ),
       );
 
@@ -320,9 +321,9 @@ const declarationLawsOf = (
   // NIL's audit, B11; spec readings 157 and 158). Each is read as its type reads it, and
   // `base-type` and `cardinality` enumerate a restriction of `xs:string`, whose whiteSpace is
   // `preserve`, so a padded form lies outside its domain.
-  const cardinality = typedValueOf(rows, node.id, "cardinality");
-  const baseType = typedValueOf(rows, node.id, "base-type");
-  const identifier = typedValueOf(rows, node.id, "identifier");
+  const cardinality = typedValueOf(rows, node.start, "cardinality");
+  const baseType = typedValueOf(rows, node.start, "base-type");
+  const identifier = typedValueOf(rows, node.start, "identifier");
   const keys = {
     ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
     ...Option.match(identifier, { onNone: () => ({}), onSome: (held) => ({ identifier: held }) }),
@@ -349,11 +350,11 @@ const declarationLawsOf = (
         (node.kind !== "qti-context-declaration" || Option.contains(isRecord, false)))
     );
   });
-  const writesBaseType = Option.isSome(valueOf(rows, node.id, "base-type"));
+  const writesBaseType = Option.isSome(valueOf(rows, node.start, "base-type"));
   const baseBroken = Option.exists(isRecord, (record) =>
     record ? Option.isSome(baseType) : !writesBaseType,
   );
-  const sets = elementsOf(rows, node.id).filter(({ kind }) => valueSetKinds.has(kind));
+  const sets = elementsOf(rows, node.start).filter(({ kind }) => valueSetKinds.has(kind));
 
   return [
     ...Option.toArray(identifier).flatMap((name) =>
@@ -387,13 +388,13 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
   const interactions = new Set(grammar.kinds.interaction.rows.map(({ kind }) => kind));
   const feedback = rowOf(grammar.ancestry.enters, "qti-feedback-block");
   const adaptive = Option.contains(
-    Option.flatMap(valueOf(rows, root.id, "adaptive"), booleanOf),
+    Option.flatMap(valueOf(rows, root.start, "adaptive"), booleanOf),
     true,
   );
   const declared = new Map(
     rows.members.flatMap((node) =>
       grammar.references.declarationKind.has(node.kind)
-        ? Option.toArray(typedValueOf(rows, node.id, "identifier")).map(
+        ? Option.toArray(typedValueOf(rows, node.start, "identifier")).map(
             (identifier) => [identifier, node] as const,
           )
         : [],
@@ -405,7 +406,7 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
       return [];
     }
 
-    return Option.toArray(typedValueOf(rows, node.id, "response-identifier")).flatMap(
+    return Option.toArray(typedValueOf(rows, node.start, "response-identifier")).flatMap(
       (identifier) => {
         const declaration = declared.get(identifier);
         // The cardinality as its type reads it, which max-strings judges only where it is a
@@ -413,7 +414,7 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
         const cardinality =
           declaration === undefined
             ? ""
-            : Option.getOrElse(typedValueOf(rows, declaration.id, "cardinality"), () => "");
+            : Option.getOrElse(typedValueOf(rows, declaration.start, "cardinality"), () => "");
         const inFeedback = [...step(grammar.ancestry, node.parentAncestry, node.kind)].some(
           (flag) => feedback.has(flag),
         );
@@ -425,7 +426,7 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
           ...(node.kind === "qti-extended-text-interaction" &&
           declaration?.kind === "qti-response-declaration" &&
           (cardinality === "multiple" || cardinality === "ordered") &&
-          Option.isNone(valueOf(rows, node.id, "max-strings"))
+          Option.isNone(valueOf(rows, node.start, "max-strings"))
             ? [breachAt(rows, node, "Max strings required", { cardinality, identifier })]
             : []),
         ];
@@ -472,47 +473,47 @@ const productions = {
  */
 const productionLawsOf = (rows: View): readonly Breach[] => {
   const { rows: folded } = rows;
-  const at = (node: NodeId, production: string, value: string): readonly Breach[] => {
-    const held = rows.byId.get(node);
+  const at = (node: bigint, production: string, value: string): readonly Breach[] => {
+    const held = rows.byStart.get(node);
 
     return held === undefined
       ? []
       : [breachAt(rows, held, "XML production", { production, value })];
   };
   const checked = (
-    node: NodeId,
+    node: bigint,
     production: string,
     pattern: RegExp,
     value: string,
   ): readonly Breach[] => (pattern.test(value) ? [] : at(node, production, value));
 
   return [
-    ...[...folded.texts, ...folded.whitespace].flatMap(({ node, value }) =>
-      checked(node, "text", productions.char, value),
+    ...[...folded.texts, ...folded.whitespace].flatMap(({ start, value }) =>
+      checked(start, "text", productions.char, value),
     ),
-    ...folded.attributes.flatMap(({ lexical, node }) =>
-      checked(node, "attribute value", productions.char, lexical),
+    ...[...folded.attributes, ...folded.openAttributes].flatMap(({ lexical, start }) =>
+      checked(start, "attribute value", productions.char, lexical),
     ),
-    ...folded.comments.flatMap(({ node, value }) =>
-      checked(node, "comment", productions.comment, value),
+    ...folded.comments.flatMap(({ start, value }) =>
+      checked(start, "comment", productions.comment, value),
     ),
-    ...folded.doctypes.flatMap(({ node, value }) =>
-      checked(node, "doctype", productions.doctype, value),
+    ...folded.doctypes.flatMap(({ start, value }) =>
+      checked(start, "doctype", productions.doctype, value),
     ),
-    ...folded.pis.flatMap(({ data, node, target }) => [
+    ...folded.pis.flatMap(({ data, start, target }) => [
       ...(ncNameForm.test(target) && !/^xml$/iu.test(target)
         ? []
-        : at(node, "processing instruction target", target)),
-      ...checked(node, "processing instruction data", productions.piData, data),
+        : at(start, "processing instruction target", target)),
+      ...checked(start, "processing instruction data", productions.piData, data),
     ]),
-    ...folded.entityRefs.flatMap(({ name, node }) =>
-      ncNameForm.test(name) ? [] : at(node, "entity name", name),
+    ...folded.entityRefs.flatMap(({ name, start }) =>
+      ncNameForm.test(name) ? [] : at(start, "entity name", name),
     ),
-    ...folded.xmlDecls.flatMap(({ node, version }) =>
-      checked(node, "version", productions.version, version),
+    ...folded.xmlDecls.flatMap(({ version }) =>
+      checked(0n, "version", productions.version, version),
     ),
-    ...folded.encodingDecls.flatMap(({ encoding, node }) =>
-      checked(node, "encoding", productions.encoding, encoding),
+    ...folded.encodingDecls.flatMap(({ encoding }) =>
+      checked(0n, "encoding", productions.encoding, encoding),
     ),
   ];
 };
@@ -618,8 +619,8 @@ const statedLanguage = (form: Option.Option<string>): Option.Option<string> =>
  *   entry.
  */
 const entryPathOf = (manifest: View, resource: Row): Option.Option<string> =>
-  Option.flatMap(valueOf(manifest, resource.id, "href"), (lexical) => {
-    const { path, resolution } = resolvedAt(manifest, resource.id, lexical);
+  Option.flatMap(valueOf(manifest, resource.start, "href"), (lexical) => {
+    const { path, resolution } = resolvedAt(manifest, resource.start, lexical);
 
     return resolution.scope === "entry" ? Option.some(path) : Option.none();
   });
@@ -652,7 +653,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
       return [];
     }
 
-    const type = Option.getOrElse(typedValueOf(manifest, resource.id, "type"), () => "");
+    const type = Option.getOrElse(typedValueOf(manifest, resource.start, "type"), () => "");
     const entry = entryPathOf(manifest, resource);
     const document = input.documents.find((listed) => Option.contains(entry, listed.path));
     const root = document === undefined ? undefined : Option.getOrUndefined(document.rows.root);
@@ -667,8 +668,8 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     // refuses has no value to read, so it states no language, as an unwritten one states none
     // (spec reading 151).
     const object = objectRoots.has(root.kind);
-    const title = Option.map(valueOf(document.rows, root.id, "title"), replaced);
-    const lang = statedLanguage(typedValueOf(document.rows, root.id, "xml:lang"));
+    const title = Option.map(valueOf(document.rows, root.start, "title"), replaced);
+    const lang = statedLanguage(typedValueOf(document.rows, root.start, "xml:lang"));
 
     return manifest.members
       .filter((lom) => {
@@ -677,7 +678,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
         return (
           lom.kind === "lom:lom" &&
           metadata?.kind === "cp:metadata.resource" &&
-          owner?.id === resource.id
+          owner?.start === resource.start
         );
       })
       .flatMap((lom): readonly Breach[] => {
@@ -688,17 +689,17 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
             string.kind === "lom:string" &&
             titleNode?.kind === "lom:title" &&
             general?.kind === "lom:general" &&
-            ancestorsOf(manifest, general).some(({ id }) => id === lom.id)
+            ancestorsOf(manifest, general).some(({ start }) => start === lom.start)
           );
         });
         const titles = manifest.members.filter(
           (held) =>
             held.kind === "lom:title" &&
             ancestorsOf(manifest, held)[0]?.kind === "lom:general" &&
-            ancestorsOf(manifest, held).some(({ id }) => id === lom.id),
+            ancestorsOf(manifest, held).some(({ start }) => start === lom.start),
         );
         const names = strings.some((string) => {
-          const language = statedLanguage(valueOf(manifest, string.id, "language"));
+          const language = statedLanguage(valueOf(manifest, string.start, "language"));
 
           return (
             object &&
@@ -733,14 +734,14 @@ const dependencyLawsOf = (manifest: View): readonly Breach[] => {
   const resources = new Set(
     manifest.members.flatMap((node) =>
       node.kind === "cp:resource"
-        ? Option.toArray(typedValueOf(manifest, node.id, "identifier"))
+        ? Option.toArray(typedValueOf(manifest, node.start, "identifier"))
         : [],
     ),
   );
 
   return manifest.members.flatMap((node) =>
     node.kind === "cp:dependency"
-      ? Option.toArray(typedValueOf(manifest, node.id, "identifierref"))
+      ? Option.toArray(typedValueOf(manifest, node.start, "identifierref"))
           .filter((identifier) => !resources.has(identifier))
           .map((identifier) => breachAt(manifest, node, "Dependency target", { identifier }))
       : [],

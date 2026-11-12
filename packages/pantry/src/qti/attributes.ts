@@ -1,8 +1,11 @@
 /**
- * Uniform attributes: every attribute of every element as one `Attribute` row, an ordered family
- * under its element in source order, with its open name, its IDREF tokens and its unexpanded entity
- * references as ordered families under it, and the laws over them (plan §1.5; fin.md §16; the W5
- * amendment's C1, C3, C6, C7, C9, C14, C18 and C21, with the orchestrator's rulings of 2026-11-06).
+ * Uniform attributes: every attribute of every element as one row, a closed name's an `Attribute`
+ * keyed by its element and its name, an open class's an `OpenAttribute` keyed by its element and
+ * its written expanded name, each a counted family under its element, since an element's attributes
+ * are a set (Infoset [attributes]); a closed attribute's IDREF tokens as an ordered family under
+ * it, each attribute's unexpanded entity references as a counted family keyed by their offset, and
+ * the laws over them (plan §1.5; fin.md §16; the W5 amendment's C1, C3, C6, C7, C9, C14, C18 and
+ * C21, with the orchestrator's rulings of 2026-11-06).
  *
  * An attribute is read under its element's governor, `Node.governor`: the kind itself where its
  * declared type governs it or no named type does, or the (kind, type) pair where an `xsi:type`
@@ -10,8 +13,8 @@
  * readings 60, 83 and 84; `GoverningOf` of the element's type, `typeGovernorOf` of
  * `#pantry/qti/node.ts`). The governor's attribute model, `AttributeModelOf(version, governor)`,
  * then gives the name's slot, value domain and use, `AttributeGrammar(model, name)`. `Attribute`
- * copies `kind`, `version`, `document` and `governor` from its element along the family's owner
- * axis, so every law below reads its governor inline.
+ * and `OpenAttribute` copy `kind`, `version` and `governor` from their element along their family's
+ * owner axis, so every law below reads its governor inline.
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
  *   governor admits, `{name} ⊆ AttributeGrammar.row(model)`, with `{name}` the name's
@@ -32,32 +35,32 @@
  *   (C47).
  * - **AL2** (C9): `slot` is the singleton of the name's slot, `Compute.singleton(slot)`. It is
  *   written by the host and proved by `E1_derived`, because a generated field reads the caller's
- *   fields alone and `version` and `governor` are copies. The `or` fold over the family, whose step
- *   selection leaves the open classes out, ends in `Node.attrs`, which AL3 reads. Distinctness is
- *   the closed attributes' key over `(node, name)`: `AttributeGrammar` is keyed `(model, name)` and
- *   its slot is injective within a model (no two names of one model share a slot, over all of its
- *   6,167 rows), and a node has one governor, so no repeated slot among a node's closed attributes
- *   is no repeated `(node, name)` among them. The injectivity is the grammar's, cited here, not
- *   stated as a law: grizzle judges a closed relation by its one declared key. An open class is one
- *   slot for many names, and the selection keeps it out of the key and out of every `attrsWas`, so
- *   two attributes of one class are no repeat (fin.md §16's `~open`). grizzle emits the fold's
- *   slot-0 pin and its empty family's end.
+ *   fields alone and `version` and `governor` are copies. The `or` fold over the closed attributes'
+ *   counted family ends in `Node.attrs`, which AL3 reads. Distinctness is `Attribute`'s key over
+ *   `(package, path, start, name)`: `AttributeGrammar` is keyed `(model, name)` and its slot is
+ *   injective within a model (no two names of one model share a slot, over all of its 6,167 rows),
+ *   and a node has one governor, so no repeated slot among a node's closed attributes is no
+ *   repeated name among them. The injectivity is the grammar's, cited here, not stated as a law:
+ *   grizzle judges a closed relation by its one declared key. An open class is one slot for many
+ *   names, so its attributes are `OpenAttribute`'s, out of the fold, and two attributes of one
+ *   class are no repeat (fin.md §16's `~open`). grizzle emits the empty family's end.
  * - **AL3** (`AL3_required`, a check on `Node`): every slot the element's governor requires is in its
  *   `attrs`.
  * - **AL5** (`AL5_attribute_count`, a check on `Node`, rule `attribute-count`): an element whose
  *   governor's model has an `AttributeCountOf` row carries from `min` to `max` of its `CountedSlot`
  *   attributes, `|attrs ∩ CountedSlot.row(model)|` (spec readings 41 and 43); a model of no count
  *   states nothing. `attrs` holds only the attributes written, so a defaulted one counts nothing.
- * - **AL4** (C14): an open-class attribute has exactly one `OpenAttributeName`, a closed one none
- *   (`AL4_open_names`); open names are distinct by expanded name on an element (`key(node, uri,
- *   local)`); and `Foreign_attribute_class` holds each open name's stored namespace to its class
- *   against its element's namespace (XML Schema 1.0 Part 1 §3.10.4); and `AL4_data_name` holds a
- *   `data-*` name to reading 13's language (`dataName` of `#pantry/vocab/open.ts`, matched by its
- *   source) and a no-namespace name of an element that is not foreign to not begin `data-`; and
- *   `AL4_declared_data_name` keeps a `data-*` name from being a custom one where the element's
- *   governor admits it as a declared attribute (goal part E): a declared name is its closed
- *   attribute, never an open name beside or instead of it. An element an `xsi:type` governs is
- *   judged by its governor, the element's `governor`, which its kind and its named type give.
+ * - **AL4** (C14): an `Attribute`'s name is no open class and an `OpenAttribute`'s class is one
+ *   (`AL4_open_names`); open names are distinct by expanded name on an element, `OpenAttribute`'s
+ *   key `(package, path, start, uri, local)`; and `Foreign_attribute_class` holds each open name's
+ *   stored namespace to its class against its element's namespace (XML Schema 1.0 Part 1 §3.10.4);
+ *   and `AL4_data_name` holds a `data-*` name to reading 13's language (`dataName` of
+ *   `#pantry/vocab/open.ts`, matched by its source) and a no-namespace name of an element that is
+ *   not foreign to not begin `data-`; and `AL4_declared_data_name` keeps a `data-*` name from being
+ *   a custom one where the element's governor admits it as a declared attribute (goal part E): a
+ *   declared name is its closed attribute, never an open name beside or instead of it. An element
+ *   an `xsi:type` governs is judged by its governor, the element's `governor`, which its kind and
+ *   its named type give.
  * - **The prefix** (`Attribute_prefix`, C54): every attribute keeps the prefix its name is written
  *   with, so the export writes it back byte for byte (spec reading 47), and the prefix agrees with
  *   the namespace its name is in: none for a name in no namespace, `xml` for the XML namespace's,
@@ -92,12 +95,12 @@ import {
   closedId,
   Compute,
   contained,
+  counted,
   doubleText,
   drawn,
   fin,
   fold,
   generated,
-  key,
   Monoid,
   natural,
   on,
@@ -105,7 +108,6 @@ import {
   relation,
   select,
   str,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { Identity } from "#pantry/grammar/install.ts";
@@ -134,8 +136,14 @@ import { namingText } from "#pantry/grammar/domains.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
-import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
-import { Chars, holdsCheckedText, nilUuid, Node, universalDomains } from "#pantry/qti/node.ts";
+import {
+  EntryPath,
+  keyText,
+  localNameBytes,
+  ManifestIdentifier,
+  namespaceText,
+} from "#pantry/qti/limits.ts";
+import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
@@ -194,10 +202,11 @@ const nonSpacePattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
 
 /**
  * An open attribute's local name: an NCName of at most `localNameBytes` UTF-8 bytes
- * (`#pantry/qti/limits.ts`), the bound `(node, uri, local)` reads it at. Its pattern is read under
- * `su`, which reads an NCName exactly as `u` does (it holds no `.`), so its law, the byte bound's,
- * is no other type's: {@link EntityName} writes the same NCName under `u`, and a refusal names each
- * by its pattern. Exported for `src/import/refusal.ts`, which names its pattern law.
+ * (`#pantry/qti/limits.ts`), the bound `(package, path, start, uri, local)` reads it at. Its
+ * pattern is read under `su`, which reads an NCName exactly as `u` does (it holds no `.`), so its
+ * law, the byte bound's, is no other type's: {@link EntityName} writes the same NCName under `u`,
+ * and a refusal names each by its pattern. Exported for `src/import/refusal.ts`, which names its
+ * pattern law.
  */
 export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${ncChar}]*$`, "su"));
 
@@ -209,20 +218,20 @@ export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${nc
 export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
 
 /**
- * One attribute of an element, at its slot among the element's attributes in source order, which
- * keeps the attributes' order for byte fidelity.
+ * One attribute of a closed name on an element, keyed by its element and its name: its expanded
+ * name is its `AttributeName` handle, so `(package, path, start, name)` is its identity (Namespaces
+ * in XML 1.0, §6.3; Infoset [namespace name] and [local name]).
  *
  * Its fields by how each is written:
  *
- * - **the host's:** `id`, `name` (an `AttributeName` handle, an open class's included), `prefix` (the
- *   prefix its name is written with, empty for none, of a declaration's type, since every prefix
- *   but `xml` is one a declaration in scope binds), `lexical` (the record) and `slot` (`{position}`
- *   of its name under its element's governor);
- * - **the family's group:** `node`, its element's id, which the nesting supplies;
- * - **drawn:** `at`, and the counts of its three families, `openName`, `idrefs` and `entities`;
- * - **accumulated** by grizzle: `kind`, `version`, `document`, `governor` and `documentType`, its
- *   element's, along the owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this
- *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation.
+ * - **the host's:** `package`, `path` and `start`, its element's key, which names its owner in the
+ *   counted family; `name` (a closed `AttributeName` handle), `prefix` (the prefix its name is
+ *   written with, empty for none, of a declaration's type, since every prefix but `xml` is one a
+ *   declaration in scope binds), `lexical` (the record) and `slot` (`{position}` of its name under
+ *   its element's governor);
+ * - **drawn:** the counts of its two families, `idrefs` and `entities`;
+ * - **accumulated** by grizzle: `kind`, `version`, `governor` and `documentType`, its element's,
+ *   along the owner axis; and `idrefText`, the end of its `Idref` pieces' concatenation.
  *
  * No law of `Qti` reads whether its lexical form is an address. The package-media level states
  * those laws as row checks over this relation (`#pantry/qti/media.ts`), installed on its table only
@@ -231,66 +240,68 @@ export const EntityName = str.regex(`^[${ncStart}][${ncChar}]*$`);
 export const Attribute = relation(
   "Attribute",
   {
-    at: drawn(natural),
-    attrsAfter: accumulated(bits(AttributeSlot), Bits.of(AttributeSlot, [])),
-    attrsWas: accumulated(bits(AttributeSlot), Bits.of(AttributeSlot, [])),
-    document: accumulated(uuid, nilUuid),
     documentType: accumulated(closedId(DocumentType), "manifest"),
     entities: drawn(natural),
     governor: accumulated(closedId(Governor), "document"),
-    id: uuid,
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: accumulated(closedId(NodeKind), "document"),
     lexical: Chars,
     name: closedId(AttributeName),
-    node: uuid,
-    openName: drawn(natural),
+    package: ManifestIdentifier,
+    path: EntryPath,
     prefix: NamespacePrefix,
     slot: bits(AttributeSlot),
+    start: natural,
     version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
-  ["node", "id"],
+  ["package", "path", "start", "name"],
 );
 
 /**
- * The exact name of an attribute under an open class (fin.md D2, C14): what its class leaves of
- * its name, an ordered family of at most one member under its `Attribute`.
+ * One attribute of an open class on an element (fin.md D2, C14), keyed by its element and its
+ * expanded name as written, `(uri, local)`: an open class's handle names many attributes (`data-a`
+ * and `data-b` share `data-*`), so the written name is its identity.
  *
- * - **the host's:** `local` and `uri`, its local name and namespace name as written (an empty
- *   namespace for `data-*` and `no-namespace`), and `elementNamespace`, its element's namespace
- *   name, which the class is read against. Its prefix is its attribute's (`Attribute.prefix`);
- * - **the family's group:** `node` and `attribute`, its attribute's key;
- * - **drawn:** `at`, always 0;
- * - **accumulated** along the owner axis: `class`, its attribute's name (the open class), and its
- *   element's `kind`, `version` and `governor`, by which `AL4_declared_data_name` reads its
- *   attribute model.
+ * - **the host's:** `package`, `path` and `start`, its element's key; `class`, the open class its
+ *   name falls in; `local` and `uri`, its local name and namespace name as written (an empty
+ *   namespace for `data-*` and `no-namespace`); `prefix`, `lexical` and `slot`, as a closed
+ *   attribute's; and `elementNamespace`, its element's namespace name, which the class is read
+ *   against;
+ * - **drawn:** `entities`, the count of its entity references;
+ * - **accumulated** along the owner axis: its element's `kind`, `version` and `governor`, by which
+ *   `AL4_declared_data_name` reads its attribute model.
  */
-export const OpenAttributeName = relation(
-  "OpenAttributeName",
+export const OpenAttribute = relation(
+  "OpenAttribute",
   {
-    at: drawn(natural),
-    attribute: uuid,
-    class: accumulated(closedId(AttributeName), "data-*"),
+    class: closedId(AttributeName),
     elementNamespace: namespaceText,
+    entities: drawn(natural),
     governor: accumulated(closedId(Governor), "document"),
     kind: accumulated(closedId(NodeKind), "document"),
+    lexical: Chars,
     local: OpenLocal,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    prefix: NamespacePrefix,
+    slot: bits(AttributeSlot),
+    start: natural,
     uri: namespaceText,
     version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
-  ["node", "attribute", "at"],
+  ["package", "path", "start", "uri", "local"],
 );
 
 /**
  * One IDREF token of an attribute whose domain is an `xs:IDREF` or `xs:IDREFS` (C3), in order, with
  * the whitespace written before and after it, so its `piece` is a stretch of the lexical form and
- * the pieces concatenate to it.
+ * the pieces concatenate to it. An IDREFS value is an `xs:list`, an ordered sequence of tokens, so
+ * its order is kept. Only a closed attribute's domain is an IDREF's.
  *
  * `token`, and the concatenation's running values and end, are `keyText` (`#pantry/qti/limits.ts`):
  * `Idref target` (Q5.07) compares the token with a document's ids across rows, and the running
- * values ride the family's predecessor and last axes, each beside two uuids and a bigint in one
+ * values ride the family's predecessor and last axes beside the attribute's key and a bigint in one
  * B-tree entry. So one bound serves every IDREF the schema holds, and an IDREFS value past it is
  * refused by the accumulator's type when grizzle fills the fold, a stated limit of the
  * representation.
@@ -299,71 +310,106 @@ export const OpenAttributeName = relation(
  * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step: a `keyText` whose
  *   domain refuses a piece past the bound, as grizzle's README states of a generated term of
  *   another pattern or byte bound than its field's ("How a field is written");
- * - **the family's group:** `node` and `attribute`;
+ * - **the family's group:** `package`, `path`, `start` and `name`, its attribute's key, which the
+ *   nesting supplies;
  * - **drawn:** `at`;
- * - **accumulated:** `document`, its attribute's, along the owner axis, which `Idref target` reads
- *   (Q5.07); `piecesWas` and `piecesAfter`, the concatenation before and after it.
+ * - **accumulated:** `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
 export const Idref = relation.generated(
   "Idref",
   {
     after: Space,
     at: drawn(natural),
-    attribute: uuid,
     before: Space,
-    document: accumulated(uuid, nilUuid),
-    node: uuid,
+    name: closedId(AttributeName),
+    package: ManifestIdentifier,
+    path: EntryPath,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
+    start: natural,
     token: keyText,
   },
-  ["node", "attribute", "at"],
+  ["package", "path", "start", "name", "at"],
   (i) => ({
     piece: generated(keyText, Compute.concat(Compute.concat(i.before, i.token), i.after)),
   }),
 );
 
 /**
- * One unexpanded entity reference inside an attribute's lexical form, in offset order (plan §1.4):
- * the entity's name and the offset of its `&` in the lexical form, which keeps it as `&name;`.
+ * One unexpanded entity reference inside a closed attribute's lexical form (plan §1.4), keyed by
+ * its attribute and its offset: the entity's name, `entity`, and the offset of its `&` in the
+ * lexical form, which keeps it as `&entity;`. The offset is the reference's place in the value, so
+ * no other order is stored.
  */
 export const AttributeEntity = relation(
   "AttributeEntity",
   {
-    at: drawn(natural),
-    attribute: uuid,
-    name: EntityName,
-    node: uuid,
+    entity: EntityName,
+    name: closedId(AttributeName),
     offset: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute", "at"],
+  ["package", "path", "start", "name", "offset"],
 );
 
 /**
- * Each element's attributes in source order, counted by `Node.attributes`.
+ * One unexpanded entity reference inside an open attribute's lexical form, keyed by its attribute
+ * and its offset, as {@link AttributeEntity} is a closed attribute's.
  */
-export const attributeFamily = ordered(on(Attribute, "node", "at"), fin(Node, "attributes"));
+export const OpenAttributeEntity = relation(
+  "OpenAttributeEntity",
+  {
+    entity: EntityName,
+    local: OpenLocal,
+    offset: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    uri: namespaceText,
+  },
+  ["package", "path", "start", "uri", "local", "offset"],
+);
 
 /**
- * Each open-class attribute's exact name, counted by `Attribute.openName`: one member for an open
- * class, none for a closed name (`AL4_open_names`).
+ * Each element's closed attributes, a set counted by `Node.attributes`.
  */
-const openNameFamily = ordered(
-  on(OpenAttributeName, "node", "attribute", "at"),
-  fin(Attribute, "openName"),
+export const attributeFamily = counted(
+  on(Attribute, "package", "path", "start"),
+  fin(Node, "attributes"),
+);
+
+/**
+ * Each element's open-class attributes, a set counted by `Node.openAttributes`.
+ */
+export const openAttributeFamily = counted(
+  on(OpenAttribute, "package", "path", "start"),
+  fin(Node, "openAttributes"),
 );
 
 /**
  * Each IDREF or IDREFS attribute's tokens in order, counted by `Attribute.idrefs`.
  */
-const idrefFamily = ordered(on(Idref, "node", "attribute", "at"), fin(Attribute, "idrefs"));
+const idrefFamily = ordered(
+  on(Idref, "package", "path", "start", "name", "at"),
+  fin(Attribute, "idrefs"),
+);
 
 /**
- * Each attribute's unexpanded entity references in offset order, counted by `Attribute.entities`.
+ * Each closed attribute's unexpanded entity references, counted by `Attribute.entities`.
  */
-const entityFamily = ordered(
-  on(AttributeEntity, "node", "attribute", "at"),
+const entityFamily = counted(
+  on(AttributeEntity, "package", "path", "start", "name"),
   fin(Attribute, "entities"),
+);
+
+/**
+ * Each open attribute's unexpanded entity references, counted by `OpenAttribute.entities`.
+ */
+const openEntityFamily = counted(
+  on(OpenAttributeEntity, "package", "path", "start", "uri", "local"),
+  fin(OpenAttribute, "entities"),
 );
 
 /**
@@ -380,19 +426,44 @@ const declaredDataNames = AttributeName.handles.filter(
 type AttributeRow = RowScalars<typeof Attribute>;
 
 /**
+ * An `OpenAttribute` row as a row check or a selection reads it.
+ */
+type OpenAttributeRow = RowScalars<typeof OpenAttribute>;
+
+/**
  * What an attribute's domain is read by: its name, and its element's version and governor, which
  * an `Attribute` row holds.
  */
 type NamedRow = Pick<AttributeRow, "governor" | "name" | "version">;
 
 /**
- * Read an attribute's attribute model: its element's governor's in the version
- * (`AttributeModelOf`, total).
+ * Read the attribute model of an element's governor in a version (`AttributeModelOf`, total): the
+ * model its attributes, closed and open, are read under.
+ *
+ * @param version - The element's version.
+ * @param governor - Its governor.
+ * @returns The closed read.
+ */
+const modelOf = (
+  version: Parameters<typeof AttributeModelOf.at>[1],
+  governor: Parameters<typeof AttributeModelOf.at>[2],
+) => AttributeModelOf.at("model", version, governor);
+
+/**
+ * Read an attribute's attribute model: its element's governor's in the version.
  *
  * @param a - The row.
  * @returns The closed read.
  */
-const attributeModelOf = (a: NamedRow) => AttributeModelOf.at("model", a.version, a.governor);
+const attributeModelOf = (a: NamedRow) => modelOf(a.version, a.governor);
+
+/**
+ * Read an open attribute's attribute model: its element's governor's in the version.
+ *
+ * @param o - The row.
+ * @returns The closed read.
+ */
+const openModelOf = (o: OpenAttributeRow) => modelOf(o.version, o.governor);
 
 /**
  * Read an admitted attribute's slot under its element's governor (`AttributeGrammar`).
@@ -415,6 +486,16 @@ export const admitted = (a: AttributeRow) =>
   a.eq(Compute.subset(Compute.singleton(a.name), AttributeGrammar.row(attributeModelOf(a))), true);
 
 /**
+ * State that an open attribute's class is one its element's governor admits, as {@link admitted}
+ * states it of a closed name.
+ *
+ * @param o - The row.
+ * @returns The predicate.
+ */
+const openAdmitted = (o: OpenAttributeRow) =>
+  o.eq(Compute.subset(Compute.singleton(o.class), AttributeGrammar.row(openModelOf(o))), true);
+
+/**
  * Read an admitted attribute's value domain under its element's governor. Exported for
  * `#pantry/qti/media.ts`, whose laws read it.
  *
@@ -424,37 +505,13 @@ export const admitted = (a: AttributeRow) =>
 export const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attributeModelOf(a), a.name);
 
 /**
- * State that an attribute's name is an open class's.
+ * Read an admitted open attribute's value domain: its class's under its element's governor.
  *
- * @param a - The row.
- * @returns The predicate.
+ * @param o - The row.
+ * @returns The closed read, absent for an unadmitted class.
  */
-const open = (a: AttributeRow) => a.in(a.name, openClasses);
-
-/**
- * State that an attribute's name is closed, the attributes AL2's fold steps over: an element holds
- * at most one of each closed name, by {@link closedAttributes}' key. Exported for every selection
- * of closed names, which states it as its first conjunct, so that the key keys it.
- *
- * @param a - The row.
- * @returns The predicate.
- */
-export const closedName = (a: AttributeRow) => a.not(open(a));
-
-/**
- * The attributes of a closed name. Its key over `(node, name)` is the whole of AL2's distinctness,
- * and the only key any selection of closed names needs. grizzle keys a containment's target by a
- * key whose conjuncts are among the target's, matched by their text (`selectsWithin`,
- * `laws/model/plan.ts:649` at `698880a`), and whose terms are among the target's terms and the
- * fields its selection fixes (`#fixedTarget`, `:1536-1586`; `#keyedTarget`, `:1588`). So a
- * selection that states {@link closedName} and fixes `name` to a literal, read at `node`, and one
- * read at `(node, name)`, are both keyed by it, and states no key of its own. A selection read at
- * `node` alone whose `name` no conjunct fixes (`lookupAttributes`, `#pantry/qti/mapping.ts`) is
- * keyed by neither, and keeps its own. Where a keyed selection is also a copy's source (C18), its
- * reverse probe reads an index over the selection's `node`, and grizzle builds one index there that
- * serves both the probe and the fixed target's UNIQUE, so `Attribute.lexical` sits in no index.
- */
-const closedAttributes = select(Attribute, closedName);
+const openDomainOf = (o: OpenAttributeRow) =>
+  AttributeGrammar.at("domain", openModelOf(o), o.class);
 
 /**
  * State that an attribute's domain is of one of `identities` (`ID`, `IDREF`, `IDREFS`): its domain
@@ -501,14 +558,18 @@ const handlesUnder = (prefix: (typeof handlePrefixes)[number]["prefix"]) =>
 const xmlNames = handlesUnder("xml");
 
 /**
- * The names in a namespace a document binds a prefix of its own choosing to: XML Schema's instance
- * names, XLink's, and the open classes of a name in a namespace, its element's or another.
+ * The closed names in a namespace a document binds a prefix of its own choosing to: XML Schema's
+ * instance names and XLink's.
  */
-const boundNames = [
-  ...handlePrefixes.flatMap(({ prefix }) => (prefix === "xml" ? [] : handlesUnder(prefix))),
-  "own-namespace",
-  "foreign",
-] as const;
+const boundNames = handlePrefixes.flatMap(({ prefix }) =>
+  prefix === "xml" ? [] : handlesUnder(prefix),
+);
+
+/**
+ * The open classes of a name in a namespace, its element's or another, each written with a prefix
+ * a document binds.
+ */
+const boundClasses = ["own-namespace", "foreign"] as const;
 
 /**
  * The prefixes no attribute in a namespace other than the XML namespace is written with: none,
@@ -535,14 +596,14 @@ const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, n.govern
 /**
  * Every statement over the attribute layer, each `check` named by its oracle law:
  *
- * - The four families;
- * - **AL1 owner:** an attribute's copy of its element's kind, version, document and governing type,
- *   riding `attributeFamily`'s owner axis; `OpenAttributeName`'s copies of its attribute's name and
- *   kind, and `Idref`'s of its document, riding their families' owner axes;
+ * - The five families;
+ * - **AL1 owner:** a closed attribute's copy of its element's kind, version, governing type and
+ *   document type, and an open attribute's of its element's kind, version and governing type, each
+ *   riding its counted family's owner axis;
  * - **AL1** admission and its lexical half, **E1** the written slot and the IDREF tokens' agreement,
- *   **AL2** the fold and distinctness, **AL3** required, **AL4** open names, their key and the
- *   foreign attribute class, **AL5** the attribute count, the prefix, and **TextDomain**, as the
- *   module's header states them;
+ *   **AL2** the fold, **AL3** required, **AL4** open names and the foreign attribute class, **AL5**
+ *   the attribute count, the prefix, and **TextDomain**, as the module's header states them. AL2's
+ *   distinctness and AL4's open name key are `Attribute`'s and `OpenAttribute`'s primary keys;
  * - **Double bound** (reading 144): an admitted attribute's, or a checked element text's, value in a
  *   bounded domain's lexical space is judged by the domain's `DoubleBound` on the double PostgreSQL
  *   reads from its collapsed form by grizzle's `Compute.parseDouble`, XML Schema 1.1's
@@ -553,26 +614,27 @@ const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, n.govern
  *   row holds the value: the check reads it from the lexical form it judges.
  */
 export const attributeLawsByName = {
-  "AL1 admission": [check("AL1_admission", Attribute, admitted)],
+  "AL1 admission": [
+    check("AL1_admission", Attribute, admitted),
+    check("AL1_admission", OpenAttribute, openAdmitted),
+  ],
   "AL1 owner": [
     contained(
-      on(Attribute, "node", "kind", "version", "document", "governor", "documentType"),
-      on(Node, "id", "kind", "version", "document", "governor", "documentType"),
+      on(Attribute, "package", "path", "start", "kind", "version", "governor", "documentType"),
+      on(Node, "package", "path", "start", "kind", "version", "governor", "documentType"),
     ),
     contained(
-      on(OpenAttributeName, "node", "attribute", "class", "kind", "version", "governor"),
-      on(Attribute, "node", "id", "name", "kind", "version", "governor"),
+      on(OpenAttribute, "package", "path", "start", "kind", "version", "governor"),
+      on(Node, "package", "path", "start", "kind", "version", "governor"),
     ),
-    contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
   ],
-  "AL2 count": [attributeFamily],
-  "AL2 distinct": [key(on(closedAttributes, "node", "name"))],
+  "AL2 count": [attributeFamily, openAttributeFamily],
   "AL2 fold": [
     fold(
       attributeFamily,
       Monoid.or,
-      on(closedAttributes, "node", "slot", "attrsWas", "attrsAfter"),
-      on(Node, "id", "attrs"),
+      on(Attribute, "package", "path", "start", "slot"),
+      on(Node, "package", "path", "start", "attrs"),
     ),
   ],
   "AL3 required": [
@@ -584,7 +646,7 @@ export const attributeLawsByName = {
     ),
   ],
   "AL4 data name": [
-    check("AL4_data_name", OpenAttributeName, (o) =>
+    check("AL4_data_name", OpenAttribute, (o) =>
       o.and(
         o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataNamePattern)),
         o.or(
@@ -596,7 +658,7 @@ export const attributeLawsByName = {
     ),
   ],
   "AL4 declared data name": [
-    check("AL4_declared_data_name", OpenAttributeName, (o) =>
+    check("AL4_declared_data_name", OpenAttribute, (o) =>
       o.or(
         o.ne(o.class, "data-*"),
         o.and(
@@ -605,7 +667,7 @@ export const attributeLawsByName = {
               o.ne(o.local, name),
               o.eq(
                 Compute.disjoint(
-                  AttributeGrammar.row(AttributeModelOf.at("model", o.version, o.governor)),
+                  AttributeGrammar.row(openModelOf(o)),
                   Bits.of(AttributeName, [name]),
                 ),
                 true,
@@ -616,12 +678,9 @@ export const attributeLawsByName = {
       ),
     ),
   ],
-  "AL4 open name key": [key(on(OpenAttributeName, "node", "uri", "local"))],
   "AL4 open names": [
-    openNameFamily,
-    check("AL4_open_names", Attribute, (a) =>
-      a.or(a.and(open(a), a.eq(a.openName, 1n)), a.and(a.not(open(a)), a.eq(a.openName, 0n))),
-    ),
+    check("AL4_open_names", Attribute, (a) => a.not(a.in(a.name, openClasses))),
+    check("AL4_open_names", OpenAttribute, (o) => o.in(o.class, openClasses)),
   ],
   "AL5 attribute count": [
     check("AL5_attribute_count", Node, (n) => {
@@ -649,8 +708,14 @@ export const attributeLawsByName = {
         a.and(a.not(a.in(a.name, [...xmlNames, ...boundNames])), a.eq(a.prefix, "")),
       ),
     ),
+    check("Attribute_prefix", OpenAttribute, (o) =>
+      o.or(
+        o.and(o.in(o.class, boundClasses), o.not(o.in(o.prefix, unboundPrefixes))),
+        o.and(o.not(o.in(o.class, boundClasses)), o.eq(o.prefix, "")),
+      ),
+    ),
   ],
-  "AttributeEntity owner": [entityFamily],
+  "AttributeEntity owner": [entityFamily, openEntityFamily],
   "Double bound": [
     check("Double_bound", Attribute, (a) => {
       const domain = domainOf(a);
@@ -679,6 +744,38 @@ export const attributeLawsByName = {
             a.and(
               a.eq(DoubleBound.at("facet", domain), "minExclusive"),
               a.gt(value, DoubleBound.at("value", domain)),
+            ),
+          ),
+        ),
+      );
+    }),
+    check("Double_bound", OpenAttribute, (o) => {
+      const domain = openDomainOf(o);
+      const form = Compute.collapse(o.lexical);
+      const value = Compute.when(
+        Compute.matches(form, doubleText),
+        (double) => Compute.parseDouble(double),
+        0,
+      );
+
+      return o.or(
+        o.not(
+          o.and(
+            openAdmitted(o),
+            o.in(domain, boundedDomains),
+            Compute.matches(o.lexical, ValueDomainOf.at("pattern", domain)),
+          ),
+        ),
+        o.and(
+          Compute.matches(form, doubleText),
+          o.or(
+            o.and(
+              o.eq(DoubleBound.at("facet", domain), "minInclusive"),
+              o.ge(value, DoubleBound.at("value", domain)),
+            ),
+            o.and(
+              o.eq(DoubleBound.at("facet", domain), "minExclusive"),
+              o.gt(value, DoubleBound.at("value", domain)),
             ),
           ),
         ),
@@ -731,18 +828,24 @@ export const attributeLawsByName = {
         ),
       ),
     ),
+    check("E1_derived", OpenAttribute, (o) =>
+      o.or(
+        o.not(openAdmitted(o)),
+        o.eq(o.slot, Compute.singleton(AttributeGrammar.at("slot", openModelOf(o), o.class))),
+      ),
+    ),
     fold(
       idrefFamily,
       Monoid.concat,
-      on(Idref, "node", "attribute", "piece", "piecesWas", "piecesAfter"),
-      on(Attribute, "node", "id", "idrefText"),
+      on(Idref, "package", "path", "start", "name", "piece", "piecesWas", "piecesAfter"),
+      on(Attribute, "package", "path", "start", "name", "idrefText"),
     ),
     check("E1_derived", Idref, (i) =>
       i.and(Compute.matches(i.token, nonSpacePattern), i.or(i.eq(i.at, 0n), i.ne(i.before, ""))),
     ),
   ],
   "Foreign attribute class": [
-    check("Foreign_attribute_class", OpenAttributeName, (o) =>
+    check("Foreign_attribute_class", OpenAttribute, (o) =>
       o.and(
         o.or(
           o.and(o.in(o.class, ["data-*", "no-namespace"]), o.eq(o.uri, "")),
@@ -757,11 +860,13 @@ export const attributeLawsByName = {
     ),
     contained(
       on(
-        select(OpenAttributeName, (o) => o.in(o.kind, openElementClasses)),
-        "node",
+        select(OpenAttribute, (o) => o.in(o.kind, openElementClasses)),
+        "package",
+        "path",
+        "start",
         "elementNamespace",
       ),
-      on(OpenElementName, "node", "namespace"),
+      on(OpenElementName, "package", "path", "start", "namespace"),
     ),
   ],
   TextDomain: [
@@ -783,6 +888,16 @@ export const attributeLawsByName = {
         a.and(
           a.not(a.in(domainOf(a), emptyDomains)),
           Compute.matches(a.lexical, ValueDomainOf.at("pattern", domainOf(a))),
+        ),
+      ),
+    ),
+    check("value_domain", OpenAttribute, (o) =>
+      o.or(
+        o.not(openAdmitted(o)),
+        o.in(openDomainOf(o), universalDomains),
+        o.and(
+          o.not(o.in(openDomainOf(o), emptyDomains)),
+          Compute.matches(o.lexical, ValueDomainOf.at("pattern", openDomainOf(o))),
         ),
       ),
     ),

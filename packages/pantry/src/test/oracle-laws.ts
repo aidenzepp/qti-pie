@@ -182,13 +182,15 @@ export const hostlessLaws = {
   "Declaration overlay":
     "its rows (Declaration, DeclarationCardinality, DeclarationBaseType, DeclarationIdentifier, DeclarationName, ValueSet, ValueSetCardinality, Value, TypedValue, ValueBaseType, FieldValue, RecordField, RecordFieldName, MasteryValue, NormalMinimum, NormalMaximum, MasteryFloor, MasteryCeiling) are copies the importer writes of each declaration element's node, attributes and string value (plan §1.7 O2, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Entry family":
-    "its rows are the package's entries in listing order, one per path, which the importer numbers; two entries of one path never reach a row, since the ZIP reader refuses them under zip-format (src/package/zip.ts, 'the archive holds two entries with this name')",
+    "its rows are the package's entries, a set keyed by path, each contained in its package; two entries of one path never reach a row, since the ZIP reader refuses them under zip-format (src/package/zip.ts, 'the archive holds two entries with this name')",
   "Manifest overlay":
     "its rows (ManifestId, Resource, ResourceHref, File, Dependency) are copies the importer writes of each manifest element's node and attributes (plan §1.6, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Mapping overlay":
     "its rows (Mapping, MappingBaseType, MapKey and its typed forms, AreaMapping, LookupTable, LookupValue and LookupValueType) are copies the importer writes of each mapping element's node, its declaration's reference and base type and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+  "Package identifier":
+    "its ManifestId row holds the manifest's identifier as written, whose collapse the importer writes as the package's key and every row's package (decision 457 (3)); a package's text can make no copy disagree with what it copies",
   "Package key":
-    "its one row per package is keyed by the id the importer mints, which no package states, so no package text can repeat or omit it",
+    "its one row per package is keyed by its manifest identifier, which every row of the package holds; one package's text states it once, so no package text can repeat or omit it, and a different package under a stored identifier is the database's refusal alone",
   "Reference overlay":
     "its rows (DocumentDirectory, XmlBase, Reference, ReferencePath) are each document's directory and each reference's copy, which the importer writes and resolves from the tree (CP 1.2 (b) and (d), reading 102); the host writes no such row, and the laws a package can break over its references are the oracle's Href form, File exists and Stimulus ref target",
   "Test overlay":

@@ -35,7 +35,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { grammar, interactionKinds } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeMember } from "#pantry/import/write.ts";
 import {
   choiceOwnerPackage,
   drawnCases,
@@ -49,6 +48,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
+import { byPlace, nodePlacesOf, placeKey } from "#pantry/test/places.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -86,29 +86,48 @@ const holds = (drawnCase: ChoiceOwnerCase) =>
       `${label}: family members with no owner row: ${orphans.map(({ key, member, owner }) => `${member} ${key} into ${owner}`).join("; ")}`,
     );
 
-    const flat = (node: NodeMember): readonly NodeMember[] => [
-      node,
-      ...node.children.flatMap(flat),
-    ];
+    const places = nodePlacesOf(inputs);
     const interactionNodes = new Set(
-      [...inputs.Node.values()]
-        .flatMap(flat)
-        .filter(({ kind }) => interactionKinds.includes(kind))
-        .map(({ id }) => id),
+      [...places].flatMap(([place, { kind }]) =>
+        interactionKinds.some((held) => held === kind) ? [place] : [],
+      ),
     );
-    const interactions = new Set(inputs.Interaction.keys());
+    const interactions = new Set(
+      [...inputs.Interaction.values()].map(({ path, start }) => placeKey(path, start)),
+    );
     assert.sameMembers([...interactions], [...interactionNodes], `${label}: Interaction rows`);
-    for (const { node } of inputs.Binding.values()) {
-      assert.isTrue(interactions.has(node), `${label}: Binding ${node} has no Interaction`);
+    for (const { path, start } of inputs.Binding.values()) {
+      assert.isTrue(
+        interactions.has(placeKey(path, start)),
+        `${label}: Binding ${placeKey(path, start)} has no Interaction`,
+      );
     }
 
+    // A node's nearest is a position in its own document where an interaction there encloses it,
+    // and else in its document's context, the document a site that names it stands in.
+    const contexts = new Map(
+      [...inputs.Document.values()].map(({ contextPath, path }) => [path, contextPath]),
+    );
+    const nearestOf = (row: {
+      readonly nearest: bigint;
+      readonly path: string;
+      readonly start: bigint;
+    }) => {
+      const own = places.get(placeKey(row.path, row.nearest));
+      const encloses =
+        row.nearest > 0n && own !== undefined && own.start < row.start && row.start < own.end;
+
+      return placeKey(encloses ? row.path : (contexts.get(row.path) ?? row.path), row.nearest);
+    };
+    const choiceInteractions = byPlace(inputs.ChoiceInteraction);
     const counts = new Map<string, bigint>();
     for (const choice of inputs.Choice.values()) {
-      const owned = inputs.ChoiceInteraction.get(choice.node);
+      const owned = choiceInteractions.get(placeKey(choice.path, choice.start));
+      const nearest = nearestOf(choice);
       assert.strictEqual(
         owned !== undefined,
-        interactions.has(choice.nearest),
-        `${label}: choice ${choice.identifier}'s ChoiceInteraction, its nearest ${choice.nearest}`,
+        interactions.has(nearest),
+        `${label}: choice ${choice.identifier}'s ChoiceInteraction, its nearest ${nearest}`,
       );
       if (owned === undefined) {
         assert.include(
@@ -117,18 +136,23 @@ const holds = (drawnCase: ChoiceOwnerCase) =>
           `${label}: choice ${choice.identifier} has no interaction, where N6 does not refuse it`,
         );
       } else {
-        assert.strictEqual(owned.interaction, choice.nearest, `${label}: ${choice.identifier}`);
-        counts.set(owned.interaction, (counts.get(owned.interaction) ?? 0n) + 1n);
+        const interaction = placeKey(owned.interactionPath, owned.interaction);
+        assert.strictEqual(interaction, nearest, `${label}: ${choice.identifier}`);
+        counts.set(interaction, (counts.get(interaction) ?? 0n) + 1n);
       }
     }
     for (const owned of inputs.ChoiceInteraction.values()) {
-      assert.isTrue(interactions.has(owned.interaction), `${label}: ${owned.node}'s interaction`);
+      assert.isTrue(
+        interactions.has(placeKey(owned.interactionPath, owned.interaction)),
+        `${label}: ${placeKey(owned.path, owned.start)}'s interaction`,
+      );
     }
     for (const bound of inputs.CountBound.values()) {
-      if (interactions.has(bound.node)) {
+      const place = placeKey(bound.path, bound.start);
+      if (interactions.has(place)) {
         assert.strictEqual(
           bound.choices,
-          counts.get(bound.node) ?? 0n,
+          counts.get(place) ?? 0n,
           `${label}: CountBound.choices of ${bound.kind}`,
         );
       }

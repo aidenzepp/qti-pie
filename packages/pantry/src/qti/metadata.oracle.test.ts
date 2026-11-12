@@ -39,7 +39,6 @@ import {
   typeRefused,
 } from "#pantry/test/gen/lom-resource-type.ts";
 import type { TermSketch, TypeSketch } from "#pantry/test/gen/lom-resource-type.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
 import { documentBreaches, judge, lawsOf, typedTextHolds } from "#pantry/test/oracle.ts";
 import { statisticKinds } from "#pantry/vocab/terms/metadata.ts";
@@ -677,10 +676,10 @@ describe("qti/metadata.ts, the learning resource type", { timeout: testTimeoutMs
               const xml = resourceTypeManifest(type);
               const document = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(document, "3.0.1", shredGrammarOf(grammar)));
-              const rows = documentRowsOf(tree, idOf);
+              const rows = documentRowsOf(tree);
               const judged = databaseRefusals(rows);
               const folded = yield* Effect.orDie(
-                Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))),
+                Effect.fromResult(fold(tree, foldGrammarOf(grammar))),
               );
               const oracle = documentBreaches("imsmanifest.xml", folded, laws).filter(
                 ({ law }) => law === "LOM learning resource type",
@@ -736,15 +735,20 @@ describe("qti/metadata.ts, the rows an overlay row stands on", { timeout: testTi
         const titleString = Option.getOrUndefined(Arr.head([...inputs.LomTitleString.values()]));
         assert.isDefined(titleString, "simple's record has a title string");
 
-        const stray = "00000000-0000-4000-8000-00000000f00d";
-        const strayString = "00000000-0000-4000-8000-00000000f00e";
+        // Two positions past every node of the title's document: no row of it stands there.
+        const stray = 1_000_000n;
+        const strayString = stray + 1n;
+        const { package: pkg, path } = titleString;
         const planted: typeof inputs = {
           ...inputs,
           LomTitleString: new Map([
             ...inputs.LomTitleString,
-            [strayString, { ...titleString, node: strayString, parent: stray }],
+            ["stray title string", { ...titleString, parent: stray, start: strayString }],
           ]),
-          ObjectLang: new Map([...inputs.ObjectLang, [stray, { lang: "en", node: stray }]]),
+          ObjectLang: new Map([
+            ...inputs.ObjectLang,
+            ["stray lang", { lang: "en", package: pkg, path, start: stray }],
+          ]),
         };
         const imported = brokenBy(inputs);
         const breaks = brokenBy(planted);

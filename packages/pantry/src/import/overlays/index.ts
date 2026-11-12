@@ -3,11 +3,11 @@
  * Q5.15; §C's `overlayRowsOf`).
  *
  * Each builder (`#pantry/import/overlays/<family>.ts`) reads one document's view, its rows under
- * the ids they are written under and their folds (`DocumentView` of `#pantry/import/fold.ts`), and
- * where it stands in its package, and returns each of its relations' rows as a `ReadonlyMap` from
- * the text of a row's key to the row. The merge keeps them a set (rule 0): a key met twice with one
- * value is one row, and a key met twice with two values is a defect of the builders, reported as an
- * {@link OverlayConflict} and never overwritten.
+ * the positions that name its nodes and their folds (`DocumentView` of `#pantry/import/fold.ts`),
+ * and where it stands in its package, and returns each of its relations' rows as a `ReadonlyMap`
+ * from the text of a row's key to the row. The merge keeps them a set (rule 0): a key met twice
+ * with one value is one row, and a key met twice with two values is a defect of the builders,
+ * reported as an {@link OverlayConflict} and never overwritten.
  *
  * Five builders also read the whole package: the tests' assemblies (Q5.13), what each test reads
  * of the documents it places and what each item ref names (Q5.10's, PE's), the sections'
@@ -80,7 +80,6 @@ import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayRelations } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
@@ -150,18 +149,18 @@ interface DocumentRows {
  */
 const documentRowsOf = ({ ids, listed: { path }, view }: PlacedDocument): DocumentRows => ({
   catalog: catalogRowsOf(view, ids),
-  dataSsml: dataSsmlRowsOf(view),
-  declarations: declarationRowsOf(view),
-  expressions: expressionRowsOf(view),
-  html: htmlRowsOf(view),
+  dataSsml: dataSsmlRowsOf(view, ids),
+  declarations: declarationRowsOf(view, ids),
+  expressions: expressionRowsOf(view, ids),
+  html: htmlRowsOf(view, ids),
   identity: identityRowsOf(view, ids),
-  interactions: interactionRowsOf(view),
-  mapping: mappingRowsOf(view),
+  interactions: interactionRowsOf(view, ids),
+  mapping: mappingRowsOf(view, ids),
   mathml: mathmlRowsOf(view, ids),
   metadata: metadataRowsOf(view, ids),
-  operators: operatorRowsOf(view),
+  operators: operatorRowsOf(view, ids),
   package: path === manifestPath ? packageRowsOf(view, ids) : noPackageRows,
-  quotation: quotationRowsOf(view),
+  quotation: quotationRowsOf(view, ids),
   references: referenceRowsOf(view, ids, referenceCensus),
   tests: testRowsOf(view, ids),
 });
@@ -268,14 +267,12 @@ export const unionsOf = <Rows>(
  * document, then those of the builders that read the whole package, each a part holding every
  * relation its builder writes.
  *
- * @param documents - The package's documents, each listed and under its ids, the manifest among
+ * @param documents - The package's documents, each listed and where it stands, the manifest among
  *   them, the one of type `manifest`.
- * @param mint - Draws a fresh uuid for each assembled instance but a root.
  * @returns The parts, in the order {@link overlayRowsOf} merges them.
  */
 export const overlayPartsOf = (
   documents: readonly PlacedDocument[],
-  mint: () => NodeId,
 ): readonly Partial<OverlayRows>[] => {
   const documented = documents.map((document) => ({ document, rows: documentRowsOf(document) }));
   const choices = packageChoicesOf(documented.map(({ rows }) => rows.interactions));
@@ -283,10 +280,7 @@ export const overlayPartsOf = (
     document,
     rows: { ...rows, interactions: withPackageChoices(rows.interactions, choices) },
   }));
-  const assembled = assembledRowsOf(
-    built.map(({ rows }) => rows.tests),
-    mint,
-  );
+  const assembled = assembledRowsOf(built.map(({ rows }) => rows.tests));
   const referenced = assembledExpressionRowsOf(
     built.map(({ document, rows }) => ({
       cardinalities: rows.declarations.DeclarationCardinality,
@@ -306,14 +300,14 @@ export const overlayPartsOf = (
     targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
   });
 
-  const documentsById = new Map(
-    built.map(({ document }) => [document.view.rows.document.node, document] as const),
+  const documentsByPath = new Map(
+    built.map(({ document }) => [document.ids.path, document] as const),
   );
   const placedShares = placedShareRowsOf({
     ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
     instances: assembled.Instance.values(),
     nodesOf: (document) => {
-      const read = documentsById.get(document);
+      const read = documentsByPath.get(document);
 
       return read === undefined ? [] : read.view.rows.nodes;
     },
@@ -362,6 +356,7 @@ export const overlayPartsOf = (
       declarations: built.flatMap(({ rows }) => [
         ...rows.declarations.DeclarationIdentifier.values(),
       ]),
+      gaps: built.flatMap(({ rows }) => [...rows.interactions.GapInteraction.values()]),
       hottexts: built.flatMap(({ rows }) => [...rows.interactions.Hottext.values()]),
       instances: assembled.Instance.values(),
       mosts: built.flatMap(({ rows }) => [...rows.interactions.MostCount.values()]),
@@ -401,15 +396,12 @@ export const overlayPartsOf = (
  * set per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads
  * from the schema (`overlayRelations`).
  *
- * @param documents - The package's documents, each listed and under its ids; the manifest is the
+ * @param documents - The package's documents, each listed and where it stands; the manifest is the
  *   one no resource names (type `manifest`).
- * @param mint - Draws a fresh uuid for each assembled instance but a root, whose id is its
- *   document's node.
  * @returns The rows, every relation of {@link OverlayRows} present; or the {@link OverlayConflict}
  *   of two builders that give one key two rows.
  */
 export const overlayRowsOf = (
   documents: readonly PlacedDocument[],
-  mint: () => NodeId,
 ): Result.Result<OverlayRows, OverlayConflict> =>
-  unionsOf(overlayRelations, overlayPartsOf(documents, mint));
+  unionsOf(overlayRelations, overlayPartsOf(documents));

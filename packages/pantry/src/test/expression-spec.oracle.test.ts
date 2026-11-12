@@ -36,7 +36,6 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches } from "#pantry/test/oracle.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 import { grammar } from "#pantry/grammar/install.ts";
@@ -377,7 +376,7 @@ describe("expression typing by the information model's tables", () => {
             const tree = yield* Effect.result(shred(read, version, shredGrammarOf(grammar)));
             const broken = Result.isFailure(tree)
               ? [tree.failure.message]
-              : Result.match(fold(tree.success, idOf, foldGrammarOf(grammar)), {
+              : Result.match(fold(tree.success, foldGrammarOf(grammar)), {
                   onFailure: (failure) => [String(failure)],
                   onSuccess: (rows) =>
                     documentBreaches("doc.xml", rows, laws).map(({ law }) => law),

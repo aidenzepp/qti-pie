@@ -3,7 +3,7 @@
  * view (`DocumentView` of `#pantry/import/fold.ts`), one `CardSupport` row per `qti-card`'s
  * `support`, one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one
  * `CatalogRef` row per `data-catalog-idref` that holds a token and one `CatalogId` row per
- * `qti-catalog` whose `id` is an NCName, each keyed by its node, and one `CatalogTarget` row per
+ * `qti-catalog` whose `id` is an NCName, each keyed by its element, and one `CatalogTarget` row per
  * distinct token of the document's references, keyed by its document and token.
  *
  * A document in an assembly resolves its references once per instance (spec reading 117), which
@@ -38,7 +38,7 @@ import type { AssembledId } from "#pantry/qti/identity.ts";
 
 /**
  * Where a document stands in its package, as this builder reads it beside the document's view: the
- * part of the importer's `NodeIds` (Q5.15) it needs.
+ * part of the importer's `DocumentPlace` (Q5.15) it needs.
  */
 interface CatalogIds {
   /**
@@ -46,11 +46,20 @@ interface CatalogIds {
    * instance (spec reading 117).
    */
   readonly assembled: boolean;
+  /**
+   * The package's manifest identifier.
+   */
+  readonly package: Addition<typeof CatalogRef>["package"];
+  /**
+   * The document's path in the package, its entry's.
+   */
+  readonly path: Addition<typeof CatalogRef>["path"];
 }
 
 /**
- * A document's catalog rows, one keyed set per relation: each map from the text of a row's key, its
- * node's id, to the row as its writer writes it.
+ * A document's catalog rows, one keyed set per relation: each map from the text of a row's key
+ * within its document, its element's start (a token's own text for `CatalogTarget`), to the row as
+ * its writer writes it.
  */
 export interface CatalogRows {
   readonly CardSupport: ReadonlyMap<string, Addition<typeof CardSupport>>;
@@ -132,30 +141,31 @@ const designating: ReadonlySet<string> = new Set(booleanTrue);
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117).
  * @param ids - Where it stands in its package.
- * @returns Every catalog relation's rows, keyed by node.
+ * @returns Every catalog relation's rows, keyed by start.
  */
 export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
   const { folds, rows } = view;
-  const document = rows.document.node;
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const { assembled, package: pkg, path } = ids;
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
   const supports = new Map<string, Addition<typeof CardSupport>>();
   const defaults = new Map<string, Addition<typeof DefaultEntry>>();
   const references = new Map<string, Addition<typeof CatalogRef>>();
   const catalogIds = new Map<string, Addition<typeof CatalogId>>();
-  const { assembled } = ids;
   const targets = new Map<string, Addition<typeof CatalogTarget>>();
 
-  for (const { lexical, name, node: id } of rows.attributes) {
-    const node = byId.get(id);
+  for (const { lexical, name, start } of rows.attributes) {
+    const node = byStart.get(start);
     if (node === undefined) {
       continue;
     }
 
+    const at = String(start);
+    const place = { package: pkg, path, start };
     const value = collapse(lexical);
     if (name === referenceName) {
       if (holdsReference(node, lexical)) {
-        references.set(id, { document, lexical, node: id, token: value });
-        targets.set(headingKey([document, value]), { assembled, document, id: value });
+        references.set(at, { ...place, lexical, token: value });
+        targets.set(value, { assembled, id: value, package: pkg, path });
       }
 
       continue;
@@ -165,7 +175,7 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     // (spec reading 156), and its value domain refuses it alone.
     if (node.kind === "qti-catalog" && name === "id") {
       for (const catalog of Option.toArray(namedBy(lexical))) {
-        catalogIds.set(id, { document, id: catalog, node: id, owner: id });
+        catalogIds.set(at, { ...place, id: catalog, owner: start });
       }
 
       continue;
@@ -179,18 +189,16 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
     }
 
     const tuple = {
-      document,
+      ...place,
       kind: node.kind,
       lexical,
-      nearest: foldAt(folds, id).nearest,
-      node: id,
-      start: node.start,
+      nearest: foldAt(folds, start).nearest,
       version: node.version,
     };
     if (isSupport) {
-      supports.set(id, { ...tuple, catalog: node.parent });
+      supports.set(at, { ...tuple, catalog: node.parent });
     } else {
-      defaults.set(id, { ...tuple, card: node.parent });
+      defaults.set(at, { ...tuple, card: node.parent });
     }
   }
 
@@ -204,17 +212,26 @@ export const rowsOf = (view: DocumentView, ids: CatalogIds): CatalogRows => {
 };
 
 /**
- * Collect every instance of an assembly's tree, its root's own included.
+ * An instance of an assembly's tree with its start, its pre-order position, which is its key.
+ */
+interface Numbered {
+  readonly instance: InstanceMember | InstanceRoot;
+  readonly start: bigint;
+}
+
+/**
+ * Collect every instance of an assembly's tree in pre-order, its root's own first, each numbered
+ * by its place in that order, as the instance tree draws `start`.
  *
  * @param root - The assembly's root instance.
- * @returns Each instance.
+ * @returns Each instance with its start.
  */
-const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoot)[] => {
-  const found: (InstanceMember | InstanceRoot)[] = [];
+const instancesOf = (root: InstanceRoot): readonly Numbered[] => {
+  const found: Numbered[] = [];
   const stack: (InstanceMember | InstanceRoot)[] = [root];
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    found.push(next);
-    stack.push(...next.children);
+    found.push({ instance: next, start: BigInt(found.length) });
+    stack.push(...next.children.toReversed());
   }
 
   return found;
@@ -229,7 +246,7 @@ const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoo
  * @param input - The package's rows the placements read.
  * @param input.assembledIds - Every assembly's ID bindings ({@link placedIdRowsOf}'s
  *   `AssembledId`, in `#pantry/import/overlays/identity.ts`).
- * @param input.catalogs - Every document's catalogs ({@link rowsOf}'s `CatalogId`), whose nodes
+ * @param input.catalogs - Every document's catalogs ({@link rowsOf}'s `CatalogId`), whose elements
  *   own the ids that are catalog bindings.
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
@@ -242,26 +259,29 @@ export const placedCatalogRowsOf = (input: {
   readonly instances: Iterable<InstanceRoot>;
   readonly targets: Iterable<Addition<typeof CatalogTarget>>;
 }): PlacedCatalogRows => {
-  const targetsOf = Map.groupBy(input.targets, ({ document }) => document);
-  const catalogNodes = new Set([...input.catalogs].map(({ node }) => node));
+  const targetsOf = Map.groupBy(input.targets, ({ path }) => path);
+  const catalogElements = new Set(
+    [...input.catalogs].map(({ path, start }) => headingKey([path, String(start)])),
+  );
   const placed = new Map<string, Addition<typeof PlacedCatalogRef>>();
   for (const root of input.instances) {
-    for (const instance of instancesOf(root)) {
-      for (const { document, id } of targetsOf.get(instance.document) ?? []) {
-        placed.set(headingKey([instance.id, id]), {
+    for (const { instance, start } of instancesOf(root)) {
+      for (const { id, path } of targetsOf.get(instance.document) ?? []) {
+        placed.set(headingKey([root.assembly, String(start), id]), {
           assembly: root.assembly,
-          document,
           id,
-          instance: instance.id,
+          instance: start,
+          package: root.package,
+          path,
         });
       }
     }
   }
 
   const bound = new Map<string, Addition<typeof AssembledCatalog>>();
-  for (const { assembly, id, owner } of input.assembledIds) {
-    if (catalogNodes.has(owner)) {
-      bound.set(headingKey([assembly, id]), { assembly, id, owner });
+  for (const { assembly, id, owner, package: pkg, path } of input.assembledIds) {
+    if (catalogElements.has(headingKey([path, String(owner)]))) {
+      bound.set(headingKey([assembly, id]), { assembly, id, owner, package: pkg, path });
     }
   }
 

@@ -5,19 +5,25 @@
  * Shred reads a crust tree into an {@link XdmDocument} through the vocabulary's kind and attribute
  * resolution; unshred runs it backwards through the vocabulary's names ({@link XdmNames}), writes
  * each name no handle stands for as the exact name the tree keeps, and hands the tree to crust's
- * encoder. Every value is written as the tree records it: attributes in source order with their
- * lexical forms verbatim, each recorded entity reference as `&name;`, namespace declarations as
- * written, and character data, comments and processing instructions as read.
+ * encoder. Every value is written as the tree records it: attributes with their lexical forms
+ * verbatim, each recorded entity reference as `&name;`, namespace declarations as written, and
+ * character data, comments and processing instructions as read.
  *
  * What the tree does not record, the bytes cannot repeat, and canonical XML erases each of these:
- * a CDATA section is written as escaped text, the namespace declarations are written before the
- * attributes, and the doctype is written first in the prolog, where crust's tree holds it. The
- * tree's document node holds its children by their place in XML's `document` production, as
- * crust's tree does, so every tree converts.
+ * a CDATA section is written as escaped text, and the doctype is written first in the prolog, where
+ * crust's tree holds it. An element's attributes and namespace declarations are sets (XML
+ * Information Set §2.2, [attributes] and [namespace attributes] unordered), which the database
+ * stores with no order, so they are written in Canonical XML 1.0's: the namespace declarations
+ * first, by prefix, the default namespace's empty prefix least, then the attributes by namespace
+ * name, then local name, the empty namespace name least, each compared by code point (§2.2,
+ * "Document Order"). An export is so canonical-equal to its source, and
+ * byte-identical where the source wrote that order. The tree's document node holds its children by
+ * their place in XML's `document` production, as crust's tree does, so every tree converts.
  *
  * @see {@link https://www.w3.org/TR/xml-c14n/ | Canonical XML 1.0}
+ * @see {@link https://www.w3.org/TR/xml-infoset/#infoitem.element | XML Information Set, element}
  */
-import { Effect, Option } from "effect";
+import { Effect, Option, Order } from "effect";
 import { encode } from "@qti-pie/crust/encode.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -71,6 +77,33 @@ export interface XdmNames<V extends XdmVocabulary> {
    */
   readonly element: (kind: ElementKind<V>) => ExpandedName;
 }
+
+/**
+ * Order texts by code point, which is the byte order of their UTF-8 forms: Canonical XML 1.0's
+ * lexicographic order (§2.2, "based on the UCS codepoint values"). JavaScript's own comparison
+ * reads UTF-16 code units, which put a code point above U+FFFF before one from U+E000 to U+FFFF.
+ */
+const byCodePoint: Order.Order<string> = Order.mapInput(Order.Array(Order.Number), (text: string) =>
+  Array.from(text, (point) => point.codePointAt(0) ?? 0),
+);
+
+/**
+ * Canonical XML 1.0's order of an element's namespace declarations: by prefix, the default
+ * namespace's empty prefix least.
+ */
+const declarationOrder: Order.Order<XdmNamespace> = Order.mapInput(
+  byCodePoint,
+  ({ prefix }: XdmNamespace) => prefix,
+);
+
+/**
+ * Canonical XML 1.0's order of an element's attributes: by namespace name, the empty one least,
+ * then by local name.
+ */
+const attributeOrder: Order.Order<Attribute> = Order.combine(
+  Order.mapInput(byCodePoint, ({ namespace }: Attribute) => namespace),
+  Order.mapInput(byCodePoint, ({ local }: Attribute) => local),
+);
 
 /**
  * Spell a qualified name from its prefix and local name.
@@ -176,7 +209,8 @@ const attributeOf = <V extends XdmVocabulary>(
  * @param names - The vocabulary's names.
  * @param children - The list the element's children are appended to, in document order.
  * @returns The element, named by its kind through the vocabulary, or by its own name when it is
- *   foreign: its namespace declarations, then its attributes, each in source order.
+ *   foreign: its namespace declarations by prefix, then its attributes by namespace name and local
+ *   name, Canonical XML 1.0's order, whatever order the tree lists them in.
  */
 const elementOf = <V extends XdmVocabulary>(
   element: XdmElement<V>,
@@ -188,8 +222,10 @@ const elementOf = <V extends XdmVocabulary>(
 
   return {
     attributes: [
-      ...element.namespaces.map(declarationOf),
-      ...element.attributes.map((attribute) => attributeOf(attribute, names)),
+      ...element.namespaces.toSorted(declarationOrder).map(declarationOf),
+      ...element.attributes
+        .map((attribute) => attributeOf(attribute, names))
+        .toSorted(attributeOrder),
     ],
     children,
     kind: "element",
@@ -337,7 +373,8 @@ const rootOf = <V extends XdmVocabulary>(root: XdmElement<V>, names: XdmNames<V>
  *
  * The result is the tree crust's reader gave the bytes, but for what the XDM does not record: each
  * text run is plain text where the source may have written CDATA, a stretch of character data is
- * one run, and an element's namespace declarations come before its attributes. The XML declaration
+ * one run, and an element's namespace declarations and attributes are in Canonical XML 1.0's order,
+ * the declarations first. The XML declaration
  * is as written, so a caller that writes the tree in another label renames its encoding first, as
  * {@link unshred} does.
  *

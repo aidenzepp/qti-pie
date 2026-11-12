@@ -26,7 +26,6 @@
 import { Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import {
   elementsOf,
   hrefPathOf,
@@ -82,23 +81,23 @@ export const isLinkType = (type: string): boolean => /^ims(?:basic)?ltia?_xmlv/u
  * true, and false otherwise.
  *
  * @param rows - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's name.
  * @returns The value, none where the element writes none.
  */
-const writtenFlagOf = (rows: View, node: NodeId, name: string): Option.Option<boolean> =>
+const writtenFlagOf = (rows: View, node: bigint, name: string): Option.Option<boolean> =>
   Option.map(valueOf(rows, node, name), (lexical) => Option.contains(booleanOf(lexical), true));
 
 /**
  * Read an element's `xs:boolean` attribute ({@link writtenFlagOf}), or its default.
  *
  * @param rows - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's name.
  * @param otherwise - Its value where the element writes none.
  * @returns The value.
  */
-const flagOf = (rows: View, node: NodeId, name: string, otherwise: boolean): boolean =>
+const flagOf = (rows: View, node: bigint, name: string, otherwise: boolean): boolean =>
   Option.getOrElse(writtenFlagOf(rows, node, name), () => otherwise);
 
 /**
@@ -111,13 +110,14 @@ export interface Name {
   readonly mixes: boolean;
   readonly node: Row;
   /**
-   * Its parent's id, a name's or not.
+   * Its parent's `start`, a name's or not.
    */
-  readonly parent: NodeId;
+  readonly parent: bigint;
   /**
-   * The test part that holds it, itself for a test part, its document node where none does.
+   * The `start` of the test part that holds it, its own for a test part, its document node's, 0,
+   * where none does.
    */
-  readonly part: NodeId;
+  readonly part: bigint;
   /**
    * Whether a section above it selects with replacement, so its element can be drawn again.
    */
@@ -132,7 +132,7 @@ export interface Section {
   readonly looseChain: boolean;
   readonly mixes: boolean;
   readonly node: Row;
-  readonly part: NodeId;
+  readonly part: bigint;
   /**
    * Its parts (`SectionMember`, C15): its children of the kinds a section holds as parts.
    */
@@ -156,7 +156,7 @@ export interface Site {
   readonly node: Row;
   readonly parentLooseChain: boolean;
   readonly parentMixes: boolean;
-  readonly part: NodeId;
+  readonly part: bigint;
   readonly path: string;
   readonly replaced: boolean;
 }
@@ -177,10 +177,10 @@ export interface Rule {
 export interface TestDocument {
   readonly listed: ListedRows;
   readonly names: readonly Name[];
-  readonly namesByNode: ReadonlyMap<NodeId, Name>;
+  readonly namesByNode: ReadonlyMap<bigint, Name>;
   readonly rootKind: string;
   readonly rules: readonly Rule[];
-  readonly sections: ReadonlyMap<NodeId, Section>;
+  readonly sections: ReadonlyMap<bigint, Section>;
   readonly sites: readonly Site[];
 }
 
@@ -200,24 +200,24 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
   const { rows } = listed;
   const partKinds = new Set(grammar.references.sectionPart.rows.map(({ kind }) => kind));
   const includeParents = new Set(grammar.include.includeParentKind.rows.map(({ kind }) => kind));
-  const sections = new Map<NodeId, Section>();
+  const sections = new Map<bigint, Section>();
   // A section met again while its own scope is still being read stands on a cycle of parent
   // links, which the tree laws refuse; it reads no section above it, so the walk ends.
-  const opening = new Set<NodeId>();
+  const opening = new Set<bigint>();
   const sectionOf = (node: Row): Section => {
-    const known = sections.get(node.id);
+    const known = sections.get(node.start);
     if (known !== undefined) {
       return known;
     }
 
-    opening.add(node.id);
+    opening.add(node.start);
 
-    const parent = rows.byId.get(node.parent);
+    const parent = rows.byStart.get(node.parent);
     const above =
-      parent?.kind === testKinds.section && parent.start > 0n && !opening.has(parent.id)
+      parent?.kind === testKinds.section && parent.start > 0n && !opening.has(parent.start)
         ? sectionOf(parent)
         : undefined;
-    const children = elementsOf(rows, node.id);
+    const children = elementsOf(rows, node.start);
     const selection = Option.fromNullishOr(
       children.find(({ kind }) => kind === testKinds.selection),
     );
@@ -225,12 +225,12 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
     // Invisible only where it writes `visible` false: one that writes none is neither visible nor
     // invisible (information model §4.2.6, reading 173), so it is not loose.
     const loose =
-      Option.contains(writtenFlagOf(rows, node.id, "visible"), false) &&
-      !flagOf(rows, node.id, "keep-together", true);
-    const withReplacement = Option.exists(selection, ({ id }) =>
-      flagOf(rows, id, "with-replacement", false),
+      Option.contains(writtenFlagOf(rows, node.start, "visible"), false) &&
+      !flagOf(rows, node.start, "keep-together", true);
+    const withReplacement = Option.exists(selection, ({ start }) =>
+      flagOf(rows, start, "with-replacement", false),
     );
-    const shuffle = ordering !== undefined && flagOf(rows, ordering.id, "shuffle", false);
+    const shuffle = ordering !== undefined && flagOf(rows, ordering.start, "shuffle", false);
     // A section under a test part takes the part as its own; under a section, that section's
     // scope; and the root of a section document is under no section, so a loose chain reaches it.
     const scope =
@@ -238,7 +238,7 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
         ? {
             looseChain: parent?.kind !== testKinds.part,
             mixes: false,
-            part: parent?.kind === testKinds.part ? parent.id : rows.self,
+            part: parent?.kind === testKinds.part ? parent.start : 0n,
             replaced: false,
           }
         : {
@@ -257,8 +257,8 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
       replacing: scope.replaced || withReplacement,
       selection,
     };
-    sections.set(node.id, section);
-    opening.delete(node.id);
+    sections.set(node.start, section);
+    opening.delete(node.start);
 
     return section;
   };
@@ -269,14 +269,14 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
   }
 
   const parentScope = (node: Row) => {
-    const parent = rows.byId.get(node.parent);
-    const section = parent === undefined ? undefined : sections.get(parent.id);
+    const parent = rows.byStart.get(node.parent);
+    const section = parent === undefined ? undefined : sections.get(parent.start);
 
     return section === undefined
       ? {
           looseChain: false,
           mixes: false,
-          part: parent?.kind === testKinds.part ? parent.id : rows.self,
+          part: parent?.kind === testKinds.part ? parent.start : 0n,
           replaced: false,
         }
       : {
@@ -291,11 +291,11 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
       return [];
     }
 
-    const section = sections.get(node.id);
+    const section = sections.get(node.start);
     const scope = parentScope(node);
     // An element that writes no identifier names nothing (reading 147): the XSD requires it, with
     // no default, and no identifier is empty, so AL3 alone refuses the element.
-    const written = typedValueOf(rows, node.id, "identifier");
+    const written = typedValueOf(rows, node.start, "identifier");
     if (Option.isNone(written)) {
       return [];
     }
@@ -323,13 +323,13 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
         mixes: false,
         node,
         parent: node.parent,
-        part: node.kind === testKinds.part ? node.id : scope.part,
+        part: node.kind === testKinds.part ? node.start : scope.part,
         replaced: node.kind === testKinds.part ? false : scope.replaced,
       },
     ];
   });
   const sites = rows.members.flatMap((node): readonly Site[] => {
-    const parent = rows.byId.get(node.parent);
+    const parent = rows.byStart.get(node.parent);
     const placed =
       (node.kind === testKinds.sectionRef &&
         (parent?.kind === testKinds.section || parent?.kind === testKinds.part)) ||
@@ -360,9 +360,9 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
     }));
   });
   const rules = rows.members.flatMap((node): readonly Rule[] => {
-    const owner = rows.byId.get(node.parent);
+    const owner = rows.byStart.get(node.parent);
 
-    return Option.toArray(typedOr(rows, node.id, "target", "")).flatMap((target) =>
+    return Option.toArray(typedOr(rows, node.start, "target", "")).flatMap((target) =>
       node.kind === testKinds.rule && owner !== undefined && !exits.has(target)
         ? [{ node, owner, target }]
         : [],
@@ -372,13 +372,24 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
   return {
     listed,
     names,
-    namesByNode: new Map(names.map((name) => [name.node.id, name])),
+    namesByNode: new Map(names.map((name) => [name.node.start, name])),
     rootKind: Option.match(rows.root, { onNone: () => "", onSome: ({ kind }) => kind }),
     rules,
     sections,
     sites,
   };
 };
+
+/**
+ * Name a test part across an assembly's documents: its document's path and its `start` there, a
+ * position alone naming an element only within one document.
+ *
+ * @param document - The document that holds it.
+ * @param start - Its `start`, the document node's 0 for an assembly's root standing for none.
+ * @returns The part's name.
+ */
+const partOf = (document: TestDocument, start: bigint): string =>
+  `${document.listed.path} ${String(start)}`;
 
 /**
  * One placement of a document in an assembly (`Instance`): its document, its parent, its site's
@@ -390,7 +401,11 @@ export interface Instance {
   end: number;
   readonly mixes: boolean;
   readonly parent: Instance | undefined;
-  readonly part: NodeId;
+  /**
+   * The test part that holds it in the assembly ({@link partOf}): its document's where its site
+   * stands in one, else its parent instance's.
+   */
+  readonly part: string;
   readonly replaced: boolean;
   readonly siteStart: bigint;
   readonly start: number;
@@ -415,7 +430,6 @@ const place = (
 ): Instance => {
   walked.push(instance);
   if (!chain.includes(instance.document)) {
-    const { self } = instance.document.listed.rows;
     const sites = instance.document.sites.toSorted((left, right) =>
       Number(left.node.start - right.node.start),
     );
@@ -427,7 +441,7 @@ const place = (
           end: 0,
           mixes: site.parentMixes || (site.parentLooseChain && instance.mixes),
           parent: instance,
-          part: site.part === self ? instance.part : site.part,
+          part: site.part === 0n ? instance.part : partOf(instance.document, site.part),
           replaced: site.replaced || instance.replaced,
           siteStart: site.node.start,
           start: walked.length,
@@ -458,7 +472,7 @@ export const assemblyOf = (
     end: 0,
     mixes: false,
     parent: undefined,
-    part: root.listed.rows.self,
+    part: partOf(root, 0n),
     replaced: false,
     siteStart: 0n,
     start: 0,
@@ -474,7 +488,7 @@ export interface PlacedName {
   readonly instance: Instance;
   readonly mixes: boolean;
   readonly name: Name;
-  readonly part: NodeId;
+  readonly part: string;
   readonly replaced: boolean;
 }
 
@@ -492,7 +506,7 @@ export const placedName = (instance: Instance, name: Name): PlacedName => ({
   instance,
   mixes: name.mixes || (name.looseChain && instance.mixes),
   name,
-  part: name.part === instance.document.listed.rows.self ? instance.part : name.part,
+  part: name.part === 0n ? instance.part : partOf(instance.document, name.part),
   replaced: name.replaced || instance.replaced,
 });
 
@@ -542,7 +556,7 @@ const resourceTypesByPath = (
   for (const node of manifest.members) {
     if (node.kind === "cp:resource") {
       for (const path of Option.toArray(hrefPathOf(manifest, node))) {
-        byPath.set(path, [...(byPath.get(path) ?? []), typedOr(manifest, node.id, "type", "")]);
+        byPath.set(path, [...(byPath.get(path) ?? []), typedOr(manifest, node.start, "type", "")]);
       }
     }
   }

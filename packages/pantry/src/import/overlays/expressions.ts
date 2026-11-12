@@ -30,6 +30,7 @@ import { isNcName } from "#pantry/grammar/domains.ts";
 import { builtInBaseTypes, BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import {
   spelledBaseTypeOf,
   typedCountOf,
@@ -38,7 +39,7 @@ import {
 import { namedBy } from "#pantry/import/names.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
 import { charactersIn } from "#pantry/import/overlays/quotation.ts";
-import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
+import { itemRefPathsOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
   InstanceMember,
@@ -49,7 +50,8 @@ import type {
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { AttributeRow, FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { DocumentPlace, Place } from "#pantry/import/write.ts";
+import type { AttributeRow, FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssembledReference,
   Expression,
@@ -107,8 +109,9 @@ import {
 
 /**
  * A document's expression and processing rows, one keyed set per relation: each map from the text
- * of a row's key to the row as its writer writes it. A node-keyed overlay's key text is its node's
- * id; a (node, attribute)-keyed one's is the pair as a JSON array.
+ * of a row's key to the row as its writer writes it, the key's values as a JSON array: its
+ * element's place `(package, path, start)` ({@link keyTextOf}), then its attribute where the key
+ * holds one ({@link pairKey}); a document's own row by `(package, path)`.
  */
 export interface ExpressionRows {
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
@@ -177,7 +180,7 @@ const unfilledTypes = {
 } as const;
 
 /**
- * One declaration of the document as a reference resolves to it: its node, kind and codes, its
+ * One declaration of the document as a reference resolves to it: its `start`, kind and codes, its
  * base type none where it has none, a record's or one that spells nothing (lane NIL's audit, B12),
  * and its cardinality none where it has none, unwritten or spelling nothing (spec reading 159).
  */
@@ -185,7 +188,7 @@ interface DeclarationEntry {
   readonly baseType: Option.Option<(typeof BaseType.handles)[number]>;
   readonly cardinality: Option.Option<(typeof Cardinality.handles)[number]>;
   readonly kind: string;
-  readonly node: NodeId;
+  readonly start: bigint;
   readonly tables: ReadonlySet<string>;
 }
 
@@ -289,14 +292,14 @@ const templateOf = (uri: string): (typeof rpTemplates)[number] =>
  * Index a document's attribute rows by their element and name.
  *
  * @param rows - The document's flat rows.
- * @returns Each element's attributes, by the element's id and the attribute's name.
+ * @returns Each element's attributes, by the element's `start` and the attribute's name.
  */
 const attributesOf = (
   rows: FlatRows<Composed>,
-): ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>> =>
+): ReadonlyMap<bigint, ReadonlyMap<string, AttributeRow<Composed>>> =>
   new Map(
-    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
-      ([node, attributes]) => [node, new Map(attributes.map((row) => [row.name, row]))] as const,
+    [...Map.groupBy(rows.attributes, ({ start }) => start)].map(
+      ([start, attributes]) => [start, new Map(attributes.map((row) => [row.name, row]))] as const,
     ),
   );
 
@@ -637,12 +640,13 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
 };
 
 /**
- * One document as the builder reads it: its flat rows indexed by node, each node's attributes,
- * children, fold (`#pantry/import/fold.ts`, its nearest interaction among the rest) and processing
- * language, its root's kind, and its named declarations, by name.
+ * One document as the builder reads it: its place in its package, its flat rows indexed by each
+ * node's `start`, each node's attributes, children, fold (`#pantry/import/fold.ts`, its nearest
+ * interaction among the rest) and processing language, its root's kind, and its named
+ * declarations, by name.
  */
 interface Document extends Tree {
-  readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
+  readonly attributes: ReadonlyMap<bigint, ReadonlyMap<string, AttributeRow<Composed>>>;
   /**
    * A node's own characters as `Node.chars` holds them (`charactersIn` of
    * `#pantry/import/overlays/quotation.ts`).
@@ -650,28 +654,28 @@ interface Document extends Tree {
   readonly charsOf: (node: NodeRow<Composed>) => string;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
   readonly folds: Folds;
-  readonly id: NodeId;
   /**
    * A node's processing language ({@link languagesOf}), which every node of the document has.
    */
-  readonly languageOf: (node: NodeId) => Language;
+  readonly languageOf: (node: bigint) => Language;
+  readonly place: Place;
   readonly rootKind: NodeRow<Composed>["kind"];
   readonly rows: FlatRows<Composed>;
 }
 
 /**
  * A document's tree as its flat rows hold it, read through two readers that cannot miss: a
- * node's row by its id, and a node's children.
+ * node's row by its `start`, and a node's children.
  */
 interface Tree {
   /**
    * A node's children, in order: none for a node no row names as its parent.
    */
-  readonly childrenOf: (node: NodeId) => readonly NodeRow<Composed>[];
+  readonly childrenOf: (node: bigint) => readonly NodeRow<Composed>[];
   /**
-   * A node's row by its id: a node's parent's among them, the document node its own parent.
+   * A node's row by its `start`: a node's parent's among them, the document node its own parent.
    */
-  readonly nodeOf: (node: NodeId) => NodeRow<Composed>;
+  readonly nodeOf: (node: bigint) => NodeRow<Composed>;
 }
 
 /**
@@ -679,13 +683,13 @@ interface Tree {
  *
  * @param rows - The document's flat rows.
  * @returns The tree.
- * @throws {Error} From `nodeOf`, when the id is no node's of the rows, which every node's parent
- *   is: a defect of the caller, which read a node of another document.
+ * @throws {Error} From `nodeOf`, when the rows hold no node at the position, which every node's
+ *   parent is: a defect of the caller, which read a node of another document.
  */
 const treeOf = (rows: FlatRows<Composed>): Tree => {
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
   const byParent = Map.groupBy(
-    rows.nodes.filter((node) => node.parent !== node.id),
+    rows.nodes.filter((node) => node.parent !== node.start),
     ({ parent }) => parent,
   );
 
@@ -693,10 +697,10 @@ const treeOf = (rows: FlatRows<Composed>): Tree => {
     childrenOf: (node) => Option.getOrElse(Option.fromNullishOr(byParent.get(node)), Arr.empty),
     nodeOf: (node) =>
       Option.getOrThrowWith(
-        Option.fromNullishOr(byId.get(node)),
+        Option.fromNullishOr(byStart.get(node)),
         () =>
           new Error(
-            `Node ${node} is no node of the document's rows, and every node's parent is one. Read a node in its own document's rows.`,
+            `The document's rows hold no node at ${String(node)}, and every node's parent is one. Read a node in its own document's rows.`,
           ),
       ),
   };
@@ -710,7 +714,7 @@ const treeOf = (rows: FlatRows<Composed>): Tree => {
  * @param name - The attribute's name.
  * @returns Its lexical form, if written.
  */
-const valueOf = (doc: Document, node: NodeId, name: string): string | undefined =>
+const valueOf = (doc: Document, node: bigint, name: string): string | undefined =>
   doc.attributes.get(node)?.get(name)?.lexical;
 
 /**
@@ -720,7 +724,7 @@ const valueOf = (doc: Document, node: NodeId, name: string): string | undefined 
  * @param node - The element.
  * @returns Its children that are elements.
  */
-const elementsOf = (doc: Tree, node: NodeId): readonly NodeRow<Composed>[] =>
+const elementsOf = (doc: Tree, node: bigint): readonly NodeRow<Composed>[] =>
   doc.childrenOf(node).filter(({ kind }) => !notElements.has(kind));
 
 /**
@@ -747,27 +751,27 @@ const outsideProcessing = "none" satisfies Language;
  * @param rows - The document's flat rows, in document order.
  * @param tree - The rows' tree.
  * @returns The reader of each node's language.
- * @throws {Error} From the reader, when the id is no node's of the rows, every one of which this
- *   reads: a defect of the caller.
+ * @throws {Error} From the reader, when the rows hold no node at the position, every one of which
+ *   this reads: a defect of the caller.
  */
-const languagesOf = (rows: FlatRows<Composed>, tree: Tree): ((node: NodeId) => Language) => {
-  const language = new Map<NodeId, Language>();
-  const languageOf = (node: NodeId): Language =>
+const languagesOf = (rows: FlatRows<Composed>, tree: Tree): ((node: bigint) => Language) => {
+  const language = new Map<bigint, Language>();
+  const languageOf = (node: bigint): Language =>
     Option.getOrThrowWith(
       Option.fromNullishOr(language.get(node)),
       () =>
         new Error(
-          `Node ${node} has no processing language, and every node of the document has one, each read after its parent. Read the language of a node of the same document.`,
+          `The node at ${String(node)} has no processing language, and every node of the document has one, each read after its parent. Read the language of a node of the same document.`,
         ),
     );
   for (const node of rows.nodes) {
     const parent = tree.nodeOf(node.parent);
     const carried =
-      parent.id !== node.id && (rules.has(parent.kind) || expressions.has(parent.kind));
+      parent.start !== node.start && (rules.has(parent.kind) || expressions.has(parent.kind));
     language.set(
-      node.id,
+      node.start,
       Option.getOrElse(Option.fromNullishOr(rootLanguage.get(node.kind)), () =>
-        carried ? languageOf(parent.id) : outsideProcessing,
+        carried ? languageOf(parent.start) : outsideProcessing,
       ),
     );
   }
@@ -798,7 +802,7 @@ const declarationsOf = (
   const declarations = new Map<string, DeclarationEntry>();
   for (const node of rows.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
     const lexical = (attribute: string) =>
-      Option.fromUndefinedOr(attributes.get(node.id)?.get(attribute)?.lexical);
+      Option.fromUndefinedOr(attributes.get(node.start)?.get(attribute)?.lexical);
     const typed = typedDeclarationOf({
       baseType: lexical("base-type"),
       cardinality: lexical("cardinality"),
@@ -810,9 +814,9 @@ const declarationsOf = (
           baseType: typed.baseType,
           cardinality: typed.cardinality,
           kind: node.kind,
-          node: node.id,
+          start: node.start,
           tables: new Set(
-            childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
+            childrenOf(node.start).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
           ),
         });
       }
@@ -828,9 +832,10 @@ const declarationsOf = (
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), its own for a document no site names, while an included fragment's nodes take the
  *   interaction their includes stand in as their nearest.
+ * @param place - Where the document stands in its package.
  * @returns The document, indexed.
  */
-const documentOf = (view: DocumentView): Document => {
+const documentOf = (view: DocumentView, place: Place): Document => {
   const { rows } = view;
   const attributes = attributesOf(rows);
   const indexed = treeOf(rows);
@@ -841,8 +846,8 @@ const documentOf = (view: DocumentView): Document => {
     charsOf: charactersIn(rows),
     declarations: declarationsOf(rows, attributes, indexed.childrenOf),
     folds: view.folds,
-    id: rows.document.node,
     languageOf: languagesOf(rows, indexed),
+    place,
     rootKind: view.tree.root.kind,
     rows,
   };
@@ -934,27 +939,30 @@ const referenceOf = (
     baseType: type.baseType,
     before: spelled.before,
     cardinality: type.cardinality,
-    document: doc.id,
     ...unfilledTypes,
     identifier: spelled.name,
     kind: node.kind,
-    language: doc.languageOf(node.id),
+    language: doc.languageOf(node.start),
     lexical: attribute.lexical,
-    node: node.id,
+    package: doc.place.package,
     parent: node.parent,
+    path: doc.place.path,
     resolution,
     rootKind: doc.rootKind,
+    start: node.start,
   };
 };
 
 /**
- * The key text of a (node, attribute)-keyed row.
+ * The key text of a row keyed by its element's place and an attribute.
  *
- * @param node - The node.
+ * @param place - The element's document's place.
+ * @param start - The element's position there.
  * @param attribute - The attribute.
  * @returns Their JSON array.
  */
-const pairKey = (node: NodeId, attribute: string): string => JSON.stringify([node, attribute]);
+const pairKey = (place: Place, start: bigint, attribute: string): string =>
+  keyTextOf(place.package, place.path, start, attribute);
 
 /**
  * Type every expression of a document bottom-up, in reverse document order, so each operand is
@@ -967,28 +975,30 @@ const pairKey = (node: NodeId, attribute: string): string => JSON.stringify([nod
 const typesOf = (
   doc: Document,
   references: ReadonlyMap<string, Addition<typeof VariableRef>>,
-): ReadonlyMap<NodeId, Typed> => {
-  const typed = new Map<NodeId, Typed>();
+): ReadonlyMap<bigint, Typed> => {
+  const typed = new Map<bigint, Typed>();
   const operandOf = (child: NodeRow<Composed>): Typed =>
     Option.getOrThrowWith(
-      Option.fromNullishOr(typed.get(child.id)),
+      Option.fromNullishOr(typed.get(child.start)),
       () =>
         new Error(
-          `The operand ${child.id} is untyped when its operator is typed, and reverse document order types every expression after the ones below it. Type a document's expressions in reverse document order.`,
+          `The operand at ${String(child.start)} is untyped when its operator is typed, and reverse document order types every expression after the ones below it. Type a document's expressions in reverse document order.`,
         ),
     );
   for (const node of doc.rows.nodes.toReversed()) {
     if (expressions.has(node.kind)) {
       typed.set(
-        node.id,
+        node.start,
         typeOf(node.kind, {
-          baseTypeLexical: Option.fromNullishOr(valueOf(doc, node.id, "base-type")),
-          name: Option.fromNullishOr(valueOf(doc, node.id, "name")),
-          operands: elementsOf(doc, node.id).flatMap((child) =>
+          baseTypeLexical: Option.fromNullishOr(valueOf(doc, node.start, "base-type")),
+          name: Option.fromNullishOr(valueOf(doc, node.start, "name")),
+          operands: elementsOf(doc, node.start).flatMap((child) =>
             expressions.has(child.kind) ? [operandOf(child)] : [],
           ),
-          reference: Option.fromNullishOr(references.get(pairKey(node.id, "identifier"))),
-          weighted: valueOf(doc, node.id, "weight-identifier") !== undefined,
+          reference: Option.fromNullishOr(
+            references.get(pairKey(doc.place, node.start, "identifier")),
+          ),
+          weighted: valueOf(doc, node.start, "weight-identifier") !== undefined,
         }),
       );
     }
@@ -1005,11 +1015,11 @@ const typesOf = (
  * @returns The tuple.
  */
 const tupleOf = (doc: Document, node: NodeRow<Composed>) => ({
-  document: doc.id,
   kind: node.kind,
-  nearest: foldAt(doc.folds, node.id).nearest,
-  node: node.id,
+  nearest: foldAt(doc.folds, node.start).nearest,
+  package: doc.place.package,
   parent: node.parent,
+  path: doc.place.path,
   start: node.start,
   version: node.version,
 });
@@ -1057,16 +1067,23 @@ const processingRowsOf = (
     readonly ProcessingTemplate: Map<string, Addition<typeof ProcessingTemplate>>;
   },
 ): void => {
-  built.Processing.set(node.id, {
+  const key = keyTextOf(doc.place.package, doc.place.path, node.start);
+  built.Processing.set(key, {
     ...tupleOf(doc, node),
-    language: doc.languageOf(node.id),
+    language: doc.languageOf(node.start),
     parentKind: parentKindOf(doc, node),
   });
 
   const uri =
-    node.kind === "qti-response-processing" ? valueOf(doc, node.id, "template") : undefined;
+    node.kind === "qti-response-processing" ? valueOf(doc, node.start, "template") : undefined;
   if (uri !== undefined) {
-    built.ProcessingTemplate.set(node.id, { node: node.id, template: templateOf(uri), uri });
+    built.ProcessingTemplate.set(key, {
+      package: doc.place.package,
+      path: doc.place.path,
+      start: node.start,
+      template: templateOf(uri),
+      uri,
+    });
   }
 };
 
@@ -1093,24 +1110,26 @@ const expressionRowsOf = (
   },
 ): void => {
   const parentKind = parentKindOf(doc, node);
-  const language = doc.languageOf(node.id);
-  const own = { ...type, kind: node.kind, language, node: node.id, parent: node.parent };
-  built.Expression.set(node.id, { ...tupleOf(doc, node), ...type, language, parentKind });
+  const language = doc.languageOf(node.start);
+  const key = keyTextOf(doc.place.package, doc.place.path, node.start);
+  const at = { package: doc.place.package, path: doc.place.path, start: node.start };
+  const own = { ...type, ...at, kind: node.kind, language, parent: node.parent };
+  built.Expression.set(key, { ...tupleOf(doc, node), ...type, language, parentKind });
 
   if (expressions.has(parentKind)) {
-    built.Operand.set(node.id, {
+    built.Operand.set(key, {
       ...type,
-      children: BigInt(elementsOf(doc, node.id).length),
+      ...at,
+      children: BigInt(elementsOf(doc, node.start).length),
       kind: node.kind,
       language,
-      node: node.id,
       operator: node.parent,
       rank: BigInt(
         Option.getOrThrowWith(
-          Arr.findFirstIndex(elementsOf(doc, node.parent), ({ id }) => id === node.id),
+          Arr.findFirstIndex(elementsOf(doc, node.parent), ({ start }) => start === node.start),
           () =>
             new Error(
-              `The operand ${node.id} is not among its operator ${node.parent}'s elements, which every element child is. Rank an element among its own parent's.`,
+              `The operand at ${String(node.start)} is not among the elements of its operator at ${String(node.parent)}, which every element child is. Rank an element among its own parent's.`,
             ),
         ) + 1,
       ),
@@ -1121,9 +1140,9 @@ const expressionRowsOf = (
     Option.fromNullishOr(typingAttributes.get(node.kind)),
     Arr.empty,
   )) {
-    const attribute = doc.attributes.get(node.id)?.get(name);
+    const attribute = doc.attributes.get(node.start)?.get(name);
     if (attribute !== undefined) {
-      built.ExpressionAttribute.set(pairKey(node.id, name), {
+      built.ExpressionAttribute.set(pairKey(doc.place, node.start, name), {
         ...own,
         attribute: attribute.name,
         lexical: attribute.lexical,
@@ -1136,8 +1155,8 @@ const expressionRowsOf = (
     Option.fromNullishOr(unwrittenTypingOf.get(node.kind)),
     Arr.empty,
   )) {
-    if (!built.ExpressionAttribute.has(pairKey(node.id, typing))) {
-      built.ExpressionAttribute.set(pairKey(node.id, typing), {
+    if (!built.ExpressionAttribute.has(pairKey(doc.place, node.start, typing))) {
+      built.ExpressionAttribute.set(pairKey(doc.place, node.start, typing), {
         ...own,
         attribute: typing,
         lexical: unwrittenLexical,
@@ -1147,13 +1166,15 @@ const expressionRowsOf = (
   }
 
   if (node.kind === "qti-base-value") {
-    const text = doc.childrenOf(node.id).map(doc.charsOf).join("");
-    built.Literal.set(node.id, { ...own, text });
+    const text = doc.childrenOf(node.start).map(doc.charsOf).join("");
+    built.Literal.set(key, { ...own, text });
 
     // A literal is typed where its base-type spells a code, the one its type is (7230d050).
-    const typeCode = spelledBaseTypeOf(Option.fromUndefinedOr(valueOf(doc, node.id, "base-type")));
+    const typeCode = spelledBaseTypeOf(
+      Option.fromUndefinedOr(valueOf(doc, node.start, "base-type")),
+    );
     if (type.baseType !== "unknown" && Option.isSome(typeCode)) {
-      built.LiteralTyped.set(node.id, { node: node.id, text, typeCode: typeCode.value });
+      built.LiteralTyped.set(key, { ...at, text, typeCode: typeCode.value });
     }
   }
 };
@@ -1166,10 +1187,10 @@ const expressionRowsOf = (
  * @returns The row with it filled, `unknown` where its element is no expression.
  */
 const withTypes = (
-  typed: ReadonlyMap<NodeId, Typed>,
+  typed: ReadonlyMap<bigint, Typed>,
   reference: Addition<typeof VariableRef>,
 ): Addition<typeof VariableRef> => {
-  const element = typeIn(Option.fromNullishOr(typed.get(reference.node)));
+  const element = typeIn(Option.fromNullishOr(typed.get(reference.start)));
 
   return {
     ...reference,
@@ -1179,20 +1200,9 @@ const withTypes = (
 };
 
 /**
- * The key text of a name in a document, a test's assembly or an item ref's mappings, by which the
- * package-level builder looks it up.
- *
- * @param document - The document, or the test or item ref, the name is looked up in.
- * @param name - The name.
- * @returns Their JSON array.
- */
-export const lookupKey = (document: NodeId, name: string): string =>
-  JSON.stringify([document, name]);
-
-/**
  * A document's declared references' declarations, each a row of its own, their declarations'
  * cardinalities, each where the declaration has one, and the tables they claim, each where one
- * claims one, by `[node, attribute]`.
+ * claims one, by {@link pairKey}.
  */
 interface ReferenceDeclarations {
   readonly cardinalities: ReadonlyMap<string, Addition<typeof VariableRefCardinality>>;
@@ -1211,7 +1221,7 @@ interface ReferenceDeclarations {
  *
  * @param doc - The document.
  * @param references - Its references, their types filled.
- * @returns The rows, by `[node, attribute]`.
+ * @returns The rows, by {@link pairKey}.
  * @throws {Error} When a declared reference's name has no declaration of the document, which its
  *   resolution read: a defect of the builder.
  */
@@ -1228,7 +1238,7 @@ const referenceDeclarationsOf = (
         Option.fromNullishOr(doc.declarations.get(reference.identifier)),
         () =>
           new Error(
-            `The reference ${reference.node} ${reference.attribute} resolved to a declaration of ${reference.identifier}, which its document's declarations do not hold. Resolve a reference against its own document's declarations.`,
+            `The reference by ${reference.attribute} at ${String(reference.start)} of ${reference.path} resolved to a declaration of ${reference.identifier}, which its document's declarations do not hold. Resolve a reference against its own document's declarations.`,
           ),
       );
       declarations.set(at, {
@@ -1237,20 +1247,23 @@ const referenceDeclarationsOf = (
         cardinality: reference.cardinality,
         declBaseTypes: typedCountOf(declared.baseType),
         declCardinalities: typedCountOf(declared.cardinality),
-        declaration: declared.node,
+        declaration: declared.start,
         declarationKind: declared.kind,
-        document: reference.document,
         identifier: reference.identifier,
         kind: reference.kind,
         language: reference.language,
-        node: reference.node,
+        package: reference.package,
+        path: reference.path,
+        start: reference.start,
       });
       for (const declCardinality of Option.toArray(declared.cardinality)) {
         cardinalities.set(at, {
           attribute: reference.attribute,
           declCardinality,
-          declaration: declared.node,
-          node: reference.node,
+          declaration: declared.start,
+          package: reference.package,
+          path: reference.path,
+          start: reference.start,
         });
       }
 
@@ -1259,9 +1272,11 @@ const referenceDeclarationsOf = (
       )) {
         tables.set(at, {
           attribute: reference.attribute,
-          declaration: declared.node,
+          declaration: declared.start,
           kind: reference.kind,
-          node: reference.node,
+          package: reference.package,
+          path: reference.path,
+          start: reference.start,
           table,
         });
       }
@@ -1275,7 +1290,7 @@ const referenceDeclarationsOf = (
  * Write a document's `section-identifier`s, each split around the name it spells.
  *
  * @param doc - The document.
- * @returns The rows, by node.
+ * @returns The rows, by {@link keyTextOf}.
  */
 const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof SectionIdentifier>> =>
   new Map(
@@ -1284,22 +1299,23 @@ const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof Sectio
         return [];
       }
 
-      const node = doc.nodeOf(attribute.node);
+      const node = doc.nodeOf(attribute.start);
       const { lead, trail, value: name } = piecesOf(attribute.lexical);
 
       return [
         [
-          node.id,
+          keyTextOf(doc.place.package, doc.place.path, node.start),
           {
             after: trail,
             attribute: attribute.name,
             before: lead,
-            document: doc.id,
             identifier: name,
             kind: node.kind,
             lexical: attribute.lexical,
-            node: node.id,
+            package: doc.place.package,
+            path: doc.place.path,
             rootKind: doc.rootKind,
+            start: node.start,
           },
         ] as const,
       ];
@@ -1314,7 +1330,7 @@ const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof Sectio
  * @param doc - The document.
  * @param references - Its variable references.
  * @param sectionIdentifiers - Its `section-identifier`s.
- * @returns The rows, by `[node, attribute]`.
+ * @returns The rows, by {@link pairKey}.
  */
 const testReferencesOf = (
   doc: Document,
@@ -1327,26 +1343,28 @@ const testReferencesOf = (
   }
 
   for (const v of references.values()) {
-    rows.set(pairKey(v.node, v.attribute), {
+    rows.set(pairKey(doc.place, v.start, v.attribute), {
       attribute: v.attribute,
-      document: v.document,
       identifier: v.identifier,
       kind: v.kind,
-      node: v.node,
+      package: v.package,
+      path: v.path,
       role: "variable",
       rootKind: v.rootKind,
+      start: v.start,
     });
   }
 
   for (const named of sectionIdentifiers.values()) {
-    rows.set(pairKey(named.node, named.attribute), {
+    rows.set(pairKey(doc.place, named.start, named.attribute), {
       attribute: named.attribute,
-      document: named.document,
       identifier: named.identifier,
       kind: named.kind,
-      node: named.node,
+      package: named.package,
+      path: named.path,
       role: "section",
       rootKind: named.rootKind,
+      start: named.start,
     });
   }
 
@@ -1361,15 +1379,16 @@ const testReferencesOf = (
  * values already derived.
  *
  * @param view - The document's view.
+ * @param place - Where the document stands in its package, the key every row holds.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (view: DocumentView): ExpressionRows => {
-  const doc = documentOf(view);
+export const rowsOf = (view: DocumentView, place: Place): ExpressionRows => {
+  const doc = documentOf(view, place);
   const references = new Map<string, Addition<typeof VariableRef>>();
   for (const attribute of doc.rows.attributes) {
-    const reference = referenceOf(doc, doc.nodeOf(attribute.node), attribute);
+    const reference = referenceOf(doc, doc.nodeOf(attribute.start), attribute);
     if (reference !== undefined) {
-      references.set(pairKey(attribute.node, attribute.name), reference);
+      references.set(pairKey(place, attribute.start, attribute.name), reference);
     }
   }
 
@@ -1393,7 +1412,7 @@ export const rowsOf = (view: DocumentView): ExpressionRows => {
       processingRowsOf(doc, node, built);
     }
 
-    const type = typed.get(node.id);
+    const type = typed.get(node.start);
     if (type !== undefined) {
       expressionRowsOf(doc, node, type, built);
     }
@@ -1407,7 +1426,9 @@ export const rowsOf = (view: DocumentView): ExpressionRows => {
     ReferenceDocument:
       doc.rootKind === itemKind
         ? new Map<string, Addition<typeof ReferenceDocument>>()
-        : new Map([[doc.id, { document: doc.id }]]),
+        : new Map([
+            [keyTextOf(place.package, place.path), { package: place.package, path: place.path }],
+          ]),
     SectionIdentifier: sectionIdentifiers,
     TestReference: testReferencesOf(doc, references, sectionIdentifiers),
     VariableRefCardinality: declared.cardinalities,
@@ -1419,14 +1440,14 @@ export const rowsOf = (view: DocumentView): ExpressionRows => {
 /**
  * One document as the package-level builder reads it: its declarations' cardinalities, each where
  * it has one (Q5.08's `DeclarationCardinality` rows), its named declarations (Q5.08's
- * `DeclarationIdentifier` rows, each by its node), its expression rows, its test rows, its view
- * and where it stands in its package.
+ * `DeclarationIdentifier` rows), its expression rows, its test rows, its view and where it stands
+ * in its package, the documents of the package by their paths among it.
  */
 export interface AssembledExpressionInput {
   readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   readonly declarations: ReadonlyMap<string, Addition<typeof DeclarationIdentifier>>;
   readonly expressions: ExpressionRows;
-  readonly ids: TestIds;
+  readonly ids: TestIds & Pick<DocumentPlace, "documentAt">;
   readonly tests: TestRows;
   readonly view: DocumentView;
 }
@@ -1444,7 +1465,10 @@ export interface NamedResource {
 /**
  * A name piece of a reference as its owner nests it: every written field but the owner's key.
  */
-type SegmentMember = Omit<Addition<typeof ReferenceSegment>, "assembly" | "attribute" | "node">;
+type SegmentMember = Omit<
+  Addition<typeof ReferenceSegment>,
+  "assembly" | "attribute" | "package" | "path" | "start"
+>;
 
 /**
  * A reference as one test reads it, its name's pieces nested at `segments` in order.
@@ -1493,19 +1517,26 @@ const durationScopes: ReadonlySet<string> = new Set([partKind, sectionKind, sect
 const digits = /^[0-9]+$/u;
 
 /**
- * A reading's scope: the written element of its test's assembly its scope names, with its kind,
- * its placements and whether a replacement can repeat it in an instance that places it (as
- * `FoundName` of `#pantry/qti/queries.ts` joins them); the test itself for an unsplit reading; and
- * for a scope the assembly holds no element of, not `found`, the test as a document placed
- * nowhere, the null objects `Reading`'s `E1_derived` states of it.
+ * A reading's scope: the written element of its test's assembly its scope names, its document's
+ * path and its `start` there, with its kind, its placements and whether a replacement can repeat it
+ * in an instance that places it (as `FoundName` of `#pantry/qti/queries.ts` joins them); the test
+ * itself, its document node, for an unsplit reading; and for a scope the assembly holds no element
+ * of, not `found`, the test as a document placed nowhere, the null objects `Reading`'s
+ * `E1_derived` states of it.
  */
 interface Scope {
+  readonly document: string;
   readonly found: boolean;
   readonly kind: Addition<typeof Reading>["namedKind"];
-  readonly node: NodeId;
   readonly placements: bigint;
   readonly replaced: boolean;
+  readonly start: bigint;
 }
+
+/**
+ * The position of a document's document node, the test itself as a reading's scope.
+ */
+const documentStart = 0n;
 
 /**
  * The resource types of an LTI link, through whose item ref a name is read unchecked (spec reading
@@ -1514,37 +1545,40 @@ interface Scope {
 const linkTypes: ReadonlySet<string> = new Set(linkResourceTypes);
 
 /**
- * What the package-level builder reads of a package's documents and assemblies, each by
- * {@link lookupKey}.
+ * What the package-level builder reads of a package's documents and assemblies, each by the key
+ * text (`keyTextOf`) of what it is looked up by: an element of the package by its document's path
+ * and its `start` there, `[path, start]`, since one package's documents are read together and a
+ * path names one of them.
  */
 interface Lookups {
   /**
-   * Each declaration's cardinality, by the declaration's node, where it has one (spec reading
-   * 159): a declaration whose cardinality is unwritten or spells nothing has none.
+   * Each declaration's cardinality, by the declaration (`[path, start]`), where it has one
+   * (spec reading 159): a declaration whose cardinality is unwritten or spells nothing has none.
    */
   readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   /**
-   * Each document's named declarations by `[document, name]`, the first of a repeated name (which
+   * Each document's named declarations by `[path, name]`, the first of a repeated name (which
    * `Declaration key` refuses), as the document builder resolves a reference (`declarationsOf`):
    * the declaration a declared reading reads.
    */
   readonly declarations: ReadonlyMap<string, Addition<typeof DeclarationIdentifier>>;
   /**
-   * The item each item ref names, by the item ref's node, where the package holds its document.
+   * The path of the item each item ref names, by the item ref (`[path, start]`), where the
+   * package holds its document.
    */
-  readonly items: ReadonlyMap<string, NodeId>;
+  readonly items: ReadonlyMap<string, string>;
   /**
-   * The item refs that name an LTI link, by node: a name read through one is read unchecked (spec
-   * reading 110), its reading's source `link`.
+   * The item refs that name an LTI link (`[path, start]`): a name read through one is read
+   * unchecked (spec reading 110), its reading's source `link`.
    */
   readonly links: ReadonlySet<string>;
   /**
-   * The names each item ref maps, by `[item ref, target]`.
+   * The names each item ref maps, by `[path, item ref's start, target]`.
    */
   readonly mapped: ReadonlySet<string>;
   /**
-   * Each mapping whose source its item declares, by its item ref and its target: the declaration a
-   * mapped reading reads.
+   * Each mapping whose source its item declares, by its item ref and its target, as
+   * {@link Lookups.mapped} keys them: the declaration a mapped reading reads.
    */
   readonly mappingSources: Map<string, Addition<typeof MappingSourceDeclaration>>;
   /**
@@ -1558,15 +1592,17 @@ interface Lookups {
  * unwritten or spells nothing.
  *
  * @param lookups - The lookups.
- * @param declaration - The declaration's node.
+ * @param document - The declaration's document's path.
+ * @param declaration - The declaration's position there.
  * @returns Its cardinality, or none.
  */
 const cardinalityAt = (
   lookups: Lookups,
-  declaration: NodeId,
+  document: string,
+  declaration: bigint,
 ): Option.Option<Addition<typeof DeclarationCardinality>["cardinality"]> =>
   Option.map(
-    Option.fromNullishOr(lookups.cardinalities.get(declaration)),
+    Option.fromNullishOr(lookups.cardinalities.get(keyTextOf(document, declaration))),
     ({ cardinality }) => cardinality,
   );
 
@@ -1574,33 +1610,34 @@ const cardinalityAt = (
  * Look a name up in a document's declarations.
  *
  * @param lookups - The lookups.
- * @param document - The document.
+ * @param document - The document's path.
  * @param name - The name.
  * @returns The declaration of that name, or none.
  */
 const declarationOf = (
   lookups: Lookups,
-  document: NodeId,
+  document: string,
   name: string,
 ): Option.Option<Addition<typeof DeclarationIdentifier>> =>
-  Option.fromNullishOr(lookups.declarations.get(lookupKey(document, name)));
+  Option.fromNullishOr(lookups.declarations.get(keyTextOf(document, name)));
 
 /**
  * Look a name up in a test's assembly: its written element, or, where the assembly holds none,
  * the null objects of a scope not found ({@link Scope}).
  *
  * @param lookups - The lookups.
- * @param assembly - The test's document node.
+ * @param assembly - The test's path, its assembly's head.
  * @param name - The name.
  * @returns The scope.
  */
-const nameOf = (lookups: Lookups, assembly: NodeId, name: string): Scope =>
-  Option.getOrElse(Option.fromNullishOr(lookups.names.get(lookupKey(assembly, name))), () => ({
+const nameOf = (lookups: Lookups, assembly: string, name: string): Scope =>
+  Option.getOrElse(Option.fromNullishOr(lookups.names.get(keyTextOf(assembly, name))), () => ({
+    document: assembly,
     found: false,
     kind: "document",
-    node: assembly,
     placements: 0n,
     replaced: false,
+    start: documentStart,
   }));
 
 /**
@@ -1664,13 +1701,20 @@ export const readingTextsOf = (
  * Read a reading's scope: the test itself for an unsplit reading, else its name in the assembly.
  *
  * @param lookups - The lookups.
- * @param assembly - The test's document node.
+ * @param assembly - The test's path, its assembly's head.
  * @param text - The reading's text.
  * @returns The scope.
  */
-const scopeOf = (lookups: Lookups, assembly: NodeId, text: ReadingText): Scope =>
+const scopeOf = (lookups: Lookups, assembly: string, text: ReadingText): Scope =>
   text.form === "unsplit"
-    ? { found: true, kind: testKind, node: assembly, placements: 1n, replaced: false }
+    ? {
+        document: assembly,
+        found: true,
+        kind: testKind,
+        placements: 1n,
+        replaced: false,
+        start: documentStart,
+      }
     : nameOf(lookups, assembly, text.scope);
 
 /**
@@ -1741,7 +1785,7 @@ const sourceOf = (
  */
 type DeclarationCodes = Pick<
   Addition<typeof ReadingDeclaration>,
-  "declBaseTypes" | "declCardinalities" | "declaration" | "declarationKind"
+  "declBaseTypes" | "declCardinalities" | "declaration" | "declarationDocument" | "declarationKind"
 >;
 
 /**
@@ -1763,7 +1807,8 @@ const declarationCodesOf = (
       Option.map((declaration) => ({
         declBaseTypes: declaration.baseTypes,
         declCardinalities: declaration.cardinalities,
-        declaration: declaration.node,
+        declaration: declaration.start,
+        declarationDocument: declaration.path,
         declarationKind: declaration.declarationKind,
       })),
     );
@@ -1775,6 +1820,7 @@ const declarationCodesOf = (
           declBaseTypes: mapping.declBaseTypes,
           declCardinalities: mapping.declCardinalities,
           declaration: mapping.declaration,
+          declarationDocument: mapping.itemDocument,
           declarationKind: mapping.declarationKind,
         })),
       )
@@ -1811,23 +1857,23 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
  * through an item ref of an LTI link or of an item the package lacks, or through any other scope.
  *
  * @param lookups - The lookups.
- * @param assembly - The test's document node.
+ * @param assembly - The test's path, its assembly's head.
  * @param text - The reading's text.
  * @param scope - Its scope.
- * @returns The document, or none.
+ * @returns The document's path, or none.
  */
 const documentRead = (
   lookups: Lookups,
-  assembly: NodeId,
+  assembly: string,
   text: ReadingText,
   scope: Scope,
-): Option.Option<NodeId> => {
+): Option.Option<string> => {
   if (text.form === "unsplit") {
     return Option.some(assembly);
   }
 
   return text.form !== "name" && scope.found && scope.kind === itemRefKind
-    ? Option.fromNullishOr(lookups.items.get(scope.node))
+    ? Option.fromNullishOr(lookups.items.get(keyTextOf(scope.document, scope.start)))
     : Option.none();
 };
 
@@ -1841,14 +1887,14 @@ const documentRead = (
  * does not resolve hold none.
  *
  * @param lookups - The lookups.
- * @param assembly - The test's document node.
+ * @param assembly - The test's path, its assembly's head.
  * @param reference - The reference.
  * @param text - The reading's text.
  * @returns The reading's row, and its declaration's where it holds one.
  */
 const readingOf = (
   lookups: Lookups,
-  assembly: NodeId,
+  assembly: string,
   reference: Addition<typeof TestReference>,
   text: ReadingText,
 ): ReadingRows => {
@@ -1858,8 +1904,9 @@ const readingOf = (
   const declared = documentRead(lookups, assembly, text, scope).pipe(
     Option.flatMap((document) => declarationOf(lookups, document, text.variable)),
   );
-  const mapped = itemScoped && lookups.mapped.has(lookupKey(scope.node, text.variable));
-  const linked = itemScoped && lookups.links.has(scope.node);
+  const mappedAt = keyTextOf(scope.document, scope.start, text.variable);
+  const mapped = itemScoped && lookups.mapped.has(mappedAt);
+  const linked = itemScoped && lookups.links.has(keyTextOf(scope.document, scope.start));
   const reading: Addition<typeof Reading> = {
     assembly,
     attribute: reference.attribute,
@@ -1867,10 +1914,12 @@ const readingOf = (
     found: scope.found,
     identifier: reference.identifier,
     kind: reference.kind,
-    named: scope.node,
+    named: scope.start,
+    namedDocument: scope.document,
     namedKind: scope.kind,
-    node: reference.node,
     number: text.number,
+    package: reference.package,
+    path: reference.path,
     placements: scope.placements,
     replaced: scope.replaced,
     role: reference.role,
@@ -1882,15 +1931,14 @@ const readingOf = (
       linked,
     ),
     split: BigInt(text.split),
+    start: reference.start,
     variable: text.variable,
   };
   const codes = readingResolves(reading)
     ? declarationCodesOf(
         reading.source,
         declared,
-        itemScoped
-          ? Option.fromNullishOr(lookups.mappingSources.get(lookupKey(scope.node, text.variable)))
-          : Option.none(),
+        itemScoped ? Option.fromNullishOr(lookups.mappingSources.get(mappedAt)) : Option.none(),
       )
     : Option.none();
 
@@ -1903,9 +1951,12 @@ const readingOf = (
         form: reading.form,
         kind: reading.kind,
         named: reading.named,
-        node: reading.node,
+        namedDocument: reading.namedDocument,
+        package: reading.package,
+        path: reading.path,
         source: reading.source,
         split: reading.split,
+        start: reading.start,
         variable: reading.variable,
       })),
     ),
@@ -1930,22 +1981,28 @@ const readingCardinalityOf = (
   declaration.pipe(
     Option.filter(({ attribute }) => attribute !== "identifier"),
     Option.flatMap((held) =>
-      Option.map(cardinalityAt(lookups, held.declaration), (declCardinality) => ({
-        assembly: held.assembly,
-        attribute: held.attribute,
-        declCardinality,
-        declaration: held.declaration,
-        form: held.form,
-        node: held.node,
-        split: held.split,
-      })),
+      Option.map(
+        cardinalityAt(lookups, held.declarationDocument, held.declaration),
+        (declCardinality) => ({
+          assembly: held.assembly,
+          attribute: held.attribute,
+          declCardinality,
+          declaration: held.declaration,
+          declarationDocument: held.declarationDocument,
+          form: held.form,
+          package: held.package,
+          path: held.path,
+          split: held.split,
+          start: held.start,
+        }),
+      ),
     ),
   );
 
 /**
  * A reference as one test reads it: its row with its name's pieces nested, and its readings, their
  * declarations where they hold one, and those declarations' cardinalities where `Reference_type`
- * reads one, each by `[assembly, node, attribute, form, split]`.
+ * reads one, each by `[assembly, path, start, attribute, form, split]`.
  */
 interface ReadReference {
   readonly cardinalities: ReadonlyMap<string, Addition<typeof ReadingCardinality>>;
@@ -1958,13 +2015,13 @@ interface ReadReference {
  * Write a reference as one test reads it: its row, its name's pieces nested, and its readings.
  *
  * @param lookups - The lookups.
- * @param assembly - The test's document node.
+ * @param assembly - The test's path, its assembly's head.
  * @param reference - The reference.
- * @returns The row, and its readings by `[assembly, node, attribute, form, split]`.
+ * @returns The row, and its readings by `[assembly, path, start, attribute, form, split]`.
  */
 const assembledReferenceOf = (
   lookups: Lookups,
-  assembly: NodeId,
+  assembly: string,
   reference: Addition<typeof TestReference>,
 ): ReadReference => {
   const pieces = reference.role === "variable" ? reference.identifier.split(".") : [];
@@ -1977,13 +2034,14 @@ const assembledReferenceOf = (
     const { declaration, reading } = readingOf(lookups, assembly, reference, text);
 
     return {
-      at: JSON.stringify([
+      at: keyTextOf(
         assembly,
-        reading.node,
+        reading.path,
+        reading.start,
         reading.attribute,
         reading.form,
-        String(reading.split),
-      ]),
+        reading.split,
+      ),
       cardinality: readingCardinalityOf(lookups, declaration),
       declaration,
       reading,
@@ -2005,31 +2063,50 @@ const assembledReferenceOf = (
     row: {
       assembly,
       attribute: reference.attribute,
-      document: reference.document,
       identifier: reference.identifier,
       kind: reference.kind,
       lastDigit: Option.exists(Arr.last(segments), ({ digit }) => digit),
-      node: reference.node,
+      package: reference.package,
+      path: reference.path,
       role: reference.role,
       rootKind: reference.rootKind,
       segments,
+      start: reference.start,
     },
   };
 };
 
 /**
- * Walk an assembly's instance tree in pre-order.
+ * Walk an instance's subtree in pre-order.
  *
  * @param member - The instance.
  * @returns It and every instance below it.
  */
-const instancesIn = (
+const subtreeOf = (
   member: InstanceMember | InstanceRoot,
-): readonly (InstanceMember | InstanceRoot)[] => [member, ...member.children.flatMap(instancesIn)];
+): readonly (InstanceMember | InstanceRoot)[] => [member, ...member.children.flatMap(subtreeOf)];
 
 /**
- * A test's template defaults, each by its node: its row; its target, the declaration of the item
- * its item ref names, where that item declares a variable of its name; and its target's
+ * One instance of an assembly at its place there: its pre-order position, `Instance.start` as the
+ * instance tree draws it, the root's 0.
+ */
+interface Placed {
+  readonly instance: InstanceMember | InstanceRoot;
+  readonly start: bigint;
+}
+
+/**
+ * Number every instance of an assembly's tree by its pre-order position.
+ *
+ * @param root - The assembly's root instance.
+ * @returns Each instance at its position, in pre-order.
+ */
+const instancesIn = (root: InstanceRoot): readonly Placed[] =>
+  subtreeOf(root).map((instance, at) => ({ instance, start: BigInt(at) }));
+
+/**
+ * A test's template defaults, each by {@link keyTextOf}: its row; its target, the declaration of the
+ * item its item ref names, where that item declares a variable of its name; and its target's
  * declaration's cardinality, where the declaration has one.
  */
 interface TemplateDefaultRows {
@@ -2052,13 +2129,15 @@ interface TemplateDefaultRows {
  *
  * @param input - A document.
  * @param lookups - The lookups.
- * @returns The rows, by node.
+ * @returns The rows, by {@link keyTextOf}.
  */
 const templateDefaultsOf = (
   input: AssembledExpressionInput,
   lookups: Lookups,
 ): TemplateDefaultRows => {
   const { rows } = input.view;
+  const { ids } = input;
+  const at = (start: bigint) => ({ package: ids.package, path: ids.path, start });
   const held = new Map(
     [...input.expressions.Expression.values()]
       .filter(({ parentKind }) => parentKind === "qti-template-default")
@@ -2068,7 +2147,7 @@ const templateDefaultsOf = (
   const defaults = rows.nodes.flatMap((node) => {
     const attribute =
       node.kind === "qti-template-default"
-        ? written.find(({ node: owner }) => owner === node.id)
+        ? written.find(({ start }) => start === node.start)
         : undefined;
 
     return attribute === undefined
@@ -2077,28 +2156,28 @@ const templateDefaultsOf = (
   });
 
   const targets = defaults.flatMap(({ node, pieces }) => {
-    const itemDocument = lookups.items.get(node.parent);
+    const itemDocument = lookups.items.get(keyTextOf(ids.path, node.parent));
     const declared =
       itemDocument === undefined
         ? undefined
-        : lookups.declarations.get(lookupKey(itemDocument, pieces.value));
-    const expression = held.get(node.id);
+        : lookups.declarations.get(keyTextOf(itemDocument, pieces.value));
+    const expression = held.get(node.start);
 
     return itemDocument === undefined || declared === undefined || expression === undefined
       ? []
       : [
           [
-            node.id,
+            keyTextOf(ids.package, ids.path, node.start),
             {
+              ...at(node.start),
               declBaseTypes: declared.baseTypes,
               declCardinalities: declared.cardinalities,
-              declaration: declared.node,
+              declaration: declared.start,
               declarationKind: declared.declarationKind,
               heldBase: expression.baseType,
               heldCardinality: expression.cardinality,
               itemDocument,
               itemRef: node.parent,
-              node: node.id,
               template: pieces.value,
             },
           ] as const,
@@ -2106,16 +2185,17 @@ const templateDefaultsOf = (
   });
 
   return {
-    cardinalities: targets.flatMap(([at, target]) =>
-      Option.toArray(cardinalityAt(lookups, target.declaration)).map(
+    cardinalities: targets.flatMap(([key, target]) =>
+      Option.toArray(cardinalityAt(lookups, target.itemDocument, target.declaration)).map(
         (declCardinality) =>
           [
-            at,
+            key,
             {
+              ...at(target.start),
               declCardinality,
               declaration: target.declaration,
               heldCardinality: target.heldCardinality,
-              node: target.node,
+              itemDocument: target.itemDocument,
             },
           ] as const,
       ),
@@ -2124,16 +2204,16 @@ const templateDefaultsOf = (
     templateDefaults: defaults.map(
       ({ lexical, node, pieces: { lead, trail, value: name } }) =>
         [
-          node.id,
-          { itemRef: node.parent, lead, lexical, node: node.id, template: name, trail },
+          keyTextOf(ids.package, ids.path, node.start),
+          { ...at(node.start), itemRef: node.parent, lead, lexical, template: name, trail },
         ] as const,
     ),
   };
 };
 
 /**
- * What each item ref names, by the item ref's node: its href, its target's type where it has one,
- * and its item where it names one.
+ * What each item ref names, by the item ref (`[path, start]`): its href, its target's type where
+ * it has one, and its item where it names one.
  */
 interface ItemRefRows {
   readonly itemRefDocuments: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
@@ -2152,7 +2232,7 @@ interface ItemRefRows {
  *
  * @param documents - Every document of the package.
  * @param resources - The package's resources of a type the importer reads.
- * @returns Each item ref's href, target type and item, by the item ref's node.
+ * @returns Each item ref's href, target type and item, by the item ref (`[path, start]`).
  */
 const itemRefTargetsOf = (
   documents: readonly AssembledExpressionInput[],
@@ -2165,28 +2245,25 @@ const itemRefTargetsOf = (
   const itemRefDocuments = new Map<string, Addition<typeof ItemRefDocument>>();
   for (const { ids, view } of documents) {
     for (const href of itemRefPathsOf(view, ids)) {
-      itemRefHrefs.set(href.node, { node: href.node, package: href.package, path: href.path });
+      const key = keyTextOf(href.path, href.start);
+      const at = { package: href.package, path: href.path, start: href.start };
+      itemRefHrefs.set(key, { ...at, target: href.target });
 
       const types = new Set(
-        Option.getOrElse(Option.fromNullishOr(typesAt.get(href.path)), Arr.empty).map(
+        Option.getOrElse(Option.fromNullishOr(typesAt.get(href.target)), Arr.empty).map(
           ({ type }) => type,
         ),
       );
       const type = Arr.findFirst(preferred, (wanted) => types.has(wanted));
       if (Option.isSome(type)) {
-        targetTypes.set(href.node, type.value);
+        targetTypes.set(key, type.value);
       }
 
       const document = Option.contains(type, itemResourceType)
-        ? ids.documentAt(href.path)
+        ? ids.documentAt(href.target)
         : Option.none();
       if (Option.isSome(document)) {
-        itemRefDocuments.set(href.node, {
-          document: document.value,
-          node: href.node,
-          package: href.package,
-          path: href.path,
-        });
+        itemRefDocuments.set(key, { ...at, target: document.value });
       }
     }
   }
@@ -2195,18 +2272,18 @@ const itemRefTargetsOf = (
 };
 
 /**
- * Index a package's named declarations by `[document, name]`, the first of a repeated name, as the
+ * Index a package's named declarations by `[path, name]`, the first of a repeated name, as the
  * document builder keeps it (`declarationsOf`); `Declaration key` refuses the second.
  *
  * @param documents - Every document of the package.
- * @returns The declarations, by `[document, name]`.
+ * @returns The declarations, by `[path, name]`.
  */
 const namedDeclarationsOf = (
   documents: readonly AssembledExpressionInput[],
 ): ReadonlyMap<string, Addition<typeof DeclarationIdentifier>> => {
   const named = new Map<string, Addition<typeof DeclarationIdentifier>>();
   for (const declaration of documents.flatMap((input) => [...input.declarations.values()])) {
-    const key = lookupKey(declaration.document, declaration.identifier);
+    const key = keyTextOf(declaration.path, declaration.identifier);
     if (!named.has(key)) {
       named.set(key, declaration);
     }
@@ -2217,9 +2294,9 @@ const namedDeclarationsOf = (
 
 /**
  * Read each test's written elements as the scopes its readings read, by `[assembly, identifier]`:
- * each element's node, its kind and its placements, and whether a replacement can repeat it in the
- * first instance that places it, the first element of a repeated name (which `Test_name_key`
- * refuses). `FoundName` of `#pantry/qti/queries.ts` admits any instance's.
+ * each element's document and `start`, its kind and its placements, and whether a replacement can
+ * repeat it in the first instance that places it, the first element of a repeated name (which
+ * `Test_name_key` refuses). `FoundName` of `#pantry/qti/queries.ts` admits any instance's.
  *
  * @param assembled - The package's assemblies.
  * @returns The scopes.
@@ -2227,28 +2304,29 @@ const namedDeclarationsOf = (
  *   projection of `InstanceName`, rules out: a defect of the assembly's rows.
  */
 const namesOf = (assembled: AssembledRows): ReadonlyMap<string, Scope> => {
-  const placed = Map.groupBy(assembled.InstanceName.values(), ({ assembly, node }) =>
-    keyOf([assembly, node]),
+  const placed = Map.groupBy(assembled.InstanceName.values(), ({ assembly, path, start }) =>
+    keyTextOf(assembly, path, start),
   );
   const names = new Map<string, Scope>();
   for (const name of assembled.AssembledName.values()) {
-    const key = lookupKey(name.assembly, name.identifier);
+    const key = keyTextOf(name.assembly, name.identifier);
     const unplaced = () =>
       new Error(
-        `The written element ${name.node} of the assembly ${name.assembly} has no instance that places it, and AssembledName projects InstanceName. Build the names from the same assembly's rows.`,
+        `The written element at ${String(name.start)} of ${name.path} in the assembly of ${name.assembly} has no instance that places it, and AssembledName projects InstanceName. Build the names from the same assembly's rows.`,
       );
     const placements = Option.getOrThrowWith(
-      Option.fromNullishOr(placed.get(keyOf([name.assembly, name.node]))),
+      Option.fromNullishOr(placed.get(keyTextOf(name.assembly, name.path, name.start))),
       unplaced,
     );
     const placement = Option.getOrThrowWith(Arr.head(placements), unplaced);
     if (!names.has(key)) {
       names.set(key, {
+        document: name.path,
         found: true,
         kind: placement.kind,
-        node: name.node,
         placements: BigInt(placements.length),
         replaced: placement.replaced,
+        start: name.start,
       });
     }
   }
@@ -2271,18 +2349,25 @@ const lookupsOf = (
   assembled: AssembledRows,
   items: ItemRefRows,
 ): Lookups => ({
-  cardinalities: new Map(documents.flatMap((input) => [...input.cardinalities])),
+  cardinalities: new Map(
+    documents.flatMap((input) =>
+      [...input.cardinalities.values()].map((row) => [keyTextOf(row.path, row.start), row]),
+    ),
+  ),
   declarations: namedDeclarationsOf(documents),
   items: new Map(
-    [...items.itemRefDocuments.values()].map(({ document, node }) => [node, document]),
+    [...items.itemRefDocuments.values()].map(({ path, start, target }) => [
+      keyTextOf(path, start),
+      target,
+    ]),
   ),
   links: new Set(
-    [...items.targetTypes].flatMap(([node, type]) => (linkTypes.has(type) ? [node] : [])),
+    [...items.targetTypes].flatMap(([itemRef, type]) => (linkTypes.has(type) ? [itemRef] : [])),
   ),
   mapped: new Set(
     documents.flatMap((input) =>
-      [...input.tests.VariableMapping.values()].map(({ parent, target }) =>
-        lookupKey(parent, target),
+      [...input.tests.VariableMapping.values()].map(({ parent, path, target }) =>
+        keyTextOf(path, parent, target),
       ),
     ),
   ),
@@ -2297,7 +2382,7 @@ const lookupsOf = (
  *
  * @param documents - Every document of the package.
  * @param lookups - The lookups, which this adds to.
- * @returns The source declarations, by the mapping's node.
+ * @returns The source declarations, by the mapping ({@link keyTextOf}).
  */
 const mappingSourcesOf = (
   documents: readonly AssembledExpressionInput[],
@@ -2306,26 +2391,28 @@ const mappingSourcesOf = (
   const sources = new Map<string, Addition<typeof MappingSourceDeclaration>>();
   for (const input of documents) {
     for (const mapping of input.tests.VariableMapping.values()) {
-      const itemDocument = lookups.items.get(mapping.parent);
+      const itemDocument = lookups.items.get(keyTextOf(mapping.path, mapping.parent));
       const source =
         itemDocument === undefined
           ? undefined
-          : lookups.declarations.get(lookupKey(itemDocument, mapping.source));
+          : lookups.declarations.get(keyTextOf(itemDocument, mapping.source));
 
       if (itemDocument !== undefined && source !== undefined) {
         const row: Addition<typeof MappingSourceDeclaration> = {
           declBaseTypes: source.baseTypes,
           declCardinalities: source.cardinalities,
-          declaration: source.node,
+          declaration: source.start,
           declarationKind: source.declarationKind,
           itemDocument,
           itemRef: mapping.parent,
-          node: mapping.node,
+          package: mapping.package,
+          path: mapping.path,
           source: mapping.source,
+          start: mapping.start,
           target: mapping.target,
         };
-        sources.set(mapping.node, row);
-        lookups.mappingSources.set(lookupKey(mapping.parent, mapping.target), row);
+        sources.set(keyTextOf(mapping.package, mapping.path, mapping.start), row);
+        lookups.mappingSources.set(keyTextOf(mapping.path, mapping.parent, mapping.target), row);
       }
     }
   }
@@ -2343,26 +2430,39 @@ const mappingSourcesOf = (
  * 428).
  *
  * @param documents - Every document of the package.
- * @param targets - Each item ref's target type, by the item ref's node, where it has a target.
- * @returns The mappings' item refs and their types, each by the mapping's node.
+ * @param targets - Each item ref's target type, by the item ref (`[path, start]`), where it has
+ *   a target.
+ * @returns The mappings' item refs and their types, each by the mapping ({@link keyTextOf}).
  */
 const mappingItemRefsOf = (
   documents: readonly AssembledExpressionInput[],
   targets: ReadonlyMap<string, NamedResource["type"]>,
 ): Pick<AssembledExpressionRows, "MappingItemRef" | "MappingItemRefType"> => {
   const mappings = documents.flatMap((input) => [...input.tests.VariableMapping.values()]);
+  const itemRefOf = ({ package: pkg, parent, path, start }: (typeof mappings)[number]) => ({
+    itemRef: parent,
+    package: pkg,
+    path,
+    start,
+  });
   const types = mappings.flatMap((mapping) => {
-    const type = targets.get(mapping.parent);
+    const type = targets.get(keyTextOf(mapping.path, mapping.parent));
 
     return type === undefined
       ? []
-      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
+      : [
+          [
+            keyTextOf(mapping.package, mapping.path, mapping.start),
+            { ...itemRefOf(mapping), type },
+          ] as const,
+        ];
   });
 
   return {
     MappingItemRef: new Map(
       mappings.map(
-        (mapping) => [mapping.node, { itemRef: mapping.parent, node: mapping.node }] as const,
+        (mapping) =>
+          [keyTextOf(mapping.package, mapping.path, mapping.start), itemRefOf(mapping)] as const,
       ),
     ),
     MappingItemRefType: new Map(types),
@@ -2399,7 +2499,7 @@ const placedRowsOf = (
 ): PlacedRows => {
   const references = Map.groupBy(
     documents.flatMap((input) => [...input.expressions.TestReference.values()]),
-    ({ document }) => document,
+    ({ path }) => path,
   );
   const placedDocuments = new Map<string, Addition<typeof PlacedDocument>>();
   const placedReferences = new Map<string, Addition<typeof PlacedReference>>();
@@ -2411,26 +2511,31 @@ const placedRowsOf = (
     ({ assemblyKind }) => assemblyKind === testKind,
   );
   for (const root of roots) {
-    for (const instance of instancesIn(root).filter(({ rootKind }) => rootKind !== itemKind)) {
-      placedDocuments.set(instance.id, {
+    for (const { instance, start } of instancesIn(root).filter(
+      ({ instance: { rootKind } }) => rootKind !== itemKind,
+    )) {
+      placedDocuments.set(keyTextOf(root.assembly, start), {
         assembly: root.assembly,
         assemblyKind: root.assemblyKind,
         document: instance.document,
-        instance: instance.id,
+        instance: start,
+        package: root.package,
       });
       for (const reference of Option.getOrElse(
         Option.fromNullishOr(references.get(instance.document)),
         Arr.empty,
       )) {
-        placedReferences.set(keyOf([instance.id, reference.node, reference.attribute]), {
+        const placement = [reference.path, String(reference.start), reference.attribute];
+        placedReferences.set(keyTextOf(root.assembly, start, ...placement), {
           assembly: root.assembly,
           attribute: reference.attribute,
-          document: reference.document,
-          instance: instance.id,
-          node: reference.node,
+          instance: start,
+          package: root.package,
+          path: reference.path,
+          start: reference.start,
         });
 
-        const at = keyOf([root.assembly, reference.node, reference.attribute]);
+        const at = keyTextOf(root.assembly, ...placement);
         if (!assembledReferences.has(at)) {
           const read = assembledReferenceOf(lookups, root.assembly, reference);
           assembledReferences.set(at, read.row);
@@ -2503,8 +2608,8 @@ export const assembledExpressionRowsOf = (
 };
 
 /**
- * The readings of each reference that resolve, by the reference (`[assembly, node, attribute]`):
- * the readings "Prefixed reference" counts, so a refusal for two names both.
+ * The readings of each reference that resolve, by the reference (`[assembly, path, start,
+ * attribute]`): the readings "Prefixed reference" counts, so a refusal for two names both.
  *
  * @param rows - The package-level rows.
  * @returns Each reference's resolving readings.
@@ -2512,8 +2617,9 @@ export const assembledExpressionRowsOf = (
 export const resolvingReadingsOf = (
   rows: Pick<AssembledExpressionRows, "Reading">,
 ): ReadonlyMap<string, readonly Addition<typeof Reading>[]> =>
-  Map.groupBy([...rows.Reading.values()].filter(readingResolves), ({ assembly, attribute, node }) =>
-    keyOf([assembly, node, attribute]),
+  Map.groupBy(
+    [...rows.Reading.values()].filter(readingResolves),
+    ({ assembly, attribute, path, start }) => keyTextOf(assembly, path, start, attribute),
   );
 
 /**
@@ -2567,42 +2673,47 @@ export const placedVariableRowsOf = (input: {
   readonly references: Iterable<Addition<typeof VariableRef>>;
 }): PlacedVariableRows => {
   const declared = new Map(
-    [...input.declarations].map((row) => [keyOf([row.document, row.identifier]), row] as const),
+    [...input.declarations].map((row) => [keyTextOf(row.path, row.identifier), row] as const),
   );
-  const referencesOf = Map.groupBy(input.references, ({ document }) => document);
+  const referencesOf = Map.groupBy(input.references, ({ path }) => path);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
   for (const root of input.instances) {
-    for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
+    for (const { instance, start } of root.assemblyKind === itemKind ? instancesIn(root) : []) {
       for (const reference of Option.getOrElse(
         Option.fromNullishOr(referencesOf.get(instance.document)),
         Arr.empty,
       )) {
-        const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
-        const at = keyOf([instance.id, reference.node, reference.attribute]);
-        placed.set(at, {
+        const declaration = declared.get(keyTextOf(root.assembly, reference.identifier));
+        const at = keyTextOf(
+          root.assembly,
+          start,
+          reference.path,
+          reference.start,
+          reference.attribute,
+        );
+        const placement = {
           assembly: root.assembly,
           attribute: reference.attribute,
-          document: instance.document,
           identifier: reference.identifier,
-          instance: instance.id,
+          instance: start,
           kind: reference.kind,
-          node: reference.node,
+          package: root.package,
+          path: reference.path,
+          start: reference.start,
+        };
+        placed.set(at, {
+          ...placement,
           resolution: placedResolutionOf(declaration, reference.identifier),
           rootKind: itemKind,
         });
         if (declaration !== undefined) {
           placedDeclarations.set(at, {
-            assembly: root.assembly,
-            attribute: reference.attribute,
+            ...placement,
             declBaseTypes: declaration.baseTypes,
             declCardinalities: declaration.cardinalities,
-            declaration: declaration.node,
+            declaration: declaration.start,
             declarationKind: declaration.declarationKind,
-            identifier: reference.identifier,
-            instance: instance.id,
-            kind: reference.kind,
-            node: reference.node,
           });
         }
       }

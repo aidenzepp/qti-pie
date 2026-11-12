@@ -10,17 +10,19 @@
  * name is listed here.
  *
  * Each name is one keyed set of a package's inputs (`PackageInputs` of `#pantry/import/write.ts`):
- * the two roots, `Node` and `Package`, each with its tree or record nested; the document layer's
- * relations, which `documentRowsOf` writes; and every overlay's.
+ * the package's record, `Package` and `Entry` (`#pantry/import/record.ts`); each document's tree,
+ * `Node`, with its nodes nested; the document layer's relations, which `documentRowsOf` writes; and
+ * every overlay's.
  */
 import type { InsertAllRowsOf } from "@bjornpagen/grizzle";
-import { Struct } from "effect";
+import { Record as Rec, Struct } from "effect";
 import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * A relation an import writes directly: one `insertAll` takes over `Qti` at its top level, every
- * stored relation of `Qti` but an ordered family's member (`Attribute`, `Namespace`, `Entry` and
- * the like), which is written nested at its owner's count field.
+ * stored relation of `Qti` but a sequence's member (a tree's nodes, an attribute's IDREF tokens and
+ * the like), which is written nested at its owner's count field. A counted family's member, an
+ * attribute or a namespace declaration, is a row of its own relation, written directly.
  */
 export type WrittenName = keyof InsertAllRowsOf<typeof Qti>;
 
@@ -42,6 +44,8 @@ export const writtenRelations = {
   AssembledName: { name: "AssembledName" },
   AssembledReference: { name: "AssembledReference" },
   AssessmentObject: { name: "AssessmentObject" },
+  Attribute: { name: "Attribute" },
+  AttributeEntity: { name: "AttributeEntity" },
   Binding: { name: "Binding" },
   BindingBaseType: { name: "BindingBaseType" },
   BindingCardinality: { name: "BindingCardinality" },
@@ -87,6 +91,7 @@ export const writtenRelations = {
   DocumentLang: { name: "DocumentLang" },
   ElementType: { name: "ElementType" },
   EncodingDecl: { name: "EncodingDecl" },
+  Entry: { name: "Entry" },
   Expression: { name: "Expression" },
   ExpressionAttribute: { name: "ExpressionAttribute" },
   FeedbackRef: { name: "FeedbackRef" },
@@ -153,12 +158,15 @@ export const writtenRelations = {
   MathRank: { name: "MathRank" },
   MostCount: { name: "MostCount" },
   Named: { name: "Named" },
+  Namespace: { name: "Namespace" },
   Node: { name: "Node" },
   NormalMaximum: { name: "NormalMaximum" },
   NormalMinimum: { name: "NormalMinimum" },
   ObjectIdentifier: { name: "ObjectIdentifier" },
   ObjectLang: { name: "ObjectLang" },
   ObjectTitle: { name: "ObjectTitle" },
+  OpenAttribute: { name: "OpenAttribute" },
+  OpenAttributeEntity: { name: "OpenAttributeEntity" },
   OpenElementName: { name: "OpenElementName" },
   OpenElementType: { name: "OpenElementType" },
   Operand: { name: "Operand" },
@@ -272,16 +280,22 @@ export const writtenRelations = {
 
 /**
  * The document layer's relations, which `documentRowsOf` of `#pantry/import/write.ts` writes for
- * each document: its `Document` row, its XML declaration's rows where it writes one, its comments',
- * instructions' and doctypes' rows, its foreign elements' expanded names, its elements' named
- * governing types, and the type of the resource that lists it, where one does.
+ * each document: its `Document` row, its XML declaration's rows where it writes one, its elements'
+ * attributes, closed and open, with their entity references, and their namespace declarations, its
+ * comments', instructions' and doctypes' rows, its foreign elements' expanded names, its elements'
+ * named governing types, and the type of the resource that lists it, where one does.
  */
 export const documentLayerNames = [
+  "Attribute",
+  "AttributeEntity",
   "Comment",
   "Doctype",
   "Document",
   "ElementType",
   "EncodingDecl",
+  "Namespace",
+  "OpenAttribute",
+  "OpenAttributeEntity",
   "OpenElementName",
   "OpenElementType",
   "Pi",
@@ -297,12 +311,104 @@ export const documentLayerNames = [
 export const documentLayer = Struct.pick(writtenRelations, documentLayerNames);
 
 /**
- * Every overlay's relation, by its name: each written relation but the two roots, `Node` and
- * `Package`, and the document layer's. `overlayRowsOf` (`#pantry/import/overlays/index.ts`) unions
- * `OverlayRows` over it, which the type checker holds to name every relation of `OverlayRows`.
+ * Every overlay's relation, by its name: each written relation but the record's, `Package` and
+ * `Entry`, the tree's, `Node`, and the document layer's. `overlayRowsOf`
+ * (`#pantry/import/overlays/index.ts`) unions `OverlayRows` over it, which the type checker holds
+ * to name every relation of `OverlayRows`.
  */
 export const overlayRelations = Struct.omit(writtenRelations, [
+  "Entry",
   "Node",
   "Package",
   ...documentLayerNames,
 ]);
+
+/**
+ * The relations an import writes directly that are a counted family's members, each a row of its
+ * own relation: a replace deletes each with its family's owner, since grizzle deletes what a family
+ * nests under the row it deletes (G2), so it states no delete of its own.
+ */
+export const familyMemberNames = [
+  "AriaValue",
+  "Attribute",
+  "AttributeEntity",
+  "BindingName",
+  "BodyXmlLang",
+  "BranchResolution",
+  "BranchRule",
+  "BranchShuffle",
+  "CatalogRef",
+  "Choice",
+  "ChoiceInteraction",
+  "CnPartText",
+  "CnSlot",
+  "DeclarationBaseType",
+  "DeclarationCardinality",
+  "DocumentId",
+  "File",
+  "GapInteraction",
+  "Hottext",
+  "IdrefTarget",
+  "InstanceName",
+  "LeastCount",
+  "LomLanguage",
+  "LomStringLanguage",
+  "MappingItemRefType",
+  "MasteryValue",
+  "MathAlignGroup",
+  "MathArgument",
+  "MathQualifier",
+  "MostCount",
+  "Named",
+  "Namespace",
+  "NormalMaximum",
+  "NormalMinimum",
+  "OpenAttribute",
+  "OpenAttributeEntity",
+  "Operand",
+  "PciModuleForm",
+  "PlacedBinding",
+  "PlacedBodyXmlLang",
+  "PlacedCatalogRef",
+  "PlacedChoice",
+  "PlacedHottext",
+  "PlacedId",
+  "PlacedIdref",
+  "PlacedReference",
+  "PlacedShareTarget",
+  "PlacedVariableRef",
+  "PlacedXmlLang",
+  "Reading",
+  "RecordField",
+  "SectionContextName",
+  "SectionContextRef",
+  "SectionFeedbackName",
+  "SectionFeedbackRef",
+  "SectionMember",
+  "SectionPrintedName",
+  "SectionPrintedRef",
+  "SectionTemplateName",
+  "SectionTemplateRef",
+  "SiteTarget",
+  "SsmlAttribute",
+  "TestReference",
+  "VariableRef",
+  "XmlLang",
+] as const satisfies readonly WrittenName[];
+
+/**
+ * The package's top relations, by name, each with the fields a replace's delete selects its rows
+ * by, a query over the package (`replaceWrite` of `#pantry/qti/logins.ts`): a tree by its root, and
+ * every other relation no family nests by its whole row. A family's members leave with their owner
+ * ({@link familyMemberNames}).
+ */
+// GRIZZLE-PENDING(WHOLEDEL): the replace's deletes read this once grizzle deletes a tree by its root
+// and a family's members with their owner; until then `replaceWrite` inserts alone.
+export const deletedBy = {
+  ...Rec.map(
+    Struct.omit(writtenRelations, [...familyMemberNames, "Instance", "Node"]),
+    () => "row" as const,
+  ),
+  Instance: ["package", "assembly"],
+  Node: ["package", "path"],
+} as const;

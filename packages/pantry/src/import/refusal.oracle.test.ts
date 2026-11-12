@@ -28,7 +28,6 @@ import {
   select,
   str,
   tree,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { Law, LawSide, RegexText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -104,7 +103,7 @@ const scratch = (() => {
     ["version", "parent", "from", "to"],
     [{ from: "0", parent: "document", to: "1", version: "v" }],
   );
-  const nil = "00000000-0000-0000-0000-000000000000";
+  const Path = str.regex("^[a-z]{1,8}$");
   const Node = relation(
     "Node",
     {
@@ -113,24 +112,23 @@ const scratch = (() => {
       attrs: accumulated(bits(Slot), Bits.of(Slot, [])),
       children: drawn(natural),
       countedChildren: accumulated(natural, 0n),
-      document: uuid,
       elementChildren: accumulated(natural, 0n),
       elements: accumulated(natural, 0n),
       elementsWas: accumulated(natural, 0n),
       end: drawn(natural),
-      id: uuid,
       kind: closedId(Kind),
       lastState: accumulated(closedId(Pos), "0"),
-      nearest: uuid,
-      parent: uuid,
+      nearest: natural,
+      parent: drawn(natural),
       parentKind: accumulated(closedId(Kind), "document"),
-      parentNearest: accumulated(uuid, nil),
+      parentNearest: accumulated(natural, 0n),
+      path: Path,
       start: drawn(natural),
       state: closedId(Pos),
       version: closedId(Version),
       was: accumulated(closedId(Pos), "0"),
     },
-    ["id"],
+    ["path", "start"],
   );
   const Attribute = relation(
     "Attribute",
@@ -138,72 +136,77 @@ const scratch = (() => {
       at: drawn(natural),
       attrsAfter: accumulated(bits(Slot), Bits.of(Slot, [])),
       attrsWas: accumulated(bits(Slot), Bits.of(Slot, [])),
-      document: accumulated(uuid, nil),
       kind: accumulated(closedId(Kind), "document"),
       name: closedId(Name),
-      node: uuid,
+      path: Path,
       slot: bits(Slot),
+      start: natural,
     },
-    ["node", "at"],
+    ["path", "start", "at"],
   );
-  const Binding = relation("Binding", { choices: drawn(natural), node: uuid }, ["node"]);
+  const Binding = relation("Binding", { choices: drawn(natural), path: Path, start: natural }, [
+    "path",
+    "start",
+  ]);
   const Choice = relation(
     "Choice",
-    { identifier: str.regex("^[a-z]{1,8}$"), interaction: uuid, node: uuid },
-    ["node"],
+    { identifier: str.regex("^[a-z]{1,8}$"), interaction: natural, path: Path, start: natural },
+    ["path", "start"],
   );
   const members = select(Node, (n) => n.gt(n.start, 0n));
-  const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), { root: "document" });
-  const attributeFamily = ordered(on(Attribute, "node", "at"), fin(Node, "attributes"));
-  const choiceFamily = counted(on(Choice, "interaction"), fin(Binding, "choices"));
+  const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), { root: ["path"] });
+  const attributeFamily = ordered(on(Attribute, "path", "start", "at"), fin(Node, "attributes"));
+  const choiceFamily = counted(on(Choice, "path", "interaction"), fin(Binding, "choices"));
   const parentCopy = contained(
-    on(members, "parent", "version", "parentKind", "parentNearest"),
-    on(Node, "id", "version", "kind", "nearest"),
+    on(members, "path", "parent", "version", "parentKind", "parentNearest"),
+    on(Node, "path", "start", "version", "kind", "nearest"),
   );
   const followStep = contained(
     on(members, "version", "parentKind", "was", "state"),
     on(Follow, "version", "parent", "from", "to"),
   );
   const predecessorCopy = contained(
-    on(members, "parent", pred("at"), "was"),
-    on(members, "parent", "at", "state"),
+    on(members, "path", "parent", pred("at"), "was"),
+    on(members, "path", "parent", "at", "state"),
   );
   const lastSlot = contained(
-    on(Node, "id", pred("children"), "lastState"),
-    on(members, "parent", "at", "state"),
+    on(Node, "path", "start", pred("children"), "lastState"),
+    on(members, "path", "parent", "at", "state"),
   );
   const elementCount = fold(
     nodeTree,
     Monoid.count,
-    on(members, "parent", "elementsWas", "elements"),
-    on(Node, "id", "elementChildren"),
+    on(members, "path", "parent", "elementsWas", "elements"),
+    on(Node, "path", "start", "elementChildren"),
   );
   const countedCount = fold(
     nodeTree,
     Monoid.count,
     on(
       select(Node, (n) => n.and(n.gt(n.start, 0n), n.eq(n.state, "2"))),
+      "path",
       "parent",
     ),
-    on(Node, "id", "countedChildren"),
+    on(Node, "path", "start", "countedChildren"),
   );
   const attributeOwner = contained(
-    on(Attribute, "node", "kind", "document"),
-    on(Node, "id", "kind", "document"),
+    on(Attribute, "path", "start", "kind"),
+    on(Node, "path", "start", "kind"),
   );
   const attrsFold = fold(
     attributeFamily,
     Monoid.or,
     on(
       select(Attribute, (a) => Compute.not(Compute.in(a.name, ["data-*"]))),
-      "node",
+      "path",
+      "start",
       "slot",
       "attrsWas",
       "attrsAfter",
     ),
-    on(Node, "id", "attrs"),
+    on(Node, "path", "start", "attrs"),
   );
-  const choiceOwner = contained(on(Choice, "interaction"), on(Binding, "node"));
+  const choiceOwner = contained(on(Choice, "path", "interaction"), on(Binding, "path", "start"));
   const relations = { Attribute, Binding, Choice, Follow, Kind, Name, Node, Pos, Slot, Version };
   const built = schema("Scratch", relations, [
     nodeTree,
@@ -219,8 +222,8 @@ const scratch = (() => {
     attrsFold,
     choiceFamily,
     choiceOwner,
-    mirrors(on(Choice, "node"), on(Node, "id")),
-    key(on(Choice, "interaction", "identifier")),
+    mirrors(on(Choice, "path", "start"), on(Node, "path", "start")),
+    key(on(Choice, "path", "interaction", "identifier")),
   ]);
   const lawsOfStatement = lawsByStatement(built);
   const lawOf = (statement: (typeof built.statements)[number]): Law =>
@@ -608,7 +611,7 @@ const plannedAxes = nonEmpty("the planned axes", [
     "Attribute owner",
     "attribute-admission",
     statedNamed("AL2 count", isFamily),
-    statedNamed("AL1 owner", containedFrom("Attribute", "node", "kind")),
+    statedNamed("AL1 owner", containedFrom("Attribute", "package", "path", "start", "kind")),
   ),
   plannedAxis(
     "Attribute predecessor and last",
@@ -650,7 +653,7 @@ const crossTier = nonEmpty("the cross-tier laws", [
   ...statedNamed("Binding declared", containedInto("Declaration")),
   ...statedNamed("Choice bounds"),
   { kind: "check", name: checkNameOf("MathML arity"), relation: "Node" } satisfies Law,
-  ...statedNamed("AL1 owner", containedFrom("Attribute", "node", "kind")),
+  ...statedNamed("AL1 owner", containedFrom("Attribute", "package", "path", "start", "kind")),
   { kind: "check", name: checkNameOf("N5 Follow"), relation: "Node" } satisfies Law,
   ...statedNamed("N7 last slot"),
   ...statedNamed("N2 tree"),
@@ -725,7 +728,11 @@ describe("the merged axes and the laws no row states", () => {
   it("names no rule for laws no row states, and still carries each law as the outcome names it", () => {
     // Oracle: the outcome itself, read back field by field: its decision, the law's display text
     // with no name or rule, no source, the witness's kind, and no rule.
-    const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
+    const law: Law = {
+      from: sideOf("Nowhere", "x"),
+      kind: "contained",
+      to: sideOf("Node", "path", "start"),
+    };
     const refused = refusalOf({ kind: "every", laws: [refusedOf(law)] }, { kind: "unreported" });
 
     assert.deepStrictEqual(refused.rules, []);
@@ -755,7 +762,7 @@ describe("the merged axes and the laws no row states", () => {
     const laws: readonly Law[] = [
       { kind: "check", name: checkNameOf("AL1 admission"), relation: "Attribute" },
       { kind: "check", name: checkNameOf("Media path"), relation: "Attribute" },
-      { fields: ["id"], kind: "primaryKey", relation: "Package" },
+      { fields: ["identifier"], kind: "primaryKey", relation: "Package" },
       { contract: "natural", kind: "contract" },
       { field: "value", kind: "generated", relation: "DocumentLang" },
     ];
@@ -1412,7 +1419,7 @@ describe("the pattern laws, one per field", () => {
     const plain = str.regex("^.*$", "su");
     const Club = relation.generated(
       "Club",
-      { alias, code, id: uuid, name: plain },
+      { alias, code, id: natural, name: plain },
       ["id"],
       (r) => ({ joined: generated(code, Compute.concat(r.code, r.alias)) }),
     );
@@ -1553,15 +1560,31 @@ describe("the census of the composed Qti schema", () => {
       // rule.
       const stated = schemaLawsOf(Qti);
       const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
-        [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
-        [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
-        [sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path"), "file-exists"],
         [
-          sideOf("SitePath", "package", "path"),
+          sideOf("SitePath", "package", "path", "start"),
+          sideOf("SiteTarget", "package", "path", "start"),
+          "include-target",
+        ],
+        [
+          sideOf("Site", "package", "path", "start", "kind"),
+          sideOf("SitePath", "package", "path", "start", "kind"),
+          "include-target",
+        ],
+        [
+          sideOf("SitePath", "package", "target"),
+          sideOf("Entry", "package", "path"),
+          "file-exists",
+        ],
+        [
+          sideOf("SitePath", "package", "target"),
           sideOf("TestDocument", "package", "path"),
           "entry-kind",
         ],
-        [sideOf("Reference", "node"), sideOf("SitePath", "node"), "entry-kind"],
+        [
+          sideOf("Reference", "package", "path", "start"),
+          sideOf("SitePath", "package", "path", "start"),
+          "entry-kind",
+        ],
       ];
 
       for (const [from, to, rule] of kinds) {
@@ -1584,8 +1607,8 @@ describe("the census of the composed Qti schema", () => {
     // `generatedNames` names: its law is listed, and named none, never another law's name.
     const Planted = relation.generated(
       "Planted",
-      { form: lexical(pg.bigint), node: uuid },
-      ["node"],
+      { form: lexical(pg.bigint), start: natural },
+      ["start"],
       (r) => ({ value: generated(pg.bigint, Compute.cast(r.form, pg.bigint)) }),
     );
     const raised = schemaLawsOf(schema("Planted", { Planted }, [])).filter(

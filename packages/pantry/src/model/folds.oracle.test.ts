@@ -40,7 +40,6 @@ import {
   editElement,
   familiesOf,
   featuresOf,
-  idOf,
   invalidVariants,
   lawOf,
   situationsOf,
@@ -116,10 +115,10 @@ const reached = required<Situation>(
  * Fold a document, which is total on the trees the generator builds.
  *
  * @param document - The tree.
- * @returns Its folded rows under {@link idOf}; a defect when the fold refuses it.
+ * @returns Its folded rows; a defect when the fold refuses it.
  */
 const foldedOf = (document: XdmDocument<Composed>) =>
-  Effect.orDie(Effect.fromResult(fold(document, idOf, foldGrammar)));
+  Effect.orDie(Effect.fromResult(fold(document, foldGrammar)));
 
 /**
  * The node rows of a tree by their number in document order.
@@ -242,7 +241,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
       // Oracle: a second implementation, the generator's model of the tree, its intervals written as
       // it closed each subtree, and the specification as a checker, plan §1.3's N1 to N3 and
       // trees.md's T2: a self-parented sentinel alone at start 0, each family's slots 0 to n − 1,
-      // each parentStart its parent's start, one row per node.
+      // each parent its parent's start, one row per position.
       // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
       searched(
         ctx,
@@ -252,48 +251,42 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
             c.noteAll(familiesOf(model));
 
             const rows = yield* foldedOf(document);
-            const sentinel = nodeAt(rows, 0);
             const children = (number: number) =>
               model.filter((placed, index) => index > 0 && placed.parent === number).length;
 
             assert.deepStrictEqual(
-              rows.nodes.map(
-                ({ at, children: count, end, id, kind, parent, parentStart, start }) => ({
-                  at,
-                  children: count,
-                  end,
-                  id,
-                  kind,
-                  parent,
-                  parentStart,
-                  start,
-                }),
-              ),
+              rows.nodes.map(({ at, children: count, end, kind, parent, start }) => ({
+                at,
+                children: count,
+                end,
+                kind,
+                parent,
+                start,
+              })),
               model.map((placed, number) => ({
                 at: BigInt(placed.at),
                 children: BigInt(children(number)),
                 end: BigInt(placed.end),
-                id: idOf(number),
                 kind: placed.kind,
-                parent: idOf(placed.parent),
-                parentStart: BigInt(model[placed.parent]?.start ?? -1),
+                parent: BigInt(model[placed.parent]?.start ?? -1),
                 start: BigInt(placed.start),
               })),
             );
             assert.deepStrictEqual(
-              rows.nodes
-                .filter(({ id, parent }) => id === parent)
-                .map(({ id, start }) => [id, start]),
-              [[sentinel.id, 0n]],
+              rows.nodes.filter(({ parent, start }) => parent === start).map(({ start }) => start),
+              [0n],
             );
-            assert.strictEqual(new Set(rows.nodes.map(({ id }) => id)).size, rows.nodes.length);
+            assert.deepStrictEqual(
+              rows.nodes.map(({ start }) => start),
+              rows.nodes.map((_, number) => BigInt(number)),
+            );
           }),
         ),
       ),
   );
 
   it.effect(
-    "starts every fold at its identity: each first slot's copies, each empty family's end values, each first attribute's names, and the sentinel's own copies",
+    "starts every fold at its identity: each first slot's copies, each empty family's end values, and the sentinel's own copies",
     (ctx) =>
       // Oracle: the specification as a checker, fin.md §4.3: the identity of the content
       // automaton's state is its start, 0, of a set the empty set, and of a count 0; and N1 pins the
@@ -310,20 +303,19 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
             const sentinel = nodeAt(rows, 0);
 
             for (const node of rows.nodes.filter(({ at }) => at === 0n)) {
-              assert.deepStrictEqual([node.was, node.elementsWas], [0, 0n], node.id);
+              assert.deepStrictEqual([node.was, node.elementsWas], [0, 0n], String(node.start));
             }
 
             for (const node of rows.nodes.filter(({ children }) => children === 0n)) {
-              assert.deepStrictEqual([node.childState, node.elementChildren], [0, 0n], node.id);
-            }
-
-            for (const attribute of rows.attributes.filter(({ at }) => at === 0n)) {
-              assert.deepStrictEqual(sorted(attribute.attrsWas), [], attribute.id);
+              assert.deepStrictEqual(
+                [node.childState, node.elementChildren],
+                [0, 0n],
+                String(node.start),
+              );
             }
 
             assert.deepStrictEqual(
               {
-                document: sentinel.document,
                 nearest: sentinel.nearest,
                 nearestKind: sentinel.nearestKind,
                 parent: sentinel.parent,
@@ -333,13 +325,12 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                 parentNearestKind: sentinel.parentNearestKind,
               },
               {
-                document: sentinel.id,
-                nearest: sentinel.id,
+                nearest: 0n,
                 nearestKind: "document",
-                parent: sentinel.id,
+                parent: 0n,
                 parentAncestry: [],
                 parentKind: "document",
-                parentNearest: sentinel.id,
+                parentNearest: 0n,
                 parentNearestKind: "document",
               },
             );
@@ -350,7 +341,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
 
   it.effect("agrees with a naive recomputation of every fold over the whole tree", (ctx) =>
     // Oracle: a second implementation, each fold's meaning computed from the whole tree at once:
-    // `parentStart` as the parent's start, `nearest` as the nearest interaction among the
+    // `parent` as the parent's start, `nearest` as the nearest interaction among the
     // ancestors, `stringValue` as the characters of the node's text, whitespace and entity rows,
     // `parentAncestry` as the flags they enter; a node's state as its own `Admission` position, or
     // for a kind several positions name the one of its `Symbol` positions `Follow` allows after its
@@ -369,23 +360,26 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
           c.noteAll(familiesOf(model));
 
           const rows = yield* foldedOf(document);
-          const byId = new Map(rows.nodes.map((node) => [node.id, node]));
-          const self = rows.document.node;
+          const byStart = new Map(rows.nodes.map((node) => [node.start, node]));
           const charactersOf = new Map([
-            ...[...rows.texts, ...rows.whitespace].map(({ node, value }) => [node, value] as const),
-            ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
+            ...[...rows.texts, ...rows.whitespace].map(
+              ({ start, value }) => [start, value] as const,
+            ),
+            ...rows.entityRefs.map(({ name, start }) => [start, `&${name};`] as const),
           ]);
           for (const node of rows.nodes) {
             const above: FoldedNode<Composed>[] = [];
             for (
-              let at = node.id === self ? undefined : byId.get(node.parent);
+              let at = node.start === 0n ? undefined : byStart.get(node.parent);
               at !== undefined;
-              at = at.id === self ? undefined : byId.get(at.parent)
+              at = at.start === 0n ? undefined : byStart.get(at.parent)
             ) {
               above.push(at);
             }
 
-            const family = rows.nodes.filter(({ id, parent }) => parent === node.id && id !== self);
+            const family = rows.nodes.filter(
+              ({ parent, start }) => parent === node.start && start !== 0n,
+            );
             const key = (child: FoldedNode<Composed>) => ({
               child: child.kind,
               parent: node.kind,
@@ -435,11 +429,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
               above.flatMap(({ kind }) => [...rowOf(grammar.ancestry.enters, kind)]),
             );
             const names = rows.attributes
-              .filter(
-                (attribute) =>
-                  attribute.node === node.id &&
-                  !openClasses.some((open) => open === attribute.name),
-              )
+              .filter((attribute) => attribute.start === node.start)
               .map(({ name }) =>
                 Option.match(
                   admissionOf(grammar.attributes, {
@@ -456,14 +446,13 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
               {
                 attrs: sorted(node.attrs),
                 childState: node.childState,
-                document: node.document,
                 elementChildren: node.elementChildren,
                 first: node.first,
                 last: node.last,
                 nearest: node.nearest,
                 nearestKind: node.nearestKind,
+                parent: node.parent,
                 parentAncestry: sorted(node.parentAncestry),
-                parentStart: node.parentStart,
                 stringValue: node.stringValue,
               },
               {
@@ -472,21 +461,20 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                   onNone: () => 0,
                   onSome: stateOf,
                 }),
-                document: self,
                 elementChildren: BigInt(
                   family.filter(({ kind }) =>
                     Option.isSome(grammar.kinds.isElement.lookup({ kind })),
                   ).length,
                 ),
-                first: Array.from(charactersOf.get(node.id) ?? "", String)[0] ?? "",
-                last: Array.from(charactersOf.get(node.id) ?? "", String).at(-1) ?? "",
-                nearest: nearest.id,
+                first: Array.from(charactersOf.get(node.start) ?? "", String)[0] ?? "",
+                last: Array.from(charactersOf.get(node.start) ?? "", String).at(-1) ?? "",
+                nearest: nearest.start,
                 nearestKind: nearest.kind,
+                parent: (above[0] ?? node).start,
                 parentAncestry: sorted(entered),
-                parentStart: (above[0] ?? node).start,
-                stringValue: family.map(({ id }) => charactersOf.get(id) ?? "").join(""),
+                stringValue: family.map(({ start }) => charactersOf.get(start) ?? "").join(""),
               },
-              node.id,
+              String(node.start),
             );
             assert.deepStrictEqual(
               family.map(({ derived, was }) => [was, derived.state]),
@@ -497,7 +485,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                 }),
                 stateOf(child),
               ]),
-              node.id,
+              String(node.start),
             );
           }
         }),
@@ -592,7 +580,7 @@ describe("fold's count and set folds", { timeout: searchTimeout }, () => {
                   }
                 }
               });
-              const folded = fold(edited, idOf, foldGrammar);
+              const folded = fold(edited, foldGrammar);
               if (Result.isFailure(folded)) {
                 // A refused edit holds no fold to compare: it is no case of this property, and the
                 // fold's refusals are judged by their own suite below.
@@ -686,18 +674,16 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
                     ...held.children,
                   ],
                 }));
-                const refusal = yield* Effect.flip(
-                  Effect.fromResult(fold(edited, idOf, foldGrammar)),
-                );
+                const refusal = yield* Effect.flip(Effect.fromResult(fold(edited, foldGrammar)));
 
                 assert.deepStrictEqual(
                   [
                     refusal._tag,
-                    refusal.node,
+                    refusal.start,
                     refusal.kind,
                     refusal._tag === "ChildUnadmitted" ? refusal.reason : "",
                   ],
-                  ["ChildUnadmitted", idOf(target + 1), child, "unadmitted"],
+                  ["ChildUnadmitted", BigInt(target + 1), child, "unadmitted"],
                 );
               } else if (Arr.isReadonlyArrayNonEmpty(names)) {
                 c.note("attribute");
@@ -710,13 +696,11 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
                     ...held.attributes,
                   ],
                 }));
-                const refusal = yield* Effect.flip(
-                  Effect.fromResult(fold(edited, idOf, foldGrammar)),
-                );
+                const refusal = yield* Effect.flip(Effect.fromResult(fold(edited, foldGrammar)));
 
                 assert.deepStrictEqual(
-                  [refusal._tag, refusal.node, refusal.kind === kind],
-                  ["AttributeUnadmitted", idOf(target), true],
+                  [refusal._tag, refusal.start, refusal.kind === kind],
+                  ["AttributeUnadmitted", BigInt(target), true],
                 );
               }
             }),
@@ -1227,14 +1211,13 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
               }
 
               const rows = yield* foldedOf(tree);
-              const byId = new Map(rows.nodes.map((node) => [node.id, node]));
-              const self = rows.document.node;
+              const byStart = new Map(rows.nodes.map((node) => [node.start, node]));
               const walked = rows.nodes.filter((node) => {
                 const entered = new Set<string>();
                 for (
-                  let at = node.id === self ? undefined : byId.get(node.parent);
+                  let at = node.start === 0n ? undefined : byStart.get(node.parent);
                   at !== undefined;
-                  at = at.id === self ? undefined : byId.get(at.parent)
+                  at = at.start === 0n ? undefined : byStart.get(at.parent)
                 ) {
                   for (const flag of rowOf(grammar.ancestry.enters, at.kind)) {
                     entered.add(flag);
@@ -1256,8 +1239,8 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
               c.note(walked.length > 0 ? "N6 refuses" : "N6 holds");
 
               assert.deepStrictEqual(
-                refused.map(({ keys }) => keys["id"] ?? "").toSorted(),
-                walked.map(({ id }) => id).toSorted(),
+                refused.map(({ keys }) => keys["start"] ?? "").toSorted(),
+                walked.map(({ start }) => String(start)).toSorted(),
               );
             }),
         ),

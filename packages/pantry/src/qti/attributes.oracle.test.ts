@@ -1,40 +1,29 @@
 /**
- * The attribute layer's free tests: the host's `attrs` agrees with the installed grammar, AL2's
- * distinctness refuses exactly a repeated closed name, the derived bounds are what
- * `#pantry/qti/limits.ts` derives, and `coords` is judged by `CoordsDType` alone, whatever its
- * shape.
+ * The attribute layer's free tests: the host's `attrs` agrees with the installed grammar, the
+ * attribute prefix and the data names are judged as Namespaces in XML and reading 13 state them,
+ * and `coords` is judged by `CoordsDType` alone, whatever its shape.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, element } from "@grizzle/testing/gen";
-import type { Gen } from "@grizzle/testing/gen";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Effect, Formatter, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
-import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { attributeRows, GoverningOf, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { asiNamespace, xsiNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
-
-/**
- * Whether an `AttributeName` handle is an open class's.
- *
- * @param name - The handle.
- * @returns Whether it is one of `openClasses`.
- */
-const isOpen = (name: string): boolean => openClasses.some((open) => open === name);
 
 /**
  * The installed `GoverningOf`, keyed `version kind governs` by its rows: the second implementation
@@ -108,10 +97,8 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
             Effect.gen(function* hostAttrs() {
               c.noteAll(featuresOf(document));
 
-              const rows = yield* Effect.orDie(
-                Effect.fromResult(fold(document, idOf, foldGrammar)),
-              );
-              const byNode = Map.groupBy(rows.attributes, ({ node }) => node);
+              const rows = yield* Effect.orDie(Effect.fromResult(fold(document, foldGrammar)));
+              const byNode = Map.groupBy(rows.attributes, ({ start }) => start);
 
               for (const node of rows.nodes) {
                 const governor = Option.match(
@@ -123,9 +110,9 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
                   { onNone: () => node.kind, onSome: (held) => held },
                 );
                 const expected = new Set(
-                  (byNode.get(node.id) ?? [])
-                    .filter(({ name }) => !isOpen(name))
-                    .map(({ name }) => slots.get(`${node.version} ${governor} ${name}`)),
+                  (byNode.get(node.start) ?? []).map(({ name }) =>
+                    slots.get(`${node.version} ${governor} ${name}`),
+                  ),
                 );
 
                 assert.isFalse(expected.has(undefined), `${node.kind}: a closed name no row holds`);
@@ -134,113 +121,6 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
                   [...expected].toSorted((a, b) => (a ?? 0) - (b ?? 0)),
                   `${node.version} ${node.kind} under ${Formatter.format(node.governs)}`,
                 );
-              }
-            }),
-        ),
-      ),
-  );
-});
-
-/**
- * A (version, governor) whose admitted names hold two closed names and two open classes, the
- * smallest alphabet in which every pattern of AL2's distinctness occurs: the first such in
- * `AttributeGrammar`'s rows.
- */
-const alphabet = (() => {
-  const families = Map.groupBy(attributeRows, ({ governor, version }) => `${version} ${governor}`);
-  for (const rows of families.values()) {
-    const closed = rows.filter(({ name }) => !isOpen(name)).slice(0, 2);
-    const open = rows.filter(({ name }) => isOpen(name)).slice(0, 2);
-    if (closed.length === 2 && open.length === 2) {
-      const [first, ...rest] = [...closed, ...open].map(({ name, position }) => ({
-        name,
-        slot: Number(position),
-      }));
-      if (first !== undefined) {
-        return [first, ...rest] as const;
-      }
-    }
-  }
-
-  return assert.fail("no (version, governor) admits two closed names and two open classes");
-})();
-
-/**
- * One attribute of the distinctness box: its name and its slot under the box's governor.
- */
-type Letter = (typeof alphabet)[number];
-
-/**
- * Judge a list of attributes by the database's statement over them: AL2's key, `(node, name)` over
- * the attributes of a closed name, the open classes left out when the key's selection selects.
- *
- * @param letters - The attributes of one element, in source order.
- * @param selects - Whether the key's selection leaves the open classes out: the statement as
- *   written; `false` is the mutant that drops it.
- * @returns Whether two rows break the key.
- */
-const refused = (letters: readonly Letter[], selects: boolean): boolean => {
-  const keyed = letters.filter(({ name }) => !(selects && isOpen(name))).map(({ name }) => name);
-
-  return new Set(keyed).size < keyed.length;
-};
-
-/**
- * Every list of at most 4 attributes over {@link alphabet}: the distinctness box.
- */
-const lists: Gen<readonly Letter[]> = array(element<Letter>(alphabet), { max: 4, min: 0 });
-
-/**
- * A situation the distinctness box must reach: each kind of list, and a list that tells the
- * mutant without the key's selection apart from the statement as written.
- */
-type DistinctSituation = "closed repeat" | "open repeat" | "distinct" | "mutant killed";
-
-describe("qti/attributes.ts, AL2's distinctness", () => {
-  it.effect(
-    "refuses exactly a repeated closed name, and the mutant without the key's selection refuses two attributes of one open class",
-    (ctx) =>
-      // Oracle: the specification as a checker, XML 1.0 §3.1's Unique Att Spec by name: a list is
-      // refused exactly when a closed name repeats, since two open names of one class are two
-      // names (OpenAttributeName's key judges those).
-      // Bound: every list of at most 4 attributes over 2 closed names and 2 open classes, 341.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every list of at most 4 attributes over 2 closed names and 2 open classes",
-            caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<DistinctSituation>([
-              "closed repeat",
-              "open repeat",
-              "distinct",
-              "mutant killed",
-            ]),
-            generator: lists,
-            literal: (letters) => letters.map(({ name }) => name).join(" "),
-            oracle: {
-              kind: "specification",
-              name: "XML 1.0 §3.1, Unique Att Spec, by closed name",
-            },
-            suite: "qti/attributes-al2-distinct",
-          },
-          (letters: readonly Letter[], c) =>
-            Effect.sync(() => {
-              const names = letters.map(({ name }) => name);
-              const repeats = (open: boolean) =>
-                names.some((name, at) => isOpen(name) === open && names.indexOf(name) !== at);
-              const situation = (): DistinctSituation => {
-                if (repeats(false)) {
-                  return "closed repeat";
-                }
-
-                return repeats(true) ? "open repeat" : "distinct";
-              };
-              c.note(situation());
-
-              assert.strictEqual(refused(letters, true), repeats(false), names.join(" "));
-              if (refused(letters, false) !== repeats(false)) {
-                c.note("mutant killed");
               }
             }),
         ),
@@ -462,7 +342,7 @@ const foldedOf = (text: string, version: (typeof schemaVersions)[number]) =>
     const read = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
     const tree = yield* Effect.orDie(shred(read, version, shredGrammar));
 
-    return yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammar)));
+    return yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammar)));
   });
 
 /**
@@ -481,20 +361,40 @@ const lawsBroken = (rows: FoldedRows<Composed>): ReadonlySet<string> =>
 const plainItem = `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"/>`;
 
 /**
- * The names of the prefix box, each with the namespace its name is in: a closed name in no
- * namespace, the XML namespace's, XML Schema's instance namespace's and XLink's, and each open
- * class, `own-namespace` and `foreign` in a namespace.
+ * The closed names of the prefix box, each with the namespace its name is in: a closed name in no
+ * namespace, the XML namespace's, XML Schema's instance namespace's and XLink's.
  */
 const prefixNames = [
   ["title", "none"],
   ["xml:lang", "xml"],
   ["xsi:schemaLocation", "other"],
   ["xlink:href", "other"],
+] as const;
+
+/**
+ * The open classes of the prefix box, each with the namespace its names are in: `own-namespace`
+ * and `foreign` in a namespace, the others in none.
+ */
+const prefixClasses = [
   ["data-*", "none"],
   ["no-namespace", "none"],
   ["own-namespace", "other"],
   ["foreign", "other"],
 ] as const;
+
+/**
+ * Whether a prefix agrees with the namespace a name is in (Namespaces in XML 1.0, §6.2 and §3).
+ *
+ * @param prefix - The prefix.
+ * @param namespace - The namespace the name is in: none, the XML namespace, or another.
+ * @returns Whether the name may be written with it.
+ */
+const agrees = (prefix: string, namespace: "none" | "other" | "xml"): boolean =>
+  ({
+    none: prefix === "",
+    other: !["", "xml", "xmlns"].includes(prefix),
+    xml: prefix === "xml",
+  })[namespace];
 
 /**
  * The prefixes of the box: none, the two Namespaces in XML reserves, the handles' own, and one a
@@ -509,19 +409,15 @@ describe("qti/attributes.ts, the attribute prefix (C54)", () => {
       // Oracle: the specification as a checker, Namespaces in XML 1.0 §6.2 (an unprefixed
       // attribute is in no namespace, a prefixed one in its prefix's) and §3 (`xml` is bound to
       // the XML namespace and no other prefix is; `xmlns` declares only), as the table below.
-      // Bound: the 8 name classes of `prefixNames` with the 6 prefixes of `prefixes`, 48 rows.
+      // Bound: the 4 closed names of `prefixNames` and the 4 open classes of `prefixClasses` with
+      // the 6 prefixes of `prefixes`, 48 rows.
       Effect.gen(function* prefixBox() {
         const rows = yield* foldedOf(plainItem, "3.0.1");
         const target =
           rows.attributes.find(({ name }) => name === "title") ??
           assert.fail("the item carries its title");
-        for (const [name, namespace] of prefixNames) {
-          for (const prefix of prefixes) {
-            const valid = {
-              none: prefix === "",
-              other: !["", "xml", "xmlns"].includes(prefix),
-              xml: prefix === "xml",
-            }[namespace];
+        for (const prefix of prefixes) {
+          for (const [name, namespace] of prefixNames) {
             const tampered: FoldedRows<Composed> = {
               ...rows,
               attributes: rows.attributes.map((attribute) =>
@@ -531,7 +427,34 @@ describe("qti/attributes.ts, the attribute prefix (C54)", () => {
 
             assert.strictEqual(
               lawsBroken(tampered).has("Attribute prefix"),
-              !valid,
+              !agrees(prefix, namespace),
+              `${name} written with ${JSON.stringify(prefix)}`,
+            );
+          }
+
+          for (const [name, namespace] of prefixClasses) {
+            const tampered: FoldedRows<Composed> = {
+              ...rows,
+              attributes: rows.attributes.filter((attribute) => attribute !== target),
+              openAttributes: [
+                ...rows.openAttributes,
+                {
+                  class: name,
+                  governs: target.governs,
+                  kind: target.kind,
+                  lexical: target.lexical,
+                  local: "title",
+                  prefix,
+                  start: target.start,
+                  uri: namespace === "none" ? "" : "urn:x",
+                  version: target.version,
+                },
+              ],
+            };
+
+            assert.strictEqual(
+              lawsBroken(tampered).has("Attribute prefix"),
+              !agrees(prefix, namespace),
               `${name} written with ${JSON.stringify(prefix)}`,
             );
           }
@@ -558,10 +481,11 @@ describe("qti/attributes.ts, the data name (reading 13)", () => {
       Effect.gen(function* dataNameBox() {
         const rows = yield* foldedOf(dataItem, "3.0.1");
         const target =
-          rows.attributes.find(({ name }) => name === "data-*") ??
+          rows.openAttributes.find(({ class: name }) => name === "data-*") ??
           assert.fail("the paragraph carries its data-x");
         const host =
-          rows.nodes.find(({ id }) => id === target.node) ?? assert.fail("the paragraph is a node");
+          rows.nodes.find(({ start }) => start === target.start) ??
+          assert.fail("the paragraph is a node");
         const cases = [
           { broken: true, class: "data-*", kind: host.kind, local: "data-A" },
           { broken: true, class: "no-namespace", kind: host.kind, local: "data-x" },
@@ -572,12 +496,9 @@ describe("qti/attributes.ts, the data name (reading 13)", () => {
         for (const { broken, class: name, kind, local } of cases) {
           const tampered: FoldedRows<Composed> = {
             ...rows,
-            attributes: rows.attributes.map((attribute) =>
-              attribute === target ? { ...attribute, name } : attribute,
-            ),
             nodes: rows.nodes.map((node) => (node === host ? { ...node, kind } : node)),
-            openNames: rows.openNames.map((open) =>
-              open.attribute === target.id ? { ...open, local } : open,
+            openAttributes: rows.openAttributes.map((open) =>
+              open === target ? { ...open, class: name, local } : open,
             ),
           };
 
@@ -602,10 +523,11 @@ describe("qti/attributes.ts, a declared data- name (goal part E)", () => {
       Effect.gen(function* declaredDataNameBox() {
         const rows = yield* foldedOf(dataItem, "3.0.1");
         const target =
-          rows.attributes.find(({ name }) => name === "data-*") ??
+          rows.openAttributes.find(({ class: name }) => name === "data-*") ??
           assert.fail("the paragraph carries its data-x");
         const host =
-          rows.nodes.find(({ id }) => id === target.node) ?? assert.fail("the paragraph is a node");
+          rows.nodes.find(({ start }) => start === target.start) ??
+          assert.fail("the paragraph is a node");
         const cases = [
           { broken: true, kind: host.kind, local: "data-catalog-idref" },
           { broken: false, kind: "qti-assessment-item", local: "data-catalog-idref" },
@@ -616,8 +538,8 @@ describe("qti/attributes.ts, a declared data- name (goal part E)", () => {
           const tampered: FoldedRows<Composed> = {
             ...rows,
             nodes: rows.nodes.map((node) => (node === host ? { ...node, kind } : node)),
-            openNames: rows.openNames.map((open) =>
-              open.attribute === target.id ? { ...open, local } : open,
+            openAttributes: rows.openAttributes.map((open) =>
+              open === target ? { ...open, local } : open,
             ),
           };
 

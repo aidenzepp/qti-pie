@@ -4,19 +4,23 @@
  * Q5.15; the W5 amendment's C19).
  *
  * The package is read whole (`readEntries`), its manifest is decoded and its schema version read,
- * and the manifest is shredded. The documents it names are the (href, type) pairs of its resources
- * whose type `RootOfType` maps (spec reading 93, `namedDocuments`), and each path one names that an
- * entry holds is shredded once, in the version the manifest declares: the manifest's path is the
- * manifest's alone, no resource's document (reading 146). A named href no entry holds is shredded
- * as nothing: the record's laws refuse it in the database (`entry-kind`). Each document's
- * references are then resolved as the import resolves them (`referenceRowsOf`), so the package
- * names every path the import writes a `ReferencePath` or a `TextReferencePath` of.
+ * the manifest is shredded, and its identifier read: the package's key, so a manifest that writes
+ * none, or one that is no `xs:ID`, is refused before any row is built. The documents it names are
+ * the (href, type) pairs of its resources whose type `RootOfType` maps (spec reading 93,
+ * `namedDocuments`), and each path one names that an entry holds is shredded once, in the version
+ * the manifest declares: the manifest's path is the manifest's alone, no resource's document
+ * (reading 146). A named href no entry holds is shredded as nothing: the record's laws refuse it in
+ * the database (`entry-kind`). Each document's references are then resolved as the import resolves
+ * them (`referenceRowsOf`), so the package names every path the import writes a `ReferencePath` or
+ * a `TextReferencePath` of.
  *
- * {@link readPackage} judges no law: what it refuses is what the reader, the container and the codec
- * refuse, and every law is the database's, met when `importPackage` (`#pantry/import/package.ts`)
- * writes the package. Nothing here reaches the author login (`#pantry/qti/logins.ts`), whose
+ * {@link readPackage} judges no law but the one its key needs: what it refuses is what the reader,
+ * the container and the codec refuse, and a manifest identifier it cannot key the package by, and
+ * every other law is the database's, met when `importPackage` (`#pantry/import/package.ts`) writes
+ * the package. Nothing here reaches the author login (`#pantry/qti/logins.ts`), whose
  * workload grizzle builds when that module is evaluated.
  */
+import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Brand, Effect, Option, Order } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -29,16 +33,18 @@ import {
   rowsOf as packageRowsOf,
 } from "#pantry/import/overlays/package.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
-import { packageNameOf } from "#pantry/import/record.ts";
-import { ruleOfError } from "#pantry/import/rules.ts";
-import type { ImportRefused } from "#pantry/import/rules.ts";
+import { namedBy } from "#pantry/import/names.ts";
+import { ImportRefused, ruleOfError } from "#pantry/import/rules.ts";
 import type { ListedDocument } from "#pantry/import/write.ts";
+import type { Composed } from "#pantry/model/composed.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { PackageReadError, readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { recordOf } from "#pantry/package/record.ts";
+import { readerOrigin } from "#pantry/package/refusal-origin.ts";
+import type { Package } from "#pantry/qti/package.ts";
 import { cpNamespace } from "#pantry/vocab/namespaces.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
@@ -67,8 +73,8 @@ const packagePath = Brand.nominal<PackagePath>();
 /**
  * A package as the import writes it: what {@link readPackage} read, before the database.
  *
- * - `name`: the last segment of the directory or zip file it was read from (`packageNameOf`), the
- *   name its `Package` row takes.
+ * - `identifier`: its manifest's identifier, collapsed (`cp:manifest/@identifier`, an `xs:ID`;
+ *   decision 457 (3)), the key its `Package` row takes and every other row of it holds.
  * - `manifest`: the manifest, `imsmanifest.xml` at the package root, shredded, of the document type
  *   `manifest`.
  * - `documents`: every other document its resources name that an entry holds, one per path, in the
@@ -84,22 +90,10 @@ const packagePath = Brand.nominal<PackagePath>();
 export interface QtiPackage {
   readonly documents: readonly ListedDocument[];
   readonly files: ReadonlyMap<PackagePath, File>;
+  readonly identifier: Addition<typeof Package>["identifier"];
   readonly manifest: ListedDocument;
-  readonly name: string;
   readonly referenced: ReadonlySet<PackagePath>;
 }
-
-/**
- * The ids of a document's provisional rows, read only for what its rows name (the hrefs and types
- * the manifest's resources name, the paths its references resolve to) before the package's ids are
- * minted: one distinct uuid per number `flatten` gives, since the builder groups each attribute
- * under its node's id.
- *
- * @param index - The number of a node or an attribute.
- * @returns A uuid that spells the number.
- */
-const provisionalIdOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
 
 /**
  * Find the schema version a manifest declares: the text of the first `schemaversion` under its
@@ -130,6 +124,49 @@ export const declaredVersionOf = (manifest: XmlDocument): Option.Option<string> 
       )
     : Option.none();
 };
+
+/**
+ * Read a manifest's identifier, the package's key: its root's `identifier`, collapsed, where that
+ * is an NCName, the lexical space of the `xs:ID` IMS Content Packaging types it as
+ * (`namedBy`). Its byte bound is the database's to judge (`Key text bound`), as every key text's.
+ *
+ * @param manifest - The manifest, shredded.
+ * @returns The identifier. Fails with `ImportRefused` under `required-attribute` where the root
+ *   writes no identifier, and under `attribute-lexical` where it writes one that is no NCName, so
+ *   no row is built without its key.
+ */
+const identifierOf = (
+  manifest: XdmDocument<Composed>,
+): Effect.Effect<QtiPackage["identifier"], ImportRefused> =>
+  Option.match(
+    Option.fromUndefinedOr(
+      manifest.root.attributes.find(
+        ({ name }) => name._tag === "closed" && name.handle === "identifier",
+      ),
+    ),
+    {
+      onNone: () =>
+        Effect.fail(
+          new ImportRefused({
+            detail: `${manifestPath}'s cp:manifest writes no identifier, and a package is stored under its manifest identifier. Give the cp:manifest an identifier attribute.`,
+            origin: readerOrigin,
+            rules: ["required-attribute"],
+          }),
+        ),
+      onSome: ({ lexical }) =>
+        Option.match(namedBy(lexical), {
+          onNone: () =>
+            Effect.fail(
+              new ImportRefused({
+                detail: `${manifestPath}'s cp:manifest identifier ${JSON.stringify(lexical)} is no xs:ID, so no package can be stored under it: with its surrounding whitespace removed, it must be an NCName, an XML name with no ":" that starts with a letter or "_".`,
+                origin: readerOrigin,
+                rules: ["attribute-lexical"],
+              }),
+            ),
+          onSome: Effect.succeed,
+        }),
+    },
+  );
 
 /**
  * Read and shred one document of the package.
@@ -170,8 +207,8 @@ const documentTypeOf = <T extends string>(
  * document its resources name that an entry holds, in the manifest's order, each shredded once.
  *
  * @param dir - The package directory or `.zip` file.
- * @returns The entries, the manifest and the other documents; the reader's, the container's or
- *   the codec's refusal.
+ * @returns The entries, the manifest identifier, the manifest and the other documents; the
+ *   reader's, the container's or the codec's refusal, or the manifest identifier's.
  */
 const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(dir: string) {
   const entries = yield* readEntries(dir);
@@ -183,10 +220,9 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const manifestXml = yield* readXml(manifestEntry.bytes);
   const version = yield* Effect.fromResult(versionOf(versions, declaredVersionOf(manifestXml)));
   const manifestTree = yield* shred(manifestXml, version, shredGrammarOf(grammar));
+  const identifier = yield* identifierOf(manifestTree);
   const byPath = new Map(entries.map((entry) => [entry.path, entry] as const));
-  const named = namedDocuments(
-    packageRowsOf(ownViewOf(manifestTree, provisionalIdOf), { package: provisionalIdOf(0) }),
-  );
+  const named = namedDocuments(packageRowsOf(ownViewOf(manifestTree), { package: identifier }));
   // A path is one document, of one type (reading 93): the manifest's, `manifest`, read before any
   // resource names a path (reading 146), else the type its root bears out among those resources
   // name it under (reading 162). Another type's href, the manifest's path's included, then names
@@ -212,7 +248,7 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
     }
   }
 
-  return { documents: [...documents.values()], entries, manifest };
+  return { documents: [...documents.values()], entries, identifier, manifest };
 });
 
 /**
@@ -228,23 +264,23 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
 /**
  * Resolve every reference of a package's documents as the import resolves it
  * (`referenceRowsOf`, the one builder of the `ReferencePath` and `TextReferencePath` rows), and
- * keep the paths of those that resolve in the package. A resolved path names no id, so the
- * provisional ids give the import's paths.
+ * keep the paths of those that resolve in the package. A resolved path depends on no context, so
+ * each document's own view gives the import's paths.
  *
+ * @param identifier - The package's manifest identifier.
  * @param documents - The package's documents, the manifest among them.
  * @returns Every path a reference resolves to, each once.
  */
-const referencedOf = (documents: readonly ListedDocument[]): ReadonlySet<PackagePath> =>
+const referencedOf = (
+  identifier: QtiPackage["identifier"],
+  documents: readonly ListedDocument[],
+): ReadonlySet<PackagePath> =>
   new Set(
     documents.flatMap(({ path, tree }) => {
-      const rows = referenceRowsOf(
-        ownViewOf(tree, provisionalIdOf),
-        { package: provisionalIdOf(0), path },
-        referenceCensus,
-      );
+      const rows = referenceRowsOf(ownViewOf(tree), { package: identifier, path }, referenceCensus);
 
       return [...rows.ReferencePath.values(), ...rows.TextReferencePath.values()].map((row) =>
-        packagePath(row.path),
+        packagePath(row.target),
       );
     }),
   );
@@ -257,7 +293,8 @@ const referencedOf = (documents: readonly ListedDocument[]): ReadonlySet<Package
  *
  * @param dir - The package directory or `.zip` file.
  * @returns The package. Fails with `ImportRefused` naming the rule the reader, the container or the
- *   codec refused the package under, and with the platform's error when the package cannot be read.
+ *   codec refused the package under, or the rule its manifest identifier breaks, and with the
+ *   platform's error when the package cannot be read.
  */
 export const readPackage = Effect.fn("import.readPackage")(function* readPackage(
   dir: string,
@@ -266,10 +303,10 @@ export const readPackage = Effect.fn("import.readPackage")(function* readPackage
   ImportRefused | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
-  const { documents, entries, manifest } = yield* listDocuments(dir).pipe(
+  const { documents, entries, identifier, manifest } = yield* listDocuments(dir).pipe(
     Effect.catchIf(isReadRefusal, (refusal) => Effect.fail(ruleOfError(refusal))),
   );
-  const referenced = referencedOf([manifest, ...documents]);
+  const referenced = referencedOf(identifier, [manifest, ...documents]);
   const files = new Map(
     recordOf(entries).map(
       ({ content, path }) => [packagePath(path), new File([content], path)] as const,
@@ -282,5 +319,5 @@ export const readPackage = Effect.fn("import.readPackage")(function* readPackage
     referenced: referenced.size,
   });
 
-  return { documents, files, manifest, name: packageNameOf(dir), referenced };
+  return { documents, files, identifier, manifest, referenced };
 });

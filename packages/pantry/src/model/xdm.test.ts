@@ -28,7 +28,7 @@ import type {
   XdmMisc,
   XdmVocabulary,
 } from "#pantry/model/xdm.ts";
-import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { Placed, XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import type { Child } from "@qti-pie/crust/tree.ts";
@@ -123,6 +123,24 @@ const preorderOf = (model: readonly Placed[]) => {
   return { childrenOf, index, size };
 };
 
+/**
+ * Assert that no two of some keys are one: they name distinct rows.
+ *
+ * @param keys - The keys' texts.
+ */
+const distinct = (keys: readonly string[]): void => {
+  assert.strictEqual(new Set(keys).size, keys.length);
+};
+
+/**
+ * The text of a row's key: its values, in key order, as one JSON array.
+ *
+ * @param values - The key's values.
+ * @returns The text.
+ */
+const keyed = (...values: readonly (bigint | string)[]): string =>
+  JSON.stringify(values.map(String));
+
 describe("flatten", { timeout: searchTimeout }, () => {
   it.effect(
     "writes each node's row where the generator's model of the tree places it, in document order",
@@ -153,24 +171,22 @@ describe("flatten", { timeout: searchTimeout }, () => {
             Effect.sync(() => {
               c.noteAll(featuresOf(document));
 
-              const rows = flatten(document, idOf);
+              const rows = flatten(document);
 
               assert.deepStrictEqual(
-                rows.nodes.map(({ at, end, id, kind, parent, start, version }) => ({
+                rows.nodes.map(({ at, end, kind, parent, start, version }) => ({
                   at,
                   end,
-                  id,
                   kind,
                   parent,
                   start,
                   version,
                 })),
-                model.map((placed, number) => ({
+                model.map((placed) => ({
                   at: BigInt(placed.at),
                   end: BigInt(placed.end),
-                  id: idOf(number),
                   kind: placed.kind,
-                  parent: idOf(placed.parent),
+                  parent: BigInt(model[placed.parent]?.start ?? -1),
                   start: BigInt(placed.start),
                   version: document.version,
                 })),
@@ -211,7 +227,7 @@ describe("flatten", { timeout: searchTimeout }, () => {
             Effect.sync(() => {
               c.noteAll(featuresOf(document));
 
-              const rows = flatten(document, idOf);
+              const rows = flatten(document);
               const { childrenOf, index, size } = preorderOf(model);
               const row = (number: number) =>
                 rows.nodes[number] ?? assert.fail(`no node numbered ${String(number)}`);
@@ -258,10 +274,10 @@ describe("flatten", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "writes rows that hold Node(parent, at)'s invariants: one self-parented sentinel, each family's slots 0 to n − 1, one row per node, and each attribute its own id, which its open name and references name",
+    "writes rows that hold Node(parent, at)'s invariants: one self-parented sentinel, each family's slots 0 to n − 1, one row per position, and each attribute, entity reference and declaration keyed by its element's position and its own name",
     (ctx) =>
-      // Oracle: the specification as a checker, plan §1.3's N1 and N2 and Node's key, and the
-      // attribute ids flatten's contract numbers after the nodes.
+      // Oracle: the specification as a checker, plan §1.3's N1 and N2, Node's key
+      // `(package, path, start)` within one document, and the attribute layer's keys.
       // Bound: the generator's drawn bounds.
       searched(
         ctx,
@@ -275,7 +291,7 @@ describe("flatten", { timeout: searchTimeout }, () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "plan §1.3's N1 and N2, Node's key, and the attribute ids flatten's contract numbers after the nodes",
+              name: "plan §1.3's N1 and N2, Node's key, and the attribute layer's keys",
             },
             runs: 150,
             shrink: completeShrink,
@@ -286,27 +302,55 @@ describe("flatten", { timeout: searchTimeout }, () => {
             Effect.sync(() => {
               c.noteAll(featuresOf(document));
 
-              const rows: FlatRows<Composed> = flatten(document, idOf);
-              const self = rows.document.node;
-              const sentinels = rows.nodes.filter(({ parent, id }) => parent === id);
+              const rows: FlatRows<Composed> = flatten(document);
+              const sentinels = rows.nodes.filter(({ parent, start }) => parent === start);
               const families = Map.groupBy(
-                rows.nodes.filter(({ id }) => id !== self),
+                rows.nodes.filter(({ start }) => start !== 0n),
                 ({ parent }) => parent,
+              );
+              const fixed: ReadonlySet<string> = new Set([
+                "comment",
+                "doctype",
+                "document",
+                "entityRef",
+                "pi",
+                "text",
+                "ws",
+              ] satisfies FixedKind[]);
+              const elements = new Set(
+                rows.nodes.flatMap(({ kind, start }) => (fixed.has(kind) ? [] : [start])),
               );
 
               assert.deepStrictEqual(
-                sentinels.map(({ at, id, kind }) => ({ at, id, kind })),
-                [{ at: 0n, id: self, kind: "document" }],
+                sentinels.map(({ at, kind, start }) => ({ at, kind, start })),
+                [{ at: 0n, kind: "document", start: 0n }],
               );
               assert.strictEqual(rows.nodes.filter(({ kind }) => kind === "document").length, 1);
-              assert.strictEqual(new Set(rows.nodes.map(({ id }) => id)).size, rows.nodes.length);
               assert.deepStrictEqual(
-                rows.attributes.map(({ id }) => id),
-                rows.attributes.map((_, index) => idOf(rows.nodes.length + index)),
+                rows.nodes.map(({ start }) => start),
+                rows.nodes.map((_, number) => BigInt(number)),
               );
               assert.isTrue(
-                [...rows.openNames, ...rows.attributeEntities].every(({ attribute }) =>
-                  rows.attributes.some(({ id }) => id === attribute),
+                [...rows.attributes, ...rows.openAttributes, ...rows.namespaces].every(
+                  ({ start }) => elements.has(start),
+                ),
+                "only elements hold attributes and declarations",
+              );
+              distinct(rows.attributes.map(({ name, start }) => keyed(start, name)));
+              distinct(
+                rows.openAttributes.map(({ local, start, uri }) => keyed(start, uri, local)),
+              );
+              distinct(rows.namespaces.map(({ prefix, start }) => keyed(start, prefix)));
+              assert.isTrue(
+                rows.attributeEntities.every(({ name, start }) =>
+                  rows.attributes.some((row) => row.start === start && row.name === name),
+                ),
+              );
+              assert.isTrue(
+                rows.openAttributeEntities.every(({ local, start, uri }) =>
+                  rows.openAttributes.some(
+                    (row) => row.start === start && row.uri === uri && row.local === local,
+                  ),
                 ),
               );
               for (const family of families.values()) {
@@ -429,8 +473,8 @@ describe("the model's walks", { timeout: searchTimeout }, () => {
           ["deep", itemAround(deep)],
           ["wide", itemAround(wide)],
         ] as const) {
-          const rows = flatten(document, idOf);
-          const folded = yield* Effect.fromResult(fold(document, idOf, foldGrammarOf(grammar)));
+          const rows = flatten(document);
+          const folded = yield* Effect.fromResult(fold(document, foldGrammarOf(grammar)));
           const assembled = yield* Effect.fromResult(assemble(rows));
           const tree = toXmlDocument(document, documentNames);
 
@@ -448,7 +492,7 @@ describe("the model's walks", { timeout: searchTimeout }, () => {
           assert.strictEqual(folded.nodes.length, rows.nodes.length, layout);
           // A deep comparison recurses once per level, so the trees are compared through their rows:
           // flatten writes every field of every node, so equal rows are equal trees.
-          assert.deepStrictEqual(flatten(assembled, idOf), rows, layout);
+          assert.deepStrictEqual(flatten(assembled), rows, layout);
           assert.strictEqual(chainLength(tree.root), layout === "deep" ? extent + 2 : 4, layout);
         }
       }),

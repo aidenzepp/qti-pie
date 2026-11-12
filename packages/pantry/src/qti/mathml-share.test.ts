@@ -115,7 +115,7 @@ const checkOf = (name: string): typeof Predicate.Type => {
 
 /**
  * Whether a {@link MathRank} row falls under the containment of `(parent, parentRank)` into its
- * parent's `(node, rank)`: the one containment whose source is a selection.
+ * parent's `(start, rank)`: the one containment whose source is a selection.
  *
  * @param row - The row.
  * @returns Whether its parent's row must carry its `parentRank`.
@@ -131,19 +131,19 @@ const tiedToParent = (row: Fields): boolean => {
 /**
  * Write a {@link MathRank} row's fields.
  *
- * @param node - Its node.
+ * @param start - Its node's position in its document.
  * @param kind - Its kind.
- * @param parent - Its parent's node.
+ * @param parent - Its parent's position.
  * @param own - Its rank.
  * @param above - Its parent's rank, as it copies it.
  * @returns The row's fields.
  */
-const rankOf = (node: string, kind: string, parent: string, own: number, above: number) => ({
+const rankOf = (start: number, kind: string, parent: number, own: number, above: number) => ({
   kind,
-  node,
   parent,
   parentRank: above,
   rank: own,
+  start,
 });
 
 /**
@@ -157,16 +157,17 @@ const holds = (name: string, row: Fields): boolean => holdsOver(checkOf(name), r
 
 describe("qti/mathml-share.ts, the rank chain's top", () => {
   it("lets the chain of a target outside every m:math end at the document node, which is its own parent", () => {
-    // An HTML div under the item body, the builder's rows: the div below the item, the item below
-    // the document node, whose parent is itself and whose copy of its parent's rank is its own.
+    // An HTML div under the item body, the builder's rows: the div (2) below the item (1), the
+    // item below the document node (0), whose parent is itself and whose copy of its parent's rank
+    // is its own.
     const chain = [
-      rankOf("div", "div", "item", 0, 1),
-      rankOf("item", "qti-assessment-item", "document", 1, 2),
-      rankOf("document", "document", "document", 2, 2),
+      rankOf(2, "div", 1, 0, 1),
+      rankOf(1, "qti-assessment-item", 0, 1, 2),
+      rankOf(0, "document", 0, 2, 2),
     ];
 
     for (const row of chain) {
-      assert.isTrue(holds("E1_derived", row), row.node);
+      assert.isTrue(holds("E1_derived", row), row.kind);
     }
 
     assert.deepStrictEqual(
@@ -177,17 +178,17 @@ describe("qti/mathml-share.ts, the rank chain's top", () => {
   });
 
   it("still holds an m:math's rank free, and any other row below its parent's", () => {
-    assert.isTrue(holds("E1_derived", rankOf("math", "m:math", "item", 3, 3)));
-    assert.isFalse(tiedToParent(rankOf("math", "m:math", "item", 3, 3)));
-    assert.isTrue(holds("E1_derived", rankOf("ci", "m:ci", "apply", 0, 1)));
-    assert.isTrue(tiedToParent(rankOf("ci", "m:ci", "apply", 0, 1)));
+    assert.isTrue(holds("E1_derived", rankOf(3, "m:math", 1, 3, 3)));
+    assert.isFalse(tiedToParent(rankOf(3, "m:math", 1, 3, 3)));
+    assert.isTrue(holds("E1_derived", rankOf(5, "m:ci", 4, 0, 1)));
+    assert.isTrue(tiedToParent(rankOf(5, "m:ci", 4, 0, 1)));
   });
 
   it("still refuses a row not below its parent's, when it is not its own parent", () => {
     // A cycle through child edges: some row's rank reaches its parent's, whatever its kind.
-    assert.isFalse(holds("E1_derived", rankOf("apply", "m:apply", "other", 1, 1)));
-    assert.isFalse(holds("E1_derived", rankOf("div", "div", "item", 2, 1)));
-    assert.isFalse(holds("E1_derived", rankOf("item", "qti-assessment-item", "document", 2, 2)));
+    assert.isFalse(holds("E1_derived", rankOf(4, "m:apply", 3, 1, 1)));
+    assert.isFalse(holds("E1_derived", rankOf(2, "div", 1, 2, 1)));
+    assert.isFalse(holds("E1_derived", rankOf(1, "qti-assessment-item", 0, 2, 2)));
   });
 
   it("still refuses a share whose rank is not above its target's", () => {

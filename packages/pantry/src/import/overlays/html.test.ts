@@ -13,7 +13,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element, string } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Result } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
@@ -24,9 +24,13 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { ownViewOf, viewOf } from "#pantry/import/fold.ts";
+
+/**
+ * Where every document of these tests stands in its package: an item of package `M`.
+ */
+const ids = { package: "M", path: "item.xml" } as const;
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -60,16 +64,16 @@ const itemOf = (body: string) =>
  * `id`, the document node `#doc`, and every other node by its kind.
  *
  * @param tree - The tree.
- * @returns Each node's name, by its id.
+ * @returns Each node's name, by its position.
  */
-const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<NodeId, string> => {
-  const rows = flatten(tree, idOf);
+const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<bigint, string> => {
+  const rows = flatten(tree);
 
   return new Map([
-    ...rows.nodes.map(({ id, kind }) => [id, kind] as const),
-    [rows.document.node, "#doc"],
-    ...rows.attributes.flatMap(({ lexical, name, node }) =>
-      name === "id" ? [[node, lexical.trim()] as const] : [],
+    ...rows.nodes.map(({ kind, start }) => [start, kind] as const),
+    [0n, "#doc"],
+    ...rows.attributes.flatMap(({ lexical, name, start }) =>
+      name === "id" ? [[start, lexical.trim()] as const] : [],
     ),
   ]);
 };
@@ -84,20 +88,29 @@ const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<NodeId, string> => {
  */
 const named = (tree: XdmDocument<Composed>, rows: HtmlRows) => {
   const names = namesOf(tree);
-  const nameOf = (node: NodeId): string => names.get(node) ?? node;
+  const nameOf = (start: bigint): string => names.get(start) ?? String(start);
+  for (const row of [
+    ...rows.CellHeaders.values(),
+    ...rows.TableHeader.values(),
+    ...rows.TableScope.values(),
+  ]) {
+    assert.deepStrictEqual([row.package, row.path], [ids.package, ids.path], "a row's document");
+  }
 
   return {
     headers: [...rows.CellHeaders.values()]
       .map(
-        ({ node, table, tokens }) =>
-          `${nameOf(node)} > ${nameOf(table)}: ${tokens.map(({ token }) => token).join(" ")}`,
+        ({ start, table, tokens }) =>
+          `${nameOf(start)} > ${nameOf(table)}: ${tokens.map(({ token }) => token).join(" ")}`,
       )
       .toSorted(),
     scopes: [...rows.TableScope.values()]
-      .map(({ nearest, node, table }) => `${nameOf(node)} > ${nameOf(table)} @ ${nameOf(nearest)}`)
+      .map(
+        ({ nearest, start, table }) => `${nameOf(start)} > ${nameOf(table)} @ ${nameOf(nearest)}`,
+      )
       .toSorted(),
     tableHeaders: [...rows.TableHeader.values()]
-      .map(({ id, node, table }) => `${nameOf(node)} > ${nameOf(table)}: ${id}`)
+      .map(({ id, start, table }) => `${nameOf(start)} > ${nameOf(table)}: ${id}`)
       .toSorted(),
   };
 };
@@ -260,7 +273,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
       // interaction but `c3`, whose nearest is the custom interaction that holds it (N8).
       Effect.gen(function* nested() {
         const tree = yield* itemOf(nestedBody);
-        const rows = rowsOf(ownViewOf(tree, idOf));
+        const rows = rowsOf(ownViewOf(tree), ids);
         const read = named(tree, rows);
 
         assert.deepStrictEqual(read.headers, [
@@ -291,7 +304,8 @@ describe("import/overlays/html.ts, rowsOf", () => {
             .toSorted(),
         );
         assert.strictEqual(
-          rows.CellHeaders.get([...rows.CellHeaders.values()][1]?.node ?? "")
+          [...rows.CellHeaders.values()]
+            .toSorted((a, b) => Number(a.start - b.start))[1]
             ?.tokens.map(({ after, before, token }) => `${before}${token}${after}`)
             .join(""),
           " h2  h1 ",
@@ -311,14 +325,15 @@ describe("import/overlays/html.ts, rowsOf", () => {
         );
         const context: DocumentContext = {
           ancestry: new Set(),
-          nearest: idOf(9999),
+          nearest: 9999n,
           nearestKind: "document",
+          nearestPath: Option.some("context.xml"),
         };
-        const own = named(tree, rowsOf(ownViewOf(tree, idOf)));
-        const placed = named(tree, rowsOf(viewOf(tree, flatten(tree, idOf), context)));
+        const own = named(tree, rowsOf(ownViewOf(tree), ids));
+        const placed = named(tree, rowsOf(viewOf(tree, flatten(tree), context), ids));
 
         assert.deepStrictEqual(own.scopes, interactionScopes("#doc"));
-        assert.deepStrictEqual(placed.scopes, interactionScopes(idOf(9999)));
+        assert.deepStrictEqual(placed.scopes, interactionScopes("9999"));
         assert.deepStrictEqual(own.headers, ["c > u: g"]);
         assert.deepStrictEqual(own.tableHeaders, ["g > u: g", "h > t: h"]);
       }),
@@ -358,7 +373,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
               const tree = yield* itemOf(
                 `<table><tbody><tr><th id="${attributeText(id)}">H</th><td headers="${attributeText(id)}">x</td></tr></tbody></table>`,
               );
-              const rows = rowsOf(ownViewOf(tree, idOf));
+              const rows = rowsOf(ownViewOf(tree), ids);
 
               assert.deepStrictEqual(
                 [...rows.TableHeader.values()].map((row) => row.id),
@@ -412,20 +427,33 @@ describe("import/overlays/html.ts, rowsOf", () => {
               const tree = yield* itemOf(
                 `<table><tbody><tr><th id="${attributeText(`${before}${form.value}${after}`)}">H</th></tr></tbody></table>`,
               );
-              const { nodes } = flatten(tree, idOf);
+              const { nodes } = flatten(tree);
               const th = nodes.find(({ kind }) => kind === "th");
               const table = nodes.find(({ kind }) => kind === "table");
               assert.isDefined(th, "the body writes a th");
               assert.isDefined(table, "the body writes a table");
 
               assert.deepStrictEqual(
-                [...rowsOf(ownViewOf(tree, idOf)).TableHeader.values()].map((row) => ({
+                [...rowsOf(ownViewOf(tree), ids).TableHeader.values()].map((row) => ({
                   id: row.id,
-                  node: row.node,
                   owner: row.owner,
+                  package: row.package,
+                  path: row.path,
+                  start: row.start,
                   table: row.table,
                 })),
-                form.names ? [{ id: form.value, node: th.id, owner: th.id, table: table.id }] : [],
+                form.names
+                  ? [
+                      {
+                        id: form.value,
+                        owner: th.start,
+                        package: ids.package,
+                        path: ids.path,
+                        start: th.start,
+                        table: table.start,
+                      },
+                    ]
+                  : [],
                 JSON.stringify(`${before}${form.value}${after}`),
               );
             }),
@@ -436,7 +464,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
   it.effect("gives a document with no table cell no row", () =>
     // Oracle: the specification as a checker: reading 126 reads table cells alone.
     Effect.gen(function* none() {
-      const rows = rowsOf(ownViewOf(yield* itemOf(`<p id="p">No table.</p>`), idOf));
+      const rows = rowsOf(ownViewOf(yield* itemOf(`<p id="p">No table.</p>`)), ids);
 
       assert.strictEqual(rows.CellHeaders.size + rows.TableHeader.size + rows.TableScope.size, 0);
     }),

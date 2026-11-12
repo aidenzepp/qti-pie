@@ -159,7 +159,7 @@ const keyLaws: readonly KeyLaw[] = Qti.statements.flatMap((statement) =>
 );
 
 /**
- * A value a key's field holds: a text, a handle, a uuid, a count or a flag.
+ * A value a key's field holds: a text, a handle, a position, a count or a flag.
  */
 const KeyValue = Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]);
 

@@ -33,7 +33,6 @@ import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import {
   accepts,
   drawnOf,
@@ -131,7 +130,7 @@ const judged = Effect.fn("test.judged")(function* judgedItem(
     return { codec: Option.some(tree.failure.message), laws: [] };
   }
 
-  const rows = fold(tree.success, idOf, foldGrammarOf(grammar));
+  const rows = fold(tree.success, foldGrammarOf(grammar));
   if (Result.isFailure(rows)) {
     return { codec: Option.some(String(rows.failure)), laws: [] };
   }

@@ -3,7 +3,7 @@ import { Argument, Command } from "effect/cli";
 import {
   dryRunFlag,
   replaceWith,
-  requirePackageId,
+  requireIdentifier,
   requireReplaceable,
   yesFlag,
   zipFlag,
@@ -17,23 +17,24 @@ import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 const ExportEntry = Schema.Struct({ bytes: Schema.Int, path: Schema.String });
 
 /**
- * What `export` returns under `--output json`: the package, where it was written and every file
- * written.
+ * What `export` returns under `--output json`: the package's manifest identifier, where it was
+ * written and every file written.
  */
 const ExportWritten = Schema.Struct({
   entries: Schema.Array(ExportEntry),
-  package_id: Schema.String,
+  package: Schema.String,
   target: Schema.String,
 });
 
 /**
- * What `export --dry-run` returns under `--output json`: the package, the target, whether the
- * target would be created or replaced, and every file that would be written. Nothing was written.
+ * What `export --dry-run` returns under `--output json`: the package's manifest identifier, the
+ * target, whether the target would be created or replaced, and every file that would be written.
+ * Nothing was written.
  */
 const ExportPlanned = Schema.Struct({
   dry_run: Schema.Literal(true),
   entries: Schema.Array(ExportEntry),
-  package_id: Schema.String,
+  package: Schema.String,
   target: Schema.String,
   target_action: Schema.Literals(["create", "replace"]),
 });
@@ -45,10 +46,11 @@ const ExportPlanned = Schema.Struct({
 export const ExportData = Schema.Union([ExportPlanned, ExportWritten]);
 
 /**
- * Write the imported package `packageId` to `dir`, or to a zip file under `--zip`.
+ * Write the imported package whose manifest identifier is `identifier` to `dir`, or to a zip file
+ * under `--zip`.
  *
  * A target that already has something in it needs `--yes`, which replaces it, files `qti` did not
- * write included. The package id and the target are checked before the database opens. The export
+ * write included. The identifier and the target are checked before the database opens. The export
  * is written beside the target first and takes its place only once it is complete, so an export
  * that fails leaves the old target as it was. A symlink target is replaced, never followed.
  *
@@ -67,21 +69,21 @@ export const exportCommand = Command.make(
   {
     dir: Argument.String("dir"),
     dryRun: dryRunFlag,
-    packageId: Argument.String("package-id"),
+    identifier: Argument.String("identifier"),
     yes: yesFlag,
     zip: zipFlag,
   },
-  Effect.fn("cli.export")(function* exportHandler({ dir, dryRun, packageId, yes, zip }) {
+  Effect.fn("cli.export")(function* exportHandler({ dir, dryRun, identifier, yes, zip }) {
     const mode = yield* outputMode;
     const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
 
-    const id = yield* requirePackageId(packageId);
+    const named = yield* requireIdentifier(identifier);
     const action = yield* requireReplaceable(target, yes);
 
     if (dryRun) {
       const planned = yield* withAuthorApp(
         () => import("#pantry/export/package.ts"),
-        ({ exportEntries }) => exportEntries(id),
+        ({ exportEntries }) => exportEntries(named),
       );
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
@@ -91,7 +93,7 @@ export const exportCommand = Command.make(
         data: {
           dry_run: true,
           entries,
-          package_id: packageId,
+          package: named,
           target,
           target_action: action,
         },
@@ -106,7 +108,7 @@ export const exportCommand = Command.make(
     const written = yield* replaceWith(target, (staged) =>
       withAuthorApp(
         () => import("#pantry/export/package.ts"),
-        ({ exportPackage }) => exportPackage(id, staged),
+        ({ exportPackage }) => exportPackage(named, staged),
       ),
     );
 
@@ -118,7 +120,7 @@ export const exportCommand = Command.make(
       command: "export",
       data: {
         entries: written.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path })),
-        package_id: packageId,
+        package: named,
         target,
       },
       dataSchema: ExportData,
@@ -127,23 +129,23 @@ export const exportCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip (writes files; --dry-run lists them, writes nothing and refuses what the real run would refuse). A <dir> that already has something in it needs --yes, which replaces it, and the old one goes only once the new export is written; a symlink is replaced, never followed",
+    "Export the package whose manifest identifier is <identifier>, as `qti import` printed it, to <dir>, or to the zip file <dir>.zip under --zip (writes files; --dry-run lists them, writes nothing and refuses what the real run would refuse). A <dir> that already has something in it needs --yes, which replaces it, and the old one goes only once the new export is written; a symlink is replaced, never followed",
   ),
   Command.withExamples([
     {
-      command: "qti export ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      command: "qti export ./out MANIFEST-1",
       description: "Write an imported package to the folder ./out",
     },
     {
-      command: "qti export --zip ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      command: "qti export --zip ./out MANIFEST-1",
       description: "Write it to the zip file ./out.zip",
     },
     {
-      command: "qti export --dry-run ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      command: "qti export --dry-run ./out MANIFEST-1",
       description: "List the files it would write, and write nothing",
     },
     {
-      command: "qti export --output json ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      command: "qti export --output json ./out MANIFEST-1",
       description: "Print the files written as one line of JSON",
     },
   ]),

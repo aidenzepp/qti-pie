@@ -4,10 +4,13 @@
  * vocabularies' (plan §1.3, N1 to N12; `docs/rfc/trees.md`; the W5 amendment's C5, C8, C10 to C13,
  * C15, C21, C22 and C25).
  *
- * `Node` is `tree(on(Node, "parent", "at"), fin(Node, "children"), { root: "document" })`: grizzle
- * draws each row's slot, count and pre-order interval `[start, end)` from the nesting its writer
- * sends, and its natives (T0 to T6, the root pin) make each document's rows one tree. Every other
- * law here rides one of the tree's three foreign keys or is a row CHECK:
+ * `Node` is `tree(on(Node, "parent", "at"), fin(Node, "children"), { root: ["package", "path"] })`,
+ * keyed by its document and its place there, `(package, path, start)`: grizzle draws each row's
+ * slot, count, pre-order interval `[start, end)` and `parent`, its parent's `start`, from the
+ * nesting its writer sends, and its natives (T0 to T6, the root pin) make each document's rows one
+ * tree. A node's identity is QTI's own: its document's package and path, and its position in
+ * document order, which no import mints. Every other law here rides one of the tree's three
+ * foreign keys or is a row CHECK:
  *
  * - The owner axis carries the parent copies (N3): `version`, `kind`, `governor`, `ancestry`,
  *   `nearest`, `nearestKind` and `parentKind` into `version`, `parentKind`, `parentGovernor`,
@@ -48,7 +51,6 @@ import {
   select,
   str,
   tree,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { openDomain } from "#pantry/grammar/attributes.ts";
@@ -85,7 +87,8 @@ import {
   XsiType,
 } from "#pantry/grammar/install.ts";
 import type { ValueDomain } from "#pantry/grammar/install.ts";
-import { keyText, prefixBytes } from "#pantry/qti/limits.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { EntryPath, keyText, ManifestIdentifier, prefixBytes } from "#pantry/qti/limits.ts";
 
 /**
  * The first characters of an XML Namespaces NCName: XML 1.0's NameStartChar without the colon,
@@ -103,8 +106,8 @@ const ncNameContinuation = `${ncNameStart}\\-.0-9·̀-ͯ‿-⁀`;
 /**
  * An element's prefix as written: an NCName, or the empty string for an unprefixed name.
  * `Node.prefix` reads it at `prefixBytes` UTF-8 bytes (`#pantry/qti/limits.ts`), the bound of the
- * namespace declaration's prefix, whose key `Namespace(node, prefix)` holds it, so one language
- * holds both.
+ * namespace declaration's prefix, whose key `Namespace(package, path, start, prefix)` holds it, so
+ * one language holds both.
  */
 const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]*)?$`;
 
@@ -140,30 +143,29 @@ export const Chars = str.regex(charsPattern);
 export const EndCharacter = str.regex("^.?$", "su");
 
 /**
- * The nil uuid: the start of every accumulated uuid copy along an owner axis, which a member's
- * owner replaces (on `Node` only the root's own value, since the owner axis holds the root to
- * itself). No row stores it: a member's copy is its owner's.
- */
-export const nilUuid = "00000000-0000-0000-0000-000000000000";
-
-/**
  * One node of a document: an element, a run of character data, a comment, an instruction, an entity
  * reference, the doctype or the document node itself.
  *
  * Its fields by how each is written (§C):
  *
- * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
- *   `version`, `documentType` (its document's type: `manifest` for the package's manifest, else the
- *   type of the resource that lists it; its document's `Document.documentType` at the root, its
- *   parent's below), `governor` (what its attributes and text are read under: its kind's own
- *   `Governor` handle where no named type governs it, else `GoverningOf`'s of its
- *   {@link ElementType} or `OpenElementType`), `prefix`, `nearest`, `nearestKind`, `state` (its
- *   content-automaton state, from `placedStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`),
- *   `chars` (a text or whitespace node's characters, an entity reference's `&name;`, empty
- *   elsewhere: the string value fold's step), and `first` and `last` (the first and last code
- *   points of its `chars`, empty where `chars` is);
- * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
- * - **drawn:** `at`, `children`, `start`, `end`, and the attribute and namespace family counts;
+ * - **the tree's root fields:** `package` and `path`, its document's, which only the root states and
+ *   grizzle fills on every member;
+ * - **the host's:** `kind`, `version`, `documentType` (its document's type: `manifest` for the
+ *   package's manifest, else the type of the resource that lists it; its document's
+ *   `Document.documentType` at the root, its parent's below), `governor` (what its attributes and
+ *   text are read under: its kind's own `Governor` handle where no named type governs it, else
+ *   `GoverningOf`'s of its {@link ElementType} or `OpenElementType`), `prefix`, `nearest` and
+ *   `nearestPath` (its nearest interaction, or its document node where none is above it: the
+ *   element's position and the path of the document it is in, its own, or, where the chain reaches
+ *   its document node, its document's context's, `Document.contextPath`, an element of another file
+ *   named as rule 3 names one), `nearestKind`, `state` (its content-automaton state, from
+ *   `placedStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace
+ *   node's characters, an entity reference's `&name;`, empty elsewhere: the string value fold's
+ *   step), and `first` and `last` (the first and last code points of its `chars`, empty where
+ *   `chars` is);
+ * - **drawn:** `at`, `children`, `start` (its position in document order, the document node's 0),
+ *   `end`, `parent` (its parent's `start`, the root's its own, 0), and the counts of its closed and
+ *   open attributes and namespace declarations;
  * - **accumulated** by grizzle along the tree's axes: the parent copies (`parentParentKind` the
  *   parent's own `parentKind`, so a member's string value can be selected by its grandparent, as
  *   {@link copiedTitleText} is), `was` and `lastState`, and each fold's values: `elementsWas`,
@@ -187,7 +189,6 @@ export const Node = relation(
     charsWas: accumulated(keyText, ""),
     children: drawn(natural),
     countedChildren: accumulated(natural, 0n),
-    document: uuid,
     documentType: closedId(DocumentType),
     elementChildren: accumulated(natural, 0n),
     elements: accumulated(natural, 0n),
@@ -195,20 +196,24 @@ export const Node = relation(
     end: drawn(natural),
     first: EndCharacter,
     governor: closedId(Governor),
-    id: uuid,
     kind: closedId(NodeKind),
     last: EndCharacter,
     lastState: accumulated(closedId(Position), "0"),
     namespaces: drawn(natural),
-    nearest: uuid,
+    nearest: natural,
     nearestKind: closedId(NodeKind),
-    parent: uuid,
+    nearestPath: EntryPath,
+    openAttributes: drawn(natural),
+    package: ManifestIdentifier,
+    parent: drawn(natural),
     parentAncestry: accumulated(bits(Flag), Bits.of(Flag, [])),
     parentGovernor: accumulated(closedId(Governor), "document"),
     parentKind: accumulated(closedId(NodeKind), "document"),
-    parentNearest: accumulated(uuid, nilUuid),
+    parentNearest: accumulated(natural, 0n),
     parentNearestKind: accumulated(closedId(NodeKind), "document"),
+    parentNearestPath: accumulated(EntryPath, manifestPath),
     parentParentKind: accumulated(closedId(NodeKind), "document"),
+    path: EntryPath,
     prefix: Prefix,
     start: drawn(natural),
     state: closedId(Position),
@@ -216,7 +221,7 @@ export const Node = relation(
     version: closedId(SchemaVersion),
     was: accumulated(closedId(Position), "0"),
   },
-  ["id"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -225,27 +230,28 @@ export const Node = relation(
 type NodeRow = RowScalars<typeof Node>;
 
 /**
- * A vocabulary element's governing type, keyed by its node, where a named type governs it (XML
+ * A vocabulary element's governing type, keyed by its element, where a named type governs it (XML
  * Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Element), clause 4; spec reading 47): the type
  * its `xsi:type` names, else its declared type. An element of an anonymous declared type has none,
  * and so has a node that is no element; a foreign element's type is its `OpenElementType`
  * (`#pantry/qti/chardata.ts`).
  *
  * - **the host's:** `type`, the shred's reading of the element's `xsi:type` or its kind's declared
- *   type; and its node's `document`, `governor`, `kind` and `version`, copied through the `(id,
- *   kind, version, document, governor)` tuple the attribute and identity overlays copy too.
+ *   type; and its element's `governor`, `kind` and `version`, copied through the `(package, path,
+ *   start, kind, version, governor)` tuple the attribute and identity overlays copy too.
  */
 export const ElementType = relation(
   "ElementType",
   {
-    document: uuid,
     governor: closedId(Governor),
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     type: closedId(TypeName),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -525,44 +531,46 @@ const simplyGoverned = (n: NodeRow) => n.not(n.in(n.governor, openElementClasses
  * Grizzle states its family over the members (φ₀), its intervals, T0 to T6 and the root pin.
  */
 export const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), {
-  root: "document",
+  root: ["package", "path"],
 });
 
 /**
  * The tree's members, every row but each document's root: the member side of every containment
  * that rides one of the tree's axes, and the side an overlay names a node by its parent and slot
- * through (`#pantry/qti/quotation.ts`). `(parent, at)` is a key of the members alone: the root is
- * its own parent at slot 0, as its first child is, so no key over every row of `Node` holds it.
+ * through (`#pantry/qti/quotation.ts`). `(package, path, parent, at)` is a key of the members
+ * alone: the root is its own parent at slot 0, as its first child is, so no key over every row of
+ * `Node` holds it.
  */
 export const members = select(Node, member);
 
 /**
- * The one tuple of a node every overlay copies (C18): its id, document, kind, start, nearest
- * interaction, version and parent. Each overlay's containment into it shares one superkey UNIQUE on
- * `Node`, so an overlay carries all seven, whichever it reads.
+ * The one tuple of a node every overlay copies (C18): its key `(package, path, start)`, its kind,
+ * nearest interaction, version and parent. Each overlay's containment into it shares one superkey
+ * UNIQUE on `Node`, so an overlay carries all seven, whichever it reads.
  */
-export const nodeRef = on(Node, "id", "document", "kind", "start", "nearest", "version", "parent");
+export const nodeRef = on(Node, "package", "path", "start", "kind", "nearest", "version", "parent");
 
 /**
  * A node's context (spec readings 85 and 117): the fields the tree's owner axis copies to its
- * children, with its id, children, document and start, and its document's type, which every node
- * of a document holds alike. It is exactly the columns the owner axis's foreign key targets, in the
- * order grizzle carries them, by their declared places (grizzle `85ec7ecf`), so a containment into
- * it shares that UNIQUE on `Node` and adds no index: an include's site copies the include's
- * ancestry and nearest interaction through it.
+ * children, with its key `(package, path, start)` and children, and its document's type, which
+ * every node of a document holds alike. It is exactly the columns the owner axis's foreign key
+ * targets, its key, its count, then the copies by their declared places (grizzle `85ec7ecf`), so a
+ * containment into it shares that UNIQUE on `Node` and adds no index: an include's site copies the
+ * include's ancestry and nearest interaction through it.
  */
 export const nodeContext = on(
   Node,
-  "id",
-  "children",
+  "package",
+  "path",
   "start",
-  "document",
+  "children",
   "ancestry",
   "documentType",
   "governor",
   "kind",
   "nearest",
   "nearestKind",
+  "nearestPath",
   "parentKind",
   "version",
 );
@@ -571,7 +579,7 @@ export const nodeContext = on(
  * A node's element counts (C18): the elements before and including it among its siblings, and its
  * own element children, which the default hotspot's last-slot law compares (Q5.09).
  */
-export const nodeCounts = on(Node, "id", "elements", "elementChildren");
+export const nodeCounts = on(Node, "package", "path", "start", "elements", "elementChildren");
 
 /**
  * The elements fold (Q4.01's hand-off): each member element counts once, so `elements` is its
@@ -582,11 +590,13 @@ const elementsFold = fold(
   Monoid.count,
   on(
     select(Node, (n) => n.and(member(n), element(n))),
+    "package",
+    "path",
     "parent",
     "elementsWas",
     "elements",
   ),
-  on(Node, "id", "elementChildren"),
+  on(Node, "package", "path", "start", "elementChildren"),
 );
 
 /**
@@ -606,14 +616,17 @@ const countedFold = fold(
         n.eq(n.state, CountedOf.at("position", n.version, n.parentKind)),
       ),
     ),
+    "package",
+    "path",
     "parent",
   ),
-  on(Node, "id", "countedChildren"),
+  on(Node, "package", "path", "start", "countedChildren"),
 );
 
 /**
  * The element children at the positions `Capped` holds (N7, spec reading 130): a family's children
- * at a position its parent's model caps at one, which the key over `(parent, state)` holds to one
+ * at a position its parent's model caps at one, which the key over `(package, path, parent, state)`
+ * holds to one
  * child each. A position names one kind alone where a reading caps it (`content.ts`, `cappedBy`),
  * so the key holds the kind to one child of the family.
  */
@@ -641,9 +654,11 @@ const barredFold = fold(
         n.eq(n.state, BarredOf.at("position", n.version, n.parentKind)),
       ),
     ),
+    "package",
+    "path",
     "parent",
   ),
-  on(Node, "id", "barredChildren"),
+  on(Node, "package", "path", "start", "barredChildren"),
 );
 
 /**
@@ -667,8 +682,8 @@ const barredFold = fold(
 const stringValueFold = fold(
   nodeTree,
   Monoid.concat,
-  on(select(Node, inStringValue), "parent", "chars", "charsWas", "charsAfter"),
-  on(Node, "id", "stringValue"),
+  on(select(Node, inStringValue), "package", "path", "parent", "chars", "charsWas", "charsAfter"),
+  on(Node, "package", "path", "start", "stringValue"),
 );
 
 /**
@@ -677,7 +692,7 @@ const stringValueFold = fold(
  * root's sentinel, the three axis copies, content order and its end, the counts beside the
  * automaton, ancestry, the nearest interaction and the governing type.
  *
- * - **N1:** the document node is the one row at start 0, its own document, at the automaton's start
+ * - **N1:** the document node is the one row at start 0, its own parent, at the automaton's start
  *   state and governed by its own kind, each of its parent copies its own field. grizzle pins no
  *   base of an owner-axis copy on a tree (`laws/model/plan.ts` `#pin`): the owner axis's foreign
  *   key, planned from the plain `parent`, holds the root to itself, which leaves `parentAncestry`
@@ -705,7 +720,8 @@ const stringValueFold = fold(
  * - **N7:** the last-slot copy, riding the last axis; `N7_Last`, its own model's `FollowSetOf` ends
  *   at every modeled node's last state (the content grammar's `Last`); and the counted and barred
  *   positions' bounds, each on the owner, each vacuous where its position is 0.
- * - **N8:** a member's nearest interaction is its parent where the parent is one, else its parent's.
+ * - **N8:** a member's nearest interaction is its parent, in its own document, where the parent is
+ *   one, else its parent's, wherever that is.
  * - **N12:** each vocabulary element whose kind declares a named type has an {@link ElementType}, and
  *   each type is one its kind may name in `xsi:type`; an element of an anonymous declared type has
  *   none, since its kind has no `XsiType` row; a foreign element is assessed laxly and is selected
@@ -742,8 +758,8 @@ export const nodeLawsByName = {
     ),
     stringValueFold,
     contained(
-      on(ElementType, "node", "kind", "version", "document", "governor"),
-      on(Node, "id", "kind", "version", "document", "governor"),
+      on(ElementType, "package", "path", "start", "kind", "version", "governor"),
+      on(Node, "package", "path", "start", "kind", "version", "governor"),
     ),
     check("E1_derived", ElementType, (t) =>
       t.eq(t.governor, typeGovernorOf(t.version, t.kind, t.type)),
@@ -765,11 +781,12 @@ export const nodeLawsByName = {
         n.and(
           n.eq(n.start, 0n),
           n.eq(n.kind, "document"),
-          n.eq(n.document, n.id),
+          n.eq(n.parent, n.start),
           n.eq(n.parentKind, n.kind),
           n.eq(n.parentGovernor, n.governor),
           n.eq(n.parentNearest, n.nearest),
           n.eq(n.parentNearestKind, n.nearestKind),
+          n.eq(n.parentNearestPath, n.nearestPath),
           n.eq(n.parentParentKind, n.parentKind),
           n.eq(n.state, "0"),
           n.eq(n.governor, "document"),
@@ -820,7 +837,10 @@ export const nodeLawsByName = {
     ),
   ],
   "N5 fold": [
-    contained(on(members, "parent", pred("at"), "was"), on(members, "parent", "at", "state")),
+    contained(
+      on(members, "package", "path", "parent", pred("at"), "was"),
+      on(members, "package", "path", "parent", "at", "state"),
+    ),
     elementsFold,
   ],
   "N6 ancestry": [
@@ -844,7 +864,7 @@ export const nodeLawsByName = {
         ),
       ),
     ),
-    key(on(cappedChildren, "parent", "state")),
+    key(on(cappedChildren, "package", "path", "parent", "state")),
   ],
   "N7 Last": [
     check("N7_Last", Node, (n) =>
@@ -872,7 +892,10 @@ export const nodeLawsByName = {
     ),
   ],
   "N7 last slot": [
-    contained(on(Node, "id", pred("children"), "lastState"), on(members, "parent", "at", "state")),
+    contained(
+      on(Node, "package", "path", "start", pred("children"), "lastState"),
+      on(members, "package", "path", "parent", "at", "state"),
+    ),
   ],
   "N8 nearest": [
     check("N8_nearest", Node, (n) =>
@@ -882,11 +905,13 @@ export const nodeLawsByName = {
           n.in(n.parentKind, interactionKinds),
           n.eq(n.nearest, n.parent),
           n.eq(n.nearestKind, n.parentKind),
+          n.eq(n.nearestPath, n.path),
         ),
         n.and(
           n.not(n.in(n.parentKind, interactionKinds)),
           n.eq(n.nearest, n.parentNearest),
           n.eq(n.nearestKind, n.parentNearestKind),
+          n.eq(n.nearestPath, n.parentNearestPath),
         ),
       ),
     ),
@@ -895,6 +920,8 @@ export const nodeLawsByName = {
     contained(
       on(
         members,
+        "package",
+        "path",
         "parent",
         "version",
         "documentType",
@@ -903,11 +930,14 @@ export const nodeLawsByName = {
         "parentAncestry",
         "parentNearest",
         "parentNearestKind",
+        "parentNearestPath",
         "parentParentKind",
       ),
       on(
         Node,
-        "id",
+        "package",
+        "path",
+        "start",
         "version",
         "documentType",
         "kind",
@@ -915,12 +945,16 @@ export const nodeLawsByName = {
         "ancestry",
         "nearest",
         "nearestKind",
+        "nearestPath",
         "parentKind",
       ),
     ),
   ],
   "XsiType derived": [
-    contained(on(select(Node, namedlyTyped), "id"), on(ElementType, "node")),
+    contained(
+      on(select(Node, namedlyTyped), "package", "path", "start"),
+      on(ElementType, "package", "path", "start"),
+    ),
     contained(on(ElementType, "version", "kind", "type"), on(XsiType, "version", "kind", "type")),
   ],
 } as const;

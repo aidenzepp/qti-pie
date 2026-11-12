@@ -2,7 +2,7 @@
  * The genetic differential's known disagreements (`src/test/genetic.oracle.test.ts`): each class of
  * disagreement the search has met that a lane owns, keyed by its signature
  * (`#pantry/test/gen/genetic/judge.ts` `Signature`: its kind and grizzle's law, its selections
- * included, or the law name, the rules or the uuid field it names), with the lane that owns its
+ * included, or the law name or the rules it names), with the lane that owns its
  * fix, the fix it waits on, and a package, reduced by the search, that shows it.
  *
  * The search fails on a class no entry records, and every run judges each entry's package on its
@@ -10,8 +10,8 @@
  * owner's fix deletes the entries it closes, or moves them to {@link fixed}, whose packages must
  * never show their class again. An entry records a class, never a package: a fix that leaves the
  * class showing elsewhere keeps the entry, with a package that still shows it. A signature is a
- * class some package can show, a law the host judges or a uuid field it holds to the mint, which
- * the replay's guard holds every entry to.
+ * class some package can show, a law the host judges, which the replay's guard holds every entry
+ * to.
  *
  * A class spec reading 1 lists as a stated limit waits on no fix: its entry's owner is the decision
  * that states it, its fix what would lift it, and it stays while the limit stands.
@@ -51,22 +51,6 @@ export interface Known extends Owned {
 }
 
 /**
- * The conjunct that leads every selection of closed attribute names, `closedName` of
- * `#pantry/qti/attributes.ts` as grizzle states it: the name in none of the open classes. A
- * containment into or out of such a selection is keyed by it first, since the closed attributes'
- * one key (AL2 distinct) is stated over it; every class keyed by such a selection, here or in a
- * test's list of the classes a reading closed, leads with it.
- */
-export const closedName = {
-  arg: {
-    arg: { field: "name", kind: "field" },
-    kind: "in",
-    values: ["data-*", "foreign", "no-namespace", "own-namespace"],
-  },
-  kind: "not",
-} as const;
-
-/**
  * A known entry's package, as the reader takes it.
  *
  * @param known - The entry.
@@ -90,7 +74,7 @@ export const known: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="v1" type="webcontent"/><resource identifier="r2" type="webcontent"><cpx:variant identifier="v0"><cpx:metadata><drd:accessForAllResource><cpx:variant identifier="v1"/></drd:accessForAllResource></cpx:metadata></cpx:variant></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="v1" type="webcontent"/><resource identifier="r2" type="webcontent"><cpx:variant identifier="v0"><cpx:metadata><drd:accessForAllResource><cpx:variant identifier="v1"/></drd:accessForAllResource></cpx:metadata></cpx:variant></resource></resources></manifest>`,
       ],
     ],
     fix: "a stated limit (spec reading 1): an element the grammar admits under its own parent binds its ID though an ancestor is a forbidden element whose subtree the law oracle drops, so its duplicate ID breaks DocumentId key beside the ancestor's N5 admitted, which no verdict follows; lifted by binding only an ID whose every ancestor the grammar admits",
@@ -112,7 +96,8 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -135,13 +120,13 @@ export const known: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="r.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="r.xml"/></resources></manifest>`,
       ],
       [
         "r.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
       ],
     ],
     fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, so its learning resource type is judged under LOM learning resource type where the law oracle reads no record of that file; RootOfType refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
@@ -160,7 +145,11 @@ export const known: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
@@ -181,7 +170,11 @@ export const known: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -209,7 +202,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/></resources></manifest>',
       ],
       [
         "items/fragment.xml",
@@ -250,7 +243,11 @@ export const known: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
@@ -314,7 +311,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -359,7 +356,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): two simple choice identifiers that share a value holding a character from U+10000 up are outside NCName by spec reading 94, and the import still keys them under Choice identifier key, while the law oracle reads each as no id; value domain refuses it on both sides; lifted by reading names from XML 1.0 Fifth Edition (spec reading 94), or by writing no row for a value outside its domain",
@@ -372,7 +369,8 @@ export const known: readonly Known[] = [
           relation: "Choice",
           selection: { conjuncts: [] },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "kind", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
@@ -385,7 +383,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -403,7 +401,8 @@ export const known: readonly Known[] = [
           relation: "Hottext",
           selection: { conjuncts: [] },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
         },
@@ -420,7 +419,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -438,6 +437,7 @@ export const known: readonly Known[] = [
           relation: "PlacedChoice",
           selection: { conjuncts: [] },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
             { field: "kind", kind: "field" },
             { field: "identifier", kind: "field" },
@@ -456,7 +456,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -474,6 +474,7 @@ export const known: readonly Known[] = [
           relation: "PlacedHottext",
           selection: { conjuncts: [] },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
@@ -491,7 +492,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): an empty item identifier still writes its ObjectIdentifier row, which breaks E1 derived on the import's side alone; value domain refuses it on both sides; lifted by writing no derived row for a value outside its domain",
@@ -511,7 +512,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource href="example.xml" type="imsqti_stimulus_xmlv3p0"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource href="example.xml" type="imsqti_stimulus_xmlv3p0"/></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): a section identifier holding a character from U+10000 up is outside NCName by spec reading 94, and the import still writes its SectionIdentifier row, which breaks E1 derived; value domain refuses it on both sides; lifted by reading names from XML 1.0 Fifth Edition (spec reading 94), or by writing no row for a value outside its domain",
@@ -526,7 +527,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -546,7 +547,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -566,7 +567,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -592,7 +593,9 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "value", kind: "field" },
           ],
         },
@@ -601,7 +604,9 @@ export const known: readonly Known[] = [
           relation: "Slider",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lower", kind: "field" },
           ],
         },
@@ -613,7 +618,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
       ],
       [
         "items/item.xml",
@@ -639,7 +644,9 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "value", kind: "field" },
           ],
         },
@@ -648,7 +655,9 @@ export const known: readonly Known[] = [
           relation: "Slider",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "upper", kind: "field" },
           ],
         },
@@ -660,7 +669,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>',
       ],
       [
         "items/item.xml",
@@ -680,7 +689,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="00000000-0000-0000-0000-000000000000"/><resource identifier="00000000-0000-0000-0000-000000000000"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="00000000-0000-0000-0000-000000000000"/><resource identifier="00000000-0000-0000-0000-000000000000"/></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): two cp:resource identifiers outside their domain that share a value are keyed under DocumentId key (ResourceId) by the identifier PostgreSQL generates from each lexical form (#pantry/qti/package.ts), which the host computes too (#pantry/test/generated-fields.ts), while the law oracle reads each as no id; value domain refuses it on both sides; lifted by keying only identifiers inside their domain (decision 457 (2)'s pattern)",
@@ -705,7 +714,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -746,7 +755,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): two qti-mapping elements under one response declaration, which admits one, break the import's per-declaration Mapping key under E1 derived beside N7 Last; N7 Last refuses it on both sides; lifted by keying only the child the content model admits",
@@ -768,7 +777,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><cpx:variant identifierref="choice_es"/></resource></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><cpx:variant identifierref="choice_es"/></resource></resources></manifest>',
       ],
     ],
     fix: "a stated limit (spec reading 1): a forbidden 3.0.1 cpx:variant's identifierref is still checked under Idref target though the law oracle drops the forbidden element's subtree (decision 452's kin); N5 admitted refuses it on both sides; lifted by checking only an identifierref whose every ancestor the grammar admits",
@@ -789,7 +798,8 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -807,7 +817,8 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -825,7 +836,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -879,8 +890,10 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
           ],
         },
@@ -959,8 +972,10 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
           ],
         },
@@ -972,7 +987,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -992,7 +1007,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "items/item.xml",
@@ -1013,13 +1028,21 @@ export const known: readonly Known[] = [
         from: {
           relation: "TemplateDefault",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "TemplateDefaultTarget",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -1029,7 +1052,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "items/item.xml",
@@ -1077,7 +1100,9 @@ export const known: readonly Known[] = [
           relation: "DeclarationBaseType",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "valueBase", kind: "field" },
           ],
         },
@@ -1089,7 +1114,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -1120,7 +1145,11 @@ export const known: readonly Known[] = [
         to: {
           relation: "SectionSelection",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -1130,7 +1159,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -1161,7 +1190,11 @@ export const known: readonly Known[] = [
         to: {
           relation: "VariableMapping",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -1171,7 +1204,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "section.xml",
@@ -1196,7 +1229,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "section.xml",
@@ -1238,8 +1271,10 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "kind", kind: "field" },
           ],
@@ -1319,8 +1354,10 @@ export const known: readonly Known[] = [
             ],
           },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "kind", kind: "field" },
           ],
@@ -1333,7 +1370,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -1360,13 +1397,21 @@ export const known: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "MappingSourceDeclaration",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -1376,7 +1421,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -1397,7 +1442,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set03.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set03.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>',
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -1450,7 +1495,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "items/media/pic.png",
@@ -1469,7 +1514,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "items/media/pic.png",
@@ -1488,7 +1533,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imslti_xmlv1p1" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imslti_xmlv1p1" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -1505,7 +1550,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_outcomes_xmlv3p0" href="testoutcome01.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_outcomes_xmlv3p0" href="testoutcome01.xml"/></resources></manifest>',
       ],
       [
         "testoutcome01.xml",
@@ -1522,7 +1567,7 @@ export const known: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "test.xml",
@@ -1546,7 +1591,7 @@ export const fixed: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -1568,7 +1613,7 @@ export const fixed: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "items/item.xml",
@@ -1593,7 +1638,7 @@ export const fixed: readonly Known[] = [
       [
         "imsmanifest.xml",
         "xml",
-        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
+        '<?xml version="1.0" encoding="UTF-8"?>\n<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>',
       ],
       [
         "section.xml",
@@ -1609,296 +1654,6 @@ export const fixed: readonly Known[] = [
     fix: "no longer shown since the merge of #96 (9cf1cc67) onto our model: a section document's context variable is written as one of its names (SectionContextName, #pantry/qti/interactions.ts) and resolved under each placement, in a rubric's portable custom interaction too, so the import's rows break Context variable reference where the law oracle raises it; N6 ancestry refuses it on both sides",
     owner: "decision 463",
     signature: { kind: "oracle-only-law", law: "Context variable reference" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
-    owner: "NIL",
-    signature: { field: "copy", kind: "dangling-uuid", relation: "AssembledId" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-    signature: { field: "document", kind: "dangling-uuid", relation: "ItemRefDocument" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        
-      </qti-assessment-item-ref>
-      
-    </qti-assessment-section>
-    
-  </qti-test-part>
-  
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-    signature: {
-      field: "declaration",
-      kind: "dangling-uuid",
-      relation: "MappingSourceDeclaration",
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
-    owner: "NIL",
-    signature: { field: "copy", kind: "dangling-uuid", relation: "PlacedId" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    <resource type="imsqti_item_xmlv3p0" href="items/item3.xml">
-      
-      
-    </resource>
-    <resource type="imsqti_fragment_xmlv3p0" href="items/rules.xml">
-      
-    </resource>
-    
-    
-    
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "items/item3.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" adaptive="false" time-dependent="false">
-  
-  
-  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>
-</qti-assessment-item>`,
-      ],
-      [
-        "items/rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-response-if>
-    
-    <qti-set-outcome-value identifier="SCORE">
-      
-    </qti-set-outcome-value>
-  </qti-response-if>
-</qti-response-condition>`,
-      ],
-    ],
-    fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
-    owner: "NIL",
-    signature: {
-      field: "declaration",
-      kind: "dangling-uuid",
-      relation: "PlacedVariableRefDeclaration",
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        
-        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
-            
-        </resource>
-        
-        
-        <resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml">
-            
-        </resource>
-    </resources>
-</manifest>`,
-      ],
-      [
-        "rtest01/rtest01-fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <p><qti-template-inline template-identifier="NONE">t</qti-template-inline></p>
-</div>`,
-      ],
-      [
-        "rtest01/rtest01-set01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="RTEST-01-SET-01" title="Set Item" adaptive="false" time-dependent="false">
-    
-    
-    <qti-item-body>
-        
-        <xi:include href="rtest01-fragment.xml" parse="xml"/>
-    </qti-item-body>
-    
-</qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
-    owner: "NIL",
-    signature: {
-      field: "declaration",
-      kind: "dangling-uuid",
-      relation: "SectionTemplateRefDeclaration",
-    },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier="NONE"/></p></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
-    owner: "NIL",
-    signature: { field: "declaration", kind: "dangling-uuid", relation: "TemplateRefDeclaration" },
-  },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
-      ],
-      [
-        "rtest01/rtest01-rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
-      ],
-    ],
-    fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
-    owner: "NIL",
-    signature: { field: "declaration", kind: "dangling-uuid", relation: "VariableRefDeclaration" },
   },
   {
     files: [
@@ -1921,7 +1676,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <metadata>
         
         <schemaversion>3.0.0</schemaversion>
@@ -1983,7 +1738,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
@@ -1998,7 +1757,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -2015,7 +1778,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
       ],
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
@@ -2027,10 +1790,11 @@ export const fixed: readonly Known[] = [
           relation: "BoundVariable",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "kind", kind: "field" },
-            { field: "document", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
         },
@@ -2039,10 +1803,11 @@ export const fixed: readonly Known[] = [
           relation: "BindingDeclaration",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "kind", kind: "field" },
-            { field: "document", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
         },
@@ -2055,7 +1820,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
       ],
       [
         "rtest01/rtest01-fragment.xml",
@@ -2080,10 +1845,11 @@ export const fixed: readonly Known[] = [
           selection: { conjuncts: [] },
           terms: [
             { field: "instance", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "document", kind: "field" },
             { field: "kind", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
@@ -2094,10 +1860,11 @@ export const fixed: readonly Known[] = [
           selection: { conjuncts: [] },
           terms: [
             { field: "instance", kind: "field" },
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
             { field: "assembly", kind: "field" },
-            { field: "document", kind: "field" },
             { field: "kind", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
@@ -2111,13 +1878,13 @@ export const fixed: readonly Known[] = [
         "choice.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
       ],
       [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
       ],
     ],
     fix: "the law oracle reads a learning resource type only in the records' documents, the manifest's and an external record file's, as the import's recordDocumentTypes does (170356bd's reading)",
@@ -2130,7 +1897,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "item.xml",
@@ -2161,7 +1928,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
       ],
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
@@ -2181,14 +1948,17 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2207,7 +1977,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -2224,7 +1998,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
       ],
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
@@ -2235,14 +2009,17 @@ export const fixed: readonly Known[] = [
         from: {
           relation: "DeclarationCardinality",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2261,7 +2038,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -2308,7 +2089,11 @@ export const fixed: readonly Known[] = [
         to: {
           relation: "Declaration",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -2319,7 +2104,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource><dependency identifierref="1x"/></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource><dependency identifierref="1x"/></resource></resources></manifest>`,
       ],
     ],
     fix: "spec reading 152 and decision 457 (2): a dependency's identifierref that is no NCName once collapsed names no resource, so it writes no Dependency row and its value domain refuses it alone, where the import wrote one that no DependencyTarget could follow",
@@ -2330,13 +2115,21 @@ export const fixed: readonly Known[] = [
         from: {
           relation: "Dependency",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "DependencyTarget",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -2347,7 +2140,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -2411,13 +2204,13 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "section.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"/>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"/>`,
       ],
       [
         "test.xml",
@@ -2465,7 +2258,6 @@ export const fixed: readonly Known[] = [
           terms: [
             { field: "package", kind: "field" },
             { field: "path", kind: "field" },
-            { field: "node", kind: "field" },
           ],
         },
       },
@@ -2477,7 +2269,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource><cpx:variant identifier="v1"/></resource><resource><cpx:variant identifier="v1"/></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource><cpx:variant identifier="v1"/></resource><resource><cpx:variant identifier="v1"/></resource></resources></manifest>`,
       ],
     ],
     fix: "an element the grammar does not admit where it stands binds no ID (DocumentId.admitted, IdBinding.admitted), so a forbidden cpx:variant is refused under N5 admitted alone and DocumentId key reads only an admitted element's IDs (R2)",
@@ -2499,7 +2291,8 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -2518,7 +2311,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml">
             
             
             
@@ -2560,7 +2353,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
       ],
       [
         "item.xml",
@@ -2578,7 +2371,6 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2593,7 +2385,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2602,7 +2396,9 @@ export const fixed: readonly Known[] = [
           relation: "ObjectIdentifier",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2621,7 +2417,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
       ],
     ],
     fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
@@ -2633,7 +2429,6 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -2648,7 +2443,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2657,7 +2454,9 @@ export const fixed: readonly Known[] = [
           relation: "ObjectTitle",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "title", kind: "field" },
           ],
         },
@@ -2676,7 +2475,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/></resources></manifest>`,
       ],
     ],
     fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
@@ -2732,7 +2531,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
       ],
       [
         "items/fragment.xml",
@@ -2765,7 +2564,8 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -2783,7 +2583,8 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "id", kind: "field" },
           ],
         },
@@ -2864,7 +2665,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
       ],
       [
         "item.xml",
@@ -2882,7 +2683,6 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 kind: "compare",
                 left: { field: "documentType", kind: "field" },
@@ -2904,7 +2704,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2913,7 +2715,9 @@ export const fixed: readonly Known[] = [
           relation: "ManifestId",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2944,7 +2748,6 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 kind: "compare",
                 left: { field: "kind", kind: "field" },
@@ -2960,7 +2763,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "lexical", kind: "field" },
           ],
         },
@@ -2969,7 +2774,9 @@ export const fixed: readonly Known[] = [
           relation: "MapKey",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "key", kind: "field" },
           ],
         },
@@ -2999,13 +2806,21 @@ export const fixed: readonly Known[] = [
         from: {
           relation: "Choice",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "ChoiceInteraction",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -3016,7 +2831,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set02.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set02.xml"/></resources></manifest>`,
       ],
       [
         "rtest01/rtest01-set02.xml",
@@ -3038,7 +2853,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3057,7 +2872,8 @@ export const fixed: readonly Known[] = [
           relation: "Named",
           selection: { conjuncts: [] },
           terms: [
-            { field: "document", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
         },
@@ -3070,7 +2886,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
       ],
       [
         "items/item.xml",
@@ -3167,7 +2983,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
           ],
         },
@@ -3176,7 +2994,9 @@ export const fixed: readonly Known[] = [
           relation: "TemplateRefDeclaration",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "attribute", kind: "field" },
           ],
         },
@@ -3189,7 +3009,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3208,6 +3028,7 @@ export const fixed: readonly Known[] = [
           relation: "AssembledName",
           selection: { conjuncts: [] },
           terms: [
+            { field: "package", kind: "field" },
             { field: "assembly", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
@@ -3221,7 +3042,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3239,7 +3060,9 @@ export const fixed: readonly Known[] = [
           relation: "Named",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "identifier", kind: "field" },
           ],
         },
@@ -3257,7 +3080,9 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
             { field: "value", kind: "field" },
           ],
         },
@@ -3270,7 +3095,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
   <metadata>
     
     <schemaversion>3.0.0</schemaversion>
@@ -3332,7 +3157,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
@@ -3353,7 +3182,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -3364,7 +3197,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
   <metadata>
     
     <schemaversion>3.0.0</schemaversion>
@@ -3426,7 +3259,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
@@ -3441,7 +3278,11 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -3452,7 +3293,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set03.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set03.xml"/></resources></manifest>`,
       ],
       [
         "rtest01/rtest01-set03.xml",
@@ -3470,9 +3311,10 @@ export const fixed: readonly Known[] = [
           relation: "SitePath",
           selection: { conjuncts: [] },
           terms: [
-            { field: "node", kind: "field" },
             { field: "package", kind: "field" },
             { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+            { field: "target", kind: "field" },
           ],
         },
         kind: "contained",
@@ -3489,9 +3331,10 @@ export const fixed: readonly Known[] = [
             ],
           },
           terms: [
-            { field: "node", kind: "field" },
             { field: "package", kind: "field" },
             { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+            { field: "target", kind: "field" },
           ],
         },
       },
@@ -3520,7 +3363,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2">
     <metadata>
         
         <schemaversion>3.0.1</schemaversion>
@@ -3556,7 +3399,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourceextmetadata/xml " href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourceextmetadata/xml " href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3578,7 +3421,6 @@ export const fixed: readonly Known[] = [
           relation: "Attribute",
           selection: {
             conjuncts: [
-              closedName,
               {
                 arg: { field: "kind", kind: "field" },
                 kind: "in",
@@ -3592,13 +3434,21 @@ export const fixed: readonly Known[] = [
               },
             ],
           },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
         kind: "contained",
         to: {
           relation: "ItemRefHref",
           selection: { conjuncts: [] },
-          terms: [{ field: "node", kind: "field" }],
+          terms: [
+            { field: "package", kind: "field" },
+            { field: "path", kind: "field" },
+            { field: "start", kind: "field" },
+          ],
         },
       },
     },
@@ -3609,7 +3459,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
   <metadata>
     <schema>QTI Package</schema>
     <schemaversion>3.0.0</schemaversion>
@@ -3702,7 +3552,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="choice"><cpx:variant/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="choice"><cpx:variant/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
       ],
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
@@ -3726,7 +3576,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
       ],
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
@@ -3779,13 +3629,13 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
       ],
       [
         "item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource identifier="Ké𝔸語xx𝔸語x𝔸𝔸xxééé語𝔸語x語𝔸語語x𝔸語é𝔸𝔸語𝔸語語𝔸語語語x語𝔸語語x𝔸語x𝔸éxxx𝔸xx語xxx𝔸𝔸xx語𝔸x語xéxxéé語𝔸éé𝔸語𝔸語𝔸x語𝔸éx𝔸x𝔸語xéx𝔸𝔸xxé語𝔸語éé𝔸é𝔸𝔸𝔸語𝔸𝔸é語xxx語x𝔸𝔸xé語𝔸é𝔸語éxé𝔸éé語x𝔸𝔸語éxxéxé語x𝔸xx𝔸é𝔸語語éé語𝔸𝔸𝔸𝔸é𝔸𝔸語x語語語x𝔸é語é語語xxx語x𝔸𝔸𝔸語éé語é語é語語é語語𝔸語x語x𝔸語xxé語𝔸ééx語𝔸𝔸𝔸𝔸é𝔸語語xxééxé𝔸xé語語x𝔸語xx語語𝔸é𝔸x語語é𝔸x語𝔸𝔸éé𝔸語xé語語語xx語xxé語語語é語𝔸語xé語xé語é語x語語éxééé語語𝔸語x語𝔸𝔸éx𝔸語語é𝔸xxééé𝔸語xé語xéé𝔸𝔸x𝔸𝔸é𝔸éx𝔸x語ééééx語𝔸語xé語x𝔸語語xxxéé語é語x𝔸語𝔸é𝔸語x𝔸x語𝔸語語𝔸𝔸x語x語𝔸語𝔸語𝔸𝔸é𝔸𝔸𝔸𝔸𝔸éxééx語𝔸語𝔸é語語𝔸éxx𝔸ééx語éxé語x𝔸𝔸語xé𝔸𝔸xxé語xx語𝔸語語𝔸xéx語語𝔸x語x𝔸𝔸x語𝔸é語é語語𝔸語xéxxé𝔸éx語𝔸𝔸語x𝔸éé𝔸語xé𝔸x語xx語語語𝔸𝔸語語éx語éx語éxééé𝔸é𝔸x語𝔸é𝔸x語𝔸x語ééx語𝔸𝔸éxééé𝔸x𝔸語é𝔸語xéxxx𝔸語𝔸語éxxx𝔸é語𝔸語𝔸xxéx語xéx語é語𝔸𝔸𝔸𝔸𝔸éxxxé𝔸語語é語ééxéé語xéé𝔸xx語é𝔸𝔸𝔸𝔸éxé𝔸x語éx𝔸éé𝔸x語𝔸x語ééé𝔸𝔸𝔸éé語xé語𝔸é𝔸xx語é語𝔸x語é語éé語éxé𝔸𝔸x𝔸𝔸𝔸x𝔸𝔸é𝔸é𝔸éé𝔸éé語語xx𝔸𝔸xxééé𝔸xxé𝔸éx語語éxéx語語𝔸ééx語xx𝔸語語é𝔸x語𝔸é語éxééxé𝔸x語xxx語éxééé𝔸𝔸éx𝔸é語語x𝔸語語語é語éx語𝔸𝔸x語é𝔸語xxx𝔸語xéééx語語語𝔸éxéx語é𝔸éxx語é語xé𝔸𝔸x語é語xéx語語x語𝔸𝔸語xxé𝔸語xéxx語ééxé語𝔸語ééxé語é𝔸𝔸語xxéé𝔸xx𝔸éé語語éé語𝔸𝔸x語語x語xé語x𝔸éé語𝔸é𝔸xxé語x語x語語x𝔸xxxxx𝔸語xxxx語é𝔸é語é𝔸語x語xéé𝔸𝔸xxx𝔸𝔸𝔸𝔸x𝔸語語xxéxx語é語x語𝔸x語xé語éxxxxé語語語語x語𝔸語語é𝔸𝔸ééx𝔸é𝔸éx語é語𝔸xxxx語é𝔸éééx語xx語é語é𝔸𝔸é𝔸éx語語語語x𝔸éé𝔸ééé𝔸xééé𝔸xéé語xé語語xé𝔸xé𝔸éé𝔸x語𝔸éxééé語x語x𝔸𝔸xxxx𝔸xxx𝔸𝔸𝔸𝔸𝔸é語é語é語𝔸𝔸xéé語𝔸𝔸xx𝔸語ééé語éx語語𝔸x𝔸xxx"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource identifier="Ké𝔸語xx𝔸語x𝔸𝔸xxééé語𝔸語x語𝔸語語x𝔸語é𝔸𝔸語𝔸語語𝔸語語語x語𝔸語語x𝔸語x𝔸éxxx𝔸xx語xxx𝔸𝔸xx語𝔸x語xéxxéé語𝔸éé𝔸語𝔸語𝔸x語𝔸éx𝔸x𝔸語xéx𝔸𝔸xxé語𝔸語éé𝔸é𝔸𝔸𝔸語𝔸𝔸é語xxx語x𝔸𝔸xé語𝔸é𝔸語éxé𝔸éé語x𝔸𝔸語éxxéxé語x𝔸xx𝔸é𝔸語語éé語𝔸𝔸𝔸𝔸é𝔸𝔸語x語語語x𝔸é語é語語xxx語x𝔸𝔸𝔸語éé語é語é語語é語語𝔸語x語x𝔸語xxé語𝔸ééx語𝔸𝔸𝔸𝔸é𝔸語語xxééxé𝔸xé語語x𝔸語xx語語𝔸é𝔸x語語é𝔸x語𝔸𝔸éé𝔸語xé語語語xx語xxé語語語é語𝔸語xé語xé語é語x語語éxééé語語𝔸語x語𝔸𝔸éx𝔸語語é𝔸xxééé𝔸語xé語xéé𝔸𝔸x𝔸𝔸é𝔸éx𝔸x語ééééx語𝔸語xé語x𝔸語語xxxéé語é語x𝔸語𝔸é𝔸語x𝔸x語𝔸語語𝔸𝔸x語x語𝔸語𝔸語𝔸𝔸é𝔸𝔸𝔸𝔸𝔸éxééx語𝔸語𝔸é語語𝔸éxx𝔸ééx語éxé語x𝔸𝔸語xé𝔸𝔸xxé語xx語𝔸語語𝔸xéx語語𝔸x語x𝔸𝔸x語𝔸é語é語語𝔸語xéxxé𝔸éx語𝔸𝔸語x𝔸éé𝔸語xé𝔸x語xx語語語𝔸𝔸語語éx語éx語éxééé𝔸é𝔸x語𝔸é𝔸x語𝔸x語ééx語𝔸𝔸éxééé𝔸x𝔸語é𝔸語xéxxx𝔸語𝔸語éxxx𝔸é語𝔸語𝔸xxéx語xéx語é語𝔸𝔸𝔸𝔸𝔸éxxxé𝔸語語é語ééxéé語xéé𝔸xx語é𝔸𝔸𝔸𝔸éxé𝔸x語éx𝔸éé𝔸x語𝔸x語ééé𝔸𝔸𝔸éé語xé語𝔸é𝔸xx語é語𝔸x語é語éé語éxé𝔸𝔸x𝔸𝔸𝔸x𝔸𝔸é𝔸é𝔸éé𝔸éé語語xx𝔸𝔸xxééé𝔸xxé𝔸éx語語éxéx語語𝔸ééx語xx𝔸語語é𝔸x語𝔸é語éxééxé𝔸x語xxx語éxééé𝔸𝔸éx𝔸é語語x𝔸語語語é語éx語𝔸𝔸x語é𝔸語xxx𝔸語xéééx語語語𝔸éxéx語é𝔸éxx語é語xé𝔸𝔸x語é語xéx語語x語𝔸𝔸語xxé𝔸語xéxx語ééxé語𝔸語ééxé語é𝔸𝔸語xxéé𝔸xx𝔸éé語語éé語𝔸𝔸x語語x語xé語x𝔸éé語𝔸é𝔸xxé語x語x語語x𝔸xxxxx𝔸語xxxx語é𝔸é語é𝔸語x語xéé𝔸𝔸xxx𝔸𝔸𝔸𝔸x𝔸語語xxéxx語é語x語𝔸x語xé語éxxxxé語語語語x語𝔸語語é𝔸𝔸ééx𝔸é𝔸éx語é語𝔸xxxx語é𝔸éééx語xx語é語é𝔸𝔸é𝔸éx語語語語x𝔸éé𝔸ééé𝔸xééé𝔸xéé語xé語語xé𝔸xé𝔸éé𝔸x語𝔸éxééé語x語x𝔸𝔸xxxx𝔸xxx𝔸𝔸𝔸𝔸𝔸é語é語é語𝔸𝔸xéé語𝔸𝔸xx𝔸語ééé語éx語語𝔸x𝔸xxx"/></resources></manifest>`,
       ],
     ],
     fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
@@ -3798,7 +3648,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "items/item.xml",
@@ -3829,7 +3679,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata>
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata>
         
         <schemaversion>3.0.0</schemaversion>
         
@@ -3854,7 +3704,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
       ],
       [
         "rtest01/rtest01-rules.xml",
@@ -3879,7 +3729,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "item.xml",
@@ -3904,7 +3754,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3923,7 +3773,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
@@ -3942,7 +3792,7 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",

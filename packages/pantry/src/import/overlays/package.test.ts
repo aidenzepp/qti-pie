@@ -25,6 +25,7 @@ import {
   ReferenceAttribute,
   ResourceTypeLexical,
 } from "#pantry/grammar/install.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { declaredVersionOf } from "#pantry/import/read.ts";
 import {
   namedDocuments,
@@ -47,17 +48,10 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { closedName, documentFamily, flatten } from "#pantry/model/xdm.ts";
-import type {
-  ClosedName,
-  NodeId,
-  XdmChild,
-  XdmClosedElement,
-  XdmDocument,
-} from "#pantry/model/xdm.ts";
+import type { ClosedName, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { hrefParamsPattern, hrefPathPattern, srcsetCandidatePattern } from "#pantry/qti/package.ts";
 import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -72,9 +66,19 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 );
 
 /**
- * The package every case writes its rows under; each node's id is `idOf` of its number.
+ * The package every case writes its rows under, by its manifest identifier; each node is named by
+ * its position in document order.
  */
-const ids: ManifestIds = { package: "00000000-0000-4000-8000-0000000000aa" };
+const ids: ManifestIds = { package: "MANIFEST-1" };
+
+/**
+ * The text of a manifest node's key, as the builder keys a node's row: the package, the manifest's
+ * path and the node's position.
+ *
+ * @param start - The node's position.
+ * @returns The key text.
+ */
+const nodeKey = (start: bigint): string => keyTextOf(ids.package, manifestPath, start);
 
 /**
  * One overlay row as the walk expects it: its relation and its fields, and the rows of the two
@@ -99,7 +103,7 @@ const spelledTypes: ReadonlySet<string> = new Set(
  * @param values - The values.
  * @returns The key text.
  */
-const heading = (values: readonly string[]): string => JSON.stringify(values);
+const heading = (values: readonly (bigint | string)[]): string => keyTextOf(...values);
 
 /**
  * Resolve a manifest href as the oracle does (readings 102 and 103): its value collapsed as an
@@ -113,7 +117,7 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
   const value = oracleValueOf(href, "collapse");
   const resolution = resolve({ bases, document: manifestPath, value });
 
-  return { path: comparedPath(resolution, value), scope: resolution.scope };
+  return { scope: resolution.scope, target: comparedPath(resolution, value) };
 };
 
 /**
@@ -126,8 +130,8 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
  *   in scope.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href.
- * @param resource.node - Its node.
  * @param resource.pkg - Its package.
+ * @param resource.start - Its node's position.
  * @param resource.type - The handle its type spells, none where it spells none.
  * @param resource.typeLexical - Its type as written, none where unwritten.
  */
@@ -136,21 +140,22 @@ const expectHref = (
   resource: {
     readonly bases: readonly string[];
     readonly href: string;
-    readonly node: NodeId;
     readonly pkg: string;
+    readonly start: bigint;
     readonly type: Option.Option<string>;
     readonly typeLexical: string | undefined;
   },
 ): void => {
-  const { bases, href, node, pkg, type, typeLexical } = resource;
-  const { path: at, scope } = manifestHrefOf(href, bases);
-  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope });
+  const { bases, href, pkg, start, type, typeLexical } = resource;
+  const { scope, target } = manifestHrefOf(href, bases);
+  const at = { package: pkg, path: manifestPath, start };
+  expected.ResourceHref.set(nodeKey(start), { ...at, href, scope, target });
   for (const code of Option.toArray(type)) {
-    expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
+    expected.TypedHref.set(nodeKey(start), { ...at, scope, target, type: code });
   }
 
   if (Option.isNone(type) && typeLexical !== undefined && typeLexical !== "") {
-    expected.UnreadTypeHref.set(node, { node, package: pkg, path: at });
+    expected.UnreadTypeHref.set(nodeKey(start), { ...at, target });
   }
 };
 
@@ -172,24 +177,29 @@ const expectResource = (
   resource: {
     readonly bases: readonly string[];
     readonly href: string | undefined;
-    readonly row: { readonly node: NodeId; readonly package: string };
+    readonly row: { readonly package: string; readonly start: bigint };
     readonly spelled: ReadonlySet<string>;
     readonly typeLexical: string | undefined;
   },
 ): void => {
   const { bases, href, row, spelled, typeLexical } = resource;
-  const { node, package: pkg } = row;
+  const { package: pkg, start } = row;
   const type =
     typeLexical !== undefined && spelled.has(typeLexical)
       ? Option.some(typeLexical)
       : Option.none();
-  expected.Resource.set(node, row);
+  expected.Resource.set(nodeKey(start), row);
   for (const code of Option.toArray(type)) {
-    expected.ResourceTyped.set(node, { node, package: pkg, type: code });
+    expected.ResourceTyped.set(nodeKey(start), {
+      package: pkg,
+      path: manifestPath,
+      start,
+      type: code,
+    });
   }
 
   if (href !== undefined) {
-    expectHref(expected, { bases, href, node, pkg, type, typeLexical });
+    expectHref(expected, { bases, href, pkg, start, type, typeLexical });
   }
 };
 
@@ -218,22 +228,23 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     TypedHref: new Map(),
     UnreadTypeHref: new Map(),
   };
-  const document = idOf(0);
   const interactions = new Set<string>(interactionKinds);
   let next = 1;
-  const named: { readonly identifier: string; readonly node: NodeId }[] = [];
-  const dependencies: { readonly node: NodeId; readonly ref: string; readonly resource: NodeId }[] =
-    [];
+  const named: { readonly identifier: string; readonly start: bigint }[] = [];
+  const dependencies: {
+    readonly ref: string;
+    readonly resource: bigint;
+    readonly start: bigint;
+  }[] = [];
   const visit = (
     child: XdmChild<Composed> | XdmDocument<Composed>["root"],
     parent: {
       readonly bases: readonly string[];
-      readonly id: NodeId;
       readonly kind: string;
-      readonly nearest: NodeId;
+      readonly nearest: bigint;
+      readonly start: bigint;
     },
   ): void => {
-    const id = idOf(next);
     const start = BigInt(next);
     next += 1;
     if (child._tag !== "element" && !("attributes" in child)) {
@@ -241,13 +252,13 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     const kind = child._tag === "element" ? child.kind : child._tag;
-    const nearest = interactions.has(parent.kind) ? parent.id : parent.nearest;
+    const nearest = interactions.has(parent.kind) ? parent.start : parent.nearest;
     const valueOf = (name: string): string | undefined =>
       child.attributes.find(
         (attribute) => attribute.name._tag === "closed" && attribute.name.handle === name,
       )?.lexical;
-    const tuple = { document, kind, nearest, node: id, start, version: doc.version };
     const pkg = ids.package;
+    const tuple = { kind, nearest, package: pkg, path: manifestPath, start, version: doc.version };
     const ownBase = valueOf("xml:base");
     const bases = ownBase === undefined ? parent.bases : [...parent.bases, ownBase];
 
@@ -255,16 +266,15 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const identifier =
       identifierLexical === undefined ? undefined : oracleValueOf(identifierLexical, "collapse");
     if (kind === "cp:manifest" && identifier !== undefined && identifierLexical !== undefined) {
-      expected.ManifestId.set(id, {
+      expected.ManifestId.set(heading([pkg]), {
         ...tuple,
         lexical: identifierLexical,
-        package: pkg,
-        parent: parent.id,
+        parent: parent.start,
       });
     }
 
     if (kind === "cp:resource") {
-      const row = { ...tuple, package: pkg, parent: parent.id };
+      const row = { ...tuple, parent: parent.start };
 
       expectResource(expected, {
         bases,
@@ -274,54 +284,55 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         typeLexical: valueOf("type"),
       });
       if (identifier !== undefined && identifierLexical !== undefined) {
-        named.push({ identifier, node: id });
-        expected.ResourceId.set(id, {
+        named.push({ identifier, start });
+        expected.ResourceId.set(nodeKey(start), {
           lexical: identifierLexical,
-          node: id,
           package: pkg,
+          path: manifestPath,
+          start,
         });
       }
     }
 
     const fileHref = kind === "cp:file" ? valueOf("href") : undefined;
     if (fileHref !== undefined) {
-      const { path: at, scope } = manifestHrefOf(fileHref, bases);
-      expected.File.set(id, {
+      const { scope, target } = manifestHrefOf(fileHref, bases);
+      expected.File.set(nodeKey(start), {
         ...tuple,
         href: fileHref,
-        package: pkg,
-        path: at,
-        resource: parent.id,
+        resource: parent.start,
         scope,
+        target,
       });
-      expected.FileHref.set(heading([pkg, scope, at]), { package: pkg, path: at, scope });
-      expected.ResourceFile.set(heading([parent.id, scope, at]), {
-        path: at,
-        resource: parent.id,
+      expected.FileHref.set(heading([pkg, scope, target]), { package: pkg, scope, target });
+      expected.ResourceFile.set(heading([pkg, manifestPath, parent.start, scope, target]), {
+        package: pkg,
+        path: manifestPath,
+        resource: parent.start,
         scope,
+        target,
       });
     }
 
     const refLexical = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
     if (refLexical !== undefined) {
       const ref = oracleValueOf(refLexical, "collapse");
-      expected.Dependency.set(id, {
+      expected.Dependency.set(nodeKey(start), {
         ...tuple,
         lexical: refLexical,
-        package: pkg,
-        resource: parent.id,
+        resource: parent.start,
       });
-      dependencies.push({ node: id, ref, resource: parent.id });
+      dependencies.push({ ref, resource: parent.start, start });
     }
 
     for (const grandchild of child.children) {
-      visit(grandchild, { bases, id, kind, nearest });
+      visit(grandchild, { bases, kind, nearest, start });
     }
   };
 
   for (const child of documentFamily(doc)) {
     if (child._tag === "element") {
-      visit(child, { bases: [], id: document, kind: "document", nearest: document });
+      visit(child, { bases: [], kind: "document", nearest: 0n, start: 0n });
     } else {
       next += 1;
     }
@@ -330,14 +341,21 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
   // A dependency names its own resource where that resource's identifier is its ref, and
   // otherwise the first resource in document order that writes the ref (IMS Content Packaging
   // 1.2, `dependency`), none where none does; both collapsed (decision 457 (3)).
-  for (const { node, ref, resource } of dependencies) {
+  for (const { ref, resource, start } of dependencies) {
     const target = named.some(
-      ({ identifier, node: held }) => held === resource && identifier === ref,
+      ({ identifier, start: held }) => held === resource && identifier === ref,
     )
       ? resource
-      : named.find(({ identifier }) => identifier === ref)?.node;
+      : named.find(({ identifier }) => identifier === ref)?.start;
     if (target !== undefined) {
-      expected.DependencyTarget.set(node, { node, package: ids.package, ref, resource, target });
+      expected.DependencyTarget.set(nodeKey(start), {
+        package: ids.package,
+        path: manifestPath,
+        ref,
+        resource,
+        start,
+        target,
+      });
     }
   }
 
@@ -373,18 +391,19 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
  * A row of the query `UnreadTypeHref`: a resource's node, its package and its href's path.
  */
 interface UnreadTypeHrefRow {
-  readonly node: string;
   readonly package: string;
   readonly path: string;
+  readonly start: bigint;
+  readonly target: string;
 }
 
 /**
  * The rows of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`) over a manifest, restated on
  * the host: each resource's `ResourceHref` beside its `type` attribute as the tree's rows hold it,
  * where that form is nonempty and spells no `ResourceType` handle ({@link spelledTypes}), as its
- * node, package and path, by the node. Only the database evaluates the query, which "Item ref
- * target" reads by (package, path); this reads the rows the query reads, the builder's and the
- * tree's, so a builder that loses an unread-type resource's href fails here.
+ * node's key and the path it is compared by, by the node. Only the database evaluates the query,
+ * which "Item ref target" reads by (package, path); this reads the rows the query reads, the
+ * builder's and the tree's, so a builder that loses an unread-type resource's href fails here.
  *
  * @param doc - The manifest's tree.
  * @param rows - The builder's rows of it.
@@ -394,21 +413,21 @@ const unreadTypeHrefsOf = (
   doc: XdmDocument<Composed>,
   rows: Pick<PackageRows, "ResourceHref">,
 ): ReadonlyMap<string, UnreadTypeHrefRow> => {
-  const flat = flatten(doc, idOf);
-  const resources = new Set<string>(
-    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
+  const flat = flatten(doc);
+  const resources = new Set<bigint>(
+    flat.nodes.flatMap(({ kind, start }) => (kind === "cp:resource" ? [start] : [])),
   );
-  const types = new Map<string, string>(
-    flat.attributes.flatMap(({ lexical, name, node }) =>
-      name === "type" && resources.has(node) ? [[node, lexical] as const] : [],
+  const types = new Map<bigint, string>(
+    flat.attributes.flatMap(({ lexical, name, start }) =>
+      name === "type" && resources.has(start) ? [[start, lexical] as const] : [],
     ),
   );
 
   return new Map(
-    [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path }) =>
-      Option.toArray(Option.fromUndefinedOr(types.get(node)))
+    [...rows.ResourceHref.values()].flatMap(({ package: pkg, path, start, target }) =>
+      Option.toArray(Option.fromUndefinedOr(types.get(start)))
         .filter((lexical) => lexical !== "" && !spelledTypes.has(lexical))
-        .map(() => [node, { node, package: pkg, path }] as const),
+        .map(() => [nodeKey(start), { package: pkg, path, start, target }] as const),
     ),
   );
 };
@@ -438,7 +457,9 @@ const assertRows = (
   }
 
   assert.deepStrictEqual(
-    sortedEntries(new Map(typedHrefsOf(rows).map((typed) => [typed.node, typed] as const))),
+    sortedEntries(
+      new Map(typedHrefsOf(rows).map((typed) => [nodeKey(typed.start), typed] as const)),
+    ),
     sortedEntries(expected.TypedHref),
     `${label} TypedHref`,
   );
@@ -742,7 +763,7 @@ const unreadOf = (
     })),
     resourcesBase: undefined,
   });
-  const rows = rowsOf(ownViewOf(doc, idOf), ids);
+  const rows = rowsOf(ownViewOf(doc), ids);
   const unread = [...unreadTypeHrefsOf(doc, rows).values()];
 
   return {
@@ -778,7 +799,6 @@ const dependencyRefsOf = (dependencies: readonly string[]) =>
           ],
           resourcesBase: undefined,
         }),
-        idOf,
       ),
       ids,
     ).Dependency.values(),
@@ -835,7 +855,7 @@ describe("import/overlays/package.ts", () => {
             c.noteAll(situationsOf(input));
 
             const doc = treeOf(input);
-            const rows = rowsOf(ownViewOf(doc, idOf), ids);
+            const rows = rowsOf(ownViewOf(doc), ids);
 
             assertRows(doc, rows, walk(doc), "generated");
             for (const [at, { type }] of namedDocuments(rows)
@@ -938,7 +958,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
           }
 
           shredded += 1;
-          const rows = rowsOf(ownViewOf(tree.value, idOf), ids);
+          const rows = rowsOf(ownViewOf(tree.value), ids);
           assertRows(tree.value, rows, walk(tree.value), name);
           assert.isNotEmpty(rows.ManifestId, name);
         }
@@ -1130,40 +1150,34 @@ const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
  * by its pattern over the lexical form, never the resolution's.
  *
  * @param input - The document.
- * @param documentIds - Its package and path; its nodes' ids are `idOf` of their numbers.
+ * @param documentIds - Its package and path; its nodes are named by their numbers.
  * @returns Its expected rows.
  */
 const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
-  const document = idOf(0);
+  const at = { package: documentIds.package, path: documentIds.path };
   const references = new Map<string, object>();
   const paths = new Map<string, object>();
-  for (const [at, { base, carrier, value }] of input.elements.entries()) {
+  for (const [index, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
-    const node = idOf(3 + 2 * at);
+    const start = BigInt(3 + 2 * index);
     for (const whiteSpace of Option.toArray(census("3.0.1", kind, name))) {
       const resolution = resolve({
         bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
         document: documentIds.path,
         value: oracleValueOf(value, whiteSpace),
       });
-      references.set(JSON.stringify([node, name]), {
-        document,
+      const key = keyTextOf(at.package, at.path, start, name);
+      references.set(key, {
+        ...at,
         kind,
         lexical: value,
         name,
-        node,
         scope: resolution.scope,
+        start,
         ...appendixPieces(value),
       });
       if (resolution.scope === "entry") {
-        paths.set(JSON.stringify([node, name]), {
-          document,
-          kind,
-          name,
-          node,
-          package: documentIds.package,
-          path: resolution.path,
-        });
+        paths.set(key, { ...at, kind, name, start, target: resolution.path });
       }
     }
   }
@@ -1383,11 +1397,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
           (input, c) =>
             Effect.sync(() => {
               const documentIds: DocumentIds = { ...ids, path: input.path };
-              const rows = referenceRowsOf(
-                ownViewOf(referenceTreeOf(input), idOf),
-                documentIds,
-                census,
-              );
+              const rows = referenceRowsOf(ownViewOf(referenceTreeOf(input)), documentIds, census);
               const expected = expectedReferences(input, documentIds);
 
               c.noteAll(referenceSituationsOf(input, rows));
@@ -1434,13 +1444,13 @@ describe("import/overlays/package.ts, hrefs and references", () => {
       ),
     };
     const documentIds: DocumentIds = { ...ids, path: "items/item.xml" };
-    const rows = referenceRowsOf(ownViewOf(tree, idOf), documentIds, census);
+    const rows = referenceRowsOf(ownViewOf(tree), documentIds, census);
 
     const expectedTexts = new Map<string, object>();
     const expectedPaths = new Map<string, object>();
     let next = 2;
     for (const { base, kind, value } of cases) {
-      const node = idOf(next + 1);
+      const start = BigInt(next + 1);
       next += value === "" ? 2 : 3;
       if (kind === "qti-file-href") {
         continue;
@@ -1453,22 +1463,18 @@ describe("import/overlays/package.ts, hrefs and references", () => {
         srcset: false,
         whiteSpace: kind === "qti-resource-icon" ? "replace" : "collapse",
       });
-      expectedTexts.set(JSON.stringify([node]), {
-        document: idOf(0),
+      const at = { package: documentIds.package, path: documentIds.path };
+      const key = keyTextOf(at.package, at.path, start);
+      expectedTexts.set(key, {
+        ...at,
         kind,
         lexical: value,
-        node,
         scope: resolution.scope,
+        start,
         ...appendixPieces(value),
       });
       if (resolution.scope === "entry") {
-        expectedPaths.set(JSON.stringify([node]), {
-          document: idOf(0),
-          kind,
-          node,
-          package: documentIds.package,
-          path: resolution.path,
-        });
+        expectedPaths.set(key, { ...at, kind, start, target: resolution.path });
       }
     }
 
@@ -1476,7 +1482,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
     assert.deepStrictEqual(sortedEntries(rows.TextReference), sortedEntries(expectedTexts));
     assert.deepStrictEqual(sortedEntries(rows.TextReferencePath), sortedEntries(expectedPaths));
     assert.deepStrictEqual(
-      [...rows.TextReferencePath.values()].map(({ path: at }) => at),
+      [...rows.TextReferencePath.values()].map(({ target }) => target),
       ["items/my clip.mp4", "items/x/img/b.svg"],
     );
   });

@@ -25,15 +25,9 @@ import { governorOf, ownViewOf } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
-import type {
-  NodeId,
-  XdmAttribute,
-  XdmChild,
-  XdmClosedElement,
-  XdmDocument,
-} from "#pantry/model/xdm.ts";
+import type { XdmAttribute, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
 import { statedLanguagePattern } from "#pantry/qti/identity.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { generatedFields } from "#pantry/test/generated-fields.ts";
 
 /**
@@ -188,13 +182,28 @@ const documentOf = (
 });
 
 /**
- * Where every content case's document stands, its nodes' ids `idOf`, numbering nodes in document
- * order: in a package that holds no document at any path a resource names, the document an item.
+ * Where every content case's document stands, its nodes numbered in document order by `start`: in
+ * a package that holds no document at any path a resource names, the document an item.
  */
 const ids = {
   assembled: false,
   documentType: "imsqti_item_xmlv3p0",
+  package: "M",
+  path: "item.xml",
 } as const satisfies IdentityIds;
+
+/**
+ * Write the text a row's place and position read as: its document's `package` and `path`, then
+ * its position.
+ *
+ * @param row - The row's document and position.
+ * @param row.package - Its package.
+ * @param row.path - Its document's path.
+ * @param start - The position.
+ * @returns The text.
+ */
+const placed = (row: { readonly package: string; readonly path: string }, start: bigint): string =>
+  `${row.package} ${row.path} ${String(start)}`;
 
 /**
  * Where a case's stimulus stands: {@link ids}, the document a stimulus.
@@ -211,9 +220,9 @@ const stimulusIds = {
 const recordIds = { ...ids, documentType: "resourcemetadata/xml" } as const satisfies IdentityIds;
 
 /**
- * The document node's id, node 0 of every case.
+ * The document node's position, node 0 of every case.
  */
-const documentNode = idOf(0);
+const documentNode = 0n;
 
 /**
  * An ID as a case writes it: its lexical form, and the whitespace before and after its value.
@@ -355,26 +364,26 @@ describe(
                   drawn.children.map((choice) => elementOf("div", attributesOf(choice), [])),
                 );
                 const rows = rowsOf(
-                  ownViewOf(documentOf(root, drawn.version), idOf),
+                  ownViewOf(documentOf(root, drawn.version)),
                   drawn.rootKind === "qti-assessment-item" ? ids : stimulusIds,
                 );
-                const placed = [
+                const elements = [
                   {
                     choice: { id: Option.none(), label: drawn.rootLabel, lang: drawn.rootLang },
-                    node: idOf(1),
+                    node: 1n,
                     root: true,
                   },
                   ...drawn.children.map((choice, at) => ({
                     choice,
-                    node: idOf(at + 2),
+                    node: BigInt(at + 2),
                     root: false,
                   })),
                 ];
-                const langs = placed.flatMap(({ choice }) => Option.toArray(choice.lang));
-                const values = placed.flatMap(({ choice }) =>
+                const langs = elements.flatMap(({ choice }) => Option.toArray(choice.lang));
+                const values = elements.flatMap(({ choice }) =>
                   Option.toArray(choice.id).map(({ value }) => value),
                 );
-                const labelled = placed.filter(
+                const labelled = elements.filter(
                   ({ choice, root: isRoot }) =>
                     choice.label &&
                     (!isRoot ||
@@ -386,7 +395,7 @@ describe(
                 }
 
                 if (
-                  placed.some(({ choice }) =>
+                  elements.some(({ choice }) =>
                     Option.exists(choice.id, ({ before }) => before !== ""),
                   )
                 ) {
@@ -409,23 +418,24 @@ describe(
                   c.note(`labelled ${drawn.version} item root`);
                 }
 
+                const place = drawn.rootKind === "qti-assessment-item" ? ids : stimulusIds;
                 assert.deepStrictEqual(
                   asSet(
-                    [...rows.DocumentLang.values()].map(
-                      ({ document, lang }) => `${document} ${lang}`,
-                    ),
+                    [...rows.DocumentLang.values()].map((row) => `${placed(row, 0n)} ${row.lang}`),
                   ),
-                  [...new Set(langs.map((lang) => `${documentNode} ${lang}`))].toSorted(),
+                  [...new Set(langs.map((lang) => `${placed(place, 0n)} ${lang}`))].toSorted(),
                 );
                 assert.deepStrictEqual(
                   asSet(
                     [...rows.XmlLang.values()].map(
-                      ({ document, lang, node }) => `${node} ${document} ${lang}`,
+                      (row) => `${placed(row, row.start)} ${row.lang} ${String(row.scope)}`,
                     ),
                   ),
-                  placed
+                  elements
                     .flatMap(({ choice, node }) =>
-                      Option.toArray(choice.lang).map((lang) => `${node} ${documentNode} ${lang}`),
+                      Option.toArray(choice.lang).map(
+                        (lang) => `${placed(place, node)} ${lang} ${String(documentNode)}`,
+                      ),
                     )
                     .toSorted(),
                 );
@@ -433,20 +443,26 @@ describe(
                   asSet(
                     [...rows.DocumentId.values()].map((row) =>
                       JSON.stringify([
-                        row.node,
-                        row.document,
+                        placed(row, row.start),
                         row.before,
                         row.id,
                         row.after,
                         row.lexical,
-                        row.owner,
+                        String(row.owner),
                       ]),
                     ),
                   ),
-                  placed
+                  elements
                     .flatMap(({ choice, node }) =>
                       Option.toArray(choice.id).map(({ after, before, lexical, value }) =>
-                        JSON.stringify([node, documentNode, before, value, after, lexical, node]),
+                        JSON.stringify([
+                          placed(place, node),
+                          before,
+                          value,
+                          after,
+                          lexical,
+                          String(node),
+                        ]),
                       ),
                     )
                     .toSorted(),
@@ -454,13 +470,13 @@ describe(
                 assert.deepStrictEqual(
                   asSet(
                     [...rows.IdBinding.values()].map(
-                      ({ document, id, owner }) => `${document} ${id} ${owner}`,
+                      (row) => `${placed(row, row.owner)} ${row.id}`,
                     ),
                   ),
-                  placed
+                  elements
                     .flatMap(({ choice, node }) =>
                       Option.toArray(choice.id).map(
-                        ({ value }) => `${documentNode} ${value} ${node}`,
+                        ({ value }) => `${placed(place, node)} ${value}`,
                       ),
                     )
                     .toSorted(),
@@ -469,12 +485,10 @@ describe(
                 assert.deepStrictEqual(
                   asSet(
                     [...rows.LabelUse.values()].map(
-                      ({ document, node, rootKind }) => `${node} ${document} ${rootKind}`,
+                      (row) => `${placed(row, row.start)} ${row.rootKind}`,
                     ),
                   ),
-                  labelled
-                    .map(({ node }) => `${node} ${documentNode} ${drawn.rootKind}`)
-                    .toSorted(),
+                  labelled.map(({ node }) => `${placed(place, node)} ${drawn.rootKind}`).toSorted(),
                 );
                 assert.strictEqual(rows.LomLanguage.size, 0);
                 assert.strictEqual(rows.ResourceLomLanguageSet.size, 0);
@@ -571,20 +585,20 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
               }
 
               const rows = rowsOf(
-                ownViewOf(documentOf(elementOf("lom:lom", [], children)), idOf),
+                ownViewOf(documentOf(elementOf("lom:lom", [], children))),
                 recordIds,
               );
               const expected: {
-                readonly general: string;
+                readonly general: bigint;
                 readonly lang: string;
-                readonly node: string;
+                readonly node: bigint;
               }[] = [];
               let next = 2;
               for (const texts of drawn.generals) {
-                const general = idOf(next);
+                const general = BigInt(next);
                 next += 1;
                 for (const lang of texts) {
-                  expected.push({ general, lang, node: idOf(next) });
+                  expected.push({ general, lang, node: BigInt(next) });
                   next += lang === "" ? 1 : 2;
                 }
               }
@@ -620,21 +634,29 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
               assert.deepStrictEqual(
                 asSet(
                   [...rows.LomLanguage.values()].map(
-                    ({ general, lang, node, tag }) => `${node} ${general} ${lang} ${tag}`,
+                    (row) =>
+                      `${placed(row, row.start)} ${String(row.general)} ${row.lang} ${row.tag}`,
                   ),
                 ),
                 expected
-                  .map(({ general, lang, node }) => `${node} ${general} ${lang} ${folded(lang)}`)
+                  .map(
+                    ({ general, lang, node }) =>
+                      `${placed(recordIds, node)} ${String(general)} ${lang} ${folded(lang)}`,
+                  )
                   .toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(
                   [...rows.ResourceLomLanguageSet.values()].map(
-                    ({ general, lang }) => `${general} ${lang}`,
+                    (row) => `${placed(row, row.general)} ${row.lang}`,
                   ),
                 ),
                 [
-                  ...new Set(expected.map(({ general, lang }) => `${general} ${folded(lang)}`)),
+                  ...new Set(
+                    expected.map(
+                      ({ general, lang }) => `${placed(recordIds, general)} ${folded(lang)}`,
+                    ),
+                  ),
                 ].toSorted(),
               );
             }),
@@ -782,28 +804,30 @@ describe(
                     ),
                   ),
                 );
-                const rows = rowsOf(ownViewOf(documentOf(root), idOf), ids);
-                const placed: {
+                const rows = rowsOf(ownViewOf(documentOf(root)), ids);
+                const descriptions: {
                   readonly choice: TextChoice;
-                  readonly node: string;
-                  readonly owner: string;
+                  readonly node: bigint;
+                  readonly owner: bigint;
                 }[] = [];
                 let next = 2;
                 for (const choices of drawn) {
-                  const owner = idOf(next);
+                  const owner = BigInt(next);
                   next += 1;
                   for (const choice of choices) {
-                    placed.push({ choice, node: idOf(next), owner });
+                    descriptions.push({ choice, node: BigInt(next), owner });
                     next += 2;
                   }
                 }
 
-                const typed = placed.filter(({ choice }) => choice.type !== "xs:normalizedString");
+                const typed = descriptions.filter(
+                  ({ choice }) => choice.type !== "xs:normalizedString",
+                );
                 const idTexts = typed.filter(
                   ({ choice }) => choice.type !== "xs:IDREF" && choice.text.id.names,
                 );
                 const bindings = idTexts.map(
-                  ({ choice, owner }) => `${documentNode} ${choice.text.id.value} ${owner}`,
+                  ({ choice, owner }) => `${placed(ids, owner)} ${choice.text.id.value}`,
                 );
                 const values = idTexts.map(({ choice }) => choice.text.id.value);
 
@@ -823,7 +847,7 @@ describe(
                   c.note("tokens split");
                 }
 
-                if (placed.some(({ choice }) => choice.type === "xs:normalizedString")) {
+                if (descriptions.some(({ choice }) => choice.type === "xs:normalizedString")) {
                   c.note("untyped text");
                 }
 
@@ -837,9 +861,8 @@ describe(
                   asSet(
                     [...rows.IdentityText.values()].map((row) =>
                       JSON.stringify([
-                        row.node,
-                        row.document,
-                        row.owner,
+                        placed(row, row.start),
+                        String(row.owner),
                         row.kind,
                         row.governor,
                         row.lexical,
@@ -850,9 +873,8 @@ describe(
                   typed
                     .map(({ choice, node, owner }) =>
                       JSON.stringify([
-                        node,
-                        documentNode,
-                        owner,
+                        placed(ids, node),
+                        String(owner),
                         "qti-description",
                         governorOf(version, "qti-description", Option.some(choice.type)),
                         choice.text.text,
@@ -871,26 +893,24 @@ describe(
                   asSet(
                     [...rows.DocumentId.values()].map((row) =>
                       JSON.stringify([
-                        row.node,
-                        row.document,
+                        placed(row, row.start),
                         row.before,
                         row.id,
                         row.after,
                         row.lexical,
-                        row.owner,
+                        String(row.owner),
                       ]),
                     ),
                   ),
                   idTexts
                     .map(({ choice, node, owner }) =>
                       JSON.stringify([
-                        node,
-                        documentNode,
+                        placed(ids, node),
                         choice.text.id.before,
                         choice.text.id.value,
                         choice.text.id.after,
                         choice.text.text,
-                        owner,
+                        String(owner),
                       ]),
                     )
                     .toSorted(),
@@ -898,7 +918,7 @@ describe(
                 assert.deepStrictEqual(
                   asSet(
                     [...rows.IdBinding.values()].map(
-                      ({ document, id, owner }) => `${document} ${id} ${owner}`,
+                      (row) => `${placed(row, row.owner)} ${row.id}`,
                     ),
                   ),
                   [...new Set(bindings)].toSorted(),
@@ -909,16 +929,6 @@ describe(
     );
   },
 );
-
-/**
- * The id of the node numbered `index` in the item document of the R26 box: a uuid of its own
- * document's, distinct from every manifest node's {@link idOf}.
- *
- * @param index - The number `flatten` gives the node.
- * @returns Its id.
- */
-const itemIdOf = (index: number): NodeId =>
-  `00000000-0000-4000-8001-${index.toString(16).padStart(12, "0")}`;
 
 /**
  * The path of the item document of the R26 box, the one path its package holds a document at.
@@ -1077,19 +1087,24 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                   ),
                 ],
               );
-              const manifestRows = rowsOf(ownViewOf(documentOf(manifest), idOf), {
+              const manifestIds = {
                 assembled: false,
                 documentType: "manifest",
-              });
-              const itemRows = rowsOf(ownViewOf(documentOf(item), itemIdOf), {
+                package: ids.package,
+                path: "imsmanifest.xml",
+              } as const satisfies IdentityIds;
+              const manifestRows = rowsOf(ownViewOf(documentOf(manifest)), manifestIds);
+              const itemRows = rowsOf(ownViewOf(documentOf(item)), {
                 assembled: false,
                 documentType: "imsqti_item_xmlv3p0",
+                package: ids.package,
+                path: itemPath,
               });
 
-              const generals: { readonly langs: readonly string[]; readonly node: string }[] = [];
+              const generals: { readonly langs: readonly string[]; readonly node: bigint }[] = [];
               let next = 6;
               for (const langs of drawn.generals) {
-                generals.push({ langs, node: idOf(next) });
+                generals.push({ langs, node: BigInt(next) });
                 next += 1 + 2 * langs.length;
               }
 
@@ -1133,14 +1148,16 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               );
               assert.deepStrictEqual(
                 asSet(
-                  [...manifestRows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
-                    JSON.stringify([general, lang]),
+                  [...manifestRows.ResourceLomLanguageSet.values()].map((row) =>
+                    JSON.stringify([placed(row, row.general), row.lang]),
                   ),
                 ),
                 [
                   ...new Set(
                     generals.flatMap(({ langs, node }) =>
-                      langs.map((lang) => JSON.stringify([node, folded(lang)])),
+                      langs.map((lang) =>
+                        JSON.stringify([placed(manifestIds, node), folded(lang)]),
+                      ),
                     ),
                   ),
                 ].toSorted(),
@@ -1149,10 +1166,7 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               // Each form's compared value, as the database generates it, is its value collapsed
               // and case-folded.
               const values = new Map(
-                [...itemRows.DocumentLang.values()].map(({ document, lang }) => [
-                  lang,
-                  valueOf({ document, lang }),
-                ]),
+                [...itemRows.DocumentLang.values()].map((row) => [row.lang, valueOf(row)]),
               );
               for (const [lang, value] of values) {
                 assert.strictEqual(value, folded(collapsed(lang)), `the value of ${lang}`);
@@ -1163,13 +1177,13 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               // a record that names the item, is one of that category's languages.
               const listed = new Set(
                 [...manifestRows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
-                  JSON.stringify([general, lang]),
+                  JSON.stringify([String(general), lang]),
                 ),
               );
               const described = [...itemRows.DocumentLang.values()]
                 .filter(({ lang }) => statedForm.test(lang))
                 .flatMap(({ lang }) =>
-                  naming.map(({ node }) => JSON.stringify([node, values.get(lang)])),
+                  naming.map(({ node }) => JSON.stringify([String(node), values.get(lang)])),
                 );
               assert.strictEqual(
                 described.every((pair) => listed.has(pair)),
@@ -1295,48 +1309,51 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                   ),
                 ],
               );
-              const rows = rowsOf(ownViewOf(documentOf(root), idOf), ids);
+              const rows = rowsOf(ownViewOf(documentOf(root)), ids);
 
               const expectedAttributes: string[] = [];
               const expectedScopes: string[] = [];
-              const outsideMark = idOf(3);
+              const outsideMark = 3n;
               if (drawn.outside) {
-                expectedAttributes.push(`${outsideMark} name ssml:mark m n ${documentNode}`);
+                expectedAttributes.push(
+                  `${placed(ids, outsideMark)} name ssml:mark m n ${documentNode}`,
+                );
                 expectedScopes.push(
-                  `${outsideMark} ${documentNode}`,
-                  `${idOf(2)} ${documentNode}`,
-                  `${idOf(1)} ${documentNode}`,
+                  `${placed(ids, outsideMark)} ${documentNode}`,
+                  `${placed(ids, 2n)} ${documentNode}`,
+                  `${placed(ids, 1n)} ${documentNode}`,
                 );
               }
 
               let next = drawn.outside ? 4 : 3;
-              const trims: { readonly marks: number; readonly speak: string }[] = [];
+              const trims: { readonly marks: number; readonly speak: bigint }[] = [];
               for (const choice of drawn.speaks) {
-                const speak = idOf(next);
+                const speak = BigInt(next);
                 next += 1;
                 for (const mark of Option.toArray(choice.startmark)) {
                   expectedAttributes.push(
-                    `${speak} startmark ssml:speak ${collapsed(mark)} ${speak}`,
+                    `${placed(ids, speak)} startmark ssml:speak ${collapsed(mark)} ${speak}`,
                   );
-                  expectedScopes.push(`${speak} ${speak}`);
+                  expectedScopes.push(`${placed(ids, speak)} ${speak}`);
                   trims.push({ marks: choice.marks, speak });
                 }
 
+                const at = (offset: number) => placed(ids, BigInt(offset));
                 if (choice.lookup === "resolved") {
-                  expectedAttributes.push(`${idOf(next)} xml:id ssml:lexicon L ${speak}`);
-                  expectedScopes.push(`${idOf(next)} ${speak}`, `${speak} ${speak}`);
+                  expectedAttributes.push(`${at(next)} xml:id ssml:lexicon L ${speak}`);
+                  expectedScopes.push(`${at(next)} ${speak}`, `${placed(ids, speak)} ${speak}`);
                   next += 1;
                 }
 
-                for (let at = 0; at < choice.marks; at += 1) {
-                  expectedAttributes.push(`${idOf(next)} name ssml:mark m n ${speak}`);
-                  expectedScopes.push(`${idOf(next)} ${speak}`, `${speak} ${speak}`);
+                for (let mark = 0; mark < choice.marks; mark += 1) {
+                  expectedAttributes.push(`${at(next)} name ssml:mark m n ${speak}`);
+                  expectedScopes.push(`${at(next)} ${speak}`, `${placed(ids, speak)} ${speak}`);
                   next += 1;
                 }
 
                 if (choice.lookup !== "none") {
-                  expectedAttributes.push(`${idOf(next)} ref ssml:lookup L ${speak}`);
-                  expectedScopes.push(`${idOf(next)} ${speak}`, `${speak} ${speak}`);
+                  expectedAttributes.push(`${at(next)} ref ssml:lookup L ${speak}`);
+                  expectedScopes.push(`${at(next)} ${speak}`, `${placed(ids, speak)} ${speak}`);
                   next += 1;
                 }
               }
@@ -1365,14 +1382,17 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
               assert.deepStrictEqual(
                 asSet(
                   [...rows.SsmlAttribute.values()].map(
-                    (row) => `${row.node} ${row.name} ${row.kind} ${row.value} ${row.fragment}`,
+                    (row) =>
+                      `${placed(row, row.start)} ${row.name} ${row.kind} ${row.value} ${row.fragment}`,
                   ),
                 ),
                 expectedAttributes.toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(
-                  [...rows.SsmlScope.values()].map(({ fragment, node }) => `${node} ${fragment}`),
+                  [...rows.SsmlScope.values()].map(
+                    (row) => `${placed(row, row.start)} ${row.fragment}`,
+                  ),
                 ),
                 [...new Set(expectedScopes)].toSorted(),
               );
@@ -1403,7 +1423,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                   marks.filter(
                     ({ fragment, value }) => fragment === trim.fragment && value === trim.value,
                   ).length === 1,
-                  trims.find(({ speak }) => speak === trim.node)?.marks === 1,
+                  trims.find(({ speak }) => speak === trim.start)?.marks === 1,
                   JSON.stringify(drawn),
                 );
               }
@@ -1447,7 +1467,6 @@ const catalogued = () =>
           ],
         ),
       ),
-      idOf,
     ),
     ids,
   );
@@ -1459,14 +1478,14 @@ describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
     const rows = catalogued();
 
     assert.deepStrictEqual(
-      asSet([...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`)),
+      asSet([...rows.CatalogScope.values()].map((row) => `${placed(row, row.start)} ${row.scope}`)),
       [
-        `${idOf(5)} ${idOf(2)}`,
-        `${idOf(4)} ${idOf(2)}`,
-        `${idOf(3)} ${idOf(2)}`,
-        `${idOf(2)} ${idOf(2)}`,
-        `${idOf(6)} ${documentNode}`,
-        `${idOf(1)} ${documentNode}`,
+        `${placed(ids, 5n)} 2`,
+        `${placed(ids, 4n)} 2`,
+        `${placed(ids, 3n)} 2`,
+        `${placed(ids, 2n)} 2`,
+        `${placed(ids, 6n)} ${documentNode}`,
+        `${placed(ids, 1n)} ${documentNode}`,
       ].toSorted(),
     );
   });
@@ -1476,23 +1495,24 @@ describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
     const rows = catalogued();
 
     assert.deepStrictEqual(
-      asSet([...rows.XmlLang.values()].map(({ lang, node, scope }) => `${node} ${lang} ${scope}`)),
-      [`${idOf(5)} es ${idOf(2)}`, `${idOf(6)} en ${documentNode}`].toSorted(),
+      asSet(
+        [...rows.XmlLang.values()].map(
+          (row) => `${placed(row, row.start)} ${row.lang} ${row.scope}`,
+        ),
+      ),
+      [`${placed(ids, 5n)} es 2`, `${placed(ids, 6n)} en ${documentNode}`].toSorted(),
     );
   });
 
   it("gives an item with no catalog the document as every scope", () => {
     const rows = rowsOf(
-      ownViewOf(
-        documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], [])),
-        idOf,
-      ),
+      ownViewOf(documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], []))),
       ids,
     );
 
     assert.deepStrictEqual(
-      [...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`),
-      [`${idOf(1)} ${documentNode}`],
+      [...rows.CatalogScope.values()].map((row) => `${placed(row, row.start)} ${row.scope}`),
+      [`${placed(ids, 1n)} ${documentNode}`],
     );
   });
 });
@@ -1508,10 +1528,7 @@ const sharedRows = (srcs: readonly string[], assembled?: boolean) => {
   const shares = srcs.map((src) => elementOf("m:share", [attribute("src", src)], []));
   const root = elementOf("qti-assessment-item", [], shares);
 
-  return rowsOf(
-    ownViewOf(documentOf(root), idOf),
-    assembled === undefined ? ids : { ...ids, assembled },
-  );
+  return rowsOf(ownViewOf(documentOf(root)), assembled === undefined ? ids : { ...ids, assembled });
 };
 
 describe("import/overlays/identity.ts, a share's same-document fragment (P7)", () => {
@@ -1522,7 +1539,7 @@ describe("import/overlays/identity.ts, a share's same-document fragment (P7)", (
 
     assert.deepStrictEqual(
       [...rows.ShareFragment.values()],
-      [{ assembled: false, document: documentNode, id: "a", node: idOf(2), src: "#a" }],
+      [{ assembled: false, id: "a", package: ids.package, path: ids.path, src: "#a", start: 2n }],
     );
     assert.deepStrictEqual(
       [...rows.IdrefTarget.values()].map(({ assembled, id }) => [assembled, id]),
@@ -1588,24 +1605,24 @@ describe("import/overlays/identity.ts, an unadmitted element's ID (R2)", () => {
         [],
         [elementOf("cp:resources", [], [resource, resource])],
       );
-      const rows = rowsOf(ownViewOf(documentOf(manifest, written), idOf), {
+      const rows = rowsOf(ownViewOf(documentOf(manifest, written)), {
         ...ids,
         documentType: "none",
       });
 
       assert.deepStrictEqual(
-        [...rows.DocumentId.values()].map(({ admitted, id, node }) => [node, id, admitted]),
+        [...rows.DocumentId.values()].map(({ admitted, id, start }) => [start, id, admitted]),
         [
-          [idOf(4), "v1", bound],
-          [idOf(6), "v1", bound],
+          [4n, "v1", bound],
+          [6n, "v1", bound],
         ],
         written,
       );
       assert.deepStrictEqual(
         [...rows.IdBinding.values()].map(({ admitted, id, owner }) => [owner, id, admitted]),
         [
-          [idOf(4), "v1", bound],
-          [idOf(6), "v1", bound],
+          [4n, "v1", bound],
+          [6n, "v1", bound],
         ],
         written,
       );

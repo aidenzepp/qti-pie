@@ -20,7 +20,6 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type {
   DocumentRow,
   FlatRows,
-  NodeId,
   NodeRow,
   XdmChild,
   XdmClosedElement,
@@ -33,10 +32,8 @@ import {
   corruption,
   familiesOf,
   featuresOf,
-  idOf,
   isRowCorruption,
   rowVariants,
-  scrambledIdOf,
   situationsOf,
   xdmDocument,
 } from "#pantry/test/gen/xdm.ts";
@@ -76,8 +73,9 @@ const rowLists = [
   "entityRefs",
   "namespaces",
   "nodes",
+  "openAttributeEntities",
+  "openAttributes",
   "openElementNames",
-  "openNames",
   "pis",
   "sdDecls",
   "texts",
@@ -86,15 +84,14 @@ const rowLists = [
 ] as const satisfies readonly RowList[];
 
 /**
- * The lists whose rows another row names by key, so each must be there: the rows of character
- * data and the doctype, an attribute's open name, and a foreign element's name.
+ * The lists whose rows a node row names by its kind, so each must be there: the rows of character
+ * data and the doctype, and a foreign element's name.
  */
 const keyedLists = [
   "comments",
   "doctypes",
   "entityRefs",
   "openElementNames",
-  "openNames",
   "pis",
   "texts",
   "whitespace",
@@ -122,8 +119,9 @@ const shuffledRows =
       entityRefs: shuffle(rows.entityRefs),
       namespaces: shuffle(rows.namespaces),
       nodes: shuffle(rows.nodes),
+      openAttributeEntities: shuffle(rows.openAttributeEntities),
+      openAttributes: shuffle(rows.openAttributes),
       openElementNames: shuffle(rows.openElementNames),
-      openNames: shuffle(rows.openNames),
       pis: shuffle(rows.pis),
       sdDecls: shuffle(rows.sdDecls),
       texts: shuffle(rows.texts),
@@ -136,10 +134,27 @@ const shuffledRows =
  * Fold a generated tree, which is total on the trees the generator builds.
  *
  * @param generated - The case.
- * @returns Its folded rows, under {@link idOf}.
+ * @returns Its folded rows.
  */
 const foldedOf = (generated: GeneratedXdm) =>
-  Effect.orDie(Effect.fromResult(fold(generated.document, idOf, foldGrammarOf(grammar))));
+  Effect.orDie(Effect.fromResult(fold(generated.document, foldGrammarOf(grammar))));
+
+/**
+ * A document's rows as sets: each list's rows, each written as text, in sorted order. Two
+ * documents are one document exactly when their rows are one set (`flatten` writes every field the
+ * tree holds), whatever order each lists its attributes and namespace declarations in, which are
+ * sets (XML Information Set §2.2).
+ *
+ * @param document - The document.
+ * @returns Each list of `flatten`'s rows as sorted text, and the document row.
+ */
+const rowSetOf = (document: XdmDocument<Composed>) =>
+  Object.fromEntries(
+    Object.entries(flatten(document)).map(([list, rows]) => [
+      list,
+      Array.isArray(rows) ? rows.map((row) => Formatter.format(row)).toSorted() : rows,
+    ]),
+  );
 
 /**
  * Assemble rows that must be refused.
@@ -279,67 +294,37 @@ const lineOf = (row: DocumentRow | FlatRows<Composed>[RowList][number]): string 
     .join(";");
 
 /**
- * The rows' canonical form, the oracle's key: each node renamed to {@link idOf} its start, every
- * list's rows as sorted text. Rows `flatten` writes number their nodes by start, 0 to N − 1 once
- * each, under ids held once, and every id they hold is a node's, so rows with no such renaming have
- * none, and are no tree's.
+ * The rows' canonical form, the oracle's key: every list's rows as sorted text. Rows are keyed by
+ * positions and names, never by a drawn id, so two sets of rows are one exactly when their
+ * canonical forms are.
  *
  * @param rows - The rows, with no attribute rows.
- * @returns The canonical form, none when the rows have no renaming by start.
+ * @returns The canonical form.
  */
-const canonicalOf = (rows: FlatRows<Composed>): Option.Option<string> => {
-  const starts = rows.nodes
-    .map(({ start }) => Number(start))
-    .toSorted((left, right) => left - right);
-  const ids = new Map(rows.nodes.map(({ id, start }) => [id, idOf(Number(start))]));
-  if (!starts.every((start, at) => start === at) || ids.size !== rows.nodes.length) {
-    return Option.none();
-  }
-
-  const renamed = (id: NodeId): Option.Option<NodeId> => Option.fromNullishOr(ids.get(id));
-  const byNode = <Row extends { readonly node: NodeId }>(list: readonly Row[]) =>
-    Option.all(list.map((row) => Option.map(renamed(row.node), (node) => ({ ...row, node }))));
-
-  return Option.map(
-    Option.all({
-      comments: byNode(rows.comments),
-      doctypes: byNode(rows.doctypes),
-      document: Option.map(renamed(rows.document.node), (node) => [{ ...rows.document, node }]),
-      nodes: Option.all(
-        rows.nodes.map((row) =>
-          Option.map(Option.all([renamed(row.id), renamed(row.parent)]), ([id, parent]) => ({
-            ...row,
-            id,
-            parent,
-          })),
-        ),
-      ),
-      texts: byNode(rows.texts),
-    }),
-    (lists) =>
-      Object.entries(lists)
-        .toSorted(([left], [right]) => (left < right ? -1 : 1))
-        .map(([list, held]) => `${list}: ${held.map(lineOf).toSorted().join(" | ")}`)
-        .join("\n"),
-  );
-};
+const canonicalOf = (rows: FlatRows<Composed>): string =>
+  Object.entries({
+    comments: rows.comments,
+    doctypes: rows.doctypes,
+    document: [rows.document],
+    nodes: rows.nodes,
+    texts: rows.texts,
+  })
+    .toSorted(([left], [right]) => (left < right ? -1 : 1))
+    .map(([list, held]) => `${list}: ${held.map(lineOf).toSorted().join(" | ")}`)
+    .join("\n");
 
 /**
  * Every document of the small box by its rows' canonical form: the image the oracle reads.
  */
 const smallImage: ReadonlyMap<string, XdmDocument<Composed>> = new Map(
-  smallDocuments.map((document) => [
-    Option.getOrThrow(canonicalOf(flatten(document, idOf))),
-    document,
-  ]),
+  smallDocuments.map((document) => [canonicalOf(flatten(document)), document]),
 );
 
 /**
  * An edit of one field of one node row, to a value of the field's type.
  */
 type NodeEdit =
-  | { readonly field: "at" | "end" | "start"; readonly value: bigint }
-  | { readonly field: "id" | "parent"; readonly value: NodeId }
+  | { readonly field: "at" | "end" | "parent" | "start"; readonly value: bigint }
   | { readonly field: "kind"; readonly value: NodeRow<Composed>["kind"] }
   | { readonly field: "governs"; readonly value: Option.Option<string> }
   | { readonly field: "prefix"; readonly value: string }
@@ -357,7 +342,6 @@ const editedRow = (row: NodeRow<Composed>, edit: NodeEdit): NodeRow<Composed> =>
     case "at":
     case "end":
     case "start":
-    case "id":
     case "parent":
     case "prefix": {
       return { ...row, [edit.field]: edit.value };
@@ -378,27 +362,19 @@ const editedRow = (row: NodeRow<Composed>, edit: NodeEdit): NodeRow<Composed> =>
 };
 
 /**
- * Every edit of a node row's fields the small box makes: each slot and interval bound from 0 to 4,
- * each id of the document's nodes and one no node holds as the row's id or parent, each kind of the
- * box, and each prefix, governing type and version, all but the row's own value.
+ * Every edit of a node row's fields the small box makes: each slot, interval bound and parent
+ * position from 0 to 4, past every node of the box's documents (at most 4 nodes, starts 0 to 3),
+ * each kind of the box, and each prefix, governing type and version, all but the row's own value.
  *
  * @param row - The row.
- * @param nodes - The document's node rows.
  * @returns The edits.
  */
-const editsOf = (
-  row: NodeRow<Composed>,
-  nodes: readonly NodeRow<Composed>[],
-): readonly NodeEdit[] => {
+const editsOf = (row: NodeRow<Composed>): readonly NodeEdit[] => {
   const bounds = [0n, 1n, 2n, 3n, 4n];
-  const ids = [...nodes.map(({ id }) => id), idOf(99)];
   const kinds = ["document", "p", "text", "comment", "doctype"] as const;
   const edits: readonly NodeEdit[] = [
-    ...(["at", "end", "start"] as const).flatMap((field) =>
+    ...(["at", "end", "parent", "start"] as const).flatMap((field) =>
       bounds.map((value): NodeEdit => ({ field, value })),
-    ),
-    ...(["id", "parent"] as const).flatMap((field) =>
-      ids.map((value): NodeEdit => ({ field, value })),
     ),
     ...kinds.map((value): NodeEdit => ({ field: "kind", value })),
     ...smallPrefixes.map((value): NodeEdit => ({ field: "prefix", value })),
@@ -422,7 +398,7 @@ interface SmallCase {
  * `g`, in 3.0.1.
  */
 const editedDocuments = smallDocuments.filter((document) =>
-  flatten(document, idOf).nodes.every(
+  flatten(document).nodes.every(
     ({ governs, kind, prefix, version }) =>
       version === "3.0.1" && prefix === "" && (kind !== "p" || Option.contains(governs, "g")),
   ),
@@ -432,12 +408,12 @@ const editedDocuments = smallDocuments.filter((document) =>
  * Every case of the small box.
  */
 const smallCases: readonly SmallCase[] = editedDocuments.flatMap((document, at) => {
-  const { nodes } = flatten(document, idOf);
+  const { nodes } = flatten(document);
 
   return [
     { document: at, edit: Option.none() },
     ...nodes.flatMap((row, node) =>
-      editsOf(row, nodes).map((edit) => ({ document: at, edit: Option.some({ edit, node }) })),
+      editsOf(row).map((edit) => ({ document: at, edit: Option.some({ edit, node }) })),
     ),
   ];
 });
@@ -449,7 +425,7 @@ const smallCases: readonly SmallCase[] = editedDocuments.flatMap((document, at) 
  * @returns The rows of its document, with its edit applied.
  */
 const smallRowsOf = ({ document, edit }: SmallCase): FlatRows<Composed> => {
-  const rows = flatten(Arr.getUnsafe(editedDocuments, document), idOf);
+  const rows = flatten(Arr.getUnsafe(editedDocuments, document));
 
   return Option.match(edit, {
     onNone: () => rows,
@@ -468,10 +444,12 @@ type SmallFeature = "inside" | "outside" | NodeEdit["field"];
 
 describe("assemble", { timeout: searchTimeout }, () => {
   it.effect(
-    "gives back every generated tree from its rows, under ids in any order and every list in any order, to the same canonical bytes",
+    "gives back every generated tree from its rows, every list in any order, up to the order of its sets, to the same canonical bytes",
     (ctx) =>
-      // Oracle: a universal one, the round trip assemble ∘ flatten = id, and the canonical bytes of
-      // the tree assembled equal to the source tree's; row order is not data.
+      // Oracle: a universal one, the round trip assemble ∘ flatten = id up to the order of each
+      // element's attributes and namespace declarations, sets, so held by the rows they flatten
+      // to, and the canonical bytes of the tree assembled equal to the source tree's; row order
+      // is not data.
       // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
       searched(
         ctx,
@@ -500,7 +478,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
             literal: Formatter.format,
             oracle: {
               kind: "universal",
-              name: "the round trip assemble ∘ flatten = id, to the same canonical bytes",
+              name: "the round trip assemble ∘ flatten = id up to set order, to the same canonical bytes",
             },
             runs: 150,
             shrink: completeShrink,
@@ -512,11 +490,10 @@ describe("assemble", { timeout: searchTimeout }, () => {
               c.noteAll(featuresOf(generated.document));
               c.noteAll(familiesOf(generated.model));
 
-              const ids = c.draw(element([idOf, scrambledIdOf]));
-              const rows = c.draw(shuffledRows(flatten(generated.document, ids)));
+              const rows = c.draw(shuffledRows(flatten(generated.document)));
               const assembled = yield* Effect.fromResult(assemble(rows));
 
-              assert.deepStrictEqual(assembled, generated.document);
+              assert.deepStrictEqual(rowSetOf(assembled), rowSetOf(generated.document));
               assert.deepStrictEqual(
                 canonicalize(toXmlDocument(assembled, names)),
                 canonicalize(toXmlDocument(generated.document, names)),
@@ -527,7 +504,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
   );
 
   it.effect("refuses each named row variant as a node row outside flatten's image", (ctx) =>
-    // Oracle: the specification as a checker, trees.md §6: every row variant edits a node's id,
+    // Oracle: the specification as a checker, trees.md §6: every row variant edits a node's
     // parent, slot or interval so that no tree's rows hold it, and the document row and every
     // other list are as the tree wrote them, so the nodes list is the first to leave the image.
     // Bound: the generator's drawn bounds, every row variant a tree admits.
@@ -576,14 +553,13 @@ describe("assemble", { timeout: searchTimeout }, () => {
   );
 
   /**
-   * The ways a set of rows leaves flatten's image beside the row variants: a row another names is
-   * missing, a row is repeated, a node is of a kind its parent cannot hold, or an attribute or
-   * namespace declaration stands past its family's last slot.
+   * The ways a set of rows leaves flatten's image beside the row variants: a row a node names is
+   * missing, a row is repeated, or a node is of a kind its parent cannot hold.
    */
-  type Outside = "missing" | "repeated" | "misplaced" | "slot";
+  type Outside = "missing" | "repeated" | "misplaced";
 
   it.effect(
-    "refuses rows outside flatten's image: a row another names missing, any row repeated, a node of a kind its parent cannot hold, a family row past its last slot",
+    "refuses rows outside flatten's image: a row a node names missing, any row repeated, a node of a kind its parent cannot hold",
     (ctx) =>
       // Oracle: the specification as a checker, the rows flatten writes for some tree.
       // Bound: the generator's drawn bounds, one edit a case.
@@ -593,7 +569,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
           {
             caseHang,
             concurrency: 1,
-            coverage: required<Outside>(["missing", "repeated", "misplaced", "slot"], {
+            coverage: required<Outside>(["missing", "repeated", "misplaced"], {
               cases: 300,
               sense: notesOnly,
             }),
@@ -602,7 +578,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "the rows flatten writes for some tree: a row missing, repeated, misplaced or past its family's slots leaves that image",
+              name: "the rows flatten writes for some tree: a row missing, repeated or misplaced leaves that image",
             },
             runs: 150,
             shrink: completeShrink,
@@ -611,19 +587,15 @@ describe("assemble", { timeout: searchTimeout }, () => {
           },
           (generated, c) =>
             Effect.gen(function* outsideImage() {
-              const rows = flatten(generated.document, idOf);
+              const rows = flatten(generated.document);
               const named = keyedLists.filter((list) => rows[list].length > 0);
               const listed = rowLists.filter((list) => rows[list].length > 0);
               const runs = [...rows.texts, ...rows.whitespace];
-              const slotted = (["attributes", "namespaces"] as const).filter(
-                (list) => rows[list].length > 0,
-              );
               const edit = c.draw(
                 element([
                   "repeated",
                   ...(Arr.isReadonlyArrayNonEmpty(named) ? (["missing"] as const) : []),
                   ...(Arr.isReadonlyArrayNonEmpty(runs) ? (["misplaced"] as const) : []),
-                  ...(Arr.isReadonlyArrayNonEmpty(slotted) ? (["slot"] as const) : []),
                 ] as const),
               );
               c.note(edit);
@@ -671,14 +643,14 @@ describe("assemble", { timeout: searchTimeout }, () => {
                     ...rows,
                     doctypes: [...rows.doctypes, run],
                     nodes: rows.nodes.map((row) =>
-                      row.id === run.node ? { ...row, kind: "doctype" } : row,
+                      row.start === run.start ? { ...row, kind: "doctype" } : row,
                     ),
                     texts: rows.texts.filter((row) => row !== run),
                     whitespace: rows.whitespace.filter((row) => row !== run),
                   });
 
                   const parent =
-                    rows.nodes.find(({ id }) => id === run.node)?.parent ??
+                    rows.nodes.find(({ start }) => start === run.start)?.parent ??
                     assert.fail("drew a run whose node has no row");
 
                   assert.deepStrictEqual(
@@ -686,35 +658,11 @@ describe("assemble", { timeout: searchTimeout }, () => {
                       ? { departure: refusal.departure, key: refusal.key, rows: refusal.rows }
                       : refusal._tag,
                     {
-                      departure: { _tag: "unplaced", kind: "doctype", under: parent },
-                      key: run.node,
+                      departure: { _tag: "unplaced", kind: "doctype", under: String(parent) },
+                      key: String(run.start),
                       rows: "nodes",
                     },
                   );
-                  break;
-                }
-                case "slot": {
-                  if (!Arr.isReadonlyArrayNonEmpty(slotted)) {
-                    assert.fail("drew a family row past its slots from rows with no family rows");
-                  }
-
-                  const list = c.draw(element(slotted));
-                  const held: readonly { readonly at: bigint; readonly node: NodeId }[] =
-                    rows[list];
-                  const moved = Arr.getUnsafe(held, c.draw(int(0, held.length - 1)));
-                  const past = BigInt(held.filter(({ node }) => node === moved.node).length);
-                  const bump = <Row extends { readonly at: bigint; readonly node: NodeId }>(
-                    row: Row,
-                  ): Row => (Object.is(row, moved) ? { ...row, at: past } : row);
-                  const refusal = yield* refusalOf(
-                    list === "attributes"
-                      ? { ...rows, attributes: rows.attributes.map(bump) }
-                      : { ...rows, namespaces: rows.namespaces.map(bump) },
-                  );
-                  const [rowsOf, departure] = departureOf(refusal);
-
-                  assert.strictEqual(rowsOf, list);
-                  assert.include(["differs", "lacked"], departure);
                   break;
                 }
                 default: {
@@ -730,7 +678,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
     "assembles exactly the rows flatten writes for some tree, over every small document and every single-field edit of a node row",
     (ctx) =>
       // Oracle: the image, enumerated: every document of at most three nodes below the document
-      // node, its rows' canonical form, renamed by start, against the edited rows'. Rows the image
+      // node, its rows' canonical form against the edited rows'. Rows the image
       // holds assemble to their document; rows it does not are refused.
       // Bound: every such document in each version, prefix and governing type, and every edit of
       // one field of one node row to each value of the box.
@@ -746,7 +694,6 @@ describe("assemble", { timeout: searchTimeout }, () => {
               "at",
               "end",
               "start",
-              "id",
               "parent",
               "kind",
               "prefix",
@@ -765,9 +712,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
           (drawnCase, c) =>
             Effect.sync(() => {
               const rows = smallRowsOf(drawnCase);
-              const inside = Option.flatMap(canonicalOf(rows), (key) =>
-                Option.fromNullishOr(smallImage.get(key)),
-              );
+              const inside = Option.fromNullishOr(smallImage.get(canonicalOf(rows)));
               const got = assemble(rows);
               c.note(Option.isSome(inside) ? "inside" : "outside");
               if (Option.isSome(drawnCase.edit)) {

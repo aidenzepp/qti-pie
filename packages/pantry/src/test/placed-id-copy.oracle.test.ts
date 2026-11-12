@@ -3,18 +3,18 @@
  * oracle's verdict, the importer's rows, and the schema's E1 law over them.
  *
  * Every ID of an assembly is placed once per instance ({@link PlacedId}) and bound in its
- * assembly's ID table ({@link AssembledId}), keyed by `(assembly, id, owner, copy)`. Under an
- * item's assembly the copy is the instance, since a fragment placed twice holds its IDs twice, as
- * its merged document does. Under a test's assembly a section document placed twice is written once
- * (reading 86), so the copy is the placed document. Before NS4 that copy was the nil uuid, an id
- * the import never mints (GEN-A's `dangling-uuid: AssembledId.copy` and `PlacedId.copy`). The key
- * `(assembly, id)` is "DocumentId key" over the merged document either way.
+ * assembly's ID table ({@link AssembledId}), keyed by `(package, assembly, id, path, owner, copy)`.
+ * Under an item's assembly the copy is the instance's position, since a fragment placed twice holds
+ * its IDs twice, as its merged document does. Under a test's assembly a section document placed
+ * twice is written once (reading 86), so the copy is the placed document's own, its document
+ * node's position 0, the document `path` already names. The key `(assembly, id)` is "DocumentId
+ * key" over the merged document either way.
  *
  * For every case:
  *
  * - The oracle names it by exactly the rules the case says;
- * - Every copy is an id the import mints: the instance under an item's assembly, the placed document
- *   under a test's, which is the `E1_derived` law the schema states over `PlacedId`;
+ * - Every copy is the instance under an item's assembly and the placed document's node under a
+ *   test's, which is the `E1_derived` law the schema states over `PlacedId`;
  * - No member of any family of the schema names an owner the import writes no row of.
  *
  * The cases edit the every-relation package's test and its section document: the section's rubric
@@ -30,7 +30,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { orphansOf } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
@@ -73,14 +72,6 @@ const holds = (drawnCase: CopyCase) =>
       `${label}: family members with no owner row: ${orphans.map(({ key, member, owner }) => `${member} ${key} into ${owner}`).join("; ")}`,
     );
 
-    const instances = (instance: InstanceMember): readonly InstanceMember[] => [
-      instance,
-      ...instance.children.flatMap(instances),
-    ];
-    const minted = new Set([
-      ...[...inputs.Instance.values()].flatMap(instances).map((instance) => instance.id),
-      ...inputs.Document.keys(),
-    ]);
     const placed = [...inputs.PlacedId.values()];
     assert.isTrue(
       !drawnCase.sectionId ||
@@ -90,14 +81,11 @@ const holds = (drawnCase: CopyCase) =>
     for (const row of placed) {
       assert.strictEqual(
         row.copy,
-        row.assemblyKind === "qti-assessment-test" ? row.document : row.instance,
+        row.assemblyKind === "qti-assessment-test" ? 0n : row.instance,
         `${label}: ${row.id}'s copy under ${row.assemblyKind}`,
       );
     }
     const bindings = [...inputs.AssembledId.values()];
-    for (const row of bindings) {
-      assert.isTrue(minted.has(row.copy), `${label}: ${row.id}'s copy ${row.copy} is no minted id`);
-    }
     const bound = Map.groupBy(bindings, ({ assembly, id: held }) => `${assembly} ${held}`);
     assert.strictEqual(
       [...bound.values()].some((rows) => rows.length > 1),
@@ -108,7 +96,7 @@ const holds = (drawnCase: CopyCase) =>
 
 describe("a placed ID's copy (lane NIL's audit, C1)", () => {
   it.effect(
-    "is the instance under an item's assembly and the placed document under a test's, never an id the import does not mint",
+    "is the instance under an item's assembly and the placed document under a test's",
     (ctx) =>
       // Oracle: the specification as a checker (the law oracle's DocumentId key over the merged
       // test, reading 86), and the schema's E1 law and its families over the importer's rows.

@@ -22,8 +22,8 @@
  * mapping whose source its item declares nothing under, which `Variable mapping source` refuses
  * anyway, is not judged for its target. No package is accepted by one and refused by the other. And
  * every rule the host's laws refuse under is a rule the oracle predicts, so a package the oracle
- * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
- * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
+ * refuses for one cause is refused under that cause's rule alone. No target holds a `none` type,
+ * and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -37,7 +37,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
+import type { PackageInputs } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
@@ -50,6 +50,8 @@ import type {
   MappingSourceDeclaration,
   Reading,
   ReadingDeclaration,
+  TemplateDefault,
+  TemplateDefaultCardinality,
   TemplateDefaultTarget,
 } from "#pantry/qti/expressions.ts";
 import type { VariableMapping } from "#pantry/qti/tests.ts";
@@ -68,6 +70,7 @@ import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
+import { byPlace, nodePlacesOf, placeKey } from "#pantry/test/places.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -82,11 +85,6 @@ const testTimeoutMs = 180_000;
 const spelledResourceTypes: ReadonlySet<string> = new Set(
   ResourceTypeLexical.rows.map(({ lexical }) => lexical),
 );
-
-/**
- * The nil uuid, which no row of the three relations may hold.
- */
-const nil = "00000000-0000-0000-0000-000000000000";
 
 /**
  * The laws this file compares, by the oracle's names.
@@ -150,14 +148,35 @@ const valueCardinalityOf = (cardinality: string): string =>
  * The import's rows a host law reads, gathered once per package.
  */
 interface HostRows {
+  /**
+   * Each declaration's base type, at its declaration's place.
+   */
   readonly baseTypes: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
+  /**
+   * Each declaration's cardinality, at its declaration's place.
+   */
   readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   readonly declarations: readonly Addition<typeof DeclarationIdentifier>[];
+  /**
+   * The item document's path each item ref names, at the item ref's place.
+   */
   readonly documentOf: ReadonlyMap<string, string>;
   readonly expressions: readonly Addition<typeof Expression>[];
   readonly inputs: PackageInputs;
   readonly mappings: readonly Addition<typeof VariableMapping>[];
   readonly sources: readonly Addition<typeof MappingSourceDeclaration>[];
+  /**
+   * Each template default's cardinality row, at the template default's place.
+   */
+  readonly templateCardinalities: ReadonlyMap<string, Addition<typeof TemplateDefaultCardinality>>;
+  /**
+   * Each template default, at its place.
+   */
+  readonly templateDefaults: ReadonlyMap<string, Addition<typeof TemplateDefault>>;
+  /**
+   * Each variable mapping, at its place.
+   */
+  readonly variableMappings: ReadonlyMap<string, Addition<typeof VariableMapping>>;
 }
 
 /**
@@ -187,8 +206,8 @@ const declares = (
 ): boolean =>
   rows.declarations.some(
     (d) =>
-      d.node === row.declaration &&
-      d.document === row.itemDocument &&
+      d.start === row.declaration &&
+      d.path === row.itemDocument &&
       d.identifier === identifier &&
       d.declarationKind === row.declarationKind &&
       d.baseTypes === row.declBaseTypes &&
@@ -206,10 +225,10 @@ const declares = (
  * @returns Whether it fits.
  */
 const fitsHeld = (rows: HostRows, target: Addition<typeof TemplateDefaultTarget>): boolean => {
-  const typed = rows.baseTypes.get(target.declaration);
+  const typed = rows.baseTypes.get(placeKey(target.itemDocument, target.declaration));
   const declaredBase =
     target.declBaseTypes === 1n && typed !== undefined ? valueBaseOf(typed.baseType) : "unknown";
-  const cardinality = rows.inputs.TemplateDefaultCardinality.get(target.node);
+  const cardinality = rows.templateCardinalities.get(placeKey(target.path, target.start));
 
   return (
     (target.heldBase === declaredBase ||
@@ -233,14 +252,15 @@ const cardinalityHeld = (
   rows: HostRows,
   target: Addition<typeof TemplateDefaultTarget>,
 ): boolean => {
-  const cardinality = rows.inputs.TemplateDefaultCardinality.get(target.node);
+  const cardinality = rows.templateCardinalities.get(placeKey(target.path, target.start));
 
   return cardinality === undefined
     ? target.declCardinalities === 0n
     : cardinality.declaration === target.declaration &&
+        cardinality.itemDocument === target.itemDocument &&
         cardinality.heldCardinality === target.heldCardinality &&
-        rows.cardinalities.get(cardinality.declaration)?.cardinality ===
-          cardinality.declCardinality;
+        rows.cardinalities.get(placeKey(cardinality.itemDocument, cardinality.declaration))
+          ?.cardinality === cardinality.declCardinality;
 };
 
 /**
@@ -256,7 +276,7 @@ const targetBreaches = (
   target: Addition<typeof TemplateDefaultTarget>,
 ): readonly HostBreach[] => {
   const name = target.template;
-  const referrer = rows.inputs.TemplateDefault.get(target.node);
+  const referrer = rows.templateDefaults.get(placeKey(target.path, target.start));
 
   return [
     ...unless(
@@ -265,7 +285,8 @@ const targetBreaches = (
       name,
     ),
     ...unless(
-      rows.documentOf.get(target.itemRef) === target.itemDocument && declares(rows, target, name),
+      rows.documentOf.get(placeKey(target.path, target.itemRef)) === target.itemDocument &&
+        declares(rows, target, name),
       "Template default target",
       name,
     ),
@@ -279,7 +300,8 @@ const targetBreaches = (
     ...unless(
       rows.expressions.some(
         (e) =>
-          e.parent === target.node &&
+          e.path === target.path &&
+          e.parent === target.start &&
           e.baseType === target.heldBase &&
           e.cardinality === target.heldCardinality,
       ),
@@ -301,9 +323,9 @@ const sourceBreaches = (
   rows: HostRows,
   source: Addition<typeof MappingSourceDeclaration>,
 ): readonly HostBreach[] => {
-  const mapping = rows.inputs.VariableMapping.get(source.node);
+  const mapping = rows.variableMappings.get(placeKey(source.path, source.start));
   const targetDeclared = rows.declarations.some(
-    ({ document, identifier }) => document === source.itemDocument && identifier === source.target,
+    ({ identifier, path }) => path === source.itemDocument && identifier === source.target,
   );
 
   return [
@@ -315,7 +337,7 @@ const sourceBreaches = (
       source.source,
     ),
     ...unless(
-      rows.documentOf.get(source.itemRef) === source.itemDocument &&
+      rows.documentOf.get(placeKey(source.path, source.itemRef)) === source.itemDocument &&
         declares(rows, source, source.source),
       "Variable mapping source",
       source.source,
@@ -342,8 +364,12 @@ const sourceBreaches = (
  */
 const keyBreaches = (rows: HostRows): readonly HostBreach[] =>
   [
-    Map.groupBy(rows.mappings, ({ parent, target }) => JSON.stringify([parent, target])),
-    Map.groupBy(rows.sources, ({ itemRef, target }) => JSON.stringify([itemRef, target])),
+    Map.groupBy(rows.mappings, ({ parent, path, target }) =>
+      JSON.stringify([path, String(parent), target]),
+    ),
+    Map.groupBy(rows.sources, ({ itemRef, path, target }) =>
+      JSON.stringify([path, String(itemRef), target]),
+    ),
   ].flatMap((groups) =>
     [...groups.values()].flatMap((held) =>
       held.length > 1
@@ -380,7 +406,7 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
 
 /**
  * The key a reading's declaration row copies of its reading: the reading's key and the item ref it
- * reads through.
+ * reads through, its document's path and its place there.
  *
  * @param row - The reading or its declaration row.
  * @returns The key's text.
@@ -388,7 +414,16 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
 const readingKeyOf = (
   row: Addition<typeof Reading> | Addition<typeof ReadingDeclaration>,
 ): string =>
-  JSON.stringify([row.assembly, row.node, row.attribute, row.form, String(row.split), row.named]);
+  JSON.stringify([
+    row.assembly,
+    row.path,
+    String(row.start),
+    row.attribute,
+    row.form,
+    String(row.split),
+    row.namedDocument,
+    String(row.named),
+  ]);
 
 /**
  * The breaches of each resolving mapped reading's declaration, its mapping's source's, a row of its
@@ -408,7 +443,10 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
       .filter((reading) => reading.source === "mapped" && readingResolves(reading))
       .flatMap((reading) => {
         const mapping = rows.mappings.find(
-          ({ parent, target }) => parent === reading.named && target === reading.variable,
+          ({ parent, path, target }) =>
+            path === reading.namedDocument &&
+            parent === reading.named &&
+            target === reading.variable,
         );
 
         return unless(
@@ -425,8 +463,10 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
         unless(
           rows.sources.some(
             (source) =>
+              source.path === declaration.namedDocument &&
               source.itemRef === declaration.named &&
               source.target === declaration.variable &&
+              source.itemDocument === declaration.declarationDocument &&
               source.declaration === declaration.declaration &&
               source.declarationKind === declaration.declarationKind &&
               source.declBaseTypes === declaration.declBaseTypes &&
@@ -440,21 +480,21 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
- * Each item ref's targets, by the item ref's node, as the query `ItemRefTarget`
+ * Each item ref's targets, by the item ref's place, as the query `ItemRefTarget`
  * (`#pantry/qti/queries.ts`) derives them from the import's rows: the item type where a resource of
  * the package of that type names its href's path, and else each LTI type one names; none where
  * neither does.
  *
  * @param inputs - The import's rows.
- * @returns The targets' types, by the item ref's node.
+ * @returns The targets' types, by the item ref's place ({@link placeKey}).
  */
 const itemRefTargetsOf = (inputs: PackageInputs): ReadonlyMap<string, readonly string[]> => {
-  // The (path, type) pairs the package's resources name: each resource's href beside its type's
-  // code, where it has both.
-  const named = [...inputs.ResourceHref.values()].flatMap(({ node, package: held, path }) =>
-    Option.toArray(Option.fromUndefinedOr(inputs.ResourceTyped.get(node))).map(({ type }) => ({
-      package: held,
-      path,
+  // The (target, type) pairs the package's resources name: each resource's href's path beside its
+  // type's code, where it has both.
+  const typed = byPlace(inputs.ResourceTyped);
+  const named = [...inputs.ResourceHref.values()].flatMap(({ path, start, target }) =>
+    Option.toArray(Option.fromUndefinedOr(typed.get(placeKey(path, start)))).map(({ type }) => ({
+      target,
       type,
     })),
   );
@@ -462,11 +502,11 @@ const itemRefTargetsOf = (inputs: PackageInputs): ReadonlyMap<string, readonly s
   return new Map(
     [...inputs.ItemRefHref.values()].map((href) => {
       const types = named
-        .filter(({ package: held, path }) => held === href.package && path === href.path)
+        .filter(({ target }) => target === href.target)
         .map(({ type }): string => type);
 
       return [
-        href.node,
+        placeKey(href.path, href.start),
         types.includes(itemResourceType)
           ? [itemResourceType]
           : types.filter((type) => linkTypes.has(type)),
@@ -489,7 +529,9 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const law = "Item ref target";
   const targets = itemRefTargetsOf(inputs);
   const documents = [...inputs.ItemRefDocument.values()];
-  const namesItem = (node: string): boolean => (targets.get(node) ?? []).includes(itemResourceType);
+  const hrefAt = byPlace(inputs.ItemRefHref);
+  const namesItem = (place: string): boolean =>
+    (targets.get(place) ?? []).includes(itemResourceType);
   // The item refs that write an href, each read through its href's `Reference`, the attribute's
   // copy both ways.
   const hrefs = [...inputs.Reference.values()].filter(
@@ -499,66 +541,60 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   // The hrefs of the package's resources of an unread type (decision 454), as the query
   // `UnreadTypeHref` reads them: a resource's href beside its `type` as written, where that form is
   // nonempty and spells no `ResourceType` handle.
-  const nodes = (node: NodeMember): readonly NodeMember[] => [
-    node,
-    ...node.children.flatMap(nodes),
-  ];
+  const places = nodePlacesOf(inputs);
   const unreadTypes = new Set(
-    [...inputs.Node.values()]
-      .flatMap(nodes)
-      .filter(
-        ({ attributes, kind }) =>
-          kind === "cp:resource" &&
-          attributes.some(
-            ({ lexical, name }) =>
-              name === "type" && lexical !== "" && !spelledResourceTypes.has(lexical),
-          ),
-      )
-      .map(({ id }) => id),
+    [...inputs.Attribute.values()].flatMap(({ lexical, name, path, start }) => {
+      const place = placeKey(path, start);
+
+      return places.get(place)?.kind === "cp:resource" &&
+        name === "type" &&
+        lexical !== "" &&
+        !spelledResourceTypes.has(lexical)
+        ? [place]
+        : [];
+    }),
   );
-  const unreadPaths = [...inputs.ResourceHref.values()].filter(({ node }) => unreadTypes.has(node));
+  const unreadTargets = [...inputs.ResourceHref.values()].filter(({ path, start }) =>
+    unreadTypes.has(placeKey(path, start)),
+  );
 
   return [
-    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefHref.has(node), law, "")),
-    ...[...inputs.ItemRefHref.values()].flatMap((href) => [
-      ...unless(
-        (targets.get(href.node) ?? []).length > 0 ||
-          unreadPaths.some(
-            ({ package: held, path }) => held === href.package && path === href.path,
-          ),
-        law,
-        "",
-      ),
-      ...unless(
-        !namesItem(href.node) ||
-          documents.some(
-            ({ node, package: held, path }) =>
-              node === href.node && held === href.package && path === href.path,
-          ),
-        law,
-        "",
-      ),
-    ]),
-    ...documents.flatMap((document) => [
-      ...unless(
-        namesItem(document.node) &&
-          inputs.ItemRefHref.get(document.node)?.package === document.package &&
-          inputs.ItemRefHref.get(document.node)?.path === document.path,
-        law,
-        "",
-      ),
-      ...unless(
-        [...inputs.Document.values()].some(
-          ({ node, package: held, path, rootKind }) =>
-            node === document.document &&
-            held === document.package &&
-            path === document.path &&
-            rootKind === "qti-assessment-item",
+    ...hrefs.flatMap(({ path, start }) => unless(hrefAt.has(placeKey(path, start)), law, "")),
+    ...[...inputs.ItemRefHref.values()].flatMap((href) => {
+      const place = placeKey(href.path, href.start);
+
+      return [
+        ...unless(
+          (targets.get(place) ?? []).length > 0 ||
+            unreadTargets.some(({ target }) => target === href.target),
+          law,
+          "",
         ),
-        law,
-        "",
-      ),
-    ]),
+        ...unless(
+          !namesItem(place) ||
+            documents.some(
+              ({ path, start, target }) =>
+                path === href.path && start === href.start && target === href.target,
+            ),
+          law,
+          "",
+        ),
+      ];
+    }),
+    ...documents.flatMap((document) => {
+      const place = placeKey(document.path, document.start);
+
+      return [
+        ...unless(namesItem(place) && hrefAt.get(place)?.target === document.target, law, ""),
+        ...unless(
+          [...inputs.Document.values()].some(
+            ({ path, rootKind }) => path === document.target && rootKind === "qti-assessment-item",
+          ),
+          law,
+          "",
+        ),
+      ];
+    }),
   ];
 };
 
@@ -571,11 +607,14 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
  */
 const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const rows: HostRows = {
-    baseTypes: inputs.DeclarationBaseType,
-    cardinalities: inputs.DeclarationCardinality,
+    baseTypes: byPlace(inputs.DeclarationBaseType),
+    cardinalities: byPlace(inputs.DeclarationCardinality),
     declarations: [...inputs.DeclarationIdentifier.values()],
     documentOf: new Map(
-      [...inputs.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
+      [...inputs.ItemRefDocument.values()].map(({ path, start, target }) => [
+        placeKey(path, start),
+        target,
+      ]),
     ),
     expressions: [...inputs.Expression.values()].filter(
       ({ parentKind }) => parentKind === "qti-template-default",
@@ -583,13 +622,20 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     inputs,
     mappings: [...inputs.VariableMapping.values()],
     sources: [...inputs.MappingSourceDeclaration.values()],
+    templateCardinalities: byPlace(inputs.TemplateDefaultCardinality),
+    templateDefaults: byPlace(inputs.TemplateDefault),
+    variableMappings: byPlace(inputs.VariableMapping),
   };
   const targets = itemRefTargetsOf(inputs);
+  const templateTargets = byPlace(inputs.TemplateDefaultTarget);
+  const mappingItemRefs = byPlace(inputs.MappingItemRef);
+  const mappingTypes = byPlace(inputs.MappingItemRefType);
+  const mappingSources = byPlace(inputs.MappingSourceDeclaration);
 
   return [
     ...[...inputs.TemplateDefault.values()].flatMap((templateDefault) =>
       unless(
-        inputs.TemplateDefaultTarget.has(templateDefault.node),
+        templateTargets.has(placeKey(templateDefault.path, templateDefault.start)),
         "Template default target",
         templateDefault.template,
       ),
@@ -599,27 +645,31 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     // with it under "Item ref target", by the empty name the oracle keys that law by: each mapping
     // has its item ref, and a type row only where the item ref has a target, its type copied.
     ...rows.mappings.flatMap((mapping) => {
-      const itemRef = inputs.MappingItemRef.get(mapping.node);
-      const typed = inputs.MappingItemRefType.get(mapping.node);
+      const place = placeKey(mapping.path, mapping.start);
+      const itemRef = mappingItemRefs.get(place);
+      const typed = mappingTypes.get(place);
 
       return unless(
         itemRef?.itemRef === mapping.parent &&
           (typed === undefined ||
             (typed.itemRef === mapping.parent &&
-              (targets.get(mapping.parent) ?? []).includes(typed.type))),
+              (targets.get(placeKey(mapping.path, mapping.parent)) ?? []).includes(typed.type))),
         "Item ref target",
         "",
       );
     }),
-    ...rows.mappings.flatMap((mapping) => [
-      ...unless(
-        linkTypes.has(inputs.MappingItemRefType.get(mapping.node)?.type ?? "") ||
-          inputs.MappingSourceDeclaration.has(mapping.node),
-        "Variable mapping source",
-        mapping.source,
-      ),
-      ...unless(!sessionVariables.has(mapping.target), "Variable mapping target", mapping.target),
-    ]),
+    ...rows.mappings.flatMap((mapping) => {
+      const place = placeKey(mapping.path, mapping.start);
+
+      return [
+        ...unless(
+          linkTypes.has(mappingTypes.get(place)?.type ?? "") || mappingSources.has(place),
+          "Variable mapping source",
+          mapping.source,
+        ),
+        ...unless(!sessionVariables.has(mapping.target), "Variable mapping target", mapping.target),
+      ];
+    }),
     ...rows.sources.flatMap((source) => sourceBreaches(rows, source)),
     ...keyBreaches(rows),
     ...readingBreaches(rows),
@@ -725,29 +775,14 @@ const resolves = (input: ItemRefPackage, name: Named): boolean =>
   input.target === "item" && declaredKinds[name] !== undefined;
 
 /**
- * Hold the import's rows to the ruling: no row of the three relations holds the nil uuid or stands
- * for an unwritten attribute, and each declaration row exists exactly where the item declares its
- * name.
+ * Hold the import's rows to the ruling: no row of the three relations stands for an unwritten
+ * attribute, and each declaration row exists exactly where the item declares its name.
  *
  * @param input - The package.
  * @param inputs - The import's rows.
  * @param literal - The package's literal, for the messages.
  */
 const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal: string): void => {
-  const nilFields = [
-    ...[...inputs.TemplateDefaultTarget.values()].flatMap((row) => Object.values(row)),
-    ...[...inputs.MappingSourceDeclaration.values()].flatMap((row) => Object.values(row)),
-    ...[...inputs.TemplateDefault.values()].flatMap((row) => Object.values(row)),
-  ].filter((value) => value === nil);
-
-  assert.deepStrictEqual(nilFields, [], `${literal}: a row holds the nil uuid`);
-  assert.deepStrictEqual(
-    [...inputs.ItemRefDocument.values()]
-      .flatMap((row) => Object.values(row))
-      .filter((value) => value === nil),
-    [],
-    `${literal}: an item ref's item holds the nil uuid`,
-  );
   assert.isFalse(
     [...inputs.MappingItemRef.values(), ...inputs.MappingItemRefType.values()].some((row) =>
       Object.values<unknown>(row).includes("none"),

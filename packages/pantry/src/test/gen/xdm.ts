@@ -69,7 +69,6 @@ import type {
   XdmForeignElement,
   XdmMisc,
   XdmNamespace,
-  NodeId,
 } from "#pantry/model/xdm.ts";
 import {
   asiNamespace,
@@ -81,26 +80,6 @@ import {
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
-
-/**
- * Give the node numbered `index` a uuid that spells its number, so a row names its node by its
- * place in document order, and ids sort in that order.
- *
- * @param index - The node's number in document order.
- * @returns A uuid whose last group is the number in hexadecimal.
- */
-export const idOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
-
-/**
- * Give the node numbered `index` a uuid whose order is not document order, as drawn ids are not:
- * the number times an odd constant, modulo 2³², is a bijection, so every node keeps its own id.
- *
- * @param index - The node's number in document order, below 3,000,000, where the product is exact.
- * @returns A uuid that spells the scrambled number.
- */
-export const scrambledIdOf = (index: number): NodeId =>
-  idOf((index * 2_654_435_761) % 4_294_967_296);
 
 /**
  * How long one generated case may run before its search reports it hung: a case is one tree of at
@@ -2219,9 +2198,10 @@ export const familiesOf = (model: readonly Placed[]): ReadonlySet<XdmFamily> =>
 /**
  * The accumulators a family's first slot copies from the empty fold, each at its identity in a
  * valid tree (fin.md §4.3): a first child's `was`, the content automaton's start, state 0, and its
- * `elementsWas`, no element; and a first attribute's `attrsWas`, no name.
+ * `elementsWas`, no element. An element's attributes are a set, so no attribute holds a running
+ * value.
  */
-export const accumulators = ["was", "elementsWas", "attrsWas"] as const;
+export const accumulators = ["was", "elementsWas"] as const;
 
 /**
  * One of {@link accumulators}.
@@ -2229,15 +2209,14 @@ export const accumulators = ["was", "elementsWas", "attrsWas"] as const;
 type Accumulator = (typeof accumulators)[number];
 
 /**
- * The copies of its parent a node's merged parent copy holds (trees.md §6): T0's `document`, the
- * `version`, and the parent's kind, start, ancestry, nearest interaction and that interaction's
- * kind.
+ * The copies of its parent a node's merged parent copy holds (trees.md §6): the `version`, and the
+ * parent's kind, ancestry, nearest interaction and that interaction's kind. The parent's start is
+ * the `parent` link itself, and the document the key's `(package, path)`, which no row of one
+ * document's rows holds apart.
  */
 const parentCopies = [
-  "document",
   "version",
   "parentKind",
-  "parentStart",
   "parentAncestry",
   "parentNearest",
   "parentNearestKind",
@@ -2249,9 +2228,9 @@ const parentCopies = [
 type ParentCopy = (typeof parentCopies)[number];
 
 /**
- * The copies of its owner an attribute row holds (AL1): the owner's kind, version and document.
+ * The copies of its owner an attribute row holds (AL1): the owner's kind and version.
  */
-export const ownerCopies = ["kind", "version", "document"] as const;
+export const ownerCopies = ["kind", "version"] as const;
 
 /**
  * One of {@link ownerCopies}.
@@ -2266,14 +2245,12 @@ const sentinelCopies = ["parentAncestry", "nearestKind"] as const;
 
 /**
  * A named edit of a valid tree's rows, each with its own targets, by their numbers in document
- * order, or an attribute by its place among the attribute rows:
+ * order, which are their starts, or an attribute by its place among the closed or the open
+ * attribute rows:
  *
  * - `gap`: the node and every later sibling move one slot on, leaving the node's slot empty;
  * - `duplicateSlot`: the node takes its predecessor's slot;
  * - `countOffByOne`: the node's children count is one too many;
- * - `secondParent`: the node gains a second row under another element, at that element's next slot
- *   and over the next start, every later interval moving one on to make room, so only its id is
- *   wrong;
  * - `startTaken`: the node starts where the node before it in document order starts;
  * - `secondRoot`: the node, not the document node, is its own parent at slot 0, as the root is;
  * - `cycle`: the node, an element and its parent's last child, moves to slot 0 of a childless element
@@ -2283,19 +2260,16 @@ const sentinelCopies = ["parentAncestry", "nearestKind"] as const;
  * - `overlappingSiblings`: the node's predecessor ends one past the node's start;
  * - `gapBetweenSiblings`: the node's predecessor ends one before the node's start;
  * - `childOutsideParent`: the node ends one before its last child, which has children, ends;
- * - `orphan`: the node's parent is an id no row holds;
+ * - `orphan`: the node's parent is a start no row holds;
  * - `doctypeNotFirst`: the doctype moves from the document node's first slot to its last, over the
  *   last start, every node after it moving one back, so the rows are one tree with the doctype
  *   after the root element;
- * - `slotZeroAccumulator`: a first child copies an accumulator other than its identity, or a first
- *   attribute's `attrsWas` holds a position its element holds no name at, which every later
- *   attribute and the element's `attrs` then carry, as a fold from it would;
+ * - `slotZeroAccumulator`: a first child copies an accumulator other than its identity;
  * - `staleWas`: a node copies its predecessor's own predecessor copies, a fold stale by one slot;
- * - `parentCopy`: one field of the node's merged copy of its parent is not its parent's (T0's
- *   `document` among them), the parent's `start` only at a later slot, where no first-child start
- *   reads it;
+ * - `parentCopy`: one field of the node's merged copy of its parent is not its parent's;
  * - `ownerCopy`: one field of an attribute's copy of its owner is not its owner's;
- * - `repeatedName`: an attribute takes the closed name of an attribute before it on its element;
+ * - `repeatedName`: an attribute takes the closed name of another attribute on its element, so two
+ *   rows hold one key;
  * - `sentinelCopy`: the document node's copy of a parent field is not its own;
  * - `wrongClass`: the node, a foreign element, takes another class's kind, which its stored namespace
  *   contradicts: `foreign-element` becomes `no-namespace-element` and every other class
@@ -2303,8 +2277,9 @@ const sentinelCopies = ["parentAncestry", "nearestKind"] as const;
  * - `wrongAttributeClass`: an open-class attribute takes another class, which its stored namespace
  *   contradicts: `foreign` becomes `no-namespace` and every other class `foreign`.
  *
- * An edit of a node's interval moves the `parentStart` copies of the nodes whose parent it moves
- * with it, as the merged parent copy carries them, so it breaks the interval laws alone.
+ * An edit of a node's interval moves every position that names a node it moves with it, the
+ * `parent`, `nearest` and `parentNearest` of the nodes that name it, as the
+ * merged parent copy carries them, so it breaks the interval laws alone.
  */
 export type Corruption =
   | { readonly _tag: "childOutsideParent"; readonly node: number }
@@ -2319,15 +2294,9 @@ export type Corruption =
   | { readonly _tag: "ownerCopy"; readonly attribute: number; readonly field: OwnerCopy }
   | { readonly _tag: "parentCopy"; readonly field: ParentCopy; readonly node: number }
   | { readonly _tag: "repeatedName"; readonly attribute: number; readonly earlier: number }
-  | { readonly _tag: "secondParent"; readonly node: number; readonly parent: number }
   | { readonly _tag: "secondRoot"; readonly node: number }
   | { readonly _tag: "sentinelCopy"; readonly field: (typeof sentinelCopies)[number] }
-  | {
-      readonly _tag: "slotZeroAccumulator";
-      readonly field: Exclude<Accumulator, "attrsWas">;
-      readonly node: number;
-    }
-  | { readonly _tag: "slotZeroAccumulator"; readonly attribute: number; readonly field: "attrsWas" }
+  | { readonly _tag: "slotZeroAccumulator"; readonly field: Accumulator; readonly node: number }
   | { readonly _tag: "staleWas"; readonly node: number }
   | { readonly _tag: "startTaken"; readonly node: number }
   | { readonly _tag: "wrongAttributeClass"; readonly attribute: number }
@@ -2340,13 +2309,12 @@ export type Corruption =
 export type InvalidVariant = Corruption["_tag"];
 
 /**
- * The variants that edit only what `flatten` writes, each node's id, parent, slot and interval, so
+ * The variants that edit only what `flatten` writes, each node's parent, slot and interval, so
  * assembly meets them.
  */
 export const rowVariants = [
   "gap",
   "duplicateSlot",
-  "secondParent",
   "startTaken",
   "secondRoot",
   "cycle",
@@ -2448,14 +2416,13 @@ export const situationsOf = (
   variant: Corruption,
 ): readonly (InvalidVariant | VariantField | VariantTarget)[] => {
   const kindOf = (number: number): string => model[number]?.kind ?? "";
-  const ownerOf = (index: number): string => {
-    const owner = flatten(document, idOf).attributes[index]?.node;
-
-    return kindOf(model.findIndex((_, number) => idOf(number) === owner));
-  };
+  const ownerOf = (start: bigint | undefined): string =>
+    start === undefined ? "" : kindOf(Number(start));
+  const rows = flatten(document);
+  const attributes = variant._tag === "wrongAttributeClass" ? rows.openAttributes : rows.attributes;
   const target =
     "attribute" in variant
-      ? ownerOf(variant.attribute)
+      ? ownerOf(attributes[variant.attribute]?.start)
       : kindOf("node" in variant ? variant.node : 0);
 
   return [variant._tag, ...fieldOf(variant), `${variant._tag} on ${target}`];
@@ -2465,8 +2432,8 @@ export const situationsOf = (
  * The law of the document layer (plan §1.3, trees.md §2) that refuses each variant, by the name the
  * host's law model (`#pantry/test/oracle.ts`) gives it, so a renamed law breaks the build.
  *
- * A duplicated slot leaves its family a slot short, which the family's own law refuses; a second
- * row of one id is refused by `Node`'s key. Of the interval laws, two rows at one start break T1;
+ * A duplicated slot leaves its family a slot short, which the family's own law refuses. Of the
+ * interval laws, two rows at one start break T1, `Node`'s key `(package, path, start)`;
  * a second self-parented row breaks T2, since only the row at start 0 is; a cycle puts a node first
  * under a node that starts after it, which T3 refuses, as it refuses any first child that does not
  * start one past its parent; a sibling that starts anywhere but at its predecessor's end breaks T4;
@@ -2477,10 +2444,10 @@ export const situationsOf = (
  * contradicts breaks the class law of each.
  *
  * The merged parent copy is T3's, beside its first-child start (trees.md §6): a node whose copy of
- * a parent field is not its parent's, T0's `document` among them, breaks it, and so does a node
- * whose parent no row holds, which has no parent to copy. An attribute's copy of its owner is
- * AL1's, and a closed name an element already holds is AL2's distinctness, which only an open
- * class's shared position escapes. A doctype after the root element follows the node before it,
+ * a parent field is not its parent's breaks it, and so does a node whose parent no row holds,
+ * which has no parent to copy. An attribute's copy of its owner is AL1's, and a closed name an
+ * element already holds is AL2's distinctness, `Attribute`'s key `(package, path, start, name)`.
+ * A doctype after the root element follows the node before it,
  * whose state it never folded from, which N5's fold refuses.
  */
 export const lawOf = {
@@ -2496,7 +2463,6 @@ export const lawOf = {
   ownerCopy: "AL1 owner",
   parentCopy: "T3 first child",
   repeatedName: "AL2 distinct",
-  secondParent: "Node key",
   secondRoot: "T2 root",
   sentinelCopy: "N1 sentinel",
   slotZeroAccumulator: "N5 first slot",
@@ -2554,8 +2520,7 @@ const variantsOf = ({
   const lastChildOf = (number: number) => placedUnder.get(number)?.at(-1);
   const isChildless = (number: number) => !placedUnder.has(number);
   const descendantsOf = (placed: Placed) => numbered.slice(placed.start + 1, placed.end);
-  const elements = numbered.filter(isElement);
-  const attributeRows = flatten(document, idOf).attributes;
+  const { attributes: attributeRows, openAttributes } = flatten(document);
   const options: Readonly<Record<InvalidVariant, readonly [number, Gen<Corruption>]>> = {
     childOutsideParent: (() => {
       const [weight, node] = among(
@@ -2623,64 +2588,24 @@ const variantsOf = ({
         }),
       ];
     })(),
-    parentCopy: (() => {
-      // A first child's start is one past its parent's, which T3 reads beside the copy, so the
-      // parent's start is miscopied only at a later slot, where the copy alone holds it.
-      const later = members.filter(({ at }) => at > 0).map(({ number }) => number);
-      const fields = parentCopies.filter(
-        (field) => field !== "parentStart" || Arr.isReadonlyArrayNonEmpty(later),
-      );
-
-      return Arr.isReadonlyArrayNonEmpty(fields)
-        ? [
-            1,
-            (source) => {
-              const field = source.draw(element(fields));
-
-              return {
-                _tag: "parentCopy",
-                field,
-                node:
-                  field === "parentStart" && Arr.isReadonlyArrayNonEmpty(later)
-                    ? source.draw(element(later))
-                    : source.draw(int(1, model.length - 1)),
-              };
-            },
-          ]
-        : [0, constant({ _tag: "parentCopy", field: "document", node: 0 })];
-    })(),
+    parentCopy: [
+      1,
+      (source) => ({
+        _tag: "parentCopy",
+        field: source.draw(element(parentCopies)),
+        node: source.draw(int(1, model.length - 1)),
+      }),
+    ],
     repeatedName: (() => {
       const pairs = attributeRows.flatMap((later, attribute) =>
         attributeRows.flatMap((before, earlier) =>
-          before.node === later.node && before.at < later.at && !isOpenClass(before.name)
-            ? [{ attribute, earlier }]
-            : [],
+          before.start === later.start && earlier < attribute ? [{ attribute, earlier }] : [],
         ),
       );
 
       return Arr.isReadonlyArrayNonEmpty(pairs)
         ? [1, (source) => ({ _tag: "repeatedName", ...source.draw(element(pairs)) })]
         : [0, constant({ _tag: "repeatedName", attribute: 0, earlier: 0 })];
-    })(),
-    secondParent: (() => {
-      const pairs = members.flatMap((placed) => {
-        const below = new Set(descendantsOf(placed).map(({ number }) => number));
-
-        return elements
-          .filter(
-            (parent) =>
-              parent.number !== placed.parent &&
-              parent.number !== placed.number &&
-              !below.has(parent.number) &&
-              placed.kind !== "doctype" &&
-              (!isClosed(placed) || isClosed(parent)),
-          )
-          .map((parent) => ({ node: placed.number, parent: parent.number }));
-      });
-
-      return Arr.isReadonlyArrayNonEmpty(pairs)
-        ? [1, (source) => ({ _tag: "secondParent", ...source.draw(element(pairs)) })]
-        : [0, constant({ _tag: "secondParent", node: 0, parent: 0 })];
     })(),
     secondRoot: [
       1,
@@ -2692,25 +2617,15 @@ const variantsOf = ({
     ],
     slotZeroAccumulator: (() => {
       const [, node] = among(numbered.filter(({ at }) => at === 0).map(({ number }) => number));
-      const [, attribute] = among(
-        attributeRows.flatMap(({ at }, index) => (at === 0n ? [index] : [])),
-      );
-      const fields = accumulators.filter(
-        (field) => field !== "attrsWas" || attributeRows.some(({ at }) => at === 0n),
-      );
 
-      return Arr.isReadonlyArrayNonEmpty(fields)
-        ? [
-            1,
-            (source) => {
-              const field = source.draw(element(fields));
-
-              return field === "attrsWas"
-                ? { _tag: "slotZeroAccumulator", attribute: source.draw(attribute), field }
-                : { _tag: "slotZeroAccumulator", field, node: source.draw(node) };
-            },
-          ]
-        : [0, constant({ _tag: "slotZeroAccumulator", field: "was", node: 0 })];
+      return [
+        1,
+        (source) => ({
+          _tag: "slotZeroAccumulator",
+          field: source.draw(element(accumulators)),
+          node: source.draw(node),
+        }),
+      ];
     })(),
     staleWas: (() => {
       const [weight, node] = among(
@@ -2732,9 +2647,7 @@ const variantsOf = ({
       (source) => ({ _tag: "startTaken", node: source.draw(int(1, model.length - 1)) }),
     ],
     wrongAttributeClass: (() => {
-      const [weight, attribute] = among(
-        attributeRows.flatMap(({ name }, index) => (isOpenClass(name) ? [index] : [])),
-      );
+      const [weight, attribute] = among(openAttributes.map((_, index) => index));
 
       return [
         weight,
@@ -2839,9 +2752,10 @@ const otherAncestry = (held: Ancestry): Ancestry =>
   );
 
 /**
- * The edits {@link corrupt} makes of a tree's folded rows: a node's row by its number or id, an
+ * The edits {@link corrupt} makes of a tree's folded rows: a node's row by its number or start, an
  * owner's children, the rows with one node changed, a node's predecessor and last child, a node
- * ending elsewhere, and the rows with room made for one more node inside an owner.
+ * ending elsewhere, and the rows with room made for one more node inside an owner, every position
+ * past it moved one on.
  *
  * @param rows - The rows.
  * @returns The edits over them.
@@ -2850,9 +2764,7 @@ const editsOf = (rows: FoldedRows<Composed>) => {
   const { nodes } = rows;
   const at = (number: number): Option.Option<FoldedNode<Composed>> =>
     Option.fromNullishOr(nodes[number]);
-  const byId = new Map(nodes.map((node) => [node.id, node] as const));
-  const countOf = (owner: FoldedNode<Composed>): bigint =>
-    BigInt(nodes.filter((node) => node !== nodes[0] && node.parent === owner.id).length);
+  const byStart = new Map(nodes.map((node) => [node.start, node] as const));
   const withNodes = (next: readonly FoldedNode<Composed>[]): FoldedRows<Composed> => ({
     ...rows,
     nodes: next,
@@ -2866,23 +2778,30 @@ const editsOf = (rows: FoldedRows<Composed>) => {
       ),
     );
   const lastChildOf = (owner: FoldedNode<Composed>): Option.Option<FoldedNode<Composed>> =>
-    Option.fromNullishOr(nodes.findLast((node) => node !== nodes[0] && node.parent === owner.id));
+    Option.fromNullishOr(
+      nodes.findLast((node) => node !== nodes[0] && node.parent === owner.start),
+    );
   const ending = (number: number, end: (node: FoldedNode<Composed>) => bigint) =>
     one(number, (node) => ({ ...node, end: end(node) }));
-  const roomIn = (owner: FoldedNode<Composed>): readonly FoldedNode<Composed>[] =>
-    nodes.map((node) => {
+  const roomIn = (owner: FoldedNode<Composed>): readonly FoldedNode<Composed>[] => {
+    const past = (position: bigint): bigint => position + (position >= owner.end ? 1n : 0n);
+
+    return nodes.map((node) => {
       const moved = node.start >= owner.end;
       const grown = moved || (node.start <= owner.start && node.end >= owner.end);
 
       return {
         ...node,
         end: node.end + (grown ? 1n : 0n),
-        parentStart: node.parentStart + (node.parentStart >= owner.end ? 1n : 0n),
+        nearest: past(node.nearest),
+        parent: past(node.parent),
+        parentNearest: past(node.parentNearest),
         start: node.start + (moved ? 1n : 0n),
       };
     });
+  };
 
-  return { at, byId, countOf, ending, lastChildOf, nodes, one, predecessorOf, roomIn, withNodes };
+  return { at, byStart, ending, lastChildOf, nodes, one, predecessorOf, roomIn, withNodes };
 };
 
 /**
@@ -2900,15 +2819,14 @@ export const isRowCorruption = (variant: Corruption): variant is RowCorruption =
   rowVariants.some((tag) => tag === variant._tag);
 
 /**
- * Apply a row variant to a valid tree's folded rows: an edit of ids, parents, slots and intervals.
+ * Apply a row variant to a valid tree's folded rows: an edit of parents, slots and intervals.
  *
  * @param rows - The rows.
  * @param variant - The variant and its targets.
  * @returns The rows with the variant applied.
  */
 const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): FoldedRows<Composed> => {
-  const { at, countOf, ending, lastChildOf, nodes, one, predecessorOf, roomIn, withNodes } =
-    editsOf(rows);
+  const { at, ending, lastChildOf, nodes, one, predecessorOf, roomIn, withNodes } = editsOf(rows);
   switch (variant._tag) {
     case "gap": {
       return Option.match(at(variant.node), {
@@ -2926,23 +2844,6 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
     case "duplicateSlot": {
       return one(variant.node, (node) => ({ ...node, at: node.at - 1n }));
     }
-    case "secondParent": {
-      return Option.match(Option.all([at(variant.node), at(variant.parent)]), {
-        onNone: () => rows,
-        onSome: ([target, parent]) =>
-          withNodes([
-            ...roomIn(parent),
-            {
-              ...target,
-              at: countOf(parent),
-              end: parent.end + 1n,
-              parent: parent.id,
-              parentStart: parent.start,
-              start: parent.end,
-            },
-          ]),
-      });
-    }
     case "startTaken": {
       return Option.match(at(variant.node), {
         onNone: () => rows,
@@ -2953,8 +2854,8 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
                 return { ...node, start: node.start - 1n };
               }
 
-              return node.parent === target.id && index > 0
-                ? { ...node, parentStart: node.parentStart - 1n }
+              return node.parent === target.start && index > 0
+                ? { ...node, parent: node.parent - 1n }
                 : node;
             }),
           ),
@@ -2964,8 +2865,7 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
       return one(variant.node, (node) => ({
         ...node,
         at: 0n,
-        parent: node.id,
-        parentStart: node.start,
+        parent: node.start,
       }));
     }
     case "cycle": {
@@ -2975,8 +2875,7 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
           one(variant.node, (node) => ({
             ...node,
             at: 0n,
-            parent: under.id,
-            parentStart: under.start,
+            parent: under.start,
           })),
       });
     }
@@ -3005,7 +2904,7 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
       });
     }
     case "orphan": {
-      return one(variant.node, (node) => ({ ...node, parent: idOf(nodes.length) }));
+      return one(variant.node, (node) => ({ ...node, parent: BigInt(nodes.length) }));
     }
     case "doctypeNotFirst": {
       return Option.match(at(variant.node), {
@@ -3032,7 +2931,9 @@ const corruptRows = (rows: FoldedRows<Composed>, variant: RowCorruption): Folded
                 ...node,
                 at: node.parent === doctype.parent && node.at > doctype.at ? node.at - 1n : node.at,
                 end: back(node.end),
-                parentStart: back(node.parentStart),
+                nearest: back(node.nearest),
+                parent: back(node.parent),
+                parentNearest: back(node.parentNearest),
                 start: back(node.start),
               };
             }),
@@ -3057,45 +2958,12 @@ const corruptFolds = (
   rows: FoldedRows<Composed>,
   variant: Exclude<Corruption, RowCorruption>,
 ): FoldedRows<Composed> => {
-  const { at, byId, nodes, one, predecessorOf } = editsOf(rows);
+  const { at, byStart, one, predecessorOf } = editsOf(rows);
   switch (variant._tag) {
     case "countOffByOne": {
       return one(variant.node, (node) => ({ ...node, children: node.children + 1n }));
     }
     case "slotZeroAccumulator": {
-      if (variant.field === "attrsWas") {
-        const first = rows.attributes[variant.attribute];
-        if (first === undefined) {
-          return rows;
-        }
-
-        // A position the element holds no name at, which a fold from the first attribute carries
-        // into every later attribute and the element's `attrs`, so only the first slot is wrong.
-        const held = byId.get(first.node)?.attrs ?? first.derived.attrs;
-        let unheld = 0;
-        while (held.has(unheld) || first.derived.attrs.has(unheld)) {
-          unheld += 1;
-        }
-
-        const extra = new Set([unheld]);
-
-        return {
-          ...rows,
-          attributes: rows.attributes.map((attribute) =>
-            attribute.node === first.node
-              ? {
-                  ...attribute,
-                  attrsWas: attribute.attrsWas.union(extra),
-                  derived: { attrs: attribute.derived.attrs.union(extra) },
-                }
-              : attribute,
-          ),
-          nodes: nodes.map((node) =>
-            node.id === first.node ? { ...node, attrs: node.attrs.union(extra) } : node,
-          ),
-        };
-      }
-
       const { field } = variant;
 
       return one(variant.node, (node) => {
@@ -3116,25 +2984,19 @@ const corruptFolds = (
       const { field } = variant;
 
       return one(variant.node, (node) => {
-        const parent = byId.get(node.parent) ?? node;
+        const parent = byStart.get(node.parent) ?? node;
         switch (field) {
-          case "document": {
-            return { ...node, document: node.id };
-          }
           case "version": {
             return { ...node, version: otherVersion(node.version) };
           }
           case "parentKind": {
             return { ...node, parentKind: otherKind(parent.kind, node.kind) };
           }
-          case "parentStart": {
-            return { ...node, parentStart: parent.start + 1n };
-          }
           case "parentAncestry": {
             return { ...node, parentAncestry: otherAncestry(parent.derived.ancestry) };
           }
           case "parentNearest": {
-            return { ...node, parentNearest: node.id };
+            return { ...node, parentNearest: node.start };
           }
           case "parentNearestKind": {
             return { ...node, parentNearestKind: otherKind(parent.nearestKind, node.kind) };
@@ -3157,7 +3019,7 @@ const corruptFolds = (
 
           switch (field) {
             case "kind": {
-              const owner = byId.get(attribute.node);
+              const owner = byStart.get(attribute.start);
 
               return {
                 ...attribute,
@@ -3166,9 +3028,6 @@ const corruptFolds = (
             }
             case "version": {
               return { ...attribute, version: otherVersion(attribute.version) };
-            }
-            case "document": {
-              return { ...attribute, document: attribute.node };
             }
             default: {
               return field satisfies never;
@@ -3213,9 +3072,9 @@ const corruptFolds = (
     case "wrongAttributeClass": {
       return {
         ...rows,
-        attributes: rows.attributes.map((attribute, index) =>
-          index === variant.attribute && isOpenClass(attribute.name)
-            ? { ...attribute, name: attribute.name === "foreign" ? "no-namespace" : "foreign" }
+        openAttributes: rows.openAttributes.map((attribute, index) =>
+          index === variant.attribute
+            ? { ...attribute, class: attribute.class === "foreign" ? "no-namespace" : "foreign" }
             : attribute,
         ),
       };
@@ -3246,7 +3105,7 @@ const corruptFolds = (
  *
  * The rows are the tree's as `fold` writes them, so node `n` of the model is `rows.nodes[n]`, and
  * it starts at `n`. Each edit is the smallest that makes its variant: it changes the fields it
- * names, and the `parentStart` copies of a start it moves, and no other, so the laws that refuse
+ * names, and the positions that name a start it moves, and no other, so the laws that refuse
  * it are the variant's own law and those that read the fields it changed.
  *
  * @param rows - The folded rows of the tree the corruption was drawn for.

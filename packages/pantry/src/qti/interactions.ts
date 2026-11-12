@@ -4,16 +4,24 @@
  * orchestrator's answers of 2026-11-06).
  *
  * Every attribute an O3 law reads is copied once, from one selection of `Attribute`, into
- * {@link InteractionAttribute}, keyed by its element's node and its name, with its lexical form and
- * its value, the form collapsed (`Compute.collapse`, XML Schema Part 2 §4.3.6). Every identifier,
- * count, number and flag these laws read is an atomic XSD type whose whiteSpace is `collapse` (spec
- * reading 7: "An attribute the XSD itself types ... is read as the XSD reads it, outer whitespace
- * collapsed"), so the value is the form its type's lexical space is read on, the one
- * `DeclarationIdentifier.identifier` holds. The copy claims no type of it: a value with whitespace
- * inside (`max-choices="1 2"`) is in no such type's lexical space, and its value domain alone
- * refuses it.
- * One selection of `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the
- * overlays below read `InteractionAttribute` and never `Attribute`.
+ * {@link InteractionAttribute}, keyed by its element's place and its name, with its lexical form
+ * and its value, the form collapsed (`Compute.collapse`, XML Schema Part 2 §4.3.6). Every
+ * identifier, count, number and flag these laws read is an atomic XSD type whose whiteSpace is
+ * `collapse` (spec reading 7: "An attribute the XSD itself types ... is read as the XSD reads it,
+ * outer whitespace collapsed"), so the value is the form its type's lexical space is read on, the
+ * one `DeclarationIdentifier.identifier` holds. The copy claims no type of it: a value with
+ * whitespace inside (`max-choices="1 2"`) is in no such type's lexical space, and its value domain
+ * alone refuses it. One selection of `Attribute` costs one UNIQUE on it (the addendum's "Text in
+ * keys"), so the overlays below read `InteractionAttribute` and never `Attribute`.
+ *
+ * Every row is keyed by QTI's own identity (lane IDENTITY's contract): an element by its place,
+ * `(package, path, start)`, its package's manifest identifier, its document's path in the package
+ * and its pre-order position there; a link inside one document by the target's `start` alone
+ * (`parent`, `nearest`, `declaration`); and an instance of an assembly by `(package, assembly,
+ * instance)`, its assembly's head document's path and its position in that assembly's instance
+ * tree (`Instance`). A placed row reads its declaration in the assembly's head document, at
+ * `(package, assembly, declaration)`, and names its element in the instance's document, `path`, at
+ * `start`; the instance names its document, so a placed row's key holds no `path`.
  *
  * - {@link Interaction}: every interaction element, in every document, owning its choices'
  *   {@link ChoiceInteraction} rows as a counted family (C15), and its gaps' {@link GapInteraction}
@@ -73,7 +81,7 @@
  *   (reading 77), in an item's or a test's own declarations (the port audit's A43 and A44), each
  *   built-in one its root holds (spec reading 29: an item's `completionStatus` is no test's), so
  *   each reference carries the root kind it resolves under. A reference that names neither has no
- *   declaration row, and its law refuses it (lane NIL's NS2: never the nil uuid).
+ *   declaration row, and its law refuses it (lane NIL's NS2: never a sentinel).
  * - A section document's feedback, printed and template variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}, {@link SectionTemplateName}) resolve once per test that places it
  *   ({@link SectionFeedbackRef}, {@link SectionPrintedRef}, {@link SectionTemplateRef}, A45 and
@@ -87,8 +95,8 @@
  *   document splices it (spec reading 117), the same relations holding them: a fragment declares
  *   nothing, as a section does.
  *
- * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
- * `nodeRef`, and of its kinds, and each value that relaxes a law (a count written, an item
+ * A row a builder gets wrong is refused, never accepted: each overlay's element is its place's,
+ * through `nodeRef`, and of its kinds, and each value that relaxes a law (a count written, an item
  * adaptive) is proved both ways.
  *
  * Every check is named by its oracle law (`#pantry/test/oracle.ts` `LawName`) with spaces written
@@ -115,7 +123,6 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { Option, pipe, Record as Rec } from "effect";
@@ -138,7 +145,7 @@ import {
   versions,
 } from "#pantry/grammar/install.ts";
 import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute, closedName } from "#pantry/qti/attributes.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
@@ -146,7 +153,7 @@ import {
   declarationIdentifierRef,
   doublesInOrder,
 } from "#pantry/qti/declarations.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemInstances } from "#pantry/qti/tests.ts";
 
@@ -280,11 +287,11 @@ const choiceCountKinds: readonly Kind[] = ChoiceCount.rows.map(({ kind }) => kin
 const templateVariableKind = "qti-template-variable" satisfies Kind;
 
 /**
- * An attribute an O3 law reads, keyed by its element's node and its name: the element's kind,
- * document and document's root kind, the lexical form as written (C18's copy), and `value`, that
- * form collapsed (XML Schema Part 2, §4.3.6, as `SsmlAttribute`'s is), which the database derives,
- * whatever the form: a value with whitespace inside is held as its type's whiteSpace reads it, and
- * is no value of its type, which its value domain refuses alone.
+ * An attribute an O3 law reads, keyed by its element's place (`package`, `path`, `start`) and its
+ * name: the element's kind and its document's root kind, the lexical form as written (C18's copy),
+ * and `value`, that form collapsed (XML Schema Part 2, §4.3.6, as `SsmlAttribute`'s is), which the
+ * database derives, whatever the form: a value with whitespace inside is held as its type's
+ * whiteSpace reads it, and is no value of its type, which its value domain refuses alone.
  *
  * Copied text is `keyText` (`#pantry/qti/limits.ts`): the lexical form and the value each sit in a
  * containment's index, and a longer value is refused under the schema's one limit law.
@@ -292,19 +299,20 @@ const templateVariableKind = "qti-template-variable" satisfies Kind;
 export const InteractionAttribute = relation.generated(
   "InteractionAttribute",
   {
-    document: uuid,
     kind: closedId(NodeKind),
     lexical: keyText,
     name: closedId(AttributeName),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     rootKind: closedId(NodeKind),
+    start: natural,
   },
-  ["node", "name"],
+  ["package", "path", "start", "name"],
   (v) => ({ value: generated(keyText, Compute.cast(Compute.collapse(v.lexical), keyText)) }),
 );
 
 /**
- * An interaction element, in any document, keyed by its node: its {@link nodeRef} tuple and its
+ * An interaction element, in any document, keyed by its place: its {@link nodeRef} tuple and its
  * count of {@link ChoiceInteraction} rows, the choices whose nearest interaction it is, which the
  * family draws, and its count of {@link PciModuleForm} rows, the forms of a portable custom
  * interaction's module, which the second family draws, and its count of {@link GapInteraction} rows,
@@ -316,21 +324,21 @@ export const Interaction = relation(
   "Interaction",
   {
     choices: drawn(natural),
-    document: uuid,
     gaps: drawn(natural),
     kind: closedId(NodeKind),
     moduleForms: drawn(natural),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * That an interaction writes a `response-identifier`, keyed by the interaction's node: its
+ * That an interaction writes a `response-identifier`, keyed by the interaction's place: its
  * {@link nodeRef} tuple. It is the optional part of the {@link Interaction}: an interaction that
  * writes no `response-identifier` has none, and one that writes one has it, both ways. The name it
  * binds is its {@link BoundVariable}'s, the one row every law over a binding's name reads.
@@ -338,26 +346,26 @@ export const Interaction = relation(
 export const Binding = relation(
   "Binding",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One binding of an item's interaction to a response variable, keyed by the interaction's node and
- * the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable,
+ * One binding of an item's interaction to a response variable, keyed by the interaction's place
+ * and the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable,
  * where its value names a variable, an NCName ({@link namePattern}). Any other value binds nothing,
  * and its value domain refuses it alone (spec reading 152).
  *
  * Its fields, every one written by the host:
  *
- * - `kind`, the interaction's; `document`, and `identifier`, the attribute's value collapsed;
+ * - `kind`, the interaction's, and `identifier`, the attribute's value collapsed;
  * - `adaptive`, whether its item is adaptive, copied from {@link ItemMode}.
  *
  * The variable it binds is its {@link BindingDeclaration}'s, which a name no response declaration
@@ -368,12 +376,13 @@ export const BoundVariable = relation(
   {
     adaptive: pg.boolean,
     attribute: closedId(AttributeName),
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -384,11 +393,11 @@ export const BoundVariable = relation(
  *
  * Its fields, every one written by the host:
  *
- * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
+ * - `package`, `path`, `start`, `attribute`, `kind` and `identifier`, its binding's, copied from
  *   {@link BoundVariable};
- * - `declaration`, `declarationKind`, `cardinalities` and `baseTypes`, the declaration's, copied
- *   through `declarationIdentifierRef`: its cardinality, where it has one, is its
- *   {@link BindingCardinality}'s, and its base type its {@link BindingBaseType}'s.
+ * - `declaration`, the declaration's `start` in the item, and its `declarationKind`, `cardinalities`
+ *   and `baseTypes`, copied through `declarationIdentifierRef`: its cardinality, where it has one,
+ *   is its {@link BindingCardinality}'s, and its base type its {@link BindingBaseType}'s.
  */
 export const BindingDeclaration = relation(
   "BindingDeclaration",
@@ -396,14 +405,15 @@ export const BindingDeclaration = relation(
     attribute: closedId(AttributeName),
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -416,7 +426,8 @@ export const BindingDeclaration = relation(
  *
  * Its fields, every one written by the host:
  *
- * - `node`, `attribute`, `kind`, `declaration` and `baseTypes`, its {@link BindingDeclaration}'s;
+ * - `package`, `path`, `start`, `attribute`, `kind`, `declaration` and `baseTypes`, its
+ *   {@link BindingDeclaration}'s;
  * - `cardinality`, the declaration's {@link DeclarationCardinality}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
@@ -430,19 +441,21 @@ export const BindingCardinality = relation(
     attribute: closedId(AttributeName),
     baseTypes: natural,
     cardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     gaps: natural,
     kind: closedId(NodeKind),
     mosts: natural,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
  * One attribute by which an interaction of any document binds a response variable, keyed by the
- * interaction's node and the attribute (spec reading 117), where its value names a variable:
- * `kind`, the interaction's; `document`; and `identifier`, the attribute's value collapsed. A
+ * interaction's place and the attribute (spec reading 117), where its value names a variable:
+ * `kind`, the interaction's, and `identifier`, the attribute's value collapsed. A
  * fragment's interactions bind no variable of their own document, which declares none, but one of
  * each item that places the fragment ({@link PlacedBinding}); its rows count as
  * `Document.bindings`.
@@ -455,39 +468,43 @@ export const BindingName = relation(
   "BindingName",
   {
     attribute: closedId(AttributeName),
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
  * One binding of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed by
- * the instance, the interaction's node and the attribute: the item's own bindings under its root
- * instance, and an included fragment's under each instance that places it, so each placement binds
- * the item's responses as its merged document would ("interactions included from fragments must be
- * correctly bound to response variables declared in the items", information model §2.12).
+ * the instance (`package`, `assembly`, `instance`), the interaction's `start` in the instance's
+ * document and the attribute: the item's own bindings under its root instance, and an included
+ * fragment's under each instance that places it, so each placement binds the item's responses as
+ * its merged document would ("interactions included from fragments must be correctly bound to
+ * response variables declared in the items", information model §2.12). The instance names its
+ * document, so `path` is no part of the key.
  *
- * Its fields, every one written by the host: `instance`, `document` and `assembly`, the instance's;
- * `node`, `attribute`, `kind` and `identifier`, its {@link BindingName}'s; and `adaptive`, whether
- * the item is adaptive. The variable it binds among the assembly's declarations is its
- * {@link PlacedBindingDeclaration}'s.
+ * Its fields, every one written by the host: `package`, `assembly` and `instance`, the instance's,
+ * and `path`, its document's; `start`, `attribute`, `kind` and `identifier`, its
+ * {@link BindingName}'s; and `adaptive`, whether the item is adaptive. The variable it binds among
+ * the assembly's declarations is its {@link PlacedBindingDeclaration}'s.
  */
 export const PlacedBinding = relation(
   "PlacedBinding",
   {
     adaptive: pg.boolean,
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
-    document: uuid,
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -495,51 +512,56 @@ export const PlacedBinding = relation(
  * binding is, and written only where a response declaration of the item holds the name, whatever
  * its cardinality spells, as {@link BindingDeclaration} is for an item's own bindings.
  *
- * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
- * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
- * `declaration`, `declarationKind`, `cardinalities` and `baseTypes`, the declaration's, copied
- * through `declarationIdentifierRef`. Its cardinality, where it has one, is its
- * {@link PlacedBindingCardinality}'s, and its base type its {@link PlacedBindingBaseType}'s.
+ * Its fields, every one written by the host: `package`, `assembly`, `instance`, `path`, `start`,
+ * `attribute`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
+ * `declaration`, the declaration's `start` in the assembly's head document, and its
+ * `declarationKind`, `cardinalities` and `baseTypes`, copied through `declarationIdentifierRef`.
+ * Its cardinality, where it has one, is its {@link PlacedBindingCardinality}'s, and its base type
+ * its {@link PlacedBindingBaseType}'s.
  */
 export const PlacedBindingDeclaration = relation(
   "PlacedBindingDeclaration",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
  * A placed bound variable beside its declaration's cardinality, keyed as its
- * {@link PlacedBindingDeclaration} is, where the declaration has one, as
- * {@link BindingCardinality} is an item's own binding's: `instance`, `node`, `attribute`, `kind`,
- * `declaration` and `baseTypes`, its declaration row's; `cardinality`, the declaration's
+ * {@link PlacedBindingDeclaration} is, where the declaration has one, as {@link BindingCardinality}
+ * is an item's own binding's: `package`, `assembly`, `instance`, `path`, `start`, `attribute`,
+ * `kind`, `declaration` and `baseTypes`, its declaration row's; `cardinality`, the declaration's
  * {@link DeclarationCardinality}'s; and `mosts` and `gaps`, as {@link BindingCardinality}'s.
  */
 export const PlacedBindingCardinality = relation(
   "PlacedBindingCardinality",
   {
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     baseTypes: natural,
     cardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     gaps: natural,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
     mosts: natural,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -555,35 +577,40 @@ export const BindingBaseType = relation(
     attribute: closedId(AttributeName),
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
  * A placed binding's variable's base type, keyed as its {@link PlacedBindingCardinality} is, where
  * its declaration has a cardinality and a base type, as {@link BindingBaseType} is an item's own
- * binding's.
+ * binding's. It reads its declaration in the assembly's head document, `(package, assembly,
+ * declaration)`, and no field of its interaction's document beside its key.
  */
 export const PlacedBindingBaseType = relation(
   "PlacedBindingBaseType",
   {
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    instance: uuid,
+    declaration: natural,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
  * One choice of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
- * instance and the choice's node: a {@link Choice} of the instance's document, under the
+ * instance and the choice's `start`: a {@link Choice} of the instance's document, `path`, under the
  * assembly, so an included fragment's choices count among its item's ("Choice identifier key" over
  * the assembly: "This identifier must not be used by any other choice", information model
  * §5.132.1, read across the nine choice classes by spec reading 104, so a key over the query
@@ -593,76 +620,101 @@ export const PlacedBindingBaseType = relation(
 export const PlacedChoice = relation(
   "PlacedChoice",
   {
-    assembly: uuid,
-    document: uuid,
+    assembly: EntryPath,
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node"],
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
- * One hottext of an instance of an assembly, keyed by the instance and the hottext's node: a
+ * One hottext of an instance of an assembly, keyed by the instance and the hottext's `start`: a
  * {@link Hottext} of the instance's document, under the assembly, as {@link PlacedChoice} is.
  */
 export const PlacedHottext = relation(
   "PlacedHottext",
-  { assembly: uuid, document: uuid, identifier: keyText, instance: uuid, node: uuid },
-  ["instance", "node"],
+  {
+    assembly: EntryPath,
+    identifier: keyText,
+    instance: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
  * Each document's binding attributes, counted by `Document.bindings`.
  */
-const bindingNameFamily = counted(on(BindingName, "document"), fin(Document, "bindings"));
+const bindingNameFamily = counted(on(BindingName, "package", "path"), fin(Document, "bindings"));
 
 /**
  * Each item instance's bindings, counted by `Instance.bindings`, its document's count.
  */
-const placedBindingFamily = counted(on(PlacedBinding, "instance"), fin(Instance, "bindings"));
+const placedBindingFamily = counted(
+  on(PlacedBinding, "package", "assembly", "instance"),
+  fin(Instance, "bindings"),
+);
 
 /**
- * A choice, keyed by its node: its {@link nodeRef} tuple and its identifier collapsed. Its nearest
+ * A choice, keyed by its place: its {@link nodeRef} tuple and its identifier collapsed. Its nearest
  * interaction is its {@link ChoiceInteraction}'s. It owns no sequence (C15).
  */
 export const Choice = relation(
   "Choice",
   {
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A choice's interaction, keyed by the choice's node: its nearest interaction (N8), the
- * {@link Interaction} that counts it. Only a choice an interaction encloses, in its own document or
- * through the include that places its fragment, has a row; every choice must ("N8 nearest"), and a
- * gap that no gap-match encloses breaks N6 first. It owns no sequence (C15).
+ * A choice's interaction, keyed by the choice's place: its nearest interaction (N8), the
+ * {@link Interaction} that counts it, at `(package, interactionPath, interaction)`. Only a choice an
+ * interaction encloses, in its own document or through the include that places its fragment, has a
+ * row; every choice must ("N8 nearest"), and a gap that no gap-match encloses breaks N6 first. It
+ * owns no sequence (C15).
+ *
+ * `interaction` is the choice's `nearest`, a position; `interactionPath` is the document it is a
+ * position in: the choice's own `path` where an interaction of its document encloses it, else its
+ * document's context (`Document.contextPath` and `contextNearest`), the interaction its fragment's
+ * include stands in (spec reading 117).
  */
-export const ChoiceInteraction = relation("ChoiceInteraction", { interaction: uuid, node: uuid }, [
-  "node",
-]);
+export const ChoiceInteraction = relation(
+  "ChoiceInteraction",
+  {
+    interaction: natural,
+    interactionPath: EntryPath,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
+);
 
 /**
  * Each interaction's choices, counted by `Interaction.choices` (C15): a flat row whose group,
  * `interaction`, names its owner.
  */
 export const choiceFamily = counted(
-  on(ChoiceInteraction, "interaction"),
+  on(ChoiceInteraction, "package", "interactionPath", "interaction"),
   fin(Interaction, "choices"),
 );
 
 /**
- * A gap's interaction, keyed by the gap's node: a copy of its {@link ChoiceInteraction} row, held
+ * A gap's interaction, keyed by the gap's place: a copy of its {@link ChoiceInteraction} row, held
  * both ways to the {@link Choice} rows of kind `qti-gap`, so a gap an include places counts under
  * the interaction that encloses it, as its choice does, and no gap text or other choice counts.
  * `Interaction.choices` counts a gap match's gap texts beside its gaps; "Binding cardinality" reads
@@ -671,19 +723,28 @@ export const choiceFamily = counted(
 export const GapInteraction = relation(
   // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "GapInteraction",
-  { interaction: uuid, node: uuid },
-  ["node"],
+  {
+    interaction: natural,
+    interactionPath: EntryPath,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
  * Each interaction's gaps, counted by `Interaction.gaps`: a flat row whose group, `interaction`,
  * names its owner.
  */
-const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "gaps"));
+const gapFamily = counted(
+  on(GapInteraction, "package", "interactionPath", "interaction"),
+  fin(Interaction, "gaps"),
+);
 
 /**
- * One form in which a portable custom interaction names its module, keyed by the interaction's node
- * and the form: `element` is false for the `module` attribute and true for the
+ * One form in which a portable custom interaction names its module, keyed by the interaction's
+ * place and the form: `element` is false for the `module` attribute and true for the
  * `qti-interaction-modules` child (information model §5.106.2: "If this characteristic is provided
  * the qti-interaction-modules child attribute is not required, if omitted then the modules child
  * element is mandatory", R10-a). A form a PCI does not write has no row; "PCI module source" counts
@@ -692,16 +753,20 @@ const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "g
  * Its rows are copies of the tree, both ways: an attribute form of each `module` attribute of a
  * portable custom interaction, an element form of each `qti-interaction-modules` child of one.
  */
-export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, node: uuid }, [
-  "node",
-  "element",
-]);
+export const PciModuleForm = relation(
+  "PciModuleForm",
+  { element: pg.boolean, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start", "element"],
+);
 
 /**
  * Each interaction's module forms, counted by `Interaction.moduleForms`: a flat row whose group,
- * `node`, names its owner.
+ * its place, names its owner.
  */
-const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
+const pciModuleFamily = counted(
+  on(PciModuleForm, "package", "path", "start"),
+  fin(Interaction, "moduleForms"),
+);
 
 /**
  * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
@@ -713,7 +778,7 @@ const customKind = "qti-custom-interaction" satisfies Kind;
  * The `module` attribute of a portable custom interaction: the attribute form of its module.
  */
 const moduleAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, pciKind), a.eq(a.name, "module")),
+  a.and(a.eq(a.kind, pciKind), a.eq(a.name, "module")),
 );
 
 /**
@@ -740,47 +805,56 @@ const attributeForms = select(PciModuleForm, (f) => f.eq(f.element, false));
 const elementForms = select(PciModuleForm, (f) => f.eq(f.element, true));
 
 /**
- * A hottext, keyed by its node: its {@link nodeRef} tuple, its nearest interaction's kind
- * (`document` where it sits in none), and its identifier collapsed.
+ * A hottext, keyed by its place: its {@link nodeRef} tuple, its nearest interaction's kind
+ * (`document` where it sits in none, its `nearest` then the document node's 0), the document its
+ * nearest is a position in (`nearestPath`: its own `path`, or its document's context, as
+ * {@link ChoiceInteraction}'s `interactionPath` is), and its identifier collapsed.
  */
 export const Hottext = relation(
   "Hottext",
   {
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    nearest: uuid,
+    nearest: natural,
     nearestKind: closedId(NodeKind),
-    node: uuid,
-    parent: uuid,
+    nearestPath: EntryPath,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * Each document's choices, counted by `Document.choices`.
  */
-const documentChoiceFamily = counted(on(Choice, "document"), fin(Document, "choices"));
+const documentChoiceFamily = counted(on(Choice, "package", "path"), fin(Document, "choices"));
 
 /**
  * Each document's hottexts, counted by `Document.hottexts`.
  */
-const documentHottextFamily = counted(on(Hottext, "document"), fin(Document, "hottexts"));
+const documentHottextFamily = counted(on(Hottext, "package", "path"), fin(Document, "hottexts"));
 
 /**
  * Each instance's choices, counted by `Instance.choices`, its document's count.
  */
-const placedChoiceFamily = counted(on(PlacedChoice, "instance"), fin(Instance, "choices"));
+const placedChoiceFamily = counted(
+  on(PlacedChoice, "package", "assembly", "instance"),
+  fin(Instance, "choices"),
+);
 
 /**
  * Each instance's hottexts, counted by `Instance.hottexts`, its document's count.
  */
-const placedHottextFamily = counted(on(PlacedHottext, "instance"), fin(Instance, "hottexts"));
+const placedHottextFamily = counted(
+  on(PlacedHottext, "package", "assembly", "instance"),
+  fin(Instance, "hottexts"),
+);
 
 /**
- * A hotspot choice or associable hotspot, keyed by its node: its {@link nodeRef} tuple, its parent
+ * A hotspot choice or associable hotspot, keyed by its place: its {@link nodeRef} tuple, its parent
  * interaction's kind, its `area`, the value of its `shape` (the kind of area it is), and the
  * element counts the last-slot law compares, copied through `nodeCounts`: its own (`elements`, its
  * element rank among its siblings) and its parent's (`parentElementChildren`, the parent's element
@@ -790,24 +864,24 @@ export const Hotspot = relation(
   "Hotspot",
   {
     area: keyText,
-    document: uuid,
     elementChildren: natural,
     elements: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentElementChildren: natural,
     parentElements: natural,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An element whose least and most counts `ChoiceBound` pairs, keyed by its node: its
+ * An element whose least and most counts `ChoiceBound` pairs, keyed by its place: its
  * {@link nodeRef} tuple and what it writes of its two counts.
  *
  * - `minName` and `maxName`, the attributes `ChoiceBound` names for its kind, and `minWritten` and
@@ -821,7 +895,6 @@ export const CountBound = relation(
   "CountBound",
   {
     choices: natural,
-    document: uuid,
     kind: closedId(NodeKind),
     leasts: drawn(natural),
     maxName: closedId(AttributeName),
@@ -829,17 +902,18 @@ export const CountBound = relation(
     minName: closedId(AttributeName),
     minWritten: pg.boolean,
     mosts: drawn(natural),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A bound's least count, where it has a value, keyed by its node: `least`, the count's value
+ * A bound's least count, where it has a value, keyed by its place: `least`, the count's value
  * collapsed where written, else its XSD default, and `leastValue`, its integer, which `E1_derived`
  * proves by G-parse's cast, written so a selection may read it. It copies the fields its laws read
  * from its {@link CountBound}.
@@ -859,14 +933,16 @@ export const LeastCount = relation(
     leastValue: pg.bigint,
     minName: closedId(AttributeName),
     minWritten: pg.boolean,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A bound's most count, where it has a value, keyed by its node, as {@link LeastCount} is the
+ * A bound's most count, where it has a value, keyed by its place, as {@link LeastCount} is the
  * least's: `most` and `mostValue`, and the fields its laws read, `minWritten` among them, copied
  * from its {@link CountBound}.
  */
@@ -880,14 +956,16 @@ export const MostCount = relation(
     minWritten: pg.boolean,
     most: keyText,
     mostValue: pg.bigint,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A bound both of whose counts have a value, keyed by its node: the two integers, copied from its
+ * A bound both of whose counts have a value, keyed by its place: the two integers, copied from its
  * {@link LeastCount} and {@link MostCount}, and the fields "Choice bounds" reads beside them.
  */
 export const CountRange = relation(
@@ -897,133 +975,197 @@ export const CountRange = relation(
     leastValue: pg.bigint,
     minWritten: pg.boolean,
     mostValue: pg.bigint,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * Each bound's least count, counted by `CountBound.leasts`: one row or none.
  */
-const leastCountFamily = counted(on(LeastCount, "node"), fin(CountBound, "leasts"));
+const leastCountFamily = counted(
+  on(LeastCount, "package", "path", "start"),
+  fin(CountBound, "leasts"),
+);
 
 /**
  * Each bound's most count, counted by `CountBound.mosts`: one row or none.
  */
-const mostCountFamily = counted(on(MostCount, "node"), fin(CountBound, "mosts"));
+const mostCountFamily = counted(
+  on(MostCount, "package", "path", "start"),
+  fin(CountBound, "mosts"),
+);
 
 /**
- * A slider interaction's bounds, keyed by its node: its `lower-bound` and `upper-bound`, collapsed.
+ * A slider interaction's bounds, keyed by its place: its `lower-bound` and `upper-bound`,
+ * collapsed.
  */
-export const Slider = relation("Slider", { lower: keyText, node: uuid, upper: keyText }, ["node"]);
+export const Slider = relation(
+  "Slider",
+  {
+    lower: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    upper: keyText,
+  },
+  ["package", "path", "start"],
+);
 
 /**
- * One ARIA range attribute of an element, keyed by its node and its name: its value, collapsed.
+ * One ARIA range attribute of an element, keyed by its element's place and its name: its value,
+ * collapsed.
  */
 export const AriaValue = relation(
   // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "AriaValue",
-  { name: closedId(AttributeName), node: uuid, value: keyText },
-  ["node", "name"],
+  {
+    name: closedId(AttributeName),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    value: keyText,
+  },
+  ["package", "path", "start", "name"],
 );
 
 /**
- * An element with an ARIA range attribute, a projection keyed by its node: its count of
+ * An element with an ARIA range attribute, a projection keyed by its place: its count of
  * {@link AriaValue} rows, 2 exactly where it carries both.
  */
-export const AriaElement = relation("AriaElement", { node: uuid, values: drawn(natural) }, [
-  "node",
-]);
+export const AriaElement = relation(
+  "AriaElement",
+  { package: ManifestIdentifier, path: EntryPath, start: natural, values: drawn(natural) },
+  ["package", "path", "start"],
+);
 
 /**
  * Each element's ARIA range attributes, counted by `AriaElement.values`.
  */
-const ariaValueFamily = counted(on(AriaValue, "node"), fin(AriaElement, "values"));
+const ariaValueFamily = counted(
+  on(AriaValue, "package", "path", "start"),
+  fin(AriaElement, "values"),
+);
 
 /**
- * An element that carries both ARIA range attributes, keyed by its node: its `aria-valuemin` and
+ * An element that carries both ARIA range attributes, keyed by its place: its `aria-valuemin` and
  * `aria-valuemax`, collapsed.
  */
-export const AriaRange = relation("AriaRange", { max: keyText, min: keyText, node: uuid }, [
-  "node",
-]);
+export const AriaRange = relation(
+  "AriaRange",
+  {
+    max: keyText,
+    min: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
+);
 
 /**
- * A document's item mode, keyed by the document: whether it is an item whose `adaptive` is true.
- * Every adaptive item has its row, and so does every document a {@link BoundVariable} names.
+ * A document's item mode, keyed by the document (`package`, `path`): whether it is an item whose
+ * `adaptive` is true. Every adaptive item has its row, and so does every document a
+ * {@link BoundVariable} names.
  */
-export const ItemMode = relation("ItemMode", { adaptive: pg.boolean, document: uuid }, [
-  "document",
-]);
+export const ItemMode = relation(
+  "ItemMode",
+  { adaptive: pg.boolean, package: ManifestIdentifier, path: EntryPath },
+  ["package", "path"],
+);
 
 /**
- * The fields of a content reference: the referring element's node, kind and document, the root kind
- * of the assembly it resolves in, which for an item's or a test's own reference is its document's
+ * The fields of a content reference: the referring element's place and kind, the root kind of the
+ * assembly it resolves in, which for an item's or a test's own reference is its document's
  * own root kind, the attribute it refers by, and the name it refers to, collapsed. A value that is
  * no NCName ({@link namePattern}) names nothing and has no row: its value domain refuses it alone
  * (spec reading 152). What the name resolves to is a row of its own, where it names a
  * declaration (`referenceDeclarationFields`), and none where it names a built-in variable of that
  * root, as the installed `BuiltInVariable` holds each under its root (spec reading 29: an item's
  * are not a test's), or nothing, which its law refuses (lane NIL's NS2: a missing value is a row of
- * its own relation, never the nil uuid).
+ * its own relation, never a sentinel).
  */
 const referenceFields = {
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  document: uuid,
   identifier: keyText,
   kind: closedId(NodeKind),
-  node: uuid,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
 };
 
 /**
  * The fields of the declaration a content reference names, keyed as its reference is: the
  * reference's fields, and the declaration as `declarationIdentifierRef` holds it, whatever its
  * cardinality spells (spec reading 159), its kind one `ContentReference` lets the reference name:
- * its node, kind and counts of cardinalities and base types.
+ * its `start` in the reference's document, its kind and counts of cardinalities and base types.
  */
 const referenceDeclarationFields = {
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseTypes: natural,
   cardinalities: natural,
-  declaration: uuid,
+  declaration: natural,
   declarationKind: closedId(DeclarationKind),
-  document: uuid,
   identifier: keyText,
   kind: closedId(NodeKind),
-  node: uuid,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
 };
 
 /**
- * A feedback element's outcome, keyed by its node and `outcome-identifier` (reading 77).
+ * A feedback element's outcome, keyed by its element's place and `outcome-identifier` (reading
+ * 77).
  */
-export const FeedbackRef = relation("FeedbackRef", referenceFields, ["node", "attribute"]);
+export const FeedbackRef = relation("FeedbackRef", referenceFields, [
+  "package",
+  "path",
+  "start",
+  "attribute",
+]);
 
 /**
- * A template element's or a choice's template variable, keyed by its node and
+ * A template element's or a choice's template variable, keyed by its element's place and
  * `template-identifier` (§2.7.2: "A references must match the identifier in a corresponding
  * template declaration"). Of a template element or a choice the variable is of base type
  * identifier and of single or multiple cardinality (reading R15-l, "Template variable type"); a
  * portable custom interaction's `qti-template-variable` states no type.
  */
-export const TemplateRef = relation("TemplateRef", referenceFields, ["node", "attribute"]);
-
-/**
- * The variable a printed variable prints, keyed by its node and `identifier` (§7.30.6: "The
- * outcome variable or template variable must have been defined"), and the variable its `base` or
- * `index` names where that value is a name, not an integer, keyed by its node and the attribute.
- */
-export const PrintedVariableRef = relation("PrintedVariableRef", referenceFields, [
-  "node",
+export const TemplateRef = relation("TemplateRef", referenceFields, [
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
- * The context variable a PCI's `qti-context-variable` binds, keyed by its node and `identifier`
+ * The variable a printed variable prints, keyed by its element's place and `identifier` (§7.30.6:
+ * "The outcome variable or template variable must have been defined"), and the variable its `base`
+ * or `index` names where that value is a name, not an integer, keyed by its element's place and the
+ * attribute.
+ */
+export const PrintedVariableRef = relation("PrintedVariableRef", referenceFields, [
+  "package",
+  "path",
+  "start",
+  "attribute",
+]);
+
+/**
+ * The context variable a PCI's `qti-context-variable` binds, keyed by its element's place and
+ * `identifier`
  * (reading 92: "the context variables are the declared ones and the built-in QTI_CONTEXT").
  */
-export const ContextRef = relation("ContextRef", referenceFields, ["node", "attribute"]);
+export const ContextRef = relation("ContextRef", referenceFields, [
+  "package",
+  "path",
+  "start",
+  "attribute",
+]);
 
 /**
  * The outcome declaration a {@link FeedbackRef} names, keyed as it is, where its document declares
@@ -1032,7 +1174,7 @@ export const ContextRef = relation("ContextRef", referenceFields, ["node", "attr
 export const FeedbackRefDeclaration = relation(
   "FeedbackRefDeclaration",
   referenceDeclarationFields,
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -1048,10 +1190,12 @@ export const FeedbackRefCardinality = relation(
   {
     attribute: closedId(AttributeName),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    node: uuid,
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -1061,7 +1205,7 @@ export const FeedbackRefCardinality = relation(
 export const TemplateRefDeclaration = relation(
   "TemplateRefDeclaration",
   referenceDeclarationFields,
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -1078,11 +1222,13 @@ export const TemplateRefCardinality = relation(
   {
     attribute: closedId(AttributeName),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -1092,7 +1238,7 @@ export const TemplateRefCardinality = relation(
 export const PrintedVariableRefDeclaration = relation(
   "PrintedVariableRefDeclaration",
   referenceDeclarationFields,
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -1100,64 +1246,76 @@ export const PrintedVariableRefDeclaration = relation(
  * one of its name.
  */
 export const ContextRefDeclaration = relation("ContextRefDeclaration", referenceDeclarationFields, [
-  "node",
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
- * The fields of a reference a section document makes: its element's node, kind and document, the
- * attribute it refers by, and its name collapsed. It resolves in no declaration of its own
+ * The fields of a reference a section document makes: its element's place and kind, the attribute
+ * it refers by, and its name collapsed. It resolves in no declaration of its own
  * document, since a section declares nothing, but once per test that places it (the port audit's
  * A45, B15).
  */
 const sectionNameFields = {
   attribute: closedId(AttributeName),
-  document: uuid,
   identifier: keyText,
   kind: closedId(NodeKind),
-  node: uuid,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
 };
 
 /**
  * A section document's feedback outcome reference, a feedback element's `outcome-identifier`,
- * keyed by its node and attribute.
+ * keyed by its element's place and attribute.
  */
 export const SectionFeedbackName = relation("SectionFeedbackName", sectionNameFields, [
-  "node",
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
  * A section document's printed variable reference, a printed variable's `identifier`, or its
- * `base` or `index` where it names a variable, keyed by its node and attribute.
+ * `base` or `index` where it names a variable, keyed by its element's place and attribute.
  */
 export const SectionPrintedName = relation("SectionPrintedName", sectionNameFields, [
-  "node",
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
  * A section document's or an included fragment's template variable reference, a template
- * element's or a choice's `template-identifier`, keyed by its node and attribute (spec readings 5
- * and 117).
+ * element's or a choice's `template-identifier`, keyed by its element's place and attribute (spec
+ * readings 5 and 117).
  */
 export const SectionTemplateName = relation("SectionTemplateName", sectionNameFields, [
-  "node",
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
  * A section document's or an included fragment's context variable reference, a
- * `qti-context-variable`'s `identifier`, keyed by its node and attribute (spec readings 5 and 117).
+ * `qti-context-variable`'s `identifier`, keyed by its element's place and attribute (spec readings
+ * 5 and 117).
  */
 export const SectionContextName = relation("SectionContextName", sectionNameFields, [
-  "node",
+  "package",
+  "path",
+  "start",
   "attribute",
 ]);
 
 /**
- * A document whose references resolve once per assembly that places it, keyed by its document
- * node, a projection whose counts are its {@link SectionFeedbackName},
+ * A document whose references resolve once per assembly that places it, keyed by the document
+ * (`package`, `path`), a projection whose counts are its {@link SectionFeedbackName},
  * {@link SectionPrintedName}, {@link SectionTemplateName} and {@link SectionContextName} rows:
  * every document that is no item's or test's has its row, its counts 0 where it makes none.
  */
@@ -1165,19 +1323,20 @@ export const ReferringDocument = relation(
   "ReferringDocument",
   {
     contexts: drawn(natural),
-    document: uuid,
     feedbacks: drawn(natural),
+    package: ManifestIdentifier,
+    path: EntryPath,
     prints: drawn(natural),
     templates: drawn(natural),
   },
-  ["document"],
+  ["package", "path"],
 );
 
 /**
  * Each section document's feedback references, counted by `ReferringDocument.feedbacks`.
  */
 const sectionFeedbackNameFamily = counted(
-  on(SectionFeedbackName, "document"),
+  on(SectionFeedbackName, "package", "path"),
   fin(ReferringDocument, "feedbacks"),
 );
 
@@ -1185,7 +1344,7 @@ const sectionFeedbackNameFamily = counted(
  * Each section document's printed variable references, counted by `ReferringDocument.prints`.
  */
 const sectionPrintedNameFamily = counted(
-  on(SectionPrintedName, "document"),
+  on(SectionPrintedName, "package", "path"),
   fin(ReferringDocument, "prints"),
 );
 
@@ -1194,7 +1353,7 @@ const sectionPrintedNameFamily = counted(
  * `ReferringDocument.templates`.
  */
 const sectionTemplateNameFamily = counted(
-  on(SectionTemplateName, "document"),
+  on(SectionTemplateName, "package", "path"),
   fin(ReferringDocument, "templates"),
 );
 
@@ -1203,79 +1362,87 @@ const sectionTemplateNameFamily = counted(
  * `ReferringDocument.contexts`.
  */
 const sectionContextNameFamily = counted(
-  on(SectionContextName, "document"),
+  on(SectionContextName, "package", "path"),
   fin(ReferringDocument, "contexts"),
 );
 
 /**
  * One placement of a section document under a test, or of an included fragment under an item
- * (spec reading 117), keyed by its `Instance`: the document it places, the assembly (its root's
- * document node) and its root's kind, whose built-in variables its references read, and its counts
+ * (spec reading 117), keyed by its `Instance` (`package`, `assembly`, `instance`): the document it
+ * places, `document`, the instance's, and the assembly's root kind, whose built-in variables its
+ * references read, and its counts
  * of {@link SectionFeedbackRef}, {@link SectionPrintedRef}, {@link SectionTemplateRef} and
  * {@link SectionContextRef} rows, which the families draw.
  */
 export const SectionScope = relation(
   "SectionScope",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     assemblyKind: closedId(NodeKind),
     contexts: drawn(natural),
-    document: uuid,
+    document: EntryPath,
     feedbacks: drawn(natural),
-    instance: uuid,
+    instance: natural,
+    package: ManifestIdentifier,
     prints: drawn(natural),
     templates: drawn(natural),
   },
-  ["instance"],
+  ["package", "assembly", "instance"],
 );
 
 /**
  * The fields of a section document's or a fragment's reference placed under one assembly that
- * places it: the placement's instance, assembly and the assembly's root kind, and the reference's
- * fields. What its name resolves to among the assembly's declarations is a row of its own, where it
- * names a declaration (`sectionReferenceDeclarationFields`), and none where it names a built-in of
- * the assembly's root or nothing, as an own reference's is.
+ * places it: the placement's instance (`package`, `assembly`, `instance`) and the assembly's root
+ * kind, and the reference's fields, its element's place in the placed document. What its name
+ * resolves to among the assembly's declarations is a row of its own, where it names a declaration
+ * (`sectionReferenceDeclarationFields`), and none where it names a built-in of the assembly's root
+ * or nothing, as an own reference's is.
  */
 const sectionReferenceFields = {
-  assembly: uuid,
+  assembly: EntryPath,
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  document: uuid,
   identifier: keyText,
-  instance: uuid,
+  instance: natural,
   kind: closedId(NodeKind),
-  node: uuid,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
 };
 
 /**
  * The fields of the declaration a placed reference names among its assembly's declarations, keyed
  * as its placed reference is: its fields, and the declaration as `declarationIdentifierRef` holds
- * it, whatever its cardinality spells (spec reading 159).
+ * it, whatever its cardinality spells (spec reading 159): `declaration`, its `start` in the
+ * assembly's head document, `assembly`.
  */
 const sectionReferenceDeclarationFields = {
-  assembly: uuid,
+  assembly: EntryPath,
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseTypes: natural,
   cardinalities: natural,
-  declaration: uuid,
+  declaration: natural,
   declarationKind: closedId(DeclarationKind),
-  document: uuid,
   identifier: keyText,
-  instance: uuid,
+  instance: natural,
   kind: closedId(NodeKind),
-  node: uuid,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
 };
 
 /**
  * A section document's feedback reference resolved under one placement, keyed by the placement's
- * instance and the reference's node and attribute. It is a relation of its own beside
+ * instance and the reference's element's `start` and attribute. It is a relation of its own beside
  * {@link SectionPrintedRef}, so each law that resolves one is a statement of its own, which a
  * refusal names by its relations and terms ("Feedback reference", "Printed variable reference").
  */
 export const SectionFeedbackRef = relation("SectionFeedbackRef", sectionReferenceFields, [
+  "package",
+  "assembly",
   "instance",
-  "node",
+  "start",
   "attribute",
 ]);
 
@@ -1284,8 +1451,10 @@ export const SectionFeedbackRef = relation("SectionFeedbackRef", sectionReferenc
  * {@link SectionFeedbackRef} is.
  */
 export const SectionPrintedRef = relation("SectionPrintedRef", sectionReferenceFields, [
+  "package",
+  "assembly",
   "instance",
-  "node",
+  "start",
   "attribute",
 ]);
 
@@ -1294,8 +1463,10 @@ export const SectionPrintedRef = relation("SectionPrintedRef", sectionReferenceF
  * keyed as {@link SectionFeedbackRef} is ("Template reference").
  */
 export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenceFields, [
+  "package",
+  "assembly",
   "instance",
-  "node",
+  "start",
   "attribute",
 ]);
 
@@ -1304,8 +1475,10 @@ export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenc
  * keyed as {@link SectionFeedbackRef} is ("Context variable reference").
  */
 export const SectionContextRef = relation("SectionContextRef", sectionReferenceFields, [
+  "package",
+  "assembly",
   "instance",
-  "node",
+  "start",
   "attribute",
 ]);
 
@@ -1316,7 +1489,7 @@ export const SectionContextRef = relation("SectionContextRef", sectionReferenceF
 export const SectionFeedbackRefDeclaration = relation(
   "SectionFeedbackRefDeclaration",
   sectionReferenceDeclarationFields,
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1326,13 +1499,15 @@ export const SectionFeedbackRefDeclaration = relation(
 export const SectionFeedbackRefCardinality = relation(
   "SectionFeedbackRefCardinality",
   {
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    instance: uuid,
-    node: uuid,
+    declaration: natural,
+    instance: natural,
+    package: ManifestIdentifier,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1342,7 +1517,7 @@ export const SectionFeedbackRefCardinality = relation(
 export const SectionPrintedRefDeclaration = relation(
   "SectionPrintedRefDeclaration",
   sectionReferenceDeclarationFields,
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1352,7 +1527,7 @@ export const SectionPrintedRefDeclaration = relation(
 export const SectionTemplateRefDeclaration = relation(
   "SectionTemplateRefDeclaration",
   sectionReferenceDeclarationFields,
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1362,14 +1537,16 @@ export const SectionTemplateRefDeclaration = relation(
 export const SectionTemplateRefCardinality = relation(
   "SectionTemplateRefCardinality",
   {
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    instance: uuid,
+    declaration: natural,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1379,7 +1556,7 @@ export const SectionTemplateRefCardinality = relation(
 export const SectionContextRefDeclaration = relation(
   "SectionContextRefDeclaration",
   sectionReferenceDeclarationFields,
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "start", "attribute"],
 );
 
 /**
@@ -1387,7 +1564,7 @@ export const SectionContextRefDeclaration = relation(
  * its document's count, so each placement resolves every one.
  */
 const sectionFeedbackFamily = counted(
-  on(SectionFeedbackRef, "instance"),
+  on(SectionFeedbackRef, "package", "assembly", "instance"),
   fin(SectionScope, "feedbacks"),
 );
 
@@ -1395,7 +1572,7 @@ const sectionFeedbackFamily = counted(
  * Each placement's resolved printed variable references, counted by `SectionScope.prints`.
  */
 const sectionPrintedFamily = counted(
-  on(SectionPrintedRef, "instance"),
+  on(SectionPrintedRef, "package", "assembly", "instance"),
   fin(SectionScope, "prints"),
 );
 
@@ -1403,7 +1580,7 @@ const sectionPrintedFamily = counted(
  * Each placement's resolved template variable references, counted by `SectionScope.templates`.
  */
 const sectionTemplateFamily = counted(
-  on(SectionTemplateRef, "instance"),
+  on(SectionTemplateRef, "package", "assembly", "instance"),
   fin(SectionScope, "templates"),
 );
 
@@ -1411,7 +1588,7 @@ const sectionTemplateFamily = counted(
  * Each placement's resolved context variable references, counted by `SectionScope.contexts`.
  */
 const sectionContextFamily = counted(
-  on(SectionContextRef, "instance"),
+  on(SectionContextRef, "package", "assembly", "instance"),
   fin(SectionScope, "contexts"),
 );
 
@@ -1514,18 +1691,15 @@ export const itemBuiltInNames: readonly string[] = [
 
 /**
  * Select the attributes O3 reads: each name of {@link readAttributes} on its kinds, and the ARIA
- * range attributes on every kind. It is the one copy source over `Attribute` for O3, keyed at
- * `(node, name)` by the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`),
- * whose index over the selection serves the copy's reverse probe and keeps `Attribute.lexical` out
- * of every index.
+ * range attributes on every kind. It is the one copy source over `Attribute` for O3, read at
+ * `(package, path, start, name)`, `Attribute`'s own key (an element writes each closed name once,
+ * Namespaces in XML 1.0 §6.3), whose index serves the copy's reverse probe and keeps
+ * `Attribute.lexical` out of every index.
  */
 const read = select(Attribute, (a) =>
-  a.and(
-    closedName(a),
-    a.or(
-      a.in(a.name, ariaNames),
-      ...[...readAttributes].map(([name, kinds]) => a.and(a.eq(a.name, name), a.in(a.kind, kinds))),
-    ),
+  a.or(
+    a.in(a.name, ariaNames),
+    ...[...readAttributes].map(([name, kinds]) => a.and(a.eq(a.name, name), a.in(a.kind, kinds))),
   ),
 );
 
@@ -1747,7 +1921,7 @@ const lastWhere = (h: HotspotRow) =>
   );
 
 /**
- * The read `response-identifier` of each interaction, one per interaction, keyed by its node: the
+ * The read `response-identifier` of each interaction, one per interaction, keyed by its place: the
  * attribute's own key fixes its name, and the key over the selection states it so that
  * {@link Binding} mirrors it.
  */
@@ -1971,7 +2145,7 @@ const namesAllowedBuiltIn = (r: ReferenceRow) =>
 
 /**
  * State one content reference's law over its relations (lane NIL's NS2: a reference that names no
- * declaration has no declaration row, never the nil uuid):
+ * declaration has no declaration row, never a sentinel):
  *
  * - An own reference that names no built-in variable of its root has its declaration row, which is
  *   its own reference's, of a kind `ContentReference` allows, a declaration of its document through
@@ -1995,19 +2169,20 @@ const contentReferenceLaws = ({
   placedDeclared,
 }: ContentReferenceOf) => [
   contained(
-    on(select(own, namesNoBuiltIn), "node", "attribute"),
-    on(ownDeclared, "node", "attribute"),
+    on(select(own, namesNoBuiltIn), "package", "path", "start", "attribute"),
+    on(ownDeclared, "package", "path", "start", "attribute"),
   ),
   contained(
-    on(ownDeclared, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
-    on(own, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+    on(ownDeclared, "package", "path", "start", "attribute", "kind", "assemblyKind", "identifier"),
+    on(own, "package", "path", "start", "attribute", "kind", "assemblyKind", "identifier"),
   ),
   contained(on(ownDeclared, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
   contained(
     on(
       ownDeclared,
+      "package",
+      "path",
       "declaration",
-      "document",
       "identifier",
       "declarationKind",
       "baseTypes",
@@ -2018,34 +2193,36 @@ const contentReferenceLaws = ({
   check(rule, ownDeclared, namesNoBuiltIn),
   check(rule, own, namesAllowedBuiltIn),
   contained(
-    on(placed, "node", "attribute", "kind", "document", "identifier"),
-    on(names, "node", "attribute", "kind", "document", "identifier"),
+    on(placed, "package", "path", "start", "attribute", "kind", "identifier"),
+    on(names, "package", "path", "start", "attribute", "kind", "identifier"),
   ),
   contained(
-    on(select(placed, namesNoBuiltIn), "instance", "node", "attribute"),
-    on(placedDeclared, "instance", "node", "attribute"),
+    on(select(placed, namesNoBuiltIn), "package", "assembly", "instance", "start", "attribute"),
+    on(placedDeclared, "package", "assembly", "instance", "start", "attribute"),
   ),
   contained(
     on(
       placedDeclared,
-      "instance",
-      "node",
-      "attribute",
+      "package",
       "assembly",
+      "instance",
+      "start",
+      "attribute",
       "assemblyKind",
       "kind",
-      "document",
+      "path",
       "identifier",
     ),
     on(
       placed,
-      "instance",
-      "node",
-      "attribute",
+      "package",
       "assembly",
+      "instance",
+      "start",
+      "attribute",
       "assemblyKind",
       "kind",
-      "document",
+      "path",
       "identifier",
     ),
   ),
@@ -2053,8 +2230,9 @@ const contentReferenceLaws = ({
   contained(
     on(
       placedDeclared,
-      "declaration",
+      "package",
       "assembly",
+      "declaration",
       "identifier",
       "declarationKind",
       "baseTypes",
@@ -2130,8 +2308,19 @@ const feedbackCardinalities = ["single", "multiple"] as const;
  */
 const identifierTyped = on(
   select(DeclarationBaseType, (b) => b.eq(b.baseType, "identifier")),
-  "node",
+  "package",
+  "path",
+  "start",
 );
+
+/**
+ * A document's context interaction (spec reading 117): the document, then the document and
+ * position its context's nearest interaction stands at, `Document.contextPath` and
+ * `contextNearest`. A choice's or a hottext's nearest is a position in its own document, or, where
+ * no interaction of its document encloses it, its document's context's: so a row that names its
+ * nearest in another document names its document's context.
+ */
+const onContext = on(Document, "package", "path", "contextPath", "contextNearest");
 
 /**
  * Every statement over the O3 overlays, each `check` named by its oracle law:
@@ -2146,35 +2335,37 @@ const identifierTyped = on(
  *   "BindingFit", "Binding unique" over the assembly (a fragment placed twice in one item binds its
  *   responses twice, as its merged document does), "Binding cardinality" and "AdaptiveFeedback",
  *   whose feedback ancestry an included fragment inherits from its context.
- * - **interactions:** each interaction's {@link Interaction} (its node's, of an interaction kind),
+ * - **interactions:** each interaction's {@link Interaction} (its place's, of an interaction kind),
  *   the owner of its choices.
  * - **bindings:** each interaction's {@link Binding}, where it writes a `response-identifier` (its
- *   node's, the part of its {@link Interaction}, exactly where the attribute is read); each item
+ *   place's, the part of its {@link Interaction}, exactly where the attribute is read); each item
  *   binding's {@link BoundVariable}, which has its {@link BindingDeclaration} ("Binding declared",
  *   reading 75), a response declaration's whatever its cardinality spells (reading 159), whose
  *   fields are the binding's and back, and where the declaration has a cardinality its
  *   {@link BindingCardinality}, copied from `DeclarationCardinality`; each declaration of a type
  *   `BindingFit` or `RecordBindingFit` admits, the custom, portable custom and order interactions
  *   of any type (spec reading 172), and a string binding's of base type string ("BindingFit"), each
- *   fit law over the cardinality and base type rows alone; "Binding unique" (`key(document,
+ *   fit law over the cardinality and base type rows alone; "Binding unique" (`key(package, path,
  *   identifier)`); "Binding cardinality" (a single response takes a most of 1, where its
  *   interaction's most has a value, and a gap match of at most one gap, its cardinality row's
  *   `gaps` copied from `Interaction`, spec reading 169); `max-strings-required`, which carries
- *   `kind` beside `node` so that its containment into `CountBound` is a statement of its own, not
- *   "Binding cardinality"'s: a refusal names a law by its relations and terms, never its selection
- *   (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive item.
+ *   `kind` beside its place so that its containment into `CountBound` is a statement of its own,
+ *   not "Binding cardinality"'s: a refusal names a law by its relations and terms, never its
+ *   selection (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive
+ *   item.
  * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
- *   interaction the choice's nearest, the counted family under `Interaction`; each gap's
- *   {@link GapInteraction}, which every gap has ("N8 nearest" too, so a gap no interaction encloses
- *   breaks that law alone), a copy of its choice interaction counted under `Interaction`; its
- *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
- *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
- *   117), under each instance of each assembly, as many {@link PlacedChoice} and
- *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
- *   identifiers distinct over the assembly. Across the classes, "Choice identifier key" holds each
- *   name to one choice or hottext, in the document and over its assembly, and "Choice not variable"
- *   each to no variable of its document, both rules over queries (`#pantry/qti/queries.ts`, reading
- *   104).
+ *   interaction the choice's nearest, in its own document or its document's context
+ *   (`Document.contextPath` and `contextNearest`, spec reading 117), the counted family under
+ *   `Interaction`; each gap's {@link GapInteraction}, which every gap has ("N8 nearest" too, so a
+ *   gap no interaction encloses breaks that law alone), a copy of its choice interaction counted
+ *   under `Interaction`; its identifier distinct among its document's choices of its kind; each
+ *   hottext's nearest kind, and its identifier distinct among its document's hottexts (reading
+ *   104); and in place (spec reading 117), under each instance of each assembly, as many
+ *   {@link PlacedChoice} and {@link PlacedHottext} rows as its document has choices and hottexts,
+ *   each its document's, their identifiers distinct over the assembly. Across the classes, "Choice
+ *   identifier key" holds each name to one choice or hottext, in the document and over its
+ *   assembly, and "Choice not variable" each to no variable of its document, both rules over
+ *   queries (`#pantry/qti/queries.ts`, reading 104).
  * - **the default hotspot** (reading 80): `default_hotspot_last_slot` and
  *   `Graphic_gap_match_default_hotspot` over each hotspot's shape, its rank and its parent's
  *   count.
@@ -2224,18 +2415,22 @@ export const interactionLawsByName = {
         select(BoundVariable, (r) =>
           r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(outsideFeedback, "id"),
+      on(outsideFeedback, "package", "path", "start"),
     ),
     contained(
       on(
         select(PlacedBinding, (r) =>
           r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(outsideFeedback, "id"),
+      on(outsideFeedback, "package", "path", "start"),
     ),
   ],
   "Aria value range": [
@@ -2261,11 +2456,15 @@ export const interactionLawsByName = {
             r.eq(r.mosts, 1n),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
       on(
         select(MostCount, (m) => m.eq(m.mostValue, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
     contained(
@@ -2278,11 +2477,15 @@ export const interactionLawsByName = {
             r.eq(r.mosts, 1n),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
       on(
         select(MostCount, (m) => m.eq(m.mostValue, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
     check("Binding_cardinality", BindingCardinality, singleGap),
@@ -2290,14 +2493,15 @@ export const interactionLawsByName = {
   ],
   "Binding declared": [
     contained(
-      on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
-      on(BindingDeclaration, "node", "attribute", "kind", "document", "identifier"),
+      on(BoundVariable, "package", "path", "start", "attribute", "kind", "identifier"),
+      on(BindingDeclaration, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     contained(
       on(
         BindingDeclaration,
+        "package",
+        "path",
         "declaration",
-        "document",
         "identifier",
         "declarationKind",
         "baseTypes",
@@ -2311,46 +2515,89 @@ export const interactionLawsByName = {
     contained(
       on(
         select(BindingDeclaration, (r) => r.eq(r.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(BindingCardinality, "node", "attribute"),
+      on(BindingCardinality, "package", "path", "start", "attribute"),
     ),
     contained(
-      on(BindingCardinality, "node", "attribute", "kind", "declaration", "baseTypes"),
-      on(BindingDeclaration, "node", "attribute", "kind", "declaration", "baseTypes"),
+      on(
+        BindingCardinality,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "kind",
+        "declaration",
+        "baseTypes",
+      ),
+      on(
+        BindingDeclaration,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "kind",
+        "declaration",
+        "baseTypes",
+      ),
     ),
     contained(
-      on(BindingCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
-    ),
-    contained(on(typedBindings, "node", "attribute"), on(BindingBaseType, "node", "attribute")),
-    contained(
-      on(BindingBaseType, "node", "attribute", "declaration", "cardinality", "kind"),
-      on(typedBindings, "node", "attribute", "declaration", "cardinality", "kind"),
+      on(BindingCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(BindingBaseType, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
+      on(typedBindings, "package", "path", "start", "attribute"),
+      on(BindingBaseType, "package", "path", "start", "attribute"),
+    ),
+    contained(
+      on(
+        BindingBaseType,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+      on(
+        typedBindings,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+    ),
+    contained(
+      on(BindingBaseType, "package", "path", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "baseType"),
     ),
     contained(
       on(
         PlacedBinding,
-        "instance",
-        "node",
-        "attribute",
+        "package",
         "assembly",
-        "document",
+        "instance",
+        "start",
+        "attribute",
+        "path",
         "kind",
         "identifier",
       ),
       on(
         PlacedBindingDeclaration,
-        "instance",
-        "node",
-        "attribute",
+        "package",
         "assembly",
-        "document",
+        "instance",
+        "start",
+        "attribute",
+        "path",
         "kind",
         "identifier",
       ),
@@ -2358,8 +2605,9 @@ export const interactionLawsByName = {
     contained(
       on(
         PlacedBindingDeclaration,
-        "declaration",
+        "package",
         "assembly",
+        "declaration",
         "identifier",
         "declarationKind",
         "baseTypes",
@@ -2373,45 +2621,55 @@ export const interactionLawsByName = {
     contained(
       on(
         select(PlacedBindingDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
       ),
-      on(PlacedBindingCardinality, "instance", "node", "attribute"),
+      on(PlacedBindingCardinality, "package", "assembly", "instance", "start", "attribute"),
     ),
     contained(
       on(
         PlacedBindingCardinality,
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
+        "path",
         "kind",
         "declaration",
         "baseTypes",
       ),
       on(
         PlacedBindingDeclaration,
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
+        "path",
         "kind",
         "declaration",
         "baseTypes",
       ),
     ),
     contained(
-      on(PlacedBindingCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(PlacedBindingCardinality, "package", "assembly", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(typedPlacedBindings, "instance", "node", "attribute"),
-      on(PlacedBindingBaseType, "instance", "node", "attribute"),
+      on(typedPlacedBindings, "package", "assembly", "instance", "start", "attribute"),
+      on(PlacedBindingBaseType, "package", "assembly", "instance", "start", "attribute"),
     ),
     contained(
       on(
         PlacedBindingBaseType,
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
         "declaration",
         "cardinality",
@@ -2419,8 +2677,10 @@ export const interactionLawsByName = {
       ),
       on(
         typedPlacedBindings,
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
         "declaration",
         "cardinality",
@@ -2428,13 +2688,13 @@ export const interactionLawsByName = {
       ),
     ),
     contained(
-      on(PlacedBindingBaseType, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
+      on(PlacedBindingBaseType, "package", "assembly", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "baseType"),
     ),
   ],
   "Binding unique": [
-    key(on(BoundVariable, "document", "identifier")),
-    key(on(PlacedBinding, "assembly", "identifier")),
+    key(on(BoundVariable, "package", "path", "identifier")),
+    key(on(PlacedBinding, "package", "assembly", "identifier")),
   ],
   BindingFit: [
     contained(
@@ -2489,10 +2749,10 @@ export const interactionLawsByName = {
     check("Choice_bounds", CountRange, rangeBounds),
   ],
   "Choice identifier key": [
-    key(on(Choice, "document", "kind", "identifier")),
-    key(on(Hottext, "document", "identifier")),
-    key(on(PlacedChoice, "assembly", "kind", "identifier")),
-    key(on(PlacedHottext, "assembly", "identifier")),
+    key(on(Choice, "package", "path", "kind", "identifier")),
+    key(on(Hottext, "package", "path", "identifier")),
+    key(on(PlacedChoice, "package", "assembly", "kind", "identifier")),
+    key(on(PlacedHottext, "package", "assembly", "identifier")),
   ],
   "Custom interaction version": [
     check("Custom_interaction_version", Interaction, (i) =>
@@ -2501,97 +2761,138 @@ export const interactionLawsByName = {
   ],
   "E1 derived": [
     contained(
-      on(read, "node", "name", "kind", "document", "lexical"),
-      on(InteractionAttribute, "node", "name", "kind", "document", "lexical"),
+      on(read, "package", "path", "start", "name", "kind", "lexical"),
+      on(InteractionAttribute, "package", "path", "start", "name", "kind", "lexical"),
     ),
-    contained(on(InteractionAttribute, "node", "name"), on(read, "node", "name")),
-    contained(on(InteractionAttribute, "document", "rootKind"), on(Document, "node", "rootKind")),
     contained(
-      on(Interaction, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(InteractionAttribute, "package", "path", "start", "name"),
+      on(read, "package", "path", "start", "name"),
+    ),
+    contained(
+      on(InteractionAttribute, "package", "path", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
+    ),
+    contained(
+      on(Interaction, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     check("E1_derived", Interaction, (i) => i.in(i.kind, interactionKinds)),
     contained(
-      on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Binding, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    key(on(moduleElements, "parent")),
-    contained(on(moduleAttributes, "node"), on(attributeForms, "node")),
-    contained(on(attributeForms, "node"), on(moduleAttributes, "node")),
-    contained(on(moduleElements, "parent"), on(elementForms, "node")),
-    contained(on(elementForms, "node"), on(moduleElements, "parent")),
-    pciModuleFamily,
-    contained(on(GapInteraction, "node"), on(gapChoices, "node")),
+    key(on(moduleElements, "package", "path", "parent")),
     contained(
-      on(GapInteraction, "node", "interaction"),
-      on(ChoiceInteraction, "node", "interaction"),
+      on(moduleAttributes, "package", "path", "start"),
+      on(attributeForms, "package", "path", "start"),
+    ),
+    contained(
+      on(attributeForms, "package", "path", "start"),
+      on(moduleAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(moduleElements, "package", "path", "parent"),
+      on(elementForms, "package", "path", "start"),
+    ),
+    contained(
+      on(elementForms, "package", "path", "start"),
+      on(moduleElements, "package", "path", "parent"),
+    ),
+    pciModuleFamily,
+    contained(
+      on(GapInteraction, "package", "path", "start"),
+      on(gapChoices, "package", "path", "start"),
+    ),
+    contained(
+      on(GapInteraction, "package", "path", "start", "interactionPath", "interaction"),
+      on(ChoiceInteraction, "package", "path", "start", "interactionPath", "interaction"),
     ),
     gapFamily,
-    contained(on(Binding, "node"), on(Interaction, "node")),
-    key(on(responseIdentifiers, "node")),
-    mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
+    contained(on(Binding, "package", "path", "start"), on(Interaction, "package", "path", "start")),
+    key(on(responseIdentifiers, "package", "path", "start")),
+    mirrors(
+      on(responseIdentifiers, "package", "path", "start"),
+      on(Binding, "package", "path", "start"),
+    ),
     check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
     contained(
-      on(itemBindings, "node", "name", "kind", "document", "value"),
-      on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
+      on(itemBindings, "package", "path", "start", "name", "kind", "value"),
+      on(BoundVariable, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
-    contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
-    contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
-    contained(on(BoundVariable, "document", "adaptive"), on(ItemMode, "document", "adaptive")),
     contained(
-      on(namedBindings, "node", "name", "kind", "document", "value"),
-      on(BindingName, "node", "attribute", "kind", "document", "identifier"),
+      on(BoundVariable, "package", "path", "start", "kind"),
+      on(Binding, "package", "path", "start", "kind"),
     ),
-    contained(on(BindingName, "node", "kind"), on(Binding, "node", "kind")),
+    contained(
+      on(BindingDeclaration, "package", "path", "start", "attribute"),
+      on(BoundVariable, "package", "path", "start", "attribute"),
+    ),
+    contained(
+      on(BoundVariable, "package", "path", "adaptive"),
+      on(ItemMode, "package", "path", "adaptive"),
+    ),
+    contained(
+      on(namedBindings, "package", "path", "start", "name", "kind", "value"),
+      on(BindingName, "package", "path", "start", "attribute", "kind", "identifier"),
+    ),
+    contained(
+      on(BindingName, "package", "path", "start", "kind"),
+      on(Binding, "package", "path", "start", "kind"),
+    ),
     bindingNameFamily,
     placedBindingFamily,
     contained(
-      on(PlacedBinding, "instance", "document", "assembly"),
-      on(itemInstances, "id", "document", "assembly"),
+      on(PlacedBinding, "package", "assembly", "instance", "path"),
+      on(itemInstances, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(PlacedBinding, "node", "attribute", "document", "kind", "identifier"),
-      on(BindingName, "node", "attribute", "document", "kind", "identifier"),
+      on(PlacedBinding, "package", "path", "start", "attribute", "kind", "identifier"),
+      on(BindingName, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     contained(
-      on(PlacedBindingDeclaration, "instance", "node", "attribute"),
-      on(PlacedBinding, "instance", "node", "attribute"),
+      on(PlacedBindingDeclaration, "package", "assembly", "instance", "start", "attribute"),
+      on(PlacedBinding, "package", "assembly", "instance", "start", "attribute"),
     ),
-    contained(on(PlacedBinding, "assembly", "adaptive"), on(ItemMode, "document", "adaptive")),
-    key(on(adaptiveTrue, "document")),
+    contained(
+      on(PlacedBinding, "package", "assembly", "adaptive"),
+      on(ItemMode, "package", "path", "adaptive"),
+    ),
+    key(on(adaptiveTrue, "package", "path")),
     contained(
       on(
         select(ItemMode, (m) => m.eq(m.adaptive, true)),
-        "document",
+        "package",
+        "path",
       ),
-      on(adaptiveTrue, "document"),
+      on(adaptiveTrue, "package", "path"),
     ),
     contained(
-      on(adaptiveTrue, "document"),
+      on(adaptiveTrue, "package", "path"),
       on(
         select(ItemMode, (m) => m.eq(m.adaptive, true)),
-        "document",
+        "package",
+        "path",
       ),
     ),
     contained(
-      on(readOf(["identifier"], choiceKinds), "node", "value"),
-      on(Choice, "node", "identifier"),
+      on(readOf(["identifier"], choiceKinds), "package", "path", "start", "value"),
+      on(Choice, "package", "path", "start", "identifier"),
     ),
     check("E1_derived", Choice, (c) => c.in(c.kind, choiceKinds)),
     contained(
-      on(Hottext, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Hottext, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
-      on(readOf(["identifier"], [hottextKind]), "node", "value"),
-      on(Hottext, "node", "identifier"),
+      on(readOf(["identifier"], [hottextKind]), "package", "path", "start", "value"),
+      on(Hottext, "package", "path", "start", "identifier"),
     ),
     check("E1_derived", Hottext, (h) =>
       h.and(
         h.eq(h.kind, hottextKind),
         h.or(
-          h.and(h.eq(h.nearest, h.document), h.eq(h.nearestKind, "document")),
-          h.and(h.ne(h.nearest, h.document), h.in(h.nearestKind, interactionKinds)),
+          h.and(h.eq(h.nearest, 0n), h.eq(h.nearestKind, "document")),
+          h.and(h.ne(h.nearest, 0n), h.in(h.nearestKind, interactionKinds)),
         ),
       ),
     ),
@@ -2600,71 +2901,90 @@ export const interactionLawsByName = {
     placedChoiceFamily,
     placedHottextFamily,
     contained(
-      on(PlacedChoice, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(PlacedChoice, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(PlacedChoice, "node", "document", "kind", "identifier"),
-      on(Choice, "node", "document", "kind", "identifier"),
+      on(PlacedChoice, "package", "path", "start", "kind", "identifier"),
+      on(Choice, "package", "path", "start", "kind", "identifier"),
     ),
     contained(
-      on(PlacedHottext, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(PlacedHottext, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(PlacedHottext, "node", "document", "identifier"),
-      on(Hottext, "node", "document", "identifier"),
+      on(PlacedHottext, "package", "path", "start", "identifier"),
+      on(Hottext, "package", "path", "start", "identifier"),
     ),
     contained(
-      on(Hotspot, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Hotspot, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(readOf(["shape"], hotspotKinds), "node", "value"), on(Hotspot, "node", "area")),
-    contained(on(Hotspot, "parent", "parentKind"), on(Interaction, "node", "kind")),
-    contained(on(Hotspot, "node", "elements", "elementChildren"), nodeCounts),
-    contained(on(Hotspot, "parent", "parentElements", "parentElementChildren"), nodeCounts),
+    contained(
+      on(readOf(["shape"], hotspotKinds), "package", "path", "start", "value"),
+      on(Hotspot, "package", "path", "start", "area"),
+    ),
+    contained(
+      on(Hotspot, "package", "path", "parent", "parentKind"),
+      on(Interaction, "package", "path", "start", "kind"),
+    ),
+    contained(on(Hotspot, "package", "path", "start", "elements", "elementChildren"), nodeCounts),
+    contained(
+      on(Hotspot, "package", "path", "parent", "parentElements", "parentElementChildren"),
+      nodeCounts,
+    ),
     check("E1_derived", Hotspot, (h) => h.in(h.kind, hotspotKinds)),
     contained(
-      on(CountBound, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(CountBound, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
       on(
         select(Interaction, (i) => i.in(i.kind, boundKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(CountBound, "node"),
+      on(CountBound, "package", "path", "start"),
     ),
     contained(
       on(
         select(Choice, (c) => c.in(c.kind, boundKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(CountBound, "node"),
+      on(CountBound, "package", "path", "start"),
     ),
     mirrors(
-      on(readOf(minNames, boundKinds), "node", "name"),
+      on(readOf(minNames, boundKinds), "package", "path", "start", "name"),
       on(
         select(CountBound, (b) => b.eq(b.minWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "minName",
       ),
     ),
     mirrors(
-      on(readOf(maxNames, boundKinds), "node", "name"),
+      on(readOf(maxNames, boundKinds), "package", "path", "start", "name"),
       on(
         select(CountBound, (b) => b.eq(b.maxWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "maxName",
       ),
     ),
     contained(
       on(
         select(CountBound, (b) => b.in(b.kind, interactionKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
         "choices",
       ),
-      on(Interaction, "node", "choices"),
+      on(Interaction, "package", "path", "start", "choices"),
     ),
     check("E1_derived", CountBound, (b) =>
       b.and(
@@ -2675,14 +2995,36 @@ export const interactionLawsByName = {
     ),
     leastCountFamily,
     contained(
-      on(LeastCount, "node", "kind", "version", "minName", "minWritten", "choices"),
-      on(CountBound, "node", "kind", "version", "minName", "minWritten", "choices"),
+      on(
+        LeastCount,
+        "package",
+        "path",
+        "start",
+        "kind",
+        "version",
+        "minName",
+        "minWritten",
+        "choices",
+      ),
+      on(
+        CountBound,
+        "package",
+        "path",
+        "start",
+        "kind",
+        "version",
+        "minName",
+        "minWritten",
+        "choices",
+      ),
     ),
     mirrors(
-      on(integerReadOf(minNames), "node", "name", "value"),
+      on(integerReadOf(minNames), "package", "path", "start", "name", "value"),
       on(
         select(LeastCount, (l) => l.eq(l.minWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "minName",
         "least",
       ),
@@ -2690,9 +3032,11 @@ export const interactionLawsByName = {
     contained(
       on(
         select(CountBound, (b) => b.and(b.eq(b.minWritten, false), hasDefault(b, defaultedLeast))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(LeastCount, "node"),
+      on(LeastCount, "package", "path", "start"),
     ),
     check("E1_derived", LeastCount, (l) =>
       l.and(
@@ -2716,14 +3060,38 @@ export const interactionLawsByName = {
     ),
     mostCountFamily,
     contained(
-      on(MostCount, "node", "kind", "version", "maxName", "maxWritten", "minWritten", "choices"),
-      on(CountBound, "node", "kind", "version", "maxName", "maxWritten", "minWritten", "choices"),
+      on(
+        MostCount,
+        "package",
+        "path",
+        "start",
+        "kind",
+        "version",
+        "maxName",
+        "maxWritten",
+        "minWritten",
+        "choices",
+      ),
+      on(
+        CountBound,
+        "package",
+        "path",
+        "start",
+        "kind",
+        "version",
+        "maxName",
+        "maxWritten",
+        "minWritten",
+        "choices",
+      ),
     ),
     mirrors(
-      on(integerReadOf(maxNames), "node", "name", "value"),
+      on(integerReadOf(maxNames), "package", "path", "start", "name", "value"),
       on(
         select(MostCount, (m) => m.eq(m.maxWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "maxName",
         "most",
       ),
@@ -2731,9 +3099,11 @@ export const interactionLawsByName = {
     contained(
       on(
         select(CountBound, (b) => b.and(b.eq(b.maxWritten, false), hasDefault(b, defaultedMost))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(MostCount, "node"),
+      on(MostCount, "package", "path", "start"),
     ),
     check("E1_derived", MostCount, (m) =>
       m.and(
@@ -2758,22 +3128,29 @@ export const interactionLawsByName = {
     contained(
       on(
         select(CountBound, (b) => b.and(b.eq(b.leasts, 1n), b.eq(b.mosts, 1n))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(CountRange, "node"),
+      on(CountRange, "package", "path", "start"),
     ),
-    contained(on(CountRange, "node", "leastValue"), on(LeastCount, "node", "leastValue")),
     contained(
-      on(CountRange, "node", "mostValue", "kind", "minWritten"),
-      on(MostCount, "node", "mostValue", "kind", "minWritten"),
+      on(CountRange, "package", "path", "start", "leastValue"),
+      on(LeastCount, "package", "path", "start", "leastValue"),
+    ),
+    contained(
+      on(CountRange, "package", "path", "start", "mostValue", "kind", "minWritten"),
+      on(MostCount, "package", "path", "start", "mostValue", "kind", "minWritten"),
     ),
     contained(
       on(
         select(BindingCardinality, (r) => r.in(r.kind, boundKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
         "mosts",
       ),
-      on(CountBound, "node", "mosts"),
+      on(CountBound, "package", "path", "start", "mosts"),
     ),
     check("E1_derived", BindingCardinality, (r) =>
       r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
@@ -2781,137 +3158,200 @@ export const interactionLawsByName = {
     contained(
       on(
         select(PlacedBindingCardinality, (r) => r.in(r.kind, boundKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
         "mosts",
       ),
-      on(CountBound, "node", "mosts"),
+      on(CountBound, "package", "path", "start", "mosts"),
     ),
     check("E1_derived", PlacedBindingCardinality, (r) =>
       r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
     ),
-    contained(on(BindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
-    contained(on(PlacedBindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
     contained(
-      on(readOf(["lower-bound"], [sliderKind]), "node", "value"),
-      on(Slider, "node", "lower"),
+      on(BindingCardinality, "package", "path", "start", "gaps"),
+      on(Interaction, "package", "path", "start", "gaps"),
     ),
     contained(
-      on(readOf(["upper-bound"], [sliderKind]), "node", "value"),
-      on(Slider, "node", "upper"),
+      on(PlacedBindingCardinality, "package", "path", "start", "gaps"),
+      on(Interaction, "package", "path", "start", "gaps"),
     ),
     contained(
-      on(Slider, "node", "lower"),
+      on(readOf(["lower-bound"], [sliderKind]), "package", "path", "start", "value"),
+      on(Slider, "package", "path", "start", "lower"),
+    ),
+    contained(
+      on(readOf(["upper-bound"], [sliderKind]), "package", "path", "start", "value"),
+      on(Slider, "package", "path", "start", "upper"),
+    ),
+    contained(
+      on(Slider, "package", "path", "start", "lower"),
       on(
         select(InteractionAttribute, (v) => v.eq(v.name, "lower-bound")),
-        "node",
+        "package",
+        "path",
+        "start",
         "value",
       ),
     ),
     contained(
       on(
         select(InteractionAttribute, (v) => v.in(v.name, ariaNames)),
-        "node",
+        "package",
+        "path",
+        "start",
         "name",
         "value",
       ),
-      on(AriaValue, "node", "name", "value"),
+      on(AriaValue, "package", "path", "start", "name", "value"),
     ),
     contained(
-      on(AriaValue, "node", "name", "value"),
-      on(InteractionAttribute, "node", "name", "value"),
+      on(AriaValue, "package", "path", "start", "name", "value"),
+      on(InteractionAttribute, "package", "path", "start", "name", "value"),
     ),
     ariaValueFamily,
     check("E1_derived", AriaElement, (e) => e.gt(e.values, 0n)),
     contained(
       on(
         select(AriaElement, (e) => e.eq(e.values, 2n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(AriaRange, "node"),
+      on(AriaRange, "package", "path", "start"),
     ),
     contained(
-      on(AriaRange, "node", "min"),
+      on(AriaRange, "package", "path", "start", "min"),
       on(
         select(AriaValue, (a) => a.eq(a.name, "aria-valuemin")),
-        "node",
+        "package",
+        "path",
+        "start",
         "value",
       ),
     ),
     contained(
-      on(AriaRange, "node", "max"),
+      on(AriaRange, "package", "path", "start", "max"),
       on(
         select(AriaValue, (a) => a.eq(a.name, "aria-valuemax")),
-        "node",
+        "package",
+        "path",
+        "start",
         "value",
       ),
     ),
     contained(
-      on(referenceSources.feedback, "node", "name", "kind", "document", "rootKind", "value"),
-      on(FeedbackRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+      on(
+        referenceSources.feedback,
+        "package",
+        "path",
+        "start",
+        "name",
+        "kind",
+        "rootKind",
+        "value",
+      ),
+      on(
+        FeedbackRef,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "kind",
+        "assemblyKind",
+        "identifier",
+      ),
     ),
     contained(
-      on(referenceSources.template, "node", "name", "kind", "document", "rootKind", "value"),
-      on(TemplateRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+      on(
+        referenceSources.template,
+        "package",
+        "path",
+        "start",
+        "name",
+        "kind",
+        "rootKind",
+        "value",
+      ),
+      on(
+        TemplateRef,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "kind",
+        "assemblyKind",
+        "identifier",
+      ),
     ),
     contained(
-      on(referenceSources.printed, "node", "name", "kind", "document", "rootKind", "value"),
-      on(PrintedVariableRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+      on(referenceSources.printed, "package", "path", "start", "name", "kind", "rootKind", "value"),
+      on(
+        PrintedVariableRef,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "kind",
+        "assemblyKind",
+        "identifier",
+      ),
     ),
     contained(
-      on(referenceSources.context, "node", "name", "kind", "document", "rootKind", "value"),
-      on(ContextRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+      on(referenceSources.context, "package", "path", "start", "name", "kind", "rootKind", "value"),
+      on(ContextRef, "package", "path", "start", "attribute", "kind", "assemblyKind", "identifier"),
     ),
     contained(
-      on(sectionSources.feedback, "node", "name", "kind", "document", "value"),
-      on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
+      on(sectionSources.feedback, "package", "path", "start", "name", "kind", "value"),
+      on(SectionFeedbackName, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     contained(
-      on(sectionSources.printed, "node", "name", "kind", "document", "value"),
-      on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
+      on(sectionSources.printed, "package", "path", "start", "name", "kind", "value"),
+      on(SectionPrintedName, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     contained(
-      on(sectionSources.template, "node", "name", "kind", "document", "value"),
-      on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
+      on(sectionSources.template, "package", "path", "start", "name", "kind", "value"),
+      on(SectionTemplateName, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     contained(
-      on(sectionSources.context, "node", "name", "kind", "document", "value"),
-      on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
+      on(sectionSources.context, "package", "path", "start", "name", "kind", "value"),
+      on(SectionContextName, "package", "path", "start", "attribute", "kind", "identifier"),
     ),
     sectionFeedbackNameFamily,
     sectionPrintedNameFamily,
     sectionTemplateNameFamily,
     sectionContextNameFamily,
     contained(
-      on(sectionPlacements, "id", "document", "assembly", "assemblyKind"),
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(sectionPlacements, "package", "assembly", "start", "document", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
     ),
     contained(
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
-      on(Instance, "id", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
+      on(Instance, "package", "assembly", "start", "document", "assemblyKind"),
     ),
     contained(
-      on(SectionScope, "document", "feedbacks", "prints", "templates", "contexts"),
-      on(ReferringDocument, "document", "feedbacks", "prints", "templates", "contexts"),
+      on(SectionScope, "package", "document", "feedbacks", "prints", "templates", "contexts"),
+      on(ReferringDocument, "package", "path", "feedbacks", "prints", "templates", "contexts"),
     ),
     sectionFeedbackFamily,
     sectionPrintedFamily,
     sectionTemplateFamily,
     sectionContextFamily,
     contained(
-      on(SectionFeedbackRef, "instance", "document", "assembly", "assemblyKind"),
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionFeedbackRef, "package", "assembly", "instance", "path", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
     ),
     contained(
-      on(SectionPrintedRef, "instance", "document", "assembly", "assemblyKind"),
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionPrintedRef, "package", "assembly", "instance", "path", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
     ),
     contained(
-      on(SectionTemplateRef, "instance", "document", "assembly", "assemblyKind"),
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionTemplateRef, "package", "assembly", "instance", "path", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
     ),
     contained(
-      on(SectionContextRef, "instance", "document", "assembly", "assemblyKind"),
-      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionContextRef, "package", "assembly", "instance", "path", "assemblyKind"),
+      on(SectionScope, "package", "assembly", "instance", "document", "assemblyKind"),
     ),
   ],
   "Feedback outcome type": [
@@ -2922,18 +3362,20 @@ export const interactionLawsByName = {
     contained(
       on(
         select(FeedbackRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(FeedbackRefCardinality, "node", "attribute"),
+      on(FeedbackRefCardinality, "package", "path", "start", "attribute"),
     ),
     contained(
-      on(FeedbackRefCardinality, "node", "attribute", "declaration"),
-      on(FeedbackRefDeclaration, "node", "attribute", "declaration"),
+      on(FeedbackRefCardinality, "package", "path", "start", "attribute", "declaration"),
+      on(FeedbackRefDeclaration, "package", "path", "start", "attribute", "declaration"),
     ),
     contained(
-      on(FeedbackRefCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(FeedbackRefCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     check("Feedback_outcome_type", FeedbackRefCardinality, (r) =>
       r.in(r.cardinality, feedbackCardinalities),
@@ -2941,6 +3383,8 @@ export const interactionLawsByName = {
     contained(
       on(
         select(FeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "package",
+        "path",
         "declaration",
       ),
       identifierTyped,
@@ -2948,19 +3392,37 @@ export const interactionLawsByName = {
     contained(
       on(
         select(SectionFeedbackRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
       ),
-      on(SectionFeedbackRefCardinality, "instance", "node", "attribute"),
+      on(SectionFeedbackRefCardinality, "package", "assembly", "instance", "start", "attribute"),
     ),
     contained(
-      on(SectionFeedbackRefCardinality, "instance", "node", "attribute", "declaration"),
-      on(SectionFeedbackRefDeclaration, "instance", "node", "attribute", "declaration"),
+      on(
+        SectionFeedbackRefCardinality,
+        "package",
+        "assembly",
+        "instance",
+        "start",
+        "attribute",
+        "declaration",
+      ),
+      on(
+        SectionFeedbackRefDeclaration,
+        "package",
+        "assembly",
+        "instance",
+        "start",
+        "attribute",
+        "declaration",
+      ),
     ),
     contained(
-      on(SectionFeedbackRefCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(SectionFeedbackRefCardinality, "package", "assembly", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     check("Feedback_outcome_type", SectionFeedbackRefCardinality, (r) =>
       r.in(r.cardinality, feedbackCardinalities),
@@ -2968,6 +3430,8 @@ export const interactionLawsByName = {
     contained(
       on(
         select(SectionFeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "package",
+        "assembly",
         "declaration",
       ),
       identifierTyped,
@@ -2992,12 +3456,16 @@ export const interactionLawsByName = {
             r.in(r.cardinality, ["multiple", "ordered"]),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
         "kind",
       ),
       on(
         select(CountBound, (b) => b.eq(b.maxWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "kind",
       ),
     ),
@@ -3010,32 +3478,67 @@ export const interactionLawsByName = {
             r.in(r.cardinality, ["multiple", "ordered"]),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
         "kind",
       ),
       on(
         select(CountBound, (b) => b.eq(b.maxWritten, true)),
-        "node",
+        "package",
+        "path",
+        "start",
         "kind",
       ),
     ),
   ],
   "N8 nearest": [
     contained(
-      on(Choice, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Choice, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
-    contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
+    contained(
+      on(Choice, "package", "path", "start"),
+      on(ChoiceInteraction, "package", "path", "start"),
+    ),
+    contained(
+      on(ChoiceInteraction, "package", "path", "start", "interaction"),
+      on(Choice, "package", "path", "start", "nearest"),
+    ),
+    contained(
+      on(
+        select(ChoiceInteraction, (c) => c.ne(c.interactionPath, c.path)),
+        "package",
+        "path",
+        "interactionPath",
+        "interaction",
+      ),
+      onContext,
+    ),
     choiceFamily,
-    contained(on(gapChoices, "node"), on(GapInteraction, "node")),
+    contained(
+      on(gapChoices, "package", "path", "start"),
+      on(GapInteraction, "package", "path", "start"),
+    ),
     contained(
       on(
         select(Hottext, (h) => h.in(h.nearestKind, interactionKinds)),
+        "package",
+        "nearestPath",
         "nearest",
         "nearestKind",
       ),
-      on(Interaction, "node", "kind"),
+      on(Interaction, "package", "path", "start", "kind"),
+    ),
+    contained(
+      on(
+        select(Hottext, (h) => h.ne(h.nearestPath, h.path)),
+        "package",
+        "path",
+        "nearestPath",
+        "nearest",
+      ),
+      onContext,
     ),
   ],
   "PCI module source": [
@@ -3081,18 +3584,20 @@ export const interactionLawsByName = {
     contained(
       on(
         select(TemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(TemplateRefCardinality, "node", "attribute"),
+      on(TemplateRefCardinality, "package", "path", "start", "attribute"),
     ),
     contained(
-      on(TemplateRefCardinality, "node", "attribute", "declaration", "kind"),
-      on(TemplateRefDeclaration, "node", "attribute", "declaration", "kind"),
+      on(TemplateRefCardinality, "package", "path", "start", "attribute", "declaration", "kind"),
+      on(TemplateRefDeclaration, "package", "path", "start", "attribute", "declaration", "kind"),
     ),
     contained(
-      on(TemplateRefCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(TemplateRefCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     check("Template_variable_type", TemplateRefCardinality, (r) =>
       r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
@@ -3102,6 +3607,8 @@ export const interactionLawsByName = {
         select(TemplateRefDeclaration, (r) =>
           r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
         ),
+        "package",
+        "path",
         "declaration",
       ),
       identifierTyped,
@@ -3109,19 +3616,39 @@ export const interactionLawsByName = {
     contained(
       on(
         select(SectionTemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "start",
         "attribute",
       ),
-      on(SectionTemplateRefCardinality, "instance", "node", "attribute"),
+      on(SectionTemplateRefCardinality, "package", "assembly", "instance", "start", "attribute"),
     ),
     contained(
-      on(SectionTemplateRefCardinality, "instance", "node", "attribute", "declaration", "kind"),
-      on(SectionTemplateRefDeclaration, "instance", "node", "attribute", "declaration", "kind"),
+      on(
+        SectionTemplateRefCardinality,
+        "package",
+        "assembly",
+        "instance",
+        "start",
+        "attribute",
+        "declaration",
+        "kind",
+      ),
+      on(
+        SectionTemplateRefDeclaration,
+        "package",
+        "assembly",
+        "instance",
+        "start",
+        "attribute",
+        "declaration",
+        "kind",
+      ),
     ),
     contained(
-      on(SectionTemplateRefCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(SectionTemplateRefCardinality, "package", "assembly", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     check("Template_variable_type", SectionTemplateRefCardinality, (r) =>
       r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
@@ -3131,6 +3658,8 @@ export const interactionLawsByName = {
         select(SectionTemplateRefDeclaration, (r) =>
           r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
         ),
+        "package",
+        "assembly",
         "declaration",
       ),
       identifierTyped,

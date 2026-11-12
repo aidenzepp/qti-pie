@@ -14,9 +14,9 @@
  *   when the closing edge is a share's, `E1_derived` when it is a child's) and the database
  *   refuses. The host never refuses.
  * - **`ShareTarget`**, one row for every {@link ShareFragment} whose `id` an {@link IdBinding} names,
- *   keyed by the share: the fragment, the owner of the id as `target`, and the two ranks copied
- *   from the `MathRank` rows. A fragment that names no id has no row, and "Idref target" refuses
- *   it.
+ *   keyed by the share: the fragment, the owner of the id as `targetStart`, and the two ranks
+ *   copied from the `MathRank` rows. A fragment that names no id has no row, and "Idref target"
+ *   refuses it.
  *
  * **A document in an assembly** ({@link placedShareRowsOf}), from every document's rows, in a pass
  * over each assembly: its shares are resolved in the assembly, under each instance of their
@@ -25,7 +25,8 @@
  *
  * A target that is no MathML element gets a row as any other element does, with those of its
  * ancestors, which end at an `m:math` only when an `m:math` holds it (an annotation's HTML). A
- * target no `m:math` holds has rows up to the document node, the one node that is its own parent:
+ * target no `m:math` holds has rows up to the document node, the one node that is its own parent,
+ * at position 0:
  * the law frees its rank as it frees an `m:math`'s, so the database accepts what the oracle does.
  *
  * The rows restate what the tree says and nothing else. Each element's children are collected in
@@ -34,11 +35,11 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
-import type { InstanceRoot } from "#pantry/import/overlays/tests.ts";
+import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { DocumentId, ShareFragment } from "#pantry/qti/identity.ts";
 import type {
   MathRank,
@@ -50,7 +51,8 @@ import type { Site } from "#pantry/qti/tests.ts";
 import { splicingParents, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
- * A document's share rows, one keyed set per relation, each keyed by its node's id.
+ * A document's share rows, one keyed set per relation, each keyed by its node's
+ * `(package, path, start)` as a JSON array ({@link keyOf}).
  */
 export interface MathmlShareRows {
   readonly MathRank: ReadonlyMap<string, Addition<typeof MathRank>>;
@@ -63,26 +65,42 @@ export interface MathmlShareRows {
 const mathRoot = "m:math";
 
 /**
+ * The document node's `start`, 0: the copy under which a test's assembly binds an id, since it
+ * writes each of its documents once (reading 86).
+ */
+const documentStart = 0n;
+
+/**
+ * The text of a row's key, or of a node's place in a walk: its values in key order, as a JSON
+ * array.
+ *
+ * @param values - The key's values.
+ * @returns The key text.
+ */
+const keyOf = (values: readonly (bigint | string)[]): string => JSON.stringify(values.map(String));
+
+/**
  * Collect the elements that hold a row: each share with a target and each target, with their
  * ancestors up to the nearest `m:math` or, where none holds them, the document node.
  *
- * @param byId - A document's node rows by id.
+ * @param byStart - A document's node rows by `start`.
  * @param starts - The nodes the walks start from.
- * @returns The rows' nodes by id, each once.
+ * @returns The rows' nodes by `start`, each once.
  */
 const rowedOf = (
-  byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
-  starts: Iterable<NodeId>,
-): ReadonlyMap<NodeId, NodeRow<Composed>> => {
-  const rowed = new Map<NodeId, NodeRow<Composed>>();
+  byStart: ReadonlyMap<bigint, NodeRow<Composed>>,
+  starts: Iterable<bigint>,
+): ReadonlyMap<bigint, NodeRow<Composed>> => {
+  const rowed = new Map<bigint, NodeRow<Composed>>();
   for (const start of starts) {
     // A node already held has its chain held with it, so the walk stops there.
     for (
-      let node = byId.get(start);
-      node !== undefined && !rowed.has(node.id);
-      node = node.kind === mathRoot || node.parent === node.id ? undefined : byId.get(node.parent)
+      let node = byStart.get(start);
+      node !== undefined && !rowed.has(node.start);
+      node =
+        node.kind === mathRoot || node.parent === node.start ? undefined : byStart.get(node.parent)
     ) {
-      rowed.set(node.id, node);
+      rowed.set(node.start, node);
     }
   }
 
@@ -93,7 +111,7 @@ const rowedOf = (
  * One node of the depth-first walk that ranks the rows: its edges, how many it has followed, the
  * rank they give it so far, and whether its rank bounds the frame below it on the walk's stack.
  */
-interface Frame<Key extends string> {
+interface Frame<Key> {
   readonly edges: readonly Key[];
   readonly id: Key;
   readonly lifts: boolean;
@@ -121,7 +139,7 @@ interface Frame<Key extends string> {
  * @param includerOf - Each element an include splices: the include's parent element.
  * @returns Each rowed node's rank.
  */
-const ranksOf = <Key extends string>(
+const ranksOf = <Key>(
   members: readonly Key[],
   childrenOf: ReadonlyMap<Key, readonly Key[]>,
   targetOf: ReadonlyMap<Key, Key>,
@@ -219,18 +237,18 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): MathmlShareRows =>
   }
 
   const { IdBinding, ShareFragment } = identityRowsOf(view, ids);
-  const owners = new Map<string, NodeId>();
+  const owners = new Map<string, bigint>();
   for (const { id, owner } of IdBinding.values()) {
     if (!owners.has(id)) {
       owners.set(id, owner);
     }
   }
 
-  const targetOf = new Map<NodeId, NodeId>();
-  for (const { id, node } of ShareFragment.values()) {
+  const targetOf = new Map<bigint, bigint>();
+  for (const { id, start } of ShareFragment.values()) {
     const owner = owners.get(id);
     if (owner !== undefined) {
-      targetOf.set(node, owner);
+      targetOf.set(start, owner);
     }
   }
 
@@ -238,65 +256,66 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): MathmlShareRows =>
     return none;
   }
 
-  const rowed = rowedOf(new Map(flat.nodes.map((node) => [node.id, node] as const)), [
+  const rowed = rowedOf(new Map(flat.nodes.map((node) => [node.start, node] as const)), [
     ...targetOf.keys(),
     ...targetOf.values(),
   ]);
-  const members = flat.nodes.filter(({ id }) => rowed.has(id));
-  const childrenOf = new Map<NodeId, NodeId[]>();
-  for (const { id, parent } of members) {
-    if (parent !== id && rowed.has(parent)) {
+  const members = flat.nodes.filter(({ start }) => rowed.has(start));
+  const childrenOf = new Map<bigint, bigint[]>();
+  for (const { parent, start } of members) {
+    if (parent !== start && rowed.has(parent)) {
       const siblings = childrenOf.get(parent);
       if (siblings === undefined) {
-        childrenOf.set(parent, [id]);
+        childrenOf.set(parent, [start]);
       } else {
-        siblings.push(id);
+        siblings.push(start);
       }
     }
   }
 
   const ranks = ranksOf(
-    members.map(({ id }) => id),
+    members.map(({ start }) => start),
     childrenOf,
     targetOf,
   );
-  const document = flat.document.node;
   const { folds } = view;
-  const rankOf = (node: NodeId): bigint => ranks.get(node) ?? 0n;
+  const rankOf = (start: bigint): bigint => ranks.get(start) ?? 0n;
+  const keyTextOf = (start: bigint): string => keyOf([ids.package, ids.path, start]);
 
   return {
     MathRank: new Map(
       members.map((node) => [
-        node.id,
+        keyTextOf(node.start),
         {
-          document,
           kind: node.kind,
-          nearest: foldAt(folds, node.id).nearest,
-          node: node.id,
+          nearest: foldAt(folds, node.start).nearest,
+          package: ids.package,
           parent: node.parent,
           parentRank: rankOf(node.parent),
-          rank: rankOf(node.id),
+          path: ids.path,
+          rank: rankOf(node.start),
           start: node.start,
           version: node.version,
         },
       ]),
     ),
     ShareTarget: new Map(
-      [...ShareFragment.values()].flatMap(({ id, node }) => {
-        const target = targetOf.get(node);
+      [...ShareFragment.values()].flatMap(({ id, start }) => {
+        const target = targetOf.get(start);
 
         return target === undefined
           ? []
           : [
               [
-                node,
+                keyTextOf(start),
                 {
-                  document,
                   id,
-                  node,
-                  shareRank: rankOf(node),
-                  target,
+                  package: ids.package,
+                  path: ids.path,
+                  shareRank: rankOf(start),
+                  start,
                   targetRank: rankOf(target),
+                  targetStart: target,
                 },
               ] as const,
             ];
@@ -306,8 +325,8 @@ export const rowsOf = (view: DocumentView, ids: IdentityIds): MathmlShareRows =>
 };
 
 /**
- * A package's placed share rows, one keyed set per relation, each keyed by its instance and node as
- * a JSON array.
+ * A package's placed share rows, one keyed set per relation, each keyed by its instance
+ * `(package, assembly, instance)` and its node's `start` as a JSON array.
  */
 export interface PlacedShareRows {
   readonly PlacedMathRank: ReadonlyMap<string, Addition<typeof PlacedMathRank>>;
@@ -315,72 +334,48 @@ export interface PlacedShareRows {
 }
 
 /**
- * The text of a row's key: its values in key order, as a JSON array.
- *
- * @param values - The key's values.
- * @returns The key text.
+ * An include's site as the pass reads it: the include's document and place, its parent element and
+ * that element's kind.
  */
-const keyOf = (values: readonly string[]): string => JSON.stringify(values);
+export type IncludeSite = Pick<Addition<typeof Site>, "parent" | "parentKind" | "path" | "start">;
 
 /**
- * An include's site as the pass reads it: the include, its parent element and that element's kind.
- */
-export type IncludeSite = Pick<Addition<typeof Site>, "node" | "parent" | "parentKind">;
-
-/**
- * An instance as the pass over an assembly reads it: its document, the site it is placed at, and
- * its own children nested ({@link InstanceRoot}'s tree, as it writes it).
- */
-interface Placement {
-  readonly children: readonly Placement[];
-  readonly document: NodeId;
-  readonly id: NodeId;
-  readonly site: NodeId;
-}
-
-/**
- * An assembly's root instance as the pass reads it: its assembly, and the kind of its root.
- */
-export type PlacementRoot = Placement & Pick<InstanceRoot, "assembly" | "assemblyKind">;
-
-/**
- * One instance as the pass over an assembly places it: its document, and the include that splices
- * it (the include's parent element, in the instance that holds the include), none for a root and
- * for an instance placed whole at an item ref or a section ref.
+ * One instance as the pass over an assembly places it: its document, its position `instance` in
+ * the assembly's instance tree, and the include that splices it (the include's parent element, in
+ * the instance that holds the include), none for a root and for an instance placed whole at an
+ * item ref or a section ref.
  */
 interface Seat {
-  readonly document: NodeId;
-  readonly id: NodeId;
-  readonly includer?: { readonly node: NodeId; readonly seat: Seat };
+  readonly document: string;
+  readonly includer?: { readonly node: bigint; readonly seat: Seat };
+  readonly instance: bigint;
 }
 
 /**
- * Collect every instance of an assembly, parents before children, each with its includer.
+ * Collect every instance of an assembly, parents before children, each with its includer and its
+ * pre-order position, `Instance.start`, as the instance tree draws it: the root 0, then each
+ * child's subtree in slot order.
  *
  * @param root - The assembly's root instance.
- * @param sites - Each include's site by its node.
+ * @param sites - Each include's site by its document and place ({@link keyOf}).
  * @returns The instances, in pre-order.
  */
-const seatsOf = (root: PlacementRoot, sites: ReadonlyMap<NodeId, IncludeSite>): readonly Seat[] => {
+const seatsOf = (root: InstanceRoot, sites: ReadonlyMap<string, IncludeSite>): readonly Seat[] => {
   const splicing = new Set<string>(splicingParents);
   const seats: Seat[] = [];
-  const stack: { instance: Placement; parent: Seat | undefined }[] = [
+  const stack: { instance: InstanceMember | InstanceRoot; parent: Seat | undefined }[] = [
     { instance: root, parent: undefined },
   ];
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    const site = next.parent === undefined ? undefined : sites.get(next.instance.site);
+    const { children, document, site, siteDocument } = next.instance;
+    const instance = BigInt(seats.length);
+    const included = next.parent === undefined ? undefined : sites.get(keyOf([siteDocument, site]));
     const seat: Seat =
-      next.parent !== undefined && site !== undefined && splicing.has(site.parentKind)
-        ? {
-            document: next.instance.document,
-            id: next.instance.id,
-            includer: { node: site.parent, seat: next.parent },
-          }
-        : { document: next.instance.document, id: next.instance.id };
+      next.parent !== undefined && included !== undefined && splicing.has(included.parentKind)
+        ? { document, includer: { node: included.parent, seat: next.parent }, instance }
+        : { document, instance };
     seats.push(seat);
-    stack.push(
-      ...next.instance.children.toReversed().map((instance) => ({ instance, parent: seat })),
-    );
+    stack.push(...children.toReversed().map((child) => ({ instance: child, parent: seat })));
   }
 
   return seats;
@@ -391,9 +386,9 @@ const seatsOf = (root: PlacementRoot, sites: ReadonlyMap<NodeId, IncludeSite>): 
  * the binding is first met at, and the copy the assembly writes it under.
  */
 interface Bound {
-  readonly copy: NodeId;
-  readonly document: NodeId;
-  readonly owner: NodeId;
+  readonly copy: bigint;
+  readonly document: string;
+  readonly owner: bigint;
   readonly seat: Seat;
 }
 
@@ -413,26 +408,31 @@ interface Resolved {
  *
  * @param seats - The assembly's instances, in pre-order.
  * @param underTest - Whether the assembly's root is a test.
- * @param ids - Each document's IDs.
- * @param shares - Each document's shares.
+ * @param ids - Each document's IDs, by its path.
+ * @param shares - Each document's shares, by its path.
  * @returns Each share whose id the assembly binds.
  */
 const resolvedOf = (
   seats: readonly Seat[],
   underTest: boolean,
-  ids: ReadonlyMap<NodeId, readonly Addition<typeof DocumentId>[]>,
-  shares: ReadonlyMap<NodeId, readonly Addition<typeof ShareFragment>[]>,
+  ids: ReadonlyMap<string, readonly Addition<typeof DocumentId>[]>,
+  shares: ReadonlyMap<string, readonly Addition<typeof ShareFragment>[]>,
 ): readonly Resolved[] => {
-  const firstOf = new Map<NodeId, Seat>();
+  const firstOf = new Map<string, Seat>();
   const bound = new Map<string, Bound>();
   for (const seat of seats) {
     if (!firstOf.has(seat.document)) {
       firstOf.set(seat.document, seat);
     }
 
-    for (const { document, id, owner } of ids.get(seat.document) ?? []) {
+    for (const { id, owner, path } of ids.get(seat.document) ?? []) {
       if (!bound.has(id)) {
-        bound.set(id, { copy: underTest ? document : seat.id, document, owner, seat });
+        bound.set(id, {
+          copy: underTest ? documentStart : seat.instance,
+          document: path,
+          owner,
+          seat,
+        });
       }
     }
   }
@@ -464,36 +464,48 @@ interface Rowed {
 }
 
 /**
+ * The text of an element's place in an assembly's walk: its instance and its `start`.
+ *
+ * @param seat - The instance.
+ * @param start - The element's `start` in the instance's document.
+ * @returns The place's text.
+ */
+const placeOf = (seat: Seat, start: bigint): string => keyOf([seat.instance, start]);
+
+/**
  * Collect the elements that hold a row in an assembly: each share and each target, with the chain
  * of ancestors up to the nearest `m:math` or, where none holds them, the document node, and from a
  * top-level element of a spliced document on, at the include's parent element.
  *
  * @param resolved - The assembly's resolved shares.
- * @param nodesOf - A document's nodes by id.
- * @returns The rowed elements by their key, each once.
+ * @param nodesOf - A document's nodes by `start`, the document named by its path.
+ * @returns The rowed elements by their place ({@link placeOf}), each once.
  */
 const rowedUnder = (
   resolved: readonly Resolved[],
-  nodesOf: (document: NodeId) => ReadonlyMap<NodeId, NodeRow<Composed>>,
+  nodesOf: (document: string) => ReadonlyMap<bigint, NodeRow<Composed>>,
 ): ReadonlyMap<string, Rowed> => {
   const rowed = new Map<string, Rowed>();
-  const mark = (start: Seat, at: NodeId): void => {
+  const mark = (start: Seat, at: bigint): void => {
     let seat = start;
     let node = nodesOf(seat.document).get(at);
     while (node !== undefined) {
-      const key = keyOf([seat.id, node.id]);
+      const key = placeOf(seat, node.start);
       if (rowed.has(key)) {
         return;
       }
 
       rowed.set(key, { node, seat });
-      if (node.kind !== mathRoot && node.parent !== node.id) {
+      if (node.kind !== mathRoot && node.parent !== node.start) {
         node = nodesOf(seat.document).get(node.parent);
         continue;
       }
 
       const { includer } = seat;
-      if (includer === undefined || (node.id !== seat.document && node.parent !== seat.document)) {
+      if (
+        includer === undefined ||
+        (node.start !== documentStart && node.parent !== documentStart)
+      ) {
         return;
       }
 
@@ -502,7 +514,7 @@ const rowedUnder = (
     }
   };
   for (const { seat, share, target, targetSeat } of resolved) {
-    mark(seat, share.node);
+    mark(seat, share.start);
     mark(targetSeat, target.owner);
   }
 
@@ -528,7 +540,7 @@ interface Graph {
  * @returns The graph.
  */
 const graphOf = (seats: readonly Seat[], rowed: ReadonlyMap<string, Rowed>): Graph => {
-  const bySeat = Map.groupBy(rowed.values(), ({ seat }) => seat.id);
+  const bySeat = Map.groupBy(rowed.values(), ({ seat }) => seat.instance);
   const members: string[] = [];
   const childrenOf = new Map<string, string[]>();
   const includerOf = new Map<string, string>();
@@ -541,23 +553,23 @@ const graphOf = (seats: readonly Seat[], rowed: ReadonlyMap<string, Rowed>): Gra
     }
   };
   for (const seat of seats) {
-    const mine = (bySeat.get(seat.id) ?? []).toSorted((a, b) =>
+    const mine = (bySeat.get(seat.instance) ?? []).toSorted((a, b) =>
       a.node.start < b.node.start ? -1 : 1,
     );
     for (const { node } of mine) {
-      const key = keyOf([seat.id, node.id]);
-      const parent = keyOf([seat.id, node.parent]);
+      const key = placeOf(seat, node.start);
+      const parent = placeOf(seat, node.parent);
       members.push(key);
-      if (node.parent !== node.id && rowed.has(parent)) {
+      if (node.parent !== node.start && rowed.has(parent)) {
         append(parent, key);
       }
 
       if (
         seat.includer !== undefined &&
-        node.parent === seat.document &&
-        node.id !== seat.document
+        node.parent === documentStart &&
+        node.start !== documentStart
       ) {
-        const includer = keyOf([seat.includer.seat.id, seat.includer.node]);
+        const includer = placeOf(seat.includer.seat, seat.includer.node);
         if (rowed.has(includer)) {
           append(includer, key);
           includerOf.set(key, includer);
@@ -593,36 +605,38 @@ const graphOf = (seats: readonly Seat[], rowed: ReadonlyMap<string, Rowed>): Gra
  * @param input - The package's rows the placements read.
  * @param input.ids - Every document's IDs (the identity builder's `DocumentId`).
  * @param input.instances - Every assembly's root instance, its tree nested.
- * @param input.nodesOf - A document's nodes, each parent before its children.
+ * @param input.nodesOf - A document's nodes by its path, each parent before its children.
  * @param input.shares - Every document's {@link ShareFragment} rows.
  * @param input.sites - Every document's include sites.
  * @returns The rows.
  */
 export const placedShareRowsOf = (input: {
   readonly ids: Iterable<Addition<typeof DocumentId>>;
-  readonly instances: Iterable<PlacementRoot>;
-  readonly nodesOf: (document: NodeId) => readonly NodeRow<Composed>[];
+  readonly instances: Iterable<InstanceRoot>;
+  readonly nodesOf: (path: string) => readonly NodeRow<Composed>[];
   readonly shares: Iterable<Addition<typeof ShareFragment>>;
   readonly sites: Iterable<IncludeSite>;
 }): PlacedShareRows => {
   const ranked = new Map<string, Addition<typeof PlacedMathRank>>();
   const targets = new Map<string, Addition<typeof PlacedShareTarget>>();
-  const sharesOf = Map.groupBy(input.shares, ({ document }) => document);
+  const sharesOf = Map.groupBy(input.shares, ({ path }) => path);
   if (sharesOf.size === 0) {
     return { PlacedMathRank: ranked, PlacedShareTarget: targets };
   }
 
-  const idsOf = Map.groupBy(input.ids, ({ document }) => document);
-  const sites = new Map([...input.sites].map((site) => [site.node, site] as const));
-  const held = new Map<NodeId, ReadonlyMap<NodeId, NodeRow<Composed>>>();
-  const byIdOf = (document: NodeId): ReadonlyMap<NodeId, NodeRow<Composed>> => {
-    const read = held.get(document);
+  const idsOf = Map.groupBy(input.ids, ({ path }) => path);
+  const sites = new Map(
+    [...input.sites].map((site) => [keyOf([site.path, site.start]), site] as const),
+  );
+  const held = new Map<string, ReadonlyMap<bigint, NodeRow<Composed>>>();
+  const byStartOf = (path: string): ReadonlyMap<bigint, NodeRow<Composed>> => {
+    const read = held.get(path);
     if (read !== undefined) {
       return read;
     }
 
-    const nodes = new Map(input.nodesOf(document).map((node) => [node.id, node] as const));
-    held.set(document, nodes);
+    const nodes = new Map(input.nodesOf(path).map((node) => [node.start, node] as const));
+    held.set(path, nodes);
 
     return nodes;
   };
@@ -636,47 +650,52 @@ export const placedShareRowsOf = (input: {
       continue;
     }
 
-    const rowed = rowedUnder(resolved, byIdOf);
+    const rowed = rowedUnder(resolved, byStartOf);
     const { childrenOf, includerOf, members } = graphOf(seats, rowed);
     const ranks = ranksOf(
       members,
       childrenOf,
       new Map(
         resolved.map(({ seat, share, target, targetSeat }) => [
-          keyOf([seat.id, share.node]),
-          keyOf([targetSeat.id, target.owner]),
+          placeOf(seat, share.start),
+          placeOf(targetSeat, target.owner),
         ]),
       ),
       includerOf,
     );
-    const rankOf = (seat: Seat, node: NodeId): bigint => ranks.get(keyOf([seat.id, node])) ?? 0n;
+    const rankOf = (seat: Seat, start: bigint): bigint => ranks.get(placeOf(seat, start)) ?? 0n;
+    const { assembly, assemblyKind } = root;
+    const keyTextOf = (seat: Seat, start: bigint): string =>
+      keyOf([root.package, assembly, seat.instance, start]);
     for (const { node, seat } of rowed.values()) {
-      ranked.set(keyOf([seat.id, node.id]), {
-        assembly: root.assembly,
-        document: seat.document,
-        instance: seat.id,
+      ranked.set(keyTextOf(seat, node.start), {
+        assembly,
+        instance: seat.instance,
         kind: node.kind,
-        node: node.id,
+        package: root.package,
         parent: node.parent,
         parentRank: rankOf(seat, node.parent),
-        rank: rankOf(seat, node.id),
+        path: seat.document,
+        rank: rankOf(seat, node.start),
+        start: node.start,
       });
     }
 
     for (const { seat, share, target, targetSeat } of resolved) {
-      targets.set(keyOf([seat.id, share.node]), {
-        assembly: root.assembly,
-        assemblyKind: root.assemblyKind,
-        document: seat.document,
+      targets.set(keyTextOf(seat, share.start), {
+        assembly,
+        assemblyKind,
         id: share.id,
-        instance: seat.id,
-        node: share.node,
-        shareRank: rankOf(seat, share.node),
-        target: target.owner,
+        instance: seat.instance,
+        package: root.package,
+        path: seat.document,
+        shareRank: rankOf(seat, share.start),
+        start: share.start,
+        target: target.document,
         targetCopy: target.copy,
-        targetDocument: target.document,
-        targetInstance: targetSeat.id,
+        targetInstance: targetSeat.instance,
         targetRank: rankOf(targetSeat, target.owner),
+        targetStart: target.owner,
       });
     }
   }

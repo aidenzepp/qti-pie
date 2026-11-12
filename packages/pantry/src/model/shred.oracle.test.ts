@@ -36,8 +36,6 @@ import {
   closedElements,
   editElement,
   featuresOf,
-  idOf,
-  scrambledIdOf,
   searchTimeout,
   xdmDocument,
 } from "#pantry/test/gen/xdm.ts";
@@ -288,12 +286,11 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
               c.noteAll(featuresOf(document));
               c.noteAll(situationsOf(document));
 
-              const ids = c.draw(element([idOf, scrambledIdOf]));
-              const rows = flatten(document, ids);
+              const rows = flatten(document);
               const assembled = yield* Effect.orDie(Effect.fromResult(assemble(rows)));
               const back = yield* reread(yield* unshred(assembled, names), document.version);
 
-              assert.deepStrictEqual(flatten(back, ids), rows);
+              assert.deepStrictEqual(flatten(back), rows);
             }),
         ),
       ),
@@ -1553,7 +1550,7 @@ describe("an element under its governing type (spec reading 84)", () => {
                 ),
               onSuccess: (tree) =>
                 Effect.map(
-                  Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar)))),
+                  Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar)))),
                   (rows) => {
                     const node = rows.nodes.find((row) => row.kind === kind);
                     if (node === undefined) {
@@ -2048,7 +2045,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
               } else {
                 accepted += 1;
                 const rows = yield* Effect.orDie(
-                  Effect.fromResult(fold(result.success, idOf, foldGrammarOf(grammar))),
+                  Effect.fromResult(fold(result.success, foldGrammarOf(grammar))),
                 );
                 const held = rows.nodes.filter(
                   (node) => node.kind === foreignKinds.other && node.parentKind === parent.name,

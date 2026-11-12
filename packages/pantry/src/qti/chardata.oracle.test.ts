@@ -46,7 +46,6 @@ import {
   Doctype,
   Document,
   EncodingDecl,
-  EntryPath,
   entityRefChars,
   Namespace,
   OpenElementName,
@@ -58,9 +57,15 @@ import {
   XmlDecl,
   XmlStandalone,
 } from "#pantry/qti/chardata.ts";
-import { keyTextBytes, namespaceBytes, prefixBytes, utf8Length } from "#pantry/qti/limits.ts";
+import {
+  EntryPath,
+  identityBytes,
+  namespaceBytes,
+  prefixBytes,
+  utf8Length,
+} from "#pantry/qti/limits.ts";
 import { Node, nodeTree } from "#pantry/qti/node.ts";
-import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { lawNames } from "#pantry/test/oracle.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -468,7 +473,7 @@ const straddling = (bytes: number): readonly number[] =>
 /**
  * The lengths the bounds box draws, in code points: the short ones, and each side of the byte
  * bounds of a prefix (`prefixBytes`), of a foreign namespace (`namespaceBytes`) and of a path
- * (`keyTextBytes`), over one-byte and four-byte characters.
+ * (`identityBytes`), over one-byte and four-byte characters.
  */
 const boundLengths: readonly [number, ...number[]] = [
   0,
@@ -477,7 +482,7 @@ const boundLengths: readonly [number, ...number[]] = [
     2,
     ...straddling(prefixBytes),
     ...straddling(namespaceBytes),
-    ...straddling(keyTextBytes),
+    ...straddling(identityBytes),
   ]),
 ];
 
@@ -694,9 +699,11 @@ describe("qti/chardata.ts", () => {
             Effect.sync(() => {
               c.noteAll(featuresOf(document));
 
-              const rows = flatten(document, idOf);
+              const rows = flatten(document);
               const counts = kindsIn(document);
-              const kindOf = new Map<string, string>(rows.nodes.map(({ id, kind }) => [id, kind]));
+              const kindOf = new Map<string, string>(
+                rows.nodes.map(({ kind, start }) => [String(start), kind]),
+              );
               const ofKind = (kind: string, held: ReadonlyMap<string, unknown>) => {
                 assert.strictEqual(held.size, counts.get(kind) ?? 0, `${kind} rows`);
                 for (const node of held.keys()) {
@@ -704,9 +711,9 @@ describe("qti/chardata.ts", () => {
                 }
               };
 
-              const comments = keyed(rows.comments, ({ node }) => node);
-              const pis = keyed(rows.pis, ({ node }) => node);
-              const doctypes = keyed(rows.doctypes, ({ node }) => node);
+              const comments = keyed(rows.comments, ({ start }) => String(start));
+              const pis = keyed(rows.pis, ({ start }) => String(start));
+              const doctypes = keyed(rows.doctypes, ({ start }) => String(start));
               ofKind("comment", comments);
               ofKind("pi", pis);
               ofKind("doctype", doctypes);
@@ -723,11 +730,11 @@ describe("qti/chardata.ts", () => {
 
               const chars = keyed(
                 [
-                  ...rows.texts.map(({ node, value }) => ({ chars: value, node })),
-                  ...rows.whitespace.map(({ node, value }) => ({ chars: value, node })),
-                  ...rows.entityRefs.map(({ name, node }) => ({ chars: `&${name};`, node })),
+                  ...rows.texts.map(({ start, value }) => ({ chars: value, start })),
+                  ...rows.whitespace.map(({ start, value }) => ({ chars: value, start })),
+                  ...rows.entityRefs.map(({ name, start }) => ({ chars: `&${name};`, start })),
                 ],
-                ({ node }) => node,
+                ({ start }) => String(start),
               );
               for (const kind of ["text", "ws", "entityRef"] as const) {
                 const held = new Map([...chars].filter(([node]) => kindOf.get(node) === kind));
@@ -738,7 +745,7 @@ describe("qti/chardata.ts", () => {
               }
 
               const { document: row } = rows;
-              assert.strictEqual(kindOf.get(row.node), "document");
+              assert.strictEqual(kindOf.get("0"), "document");
               assert.match(row.charset, patternOf(Document.fields.charset));
               assert.match(row.exportCharset, patternOf(Document.fields.exportCharset));
 
@@ -747,19 +754,19 @@ describe("qti/chardata.ts", () => {
               const standalone = document.declaration.pipe(
                 Option.flatMap((held) => held.standalone),
               );
-              assert.deepStrictEqual(
-                rows.xmlDecls.map(({ node }) => node),
-                declared ? [row.node] : [],
+              assert.strictEqual(
+                rows.xmlDecls.length,
+                declared ? 1 : 0,
                 "an XmlDecl row exactly where the document writes a declaration",
               );
-              assert.deepStrictEqual(
-                rows.encodingDecls.map(({ node }) => node),
-                Option.isSome(encoding) ? [row.node] : [],
+              assert.strictEqual(
+                rows.encodingDecls.length,
+                Option.isSome(encoding) ? 1 : 0,
                 "an EncodingDecl row exactly where the declaration writes an encoding",
               );
-              assert.deepStrictEqual(
-                rows.sdDecls.map(({ node }) => node),
-                Option.isSome(standalone) ? [row.node] : [],
+              assert.strictEqual(
+                rows.sdDecls.length,
+                Option.isSome(standalone) ? 1 : 0,
                 "an SdDecl row exactly where the declaration writes a standalone",
               );
               for (const { version } of rows.xmlDecls) {
@@ -773,33 +780,37 @@ describe("qti/chardata.ts", () => {
               }
 
               const roots = rows.nodes.filter(
-                ({ id, kind, parent }) =>
-                  id !== row.node && kindOf.get(parent) === "document" && !nonElements.has(kind),
+                ({ kind, parent, start }) =>
+                  start !== 0n && parent === 0n && !nonElements.has(kind),
               );
               assert.deepStrictEqual(
                 roots.map(({ kind }) => kind),
                 [document.root.kind],
               );
 
-              const declarations = keyed(rows.namespaces, ({ at, node }) => `${node} ${at}`);
-              keyed(rows.namespaces, ({ node, prefix }) => `${node} ${prefix}`);
+              const declarations = keyed(rows.namespaces, ({ prefix, start }) =>
+                JSON.stringify([String(start), prefix]),
+              );
               for (const { prefix, uri } of declarations.values()) {
                 assert.match(prefix, patternOf(Namespace.fields.prefix));
                 assert.match(uri, patternOf(Namespace.fields.uri));
               }
 
-              const names = keyed(rows.openElementNames, ({ node }) => node);
+              const names = keyed(rows.openElementNames, ({ start }) => String(start));
               const foreign = rows.nodes.filter(({ kind }) => isForeignKind(kind));
               assert.deepStrictEqual(
-                foreign.map(({ id }) => id).toSorted(),
+                foreign.map(({ start }) => String(start)).toSorted(),
                 [...names.keys()].toSorted(),
               );
 
               const parentOf = new Map<string, string>(
-                rows.nodes.map(({ id, parent }) => [id, parent]),
+                rows.nodes.map(({ parent, start }) => [String(start), String(parent)]),
               );
-              const byId = new Map(rows.nodes.map((held) => [held.id, held] as const));
-              for (const { local, namespace, node } of names.values()) {
+              const byStart = new Map(
+                rows.nodes.map((held) => [String(held.start), held] as const),
+              );
+              for (const { local, namespace, start } of names.values()) {
+                const node = String(start);
                 assert.match(local, patternOf(OpenElementName.fields.local));
                 assert.match(namespace, patternOf(OpenElementName.fields.namespace));
                 assert.notStrictEqual(namespace, mathmlNamespace);
@@ -820,7 +831,7 @@ describe("qti/chardata.ts", () => {
                   kindOf.get(node),
                 );
 
-                const held = byId.get(node);
+                const held = byStart.get(node);
                 assert.isDefined(held);
                 assert.deepStrictEqual(
                   brokenChecks({
@@ -923,7 +934,7 @@ describe("qti/chardata.ts", () => {
     (ctx) =>
       // Oracle: the specification as a checker, each field's contract counted in UTF-8 bytes, which
       // grizzle's `str.bytes` checks beside the pattern: `EntryPath` 1 code point and at most
-      // `keyTextBytes` bytes of any character but a leading "/"; a foreign namespace XML `Char`s of
+      // `identityBytes` bytes of any character but a leading "/"; a foreign namespace XML `Char`s of
       // at most `namespaceBytes`; a namespace prefix empty or an NCName of at most `prefixBytes`.
       // Bound: exhaustive over the lengths each side of the three bounds over one-byte and
       // four-byte characters, × 5 first characters × 5 later characters.
@@ -933,7 +944,7 @@ describe("qti/chardata.ts", () => {
           ctx,
           exhaust(
             {
-              box: "lengths 0, 1, 2 and each side of prefixBytes, namespaceBytes and keyTextBytes over one-byte and four-byte characters, over 5 characters",
+              box: "lengths 0, 1, 2 and each side of prefixBytes, namespaceBytes and identityBytes over one-byte and four-byte characters, over 5 characters",
               caseHang,
               coverage: requiredInSpace<"path admitted" | "path refused">([
                 "path admitted",
@@ -950,11 +961,11 @@ describe("qti/chardata.ts", () => {
                   length === 0 ? [] : [first, ...Array.from({ length: length - 1 }, () => fill)];
                 const value = characters.join("");
                 const bytes = utf8Length(value);
-                const path = length >= 1 && bytes <= keyTextBytes && first !== "/";
+                const path = length >= 1 && bytes <= identityBytes && first !== "/";
                 c.note(path ? "path admitted" : "path refused");
 
                 assert.strictEqual(
-                  patternOf(EntryPath).test(value) && bytes <= keyTextBytes,
+                  patternOf(EntryPath).test(value) && bytes <= identityBytes,
                   path,
                   "path",
                 );
@@ -1028,11 +1039,11 @@ describe("qti/chardata.ts", () => {
                   ),
                 );
                 const tree = yield* Effect.orDie(shred(read, version, shredGrammarOf(grammar)));
-                const rows = flatten(tree, idOf);
-                const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-                const lawful = rows.openElementNames.flatMap(({ local, namespace, node }) => {
-                  const held = byId.get(node);
-                  const parent = held === undefined ? undefined : byId.get(held.parent);
+                const rows = flatten(tree);
+                const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
+                const lawful = rows.openElementNames.flatMap(({ local, namespace, start }) => {
+                  const held = byStart.get(start);
+                  const parent = held === undefined ? undefined : byStart.get(held.parent);
 
                   return held === undefined || parent === undefined
                     ? []

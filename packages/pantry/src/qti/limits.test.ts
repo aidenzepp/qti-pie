@@ -6,10 +6,11 @@
  * an index whose entry can pass PostgreSQL's limit (`UnrepresentableKey`, `laws/model/plan.ts`
  * `plannedEntry` of the vendored engine) wherever it compiles `Qti`.
  */
-import { keyTextBytes, str, uuid } from "@bjornpagen/grizzle";
+import { keyTextBytes, natural, str } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { OpenLocal } from "#pantry/qti/attributes.ts";
 import {
+  identityBytes,
   keyTextBytes as keyTextBound,
   localNameBytes,
   namespaceBytes,
@@ -23,24 +24,41 @@ import {
  */
 const anyText = str.regex("^.*$", "su");
 
+/**
+ * An identity text at its bound, a manifest identifier's or an entry path's, as a key counts it.
+ */
+const identity = str.bytes(identityBytes, anyText);
+
 describe("qti/limits.ts", () => {
   it("states each bound as the UTF-8 bytes grizzle's keyTextBytes leaves beside its widest key's other fields", () => {
     // Oracle: grizzle's own rule (`keyTextBytes`, public/text.ts of the vendored engine), the
     // measure the schema's compilation refuses an entry by, read over each kind's widest key: the
-    // key text beside `widestTextKey`, the namespace name beside a uuid and the local name's own
-    // type, `OpenAttributeName(node, uri, local)`, and the prefix beside a uuid, `Namespace(node,
-    // prefix)`; the local name and the namespace name share their entry evenly.
+    // key text beside `widestTextKey`, whose two identity texts, `package` and `path`, hold a
+    // third of its entry each; the namespace name beside the element's identity, a position and
+    // the local name's own type, `OpenAttributeEntity(package, path, start, uri, local, offset)`;
+    // and the prefix beside the element's identity, `Namespace(package, path, start, prefix)`. The
+    // local name and the namespace name share their entry evenly.
     assert.strictEqual(keyTextBound, keyTextBytes(widestTextKey));
-    assert.strictEqual(namespaceBytes, keyTextBytes([uuid, OpenLocal]));
-    assert.strictEqual(prefixBytes, keyTextBytes([uuid]));
+    assert.isAtLeast(keyTextBound, identityBytes);
+    assert.strictEqual(
+      namespaceBytes,
+      keyTextBytes([identity, identity, natural, natural, OpenLocal]),
+    );
+    assert.strictEqual(prefixBytes, keyTextBytes([identity, identity, natural]));
     assert.isAtLeast(namespaceBytes, localNameBytes);
     assert.isBelow(
-      keyTextBytes([uuid, str.bytes(localNameBytes + 1, anyText)]),
+      keyTextBytes([identity, identity, natural, natural, str.bytes(localNameBytes + 1, anyText)]),
       localNameBytes + 1,
     );
     assert.deepStrictEqual(
-      { keyTextBound, localNameBytes, namespaceBytes, prefixBytes },
-      { keyTextBound: 2587, localNameBytes: 1329, namespaceBytes: 1329, prefixBytes: 2665 },
+      { identityBytes, keyTextBound, localNameBytes, namespaceBytes, prefixBytes },
+      {
+        identityBytes: 858,
+        keyTextBound: 858,
+        localNameBytes: 457,
+        namespaceBytes: 457,
+        prefixBytes: 936,
+      },
     );
   });
 

@@ -70,9 +70,11 @@
  * identifier, and neither does its trimmed form. So the law compares trimmed tokens, and no padding
  * is refused (reading 1).
  *
- * Each overlay row holds its own node's {@link nodeRef} tuple, {@link LomRecord} its owner's too,
- * whose parent is the `cp:resource` where the owner is a resource's `cp:metadata`, and
- * {@link LomEntry} its identifier's, whose parent is the identifier's holder. No row copies a fact
+ * Each overlay row holds its own node's {@link nodeRef} tuple, keyed by its node's
+ * `(package, path, start)`, and every link to another element of its document is that element's
+ * `start`: {@link LomRecord} holds its owner's tuple too, whose parent is the `cp:resource` where
+ * the owner is a resource's `cp:metadata`, and {@link LomEntry} its identifier's, whose parent is
+ * the identifier's holder, each owner's own `start` the row's `parent`. No row copies a fact
  * down from its record or across from another row: the queries of `#pantry/qti/queries.ts` join
  * each row to its parent's, a title's string to its {@link LomTitle}, a title or an entry's holder
  * to its {@link LomGeneral}, whose parent is the record, and a string to its {@link LomString} for
@@ -113,7 +115,6 @@ import {
   on,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { ResourceType } from "#pantry/grammar/install.ts";
@@ -126,9 +127,9 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
-import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 import {
   noLanguage,
@@ -188,8 +189,8 @@ export const identifierPattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
 export const languageTagPattern = Compute.pattern<string>(`^(?:${languageTag})$`);
 
 /**
- * A LOM record, keyed by its `lom:lom` node: its {@link nodeRef} tuple, and its owner's kind, start
- * and parent, from the owner's own tuple.
+ * A LOM record, keyed by its `lom:lom` node: its {@link nodeRef} tuple, and its owner's kind and
+ * parent, from the owner's own tuple, whose `start` is the record's `parent`.
  *
  * Every copy shares `nearest` with the record's own: no interaction kind admits a `lom:lom`, so the
  * record's nearest interaction is its owner's (N8).
@@ -197,18 +198,17 @@ export const languageTagPattern = Compute.pattern<string>(`^(?:${languageTag})$`
 export const LomRecord = relation(
   "LomRecord",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
     owner: closedId(NodeKind),
-    ownerParent: uuid,
-    ownerStart: natural,
-    parent: uuid,
+    ownerParent: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -218,25 +218,26 @@ export const LomRecord = relation(
 export const LomGeneral = relation(
   "LomGeneral",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * A LOM identifier's entry, keyed by its `lom:entry` node (a `CharacterString`, whose parent is
- * always a `lom:identifier`): its {@link nodeRef} tuple, its identifier's kind and start and its
- * identifier's parent `holder` (a general category, the meta-metadata or a related resource), and
- * its string value in pieces. `lom-identifier` joins `holder` to its {@link LomGeneral} for the
- * record, and the identifier's tuple is the one copy up the tree it keeps: a query that read the
- * identifier's {@link Node} instead would put a rule's deferred trigger on every `Node` row and an
- * index on `Node`'s `parent`, which `grizzle generate` installs for it.
+ * always a `lom:identifier`): its {@link nodeRef} tuple, its identifier's kind and its identifier's
+ * parent `holder` (a general category, the meta-metadata or a related resource), the identifier's
+ * own `start` the entry's `parent`, and its string value in pieces. `lom-identifier` joins `holder`
+ * to its {@link LomGeneral} for the record, and the identifier's tuple is the one copy up the tree
+ * it keeps: a query that read the identifier's {@link Node} instead would put a rule's deferred
+ * trigger on every `Node` row and an index on `Node`'s `parent`, which `grizzle generate` installs
+ * for it.
  *
  * - `text` is the entry's string value, `Node.stringValue`, which `copiedTextKinds` folds
  *   (`#pantry/qti/node.ts`);
@@ -246,22 +247,21 @@ export const LomGeneral = relation(
 export const LomEntry = relation(
   "LomEntry",
   {
-    document: uuid,
-    holder: uuid,
+    holder: natural,
     identifierKind: closedId(NodeKind),
-    identifierStart: natural,
     kind: closedId(NodeKind),
     lead: Space,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     text: keyText,
     token: keyText,
     trail: Space,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -272,15 +272,15 @@ export const LomEntry = relation(
 export const LomTitle = relation(
   "LomTitle",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -292,8 +292,14 @@ export const LomTitle = relation(
  */
 export const LomString = relation(
   "LomString",
-  { languageTag: keyText, languages: drawn(natural), node: uuid },
-  ["node"],
+  {
+    languageTag: keyText,
+    languages: drawn(natural),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -303,8 +309,8 @@ export const LomString = relation(
  */
 export const LomStringLanguage = relation.generated(
   "LomStringLanguage",
-  { language: keyText, node: uuid },
-  ["node"],
+  { language: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
   (s) => ({
     languageTag: generated(keyText, Compute.cast(Compute.lowerAscii(s.language), keyText)),
   }),
@@ -313,7 +319,10 @@ export const LomStringLanguage = relation.generated(
 /**
  * Each string's `language`, counted by {@link LomString}'s `languages`.
  */
-const lomStringLanguages = counted(on(LomStringLanguage, "node"), fin(LomString, "languages"));
+const lomStringLanguages = counted(
+  on(LomStringLanguage, "package", "path", "start"),
+  fin(LomString, "languages"),
+);
 
 /**
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the
@@ -325,16 +334,16 @@ const lomStringLanguages = counted(on(LomStringLanguage, "node"), fin(LomString,
 export const LomTitleString = relation.generated(
   "LomTitleString",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     text: keyText,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
   (s) => ({
     textValue: generated(keyText, Compute.cast(Compute.replaceWhitespace(s.text), keyText)),
   }),
@@ -352,44 +361,45 @@ export const LomTitleString = relation.generated(
 export const AssessmentObject = relation(
   "AssessmentObject",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An assessment object's `identifier`, keyed by its root: its document, the lexical form as
- * written, and that form in pieces, `lead ‖ identifier ‖ trail`, `identifier` its collapsed value.
- * A root that writes no `identifier` has no row, and AL3 refuses it.
+ * An assessment object's `identifier`, keyed by its root: the lexical form as written, and that
+ * form in pieces, `lead ‖ identifier ‖ trail`, `identifier` its collapsed value. A root that writes
+ * no `identifier` has no row, and AL3 refuses it.
  */
 export const ObjectIdentifier = relation(
   "ObjectIdentifier",
   {
-    document: uuid,
     identifier: keyText,
     lead: Space,
     lexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     trail: Space,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An assessment object's `title`, keyed by its root: its document, the title as written, and
+ * An assessment object's `title`, keyed by its root: the title as written, and
  * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`), which the
  * database derives. A root that writes no `title` has no row, and AL3 refuses it.
  */
 export const ObjectTitle = relation.generated(
   "ObjectTitle",
-  { document: uuid, node: uuid, title: keyText },
-  ["node"],
+  { package: ManifestIdentifier, path: EntryPath, start: natural, title: keyText },
+  ["package", "path", "start"],
   (o) => ({
     titleValue: generated(keyText, Compute.cast(Compute.replaceWhitespace(o.title), keyText)),
   }),
@@ -400,13 +410,13 @@ export const ObjectTitle = relation.generated(
  * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
  * compares it, which reads it as a language where it is a tag ({@link languageTagPattern}), and
  * which the database derives. A root has a row exactly where it writes the attribute: copied from
- * it here, and back into every `xml:lang` (`#pantry/qti/identity.ts`), a selection the closed
- * attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys at `node`.
+ * it here, and back into every `xml:lang` (`#pantry/qti/identity.ts`), a selection that fixes
+ * `name`, so `Attribute`'s key `(package, path, start, name)` keys it at its node.
  */
 export const ObjectLang = relation.generated(
   "ObjectLang",
-  { lang: keyText, node: uuid },
-  ["node"],
+  { lang: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
   (o) => ({
     langTag: generated(
       keyText,
@@ -433,8 +443,16 @@ export const DayForm = lexical(date);
  */
 export const StatisticDate = relation.generated(
   "StatisticDate",
-  { day: DayForm, lead: Space, lexical: keyText, node: uuid, trail: Space },
-  ["node"],
+  {
+    day: DayForm,
+    lead: Space,
+    lexical: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    trail: Space,
+  },
+  ["package", "path", "start"],
   (s) => ({ date: generated(date, Compute.cast(s.day, date)) }),
 );
 
@@ -451,8 +469,14 @@ export const StatisticDate = relation.generated(
  */
 export const UsageValue = relation(
   "UsageValue",
-  { baseTypeLexical: keyText, node: uuid, text: keyText },
-  ["node"],
+  {
+    baseTypeLexical: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    text: keyText,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -465,8 +489,15 @@ export const UsageValue = relation(
  */
 export const UsageValueBaseType = relation(
   "UsageValueBaseType",
-  { baseType: closedId(BaseType), baseTypeLexical: keyText, node: uuid, text: keyText },
-  ["node"],
+  {
+    baseType: closedId(BaseType),
+    baseTypeLexical: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    text: keyText,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -475,7 +506,11 @@ export const UsageValueBaseType = relation(
  * `keyText`'s bound is refused under "Key text bound", a stated limit, as `MathDir` and the
  * `InteractionAttribute` copies are (`#pantry/qti/mathml-align.ts`, `#pantry/qti/interactions.ts`).
  */
-export const UsageBaseType = relation("UsageBaseType", { lexical: keyText, node: uuid }, ["node"]);
+export const UsageBaseType = relation(
+  "UsageBaseType",
+  { lexical: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
+);
 
 /**
  * The LOM vocabulary's source: the `source` the loose binding writes for a vocabulary term that
@@ -499,27 +534,27 @@ export const forbiddenResourceTypes = ["exam", "self assessment"] as const;
 
 /**
  * A LOM learning resource type's value, keyed by its `lom:learningResourceType` node: `term`, the
- * `lom:value` it holds, and `text`, that value's string value, `Node.stringValue` folded by
- * `copiedVocabularyText` (`#pantry/qti/node.ts`). A learning resource type that holds no value has
- * no row. The binding's Schematron caps its values at one (`imsmd_loose_v1p3p2.xsd` line 533, N7,
- * spec reading 130), so a row for each is a row for the type.
+ * `start` of the `lom:value` it holds, and `text`, that value's string value, `Node.stringValue`
+ * folded by `copiedVocabularyText` (`#pantry/qti/node.ts`). A learning resource type that holds no
+ * value has no row. The binding's Schematron caps its values at one (`imsmd_loose_v1p3p2.xsd` line
+ * 533, N7, spec reading 130), so a row for each is a row for the type.
  */
 export const LomResourceType = relation(
   "LomResourceType",
-  { node: uuid, term: uuid, text: keyText },
-  ["node"],
+  { package: ManifestIdentifier, path: EntryPath, start: natural, term: natural, text: keyText },
+  ["package", "path", "start"],
 );
 
 /**
  * A LOM learning resource type's source, keyed by its `lom:learningResourceType` node: `term`, the
- * `lom:source` it holds, and `text`, that source's string value, folded as the value's is. A
- * learning resource type that writes no source has no row; the Schematron caps its sources at one
- * (line 529).
+ * `start` of the `lom:source` it holds, and `text`, that source's string value, folded as the
+ * value's is. A learning resource type that writes no source has no row; the Schematron caps its
+ * sources at one (line 529).
  */
 export const LomResourceTypeSource = relation(
   "LomResourceTypeSource",
-  { node: uuid, term: uuid, text: keyText },
-  ["node"],
+  { package: ManifestIdentifier, path: EntryPath, start: natural, term: natural, text: keyText },
+  ["package", "path", "start"],
 );
 
 /**
@@ -544,6 +579,11 @@ export const metadataRelations = {
   UsageValue,
   UsageValueBaseType,
 };
+
+/**
+ * The document node's `start`, 0: the parent of a document's root element.
+ */
+const documentStart = 0n;
 
 /**
  * Whether a node is of a document a package's records are read from ({@link recordDocumentTypes}).
@@ -625,8 +665,7 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
  * indexes the longest leading run of a containment's source columns whose entry is bounded
  * (`plannedReverse`) and no pattern bounds `Attribute.lexical`. Each selection but the `xml:lang`
  * one is also the target of its overlay's way back, which grizzle admits only under a key that keys
- * it: the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), since the
- * selection states {@link closedName} and fixes `name`.
+ * it: `Attribute`'s key `(package, path, start, name)`, since the selection fixes `name`.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -635,7 +674,7 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
 const attributesOf = (
   name: "baseType" | "identifier" | "lastUpdated" | "title" | "xml:lang",
   kinds: readonly (typeof NodeKind.handles)[number][],
-) => select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
+) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each item's and test's root.
@@ -656,12 +695,11 @@ const objectLangAttributes = attributesOf("xml:lang", objectKinds);
  * The `language` of each `lom:string` of a record's document: the source of
  * {@link LomStringLanguage}'s copy, and the target of its way back, since the attribute is optional
  * and its row stands only where it is written. grizzle admits that containment only under a key
- * that keys this selection: the closed attributes' key (`closedAttributes`,
- * `#pantry/qti/attributes.ts`), since it states {@link closedName} and fixes `name`.
+ * that keys this selection: `Attribute`'s key `(package, path, start, name)`, since it fixes
+ * `name`.
  */
 const stringLanguageAttributes = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.name, "language"),
     a.eq(a.kind, "lom:string"),
     a.in(a.documentType, recordDocumentTypes),
@@ -761,48 +799,39 @@ const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, bas
 export const metadataLawsByName = {
   "E1 derived": [
     contained(
-      on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LomRecord, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
-      on(
-        LomRecord,
-        "parent",
-        "document",
-        "owner",
-        "ownerStart",
-        "nearest",
-        "version",
-        "ownerParent",
-      ),
+      on(LomRecord, "package", "path", "parent", "owner", "nearest", "version", "ownerParent"),
       nodeRef,
     ),
-    contained(on(recordNodes, "id"), on(LomRecord, "node")),
+    contained(
+      on(recordNodes, "package", "path", "start"),
+      on(LomRecord, "package", "path", "start"),
+    ),
     check("E1_derived", LomRecord, (r) => r.eq(r.kind, "lom:lom")),
     contained(
-      on(LomGeneral, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LomGeneral, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(generalNodes, "id"), on(LomGeneral, "node")),
+    contained(
+      on(generalNodes, "package", "path", "start"),
+      on(LomGeneral, "package", "path", "start"),
+    ),
     check("E1_derived", LomGeneral, (g) => g.eq(g.kind, "lom:general")),
     contained(
-      on(LomEntry, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LomEntry, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
-      on(
-        LomEntry,
-        "parent",
-        "document",
-        "identifierKind",
-        "identifierStart",
-        "nearest",
-        "version",
-        "holder",
-      ),
+      on(LomEntry, "package", "path", "parent", "identifierKind", "nearest", "version", "holder"),
       nodeRef,
     ),
-    contained(on(entryNodes, "id", "stringValue"), on(LomEntry, "node", "text")),
+    contained(
+      on(entryNodes, "package", "path", "start", "stringValue"),
+      on(LomEntry, "package", "path", "start", "text"),
+    ),
     check("E1_derived", LomEntry, (e) =>
       e.and(
         e.eq(e.kind, "lom:entry"),
@@ -813,98 +842,169 @@ export const metadataLawsByName = {
       ),
     ),
     contained(
-      on(LomTitle, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LomTitle, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(titleNodes, "id"), on(LomTitle, "node")),
+    contained(on(titleNodes, "package", "path", "start"), on(LomTitle, "package", "path", "start")),
     check("E1_derived", LomTitle, (t) => t.eq(t.kind, "lom:title")),
-    mirrors(on(LomString, "node"), on(stringNodes, "id")),
+    mirrors(on(LomString, "package", "path", "start"), on(stringNodes, "package", "path", "start")),
     lomStringLanguages,
     contained(
-      on(stringLanguageAttributes, "node", "lexical"),
-      on(LomStringLanguage, "node", "language"),
+      on(stringLanguageAttributes, "package", "path", "start", "lexical"),
+      on(LomStringLanguage, "package", "path", "start", "language"),
     ),
-    contained(on(LomStringLanguage, "node"), on(stringLanguageAttributes, "node")),
+    contained(
+      on(LomStringLanguage, "package", "path", "start"),
+      on(stringLanguageAttributes, "package", "path", "start"),
+    ),
     contained(
       on(
         select(LomString, (s) => s.eq(s.languages, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "languageTag",
       ),
-      on(LomStringLanguage, "node", "languageTag"),
+      on(LomStringLanguage, "package", "path", "start", "languageTag"),
     ),
     check("E1_derived", LomString, (s) =>
       s.or(s.eq(s.languages, 1n), s.eq(s.languageTag, noLanguage)),
     ),
     contained(
-      on(LomTitleString, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LomTitleString, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
-    contained(on(LomTitleString, "parent"), on(LomTitle, "node")),
+    contained(
+      on(titleStringNodes, "package", "path", "start", "stringValue"),
+      on(LomTitleString, "package", "path", "start", "text"),
+    ),
+    contained(
+      on(LomTitleString, "package", "path", "parent"),
+      on(LomTitle, "package", "path", "start"),
+    ),
     check("E1_derived", LomTitleString, (s) => s.eq(s.kind, "lom:string")),
     contained(
-      on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(AssessmentObject, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    key(on(AssessmentObject, "document")),
+    key(on(AssessmentObject, "package", "path")),
     check("E1_derived", AssessmentObject, (o) =>
-      o.and(o.in(o.kind, objectKinds), o.eq(o.parent, o.document)),
+      o.and(o.in(o.kind, objectKinds), o.eq(o.parent, documentStart)),
     ),
-    contained(on(objectIdentifiers, "node", "lexical"), on(ObjectIdentifier, "node", "lexical")),
-    contained(on(ObjectIdentifier, "node"), on(objectIdentifiers, "node")),
-    contained(on(ObjectIdentifier, "node", "document"), on(AssessmentObject, "node", "document")),
-    key(on(ObjectIdentifier, "document")),
+    contained(
+      on(objectIdentifiers, "package", "path", "start", "lexical"),
+      on(ObjectIdentifier, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(ObjectIdentifier, "package", "path", "start"),
+      on(objectIdentifiers, "package", "path", "start"),
+    ),
+    contained(
+      on(ObjectIdentifier, "package", "path", "start"),
+      on(AssessmentObject, "package", "path", "start"),
+    ),
+    key(on(ObjectIdentifier, "package", "path")),
     check("E1_derived", ObjectIdentifier, (o) =>
       o.and(
         o.eq(o.lexical, Compute.concat(Compute.concat(o.lead, o.identifier), o.trail)),
         Compute.matches(o.identifier, identifierPattern),
       ),
     ),
-    contained(on(objectTitles, "node", "lexical"), on(ObjectTitle, "node", "title")),
-    contained(on(ObjectTitle, "node"), on(objectTitles, "node")),
-    contained(on(ObjectTitle, "node", "document"), on(AssessmentObject, "node", "document")),
-    key(on(ObjectTitle, "document")),
-    contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
-    contained(on(ObjectLang, "node"), on(AssessmentObject, "node")),
     contained(
-      on(resourceTypeValues, "id", "parent", "stringValue"),
-      on(LomResourceType, "term", "node", "text"),
+      on(objectTitles, "package", "path", "start", "lexical"),
+      on(ObjectTitle, "package", "path", "start", "title"),
     ),
-    contained(on(LomResourceType, "term"), on(resourceTypeValues, "id")),
-    key(on(LomResourceType, "term")),
     contained(
-      on(resourceTypeSources, "id", "parent", "stringValue"),
-      on(LomResourceTypeSource, "term", "node", "text"),
+      on(ObjectTitle, "package", "path", "start"),
+      on(objectTitles, "package", "path", "start"),
     ),
-    contained(on(LomResourceTypeSource, "term"), on(resourceTypeSources, "id")),
-    key(on(LomResourceTypeSource, "term")),
-    contained(on(lastUpdateds, "node", "lexical"), on(StatisticDate, "node", "lexical")),
-    contained(on(StatisticDate, "node"), on(lastUpdateds, "node")),
+    contained(
+      on(ObjectTitle, "package", "path", "start"),
+      on(AssessmentObject, "package", "path", "start"),
+    ),
+    key(on(ObjectTitle, "package", "path")),
+    contained(
+      on(objectLangAttributes, "package", "path", "start", "lexical"),
+      on(ObjectLang, "package", "path", "start", "lang"),
+    ),
+    contained(
+      on(ObjectLang, "package", "path", "start"),
+      on(AssessmentObject, "package", "path", "start"),
+    ),
+    contained(
+      on(resourceTypeValues, "package", "path", "start", "parent", "stringValue"),
+      on(LomResourceType, "package", "path", "term", "start", "text"),
+    ),
+    contained(
+      on(LomResourceType, "package", "path", "term"),
+      on(resourceTypeValues, "package", "path", "start"),
+    ),
+    key(on(LomResourceType, "package", "path", "term")),
+    contained(
+      on(resourceTypeSources, "package", "path", "start", "parent", "stringValue"),
+      on(LomResourceTypeSource, "package", "path", "term", "start", "text"),
+    ),
+    contained(
+      on(LomResourceTypeSource, "package", "path", "term"),
+      on(resourceTypeSources, "package", "path", "start"),
+    ),
+    key(on(LomResourceTypeSource, "package", "path", "term")),
+    contained(
+      on(lastUpdateds, "package", "path", "start", "lexical"),
+      on(StatisticDate, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(StatisticDate, "package", "path", "start"),
+      on(lastUpdateds, "package", "path", "start"),
+    ),
     check("E1_derived", StatisticDate, (s) =>
       s.eq(s.lexical, Compute.concat(Compute.concat(s.lead, s.day), s.trail)),
     ),
-    contained(on(usageBaseTypes, "node", "lexical"), on(UsageBaseType, "node", "lexical")),
-    contained(on(UsageBaseType, "node"), on(usageBaseTypes, "node")),
-    contained(on(UsageValue, "node", "baseTypeLexical"), on(UsageBaseType, "node", "lexical")),
-    contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
-    contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
-    contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
     contained(
-      on(spelledUsageValues, "node", "baseTypeLexical"),
-      on(UsageValueBaseType, "node", "baseTypeLexical"),
+      on(usageBaseTypes, "package", "path", "start", "lexical"),
+      on(UsageBaseType, "package", "path", "start", "lexical"),
     ),
     contained(
-      on(UsageValueBaseType, "node", "baseTypeLexical"),
-      on(spelledUsageValues, "node", "baseTypeLexical"),
+      on(UsageBaseType, "package", "path", "start"),
+      on(usageBaseTypes, "package", "path", "start"),
     ),
-    contained(on(UsageValueBaseType, "node", "text"), on(Node, "id", "stringValue")),
+    contained(
+      on(UsageValue, "package", "path", "start", "baseTypeLexical"),
+      on(UsageBaseType, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(usageRecordValues, "package", "path", "start"),
+      on(UsageValue, "package", "path", "start"),
+    ),
+    contained(
+      on(UsageValue, "package", "path", "start"),
+      on(usageRecordValues, "package", "path", "start"),
+    ),
+    contained(
+      on(UsageValue, "package", "path", "start", "text"),
+      on(Node, "package", "path", "start", "stringValue"),
+    ),
+    contained(
+      on(spelledUsageValues, "package", "path", "start", "baseTypeLexical"),
+      on(UsageValueBaseType, "package", "path", "start", "baseTypeLexical"),
+    ),
+    contained(
+      on(UsageValueBaseType, "package", "path", "start", "baseTypeLexical"),
+      on(spelledUsageValues, "package", "path", "start", "baseTypeLexical"),
+    ),
+    contained(
+      on(UsageValueBaseType, "package", "path", "start", "text"),
+      on(Node, "package", "path", "start", "stringValue"),
+    ),
     check("E1_derived", UsageValueBaseType, (u) =>
       u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
     ),
   ],
   "LOM learning resource type": [
-    contained(on(forbiddenResourceTypeValues, "node"), on(otherVocabularySources, "node")),
+    contained(
+      on(forbiddenResourceTypeValues, "package", "path", "start"),
+      on(otherVocabularySources, "package", "path", "start"),
+    ),
   ],
   "Usage typed value": [
     check("Usage_typed_value", UsageValueBaseType, (u) =>

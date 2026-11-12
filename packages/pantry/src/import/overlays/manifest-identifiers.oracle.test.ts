@@ -23,7 +23,6 @@
  * nothing, and raised no "Manifest id space" on a padded manifest identifier, where the oracle
  * does.
  */
-import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -35,7 +34,6 @@ import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effec
 import { collapse } from "#pantry/grammar/domains.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
@@ -194,19 +192,13 @@ const judgedBothWays = Effect.fn("test.manifestIdentifiers.judgedBothWays")(
       ),
     );
     const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
-    const minted = new Set<string>();
-    const { inputs } = yield* readProgram(dir, (): NodeId => {
-      const id: NodeId = randomUUID();
-      minted.add(id);
-
-      return id;
-    });
+    const { inputs } = yield* readProgram(dir);
     const oracleLaws: ReadonlySet<string> = new Set(
       judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
     );
 
     return {
-      host: hostVerdictOf(inputs, minted),
+      host: hostVerdictOf(inputs),
       inputs,
       oracleLaws,
       verdict: verdictOf(judgment),

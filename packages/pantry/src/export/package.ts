@@ -1,15 +1,17 @@
 /**
- * The export of a package: every document the database holds for it rebuilt from its scan and
- * written in its charset, and every other entry written from the record (fin.md P7, D6, §4.6).
+ * The export of a package, named by its manifest identifier: every document the database holds for
+ * it rebuilt from its scan and written in its charset, and every other entry written from the
+ * record (fin.md P7, D6, §4.6).
  *
- * A package's entries are its `Entry` family, in listing order, each read with its `Document` row
- * where it is a document (`#pantry/export/scan.ts` `entriesOf`). A document is read by one ordered
- * scan of its nodes, page by page (`documentScan`, `#pantry/export/pages.ts`), assembled with one
- * stack (`#pantry/model/assemble.ts`) and written by `unshred` in its export charset; every other
- * entry is written as the bytes the import read. No tree is walked and no query recurses.
+ * A package's entries are its `Entry` rows, by path, each read with its `Document` row where it is
+ * a document (`#pantry/export/scan.ts` `entriesOf`). A document is read by one ordered scan of its
+ * nodes at its key, the package and its path, page by page (`documentScan`,
+ * `#pantry/export/pages.ts`), assembled with one stack (`#pantry/model/assemble.ts`) and written by
+ * `unshred` in its export charset; every other entry is written as the bytes the import read. No
+ * tree is walked and no query recurses.
  */
 import { Db } from "@bjornpagen/grizzle/runtime";
-import type { CursorError, Uuid } from "@bjornpagen/grizzle";
+import type { CursorError } from "@bjornpagen/grizzle";
 import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle/runtime";
 import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
@@ -36,23 +38,26 @@ import type { EncodeError } from "@qti-pie/crust/errors.ts";
 const pageSize = 1000;
 
 /**
- * An export of a package id that no imported package has.
+ * An export of a manifest identifier that no imported package has.
  */
 export class PackageNotFound extends Schema.TaggedError<PackageNotFound>()("PackageNotFound", {
-  packageId: Schema.String,
+  /**
+   * The manifest identifier the export named.
+   */
+  package: Schema.String,
 }) {
   /**
-   * What is missing, naming the id.
+   * What is missing, naming the identifier.
    */
   override get message(): string {
-    return `No imported package has the id ${this.packageId}.`;
+    return `No imported package has the manifest identifier ${this.package}.`;
   }
 }
 
 /**
  * What can stop an export before it writes: the database, a page cursor the scan does not accept, a
- * package id no package has, a document whose scanned rows are not one document's, or one that
- * cannot be written in its charset.
+ * manifest identifier no package has, a document whose scanned rows are not one document's, or one
+ * that cannot be written in its charset.
  */
 type EntriesError =
   | OpenError
@@ -64,7 +69,7 @@ type EntriesError =
   | EncodeError;
 
 /**
- * The entries an export of the package `packageId` writes, in listing order, without writing any.
+ * The entries an export of the package `identifier` names writes, by path, without writing any.
  *
  * The record is read once, each entry with its document where it is one. Each document is scanned
  * in pages of `size` rows, assembled, and written by `unshred` in its export charset; a document
@@ -72,49 +77,49 @@ type EntriesError =
  * other entry is the record's bytes. Every document's path is an entry's: the database holds it,
  * as the law "Document entry" states (`#pantry/qti/package.ts`, `Document` ⊆ `Entry` over package
  * and path), and refused every write that broke it, so the export reads each document from the
- * entry it is, and checks the law again nowhere.
+ * entry it is, at the entry's key, and checks the law again nowhere.
  *
  * The record and each page are separate reads, each in a snapshot of its own. They agree because
  * a package is written once, in one transaction, and never changed: no relation of the schema is
  * mutable, and an immutable owner's family is fixed when it is inserted.
  *
- * Fails with `PackageNotFound` when no imported package has the id, before any scan.
+ * Fails with `PackageNotFound` when no imported package has the identifier, before any scan.
  *
- * @param packageId - The id of the imported package.
+ * @param identifier - The imported package's manifest identifier, its key.
  * @param size - The rows each page of a scan asks for, at least 1; paging is invisible, so every
  *   size gives the same entries.
  * @returns The path and bytes of every entry. Fails with the database's, the scan's or the
  *   encoder's error, or `PackageNotFound`, every one an export raises before it writes.
  */
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
-  packageId: Uuid,
+  identifier: string,
   size: number = pageSize,
 ): Effect.fn.Return<readonly ZipEntry[], EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
-  yield* Effect.annotateCurrentSpan({ packageId, pageSize: size });
+  yield* Effect.annotateCurrentSpan({ package: identifier, pageSize: size });
 
   const login = yield* AuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
-  if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
-    return yield* new PackageNotFound({ packageId });
+  if (Option.isNone(yield* db.workload.packageOf.get({ identifier }))) {
+    return yield* new PackageNotFound({ package: identifier });
   }
 
-  const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
+  const record = yield* (yield* db.workload.entriesOf.execute({ package: identifier })).collect;
   const entries = yield* Effect.all(
     record.map(({ content, document, path }): Effect.Effect<ZipEntry, EntriesError> =>
       Option.match(document, {
         onNone: () => Effect.succeed({ bytes: content, path }),
-        onSome: ({ node }) =>
+        onSome: () =>
           Stream.runFold(
             scannedRows(
-              (request) => db.workload.documentScan.page({ document: node }, request),
+              (request) => db.workload.documentScan.page({ package: identifier, path }, request),
               size,
             ),
             emptyScan<Composed>,
             addRow,
           ).pipe(
-            Effect.flatMap((scan) => scanXml(node, scan)),
+            Effect.flatMap((scan) => scanXml({ package: identifier, path }, scan)),
             Effect.map((bytes) => ({ bytes, path })),
-            Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }),
+            Effect.withSpan("export.scanDocument", { attributes: { package: identifier, path } }),
           ),
       }),
     ),
@@ -128,25 +133,25 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
 });
 
 /**
- * Compare entries an export of the package `packageId` wrote with its record: the `Entry`
- * family's bytes, read from the database, against those entries.
+ * Compare entries an export of the package `identifier` names wrote with its record: the `Entry`
+ * rows' bytes, read from the database, against those entries.
  *
  * The record is one read of the package's entries; the export's documents are not scanned again,
  * so a caller that has just exported the package, as `roundtrip` has, compares what it wrote.
  *
- * @param packageId - The id of the imported package.
+ * @param identifier - The imported package's manifest identifier.
  * @param exported - The entries an export of it wrote, as {@link exportEntries} or
  *   {@link exportPackage} gives them.
  * @returns One outcome per path (`#pantry/export/compare.ts` `compareRecord`): byte equality
  *   reported, canonical equality held to. Fails with the database's error.
  */
 export const compareExported = Effect.fn("export.compareExported")(function* compareExported(
-  packageId: Uuid,
+  identifier: string,
   exported: readonly ZipEntry[],
 ): Effect.fn.Return<Report, OpenError | ReadError, AuthorLogin | DbLayer<AuthorRole>> {
   const login = yield* AuthorLogin;
   const db = yield* Db.open(login.roles.author, {});
-  const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
+  const record = yield* (yield* db.workload.entriesOf.execute({ package: identifier })).collect;
 
   return yield* compareRecord(
     new Map(record.map(({ content, path }) => [path, content])),
@@ -155,45 +160,45 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
 });
 
 /**
- * Compare an export of the package `packageId` with its record, all from the database: the
- * `Entry` family's bytes against the entries {@link exportEntries} writes.
+ * Compare an export of the package `identifier` names with its record, all from the database: the
+ * `Entry` rows' bytes against the entries {@link exportEntries} writes.
  *
- * @param packageId - The id of the imported package.
+ * @param identifier - The imported package's manifest identifier.
  * @returns One outcome per path, as {@link compareExported} gives it. Fails as
  *   {@link exportEntries} does.
  */
 export const compareWithRecord = Effect.fn("export.compareWithRecord")(function* compareWithRecord(
-  packageId: Uuid,
+  identifier: string,
 ): Effect.fn.Return<Report, EntriesError, AuthorLogin | DbLayer<AuthorRole>> {
-  return yield* compareExported(packageId, yield* exportEntries(packageId));
+  return yield* compareExported(identifier, yield* exportEntries(identifier));
 });
 
 /**
- * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
- * when `target` ends `.zip`, one zip file holding the same entries.
+ * Write the package `identifier` names to `target`: a directory of the files it was imported from,
+ * or, when `target` ends `.zip`, one zip file holding the same entries.
  *
  * The entries are those of {@link exportEntries}, all read, assembled and encoded before anything
  * is written, so an export that cannot be made writes nothing. A zip target holds those entries at
  * those paths, written by `writeZip`, and its directory is created when absent.
  *
- * @param packageId - The id of the imported package.
+ * @param identifier - The imported package's manifest identifier.
  * @param target - The directory to write under, or the `.zip` file to write, created when absent.
  * @returns The entries it wrote, in the order it wrote them. Fails with the database's, the
  *   scan's, the encoder's or the file system's error.
  */
 export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
-  packageId: Uuid,
+  identifier: string,
   target: string,
 ): Effect.fn.Return<
   readonly ZipEntry[],
   EntriesError | PlatformError.PlatformError,
   AuthorLogin | DbLayer<AuthorRole> | FileSystem.FileSystem | Path.Path
 > {
-  yield* Effect.annotateCurrentSpan({ packageId, target });
+  yield* Effect.annotateCurrentSpan({ package: identifier, target });
 
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const entries = yield* exportEntries(packageId);
+  const entries = yield* exportEntries(identifier);
 
   if (target.endsWith(".zip")) {
     yield* fs.makeDirectory(path.dirname(target), { recursive: true });

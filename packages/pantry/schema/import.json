@@ -7,8 +7,11 @@
       "anyOf": [
         {
           "type": "object",
-          "properties": { "package_id": { "type": "string" } },
-          "required": ["package_id"],
+          "properties": {
+            "outcome": { "type": "string", "enum": ["accepted", "no-change"] },
+            "package": { "type": "string" }
+          },
+          "required": ["outcome", "package"],
           "additionalProperties": true
         },
         {

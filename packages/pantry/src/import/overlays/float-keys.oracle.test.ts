@@ -47,7 +47,7 @@ import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
 
@@ -676,8 +676,8 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
   Effect.gen(function* judgedPair() {
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(itemOf(keys))));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
-    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
-    const rows = rowsOf(ownViewOf(tree, idOf));
+    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
+    const rows = rowsOf(ownViewOf(tree), { package: "MANIFEST", path: "item.xml" });
     const [first, second] = keys;
     const [firstName, secondName] = [referenceOf(first), referenceOf(second)];
     const expected = first === second || valued(firstName, secondName);
@@ -690,12 +690,12 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
 
     // The query's rows, read on the host by its selection over the `MapKeyType` rows it reads.
     const typedNodes = new Set(
-      [...rows.MapKeyType.values()].flatMap(({ baseType, key, node }) =>
-        baseType === "float" && floatSelection.test(key) ? [node] : [],
+      [...rows.MapKeyType.values()].flatMap(({ baseType, key, start }) =>
+        baseType === "float" && floatSelection.test(key) ? [start] : [],
       ),
     );
     assert.deepStrictEqual(
-      entries.map(({ node }) => typedNodes.has(node)),
+      entries.map(({ start }) => typedNodes.has(start)),
       [firstName, secondName].map(Option.isSome),
       "a typed value exactly for each key in the lexical space",
     );
@@ -703,7 +703,7 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
     const repeatsWhere = (typed: (at: 0 | 1) => boolean): boolean =>
       first === second || (typed(0) && typed(1) && valued(firstName, secondName));
     const imported = repeatsWhere((at) =>
-      Option.exists(Option.fromNullishOr(entries[at]), ({ node }) => typedNodes.has(node)),
+      Option.exists(Option.fromNullishOr(entries[at]), ({ start }) => typedNodes.has(start)),
     );
     const judgedByOracle = documentBreaches("item.xml", folded, oracleLaws).some(
       ({ law }) => law === "Map key",

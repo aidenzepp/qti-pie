@@ -523,8 +523,6 @@ const lawClasses: ReadonlyMap<string, LawClass> = new Map([
   ["pi arm", "internal"],
   ["text arm", "internal"],
   ["ws arm", "internal"],
-  ["AL2 last slot", "internal"],
-  ["Document", "internal"],
   ["E1 derived", "internal"],
   ["N1 DocumentNode", "internal"],
   ["N1 one document node", "internal"],

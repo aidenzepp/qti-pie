@@ -331,7 +331,7 @@ const parseCases: readonly ParseCase[] = [
  */
 const parsePackageOf = (drawn: ParseCase): PackageEntries => {
   const href = drawn.href === "the fragment" ? "rtest01-fragment.xml" : "rtest01-missing.xml";
-  const manifest = `${declaration}\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>\n`;
+  const manifest = `${declaration}\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-include-stands"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>\n`;
   const item = `${declaration}\n<qti-assessment-item xmlns="${asi}" xmlns:xi="${xi}"><qti-item-body><xi:include href="${href}" parse="${drawn.parse}"/></qti-item-body></qti-assessment-item>\n`;
 
   return new Map([

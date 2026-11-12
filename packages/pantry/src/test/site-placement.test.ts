@@ -4,13 +4,13 @@
  * `E1_derived`, read from the predicates grizzle keeps for them and evaluated on the host
  * (`#pantry/test/key-copies.ts` `checkOf`).
  *
- * A site's `part` is the test part it sits in: its parent section's under a section, its parent
- * under a test part, and its own document under any other parent, which its placement reads as its
- * placing instance's part. An include under an item's body or processing, or under a fragment's
- * content, is such a site, and its placement's document is a fragment, whose root is any kind the
- * include may stand for (spec readings 114 and 117). Each package below is the every-relation
- * package, which the law oracle accepts, with one site placed differently, and every law the host
- * judges (`#pantry/test/host-judge.ts`) holds over its rows.
+ * A site's `part` is the test part it sits in, by its position: its parent section's under a
+ * section, its parent under a test part, and its own document node's, 0, under any other parent,
+ * which its placement reads as its placing instance's part. An include under an item's body or
+ * processing, or under a fragment's content, is such a site, and its placement's document is a
+ * fragment, whose root is any kind the include may stand for (spec readings 114 and 117). Each
+ * package below is the every-relation package, which the law oracle accepts, with one site placed
+ * differently, and every law the host judges (`#pantry/test/host-judge.ts`) holds over its rows.
  *
  * A section's include is no splice: it places its document as a section ref does (readings 86 and
  * 117, "includes in a section follow it"), so a section document a section includes twice is
@@ -26,7 +26,7 @@ import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
+import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -185,7 +185,6 @@ const packageOf = (placement: Placement): PackageEntries => {
  */
 const siteRow = (site: Addition<typeof Site>) =>
   ({
-    document: site.document,
     kind: site.kind,
     parent: site.parent,
     parentKind: site.parentKind,
@@ -209,13 +208,14 @@ const laws = judgedLaws(Qti);
 
 /**
  * Every instance below an assembly's root as the database holds it, its drawn and accumulated
- * fields filled as grizzle fills them: `start`, its place in the tree's pre-order, and its parent's
- * `parentDocument`, `parentPart`, `parentReplaced` and `parentMixes`.
+ * fields filled as grizzle fills them: its root's `assembly`, `start`, its place in the tree's
+ * pre-order, and its parent's `parentPart`, `parentReplaced` and `parentMixes`.
  *
  * @param root - The assembly's root, as the import writes it.
  * @returns Each placed instance's row.
  */
-const placedRows = (root: InstanceMember): readonly Row[] => {
+const placedRows = (root: InstanceRoot): readonly Row[] => {
+  const { assembly } = root;
   const rows: Row[] = [];
   let next = 0;
   const visit = (instance: InstanceMember, parent: Option.Option<InstanceMember>): void => {
@@ -223,11 +223,10 @@ const placedRows = (root: InstanceMember): readonly Row[] => {
     next += 1;
     for (const held of Option.toArray(parent)) {
       rows.push({
+        assembly,
         assemblyKind: instance.assemblyKind,
         document: instance.document,
-        id: instance.id,
         mixes: instance.mixes,
-        parentDocument: held.document,
         parentMixes: held.mixes,
         parentPart: held.part,
         parentReplaced: held.replaced,
@@ -235,11 +234,11 @@ const placedRows = (root: InstanceMember): readonly Row[] => {
         replaced: instance.replaced,
         rootKind: instance.rootKind,
         site: instance.site,
+        siteDocument: instance.siteDocument,
         siteLooseChain: instance.siteLooseChain,
         siteMixes: instance.siteMixes,
         sitePart: instance.sitePart,
         siteReplaced: instance.siteReplaced,
-        siteStart: instance.siteStart,
         start,
       });
     }
@@ -260,7 +259,7 @@ const placedRows = (root: InstanceMember): readonly Row[] => {
  * @returns The feature its part reaches.
  */
 const partOf = (site: Row): Reached => {
-  if (site["part"] === site["document"]) {
+  if (site["part"] === 0n) {
     return "part is the document";
   }
 
@@ -328,7 +327,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
                   const wrongs =
                     site.parentKind === "qti-assessment-section"
                       ? []
-                      : [part === "part is the document" ? site.parent : site.document];
+                      : [part === "part is the document" ? site.parent : 0n];
                   for (const wrong of wrongs) {
                     assert.isFalse(
                       siteCheck({ ...site, part: wrong }),

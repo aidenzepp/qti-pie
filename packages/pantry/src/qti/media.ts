@@ -9,17 +9,18 @@
  * file nothing names.
  *
  * A level reaches the relations below it through a query or a row check (README, "Levels"). A law
- * of one attribute alone (Media data, Media style and Media foreign on `Attribute`) is a row check
- * over `Qti`'s `Attribute`, reading its lexical form with `Compute.matches` as `Attribute`'s own
- * checks do, and installs as a CHECK on Attribute's table, named by the check, in an installation
- * that holds this level and in no other. Every other law is a rule over a derived relation of
- * `QtiMedia` that reads `Qti`'s tables, which deferred triggers judge at commit (README, "Rules
- * over queries"). Every writer meets them all. A refusal by one is the law's own to a login over
- * `QtiMedia`, and to a login over `Qti` the first law of an `above` refusal, grizzle's
- * `{ kind: "above", level: "QtiMedia", law }`, with no witness, since that login's host holds none
- * of the level's predicates; a row check's comes beside every law of `Qti`'s own the first stated
- * row breaks, each with that row's key as `every` names them (grizzle's `refused.own`). It names
- * its law and rule either way (`lawNameOf` of `#pantry/import/refusal.ts`).
+ * of one attribute alone (Media data and Media style on `Attribute`, Media foreign on
+ * `OpenAttribute`) is a row check over that relation of `Qti`, reading its lexical form with
+ * `Compute.matches` as `Attribute`'s own checks do, and installs as a CHECK on the relation's
+ * table, named by the check, in an installation that holds this level and in no other. Every other
+ * law is a rule over a derived relation of `QtiMedia` that reads `Qti`'s tables, which deferred
+ * triggers judge at commit (README, "Rules over queries"). Every writer meets them all. A refusal
+ * by one is the law's own to a login over `QtiMedia`, and to a login over `Qti` the first law of an
+ * `above` refusal, grizzle's `{ kind: "above", level: "QtiMedia", law }`, with no witness, since
+ * that login's host holds none of the level's predicates; a row check's comes beside every law of
+ * `Qti`'s own the first stated row breaks, each with that row's key as `every` names them
+ * (grizzle's `refused.own`). It names its law and rule either way (`lawNameOf` of
+ * `#pantry/import/refusal.ts`).
  *
  * - **Media path** (rule `media-path`): every address a player fetches, each field
  *   `#pantry/vocab/fetched.ts` declares, names a file of the package, which `file-exists` holds to
@@ -61,8 +62,9 @@
  * - **Media foreign** (rule `media-foreign`): no markup pantry keeps but cannot interpret, which
  *   could carry an address no law above reads: no foreign element, of any of the three namespace
  *   classes (`foreignKinds` of `#pantry/grammar/kinds.ts`), and no attribute of an open class but
- *   `data-*`, so no `foreign`, `no-namespace` or `own-namespace` attribute. A `data-*` attribute is
- *   kept, as QTI writes them (`data-catalog-idref`).
+ *   `data-*` (an `OpenAttribute` of any other class), so no `foreign`, `no-namespace` or
+ *   `own-namespace` attribute. A `data-*` attribute is kept, as QTI writes them
+ *   (`data-catalog-idref`).
  * - **Entry used** (rule `entry-used`): every entry is the manifest, a document (`Document`), or the
  *   path a reference resolves to in the package (`ReferencePath`) or a text reference does
  *   (`TextReferencePath`). "File exists" holds every resolved path to an entry, so the package's
@@ -103,7 +105,6 @@ import {
   v,
   wholeEntriesOf,
   workload,
-  writableNamesOf,
 } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import {
@@ -114,9 +115,9 @@ import {
 } from "#pantry/grammar/install.ts";
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, OpenAttribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { authorReads, importWrite } from "#pantry/qti/logins.ts";
+import { authorReads, authorWrites, importWrite } from "#pantry/qti/logins.ts";
 import { Node } from "#pantry/qti/node.ts";
 import {
   Entry,
@@ -318,134 +319,140 @@ export const QtiMediaPolicy = schema.extend(Qti, "QtiMediaPolicy", { MediaType }
 ]);
 
 /**
- * Every attribute no {@link Reference} is of, by its element and name, with its governor: Media
- * path holds each to be no fetched attribute, since the import writes a reference for every
- * attribute the reference census resolves.
+ * Every attribute no {@link Reference} is of, by its element's place and its name, with its
+ * governor: Media path holds each to be no fetched attribute, since the import writes a reference
+ * for every attribute the reference census resolves. A fetched field is a closed name, so no
+ * `OpenAttribute` is one.
  */
 const UnreferencedAttribute = derived(
   "UnreferencedAttribute",
   query(Qti).rule((r) => {
-    const { governor, name, node } = v(Attribute, "attribute");
+    const { governor, name, package: pkg, path, start } = v(Attribute, "attribute");
 
     return r
-      .match(Attribute, { governor, name, node })
-      .where(r.not(Reference, { name, node }))
-      .find({ governor, name, node });
+      .match(Attribute, { governor, name, package: pkg, path, start })
+      .where(r.not(Reference, { name, package: pkg, path, start }))
+      .find({ governor, name, package: pkg, path, start });
   }),
 );
 
 /**
- * Every reference, by its element and name, with its kind, its outcome's scope and its lexical
- * form, which Media path reads.
+ * Every reference, by its element's place and its name, with its kind, its outcome's scope and its
+ * lexical form, which Media path reads.
  */
 const MediaReference = derived(
   "MediaReference",
   query(Qti).rule((r) => {
-    const { kind, lexical, name, node, scope } = v(Reference, "reference");
+    const { kind, lexical, name, package: pkg, path, scope, start } = v(Reference, "reference");
 
     return r
-      .match(Reference, { kind, lexical, name, node, scope })
-      .find({ kind, lexical, name, node, scope });
+      .match(Reference, { kind, lexical, name, package: pkg, path, scope, start })
+      .find({ kind, lexical, name, package: pkg, path, scope, start });
   }),
 );
 
 /**
- * Every text reference, by its element, with its kind and its outcome's scope.
+ * Every text reference, by its element's place, with its kind and its outcome's scope.
  */
 const MediaTextReference = derived(
   "MediaTextReference",
   query(Qti).rule((r) => {
-    const { kind, node, scope } = v(TextReference, "reference");
+    const { kind, package: pkg, path, scope, start } = v(TextReference, "reference");
 
-    return r.match(TextReference, { kind, node, scope }).find({ kind, node, scope });
+    return r
+      .match(TextReference, { kind, package: pkg, path, scope, start })
+      .find({ kind, package: pkg, path, scope, start });
   }),
 );
 
 /**
- * Every node, by its id, with its kind, governor, version and string value, which Media path,
+ * Every node, by its place, with its kind, governor, version and string value, which Media path,
  * Media data and Media foreign read.
  */
 const MediaNode = derived(
   "MediaNode",
   query(Qti).rule((r) => {
-    const { governor, id, kind, stringValue, version } = v(Node, "node");
+    const { governor, kind, package: pkg, path, start, stringValue, version } = v(Node, "node");
 
     return r
-      .match(Node, { governor, id, kind, stringValue, version })
-      .find({ governor, id, kind, stringValue, version });
+      .match(Node, { governor, kind, package: pkg, path, start, stringValue, version })
+      .find({ governor, kind, package: pkg, path, start, stringValue, version });
   }),
 );
 
 /**
- * The resolved paths, by the reference's element and name, whose extension a {@link MediaType} row
- * lists: a path with an extension ({@link extensionPattern}) that ends with the row's suffix.
+ * The resolved references, by the reference's element's place and its name, whose target's
+ * extension a {@link MediaType} row lists: a path with an extension ({@link extensionPattern}) that
+ * ends with the row's suffix.
  */
 const servedPaths = query(QtiMediaPolicy).rule((r) => {
-  const { name, node, path } = v(ReferencePath, "path");
+  const { name, package: pkg, path, start, target } = v(ReferencePath, "path");
   const { suffix } = v(MediaType, "media");
 
   return (
     r
-      .match(ReferencePath, { name, node, path })
+      .match(ReferencePath, { name, package: pkg, path, start, target })
       .match(MediaType, { suffix })
-      .where(Compute.matches(path, extensionPattern))
+      .where(Compute.matches(target, extensionPattern))
       // GRIZZLE-PENDING: a boolean term as a predicate
-      .where(Compute.eq(Compute.endsWith(path, suffix), true))
-      .find({ name, node })
+      .where(Compute.eq(Compute.endsWith(target, suffix), true))
+      .find({ name, package: pkg, path, start })
   );
 });
 
 /**
- * Every resolved path no {@link MediaType} row serves, by the reference's element and name, with
- * the reference's kind: Media type holds each to be no fetched reference's.
+ * Every resolved reference whose target no {@link MediaType} row serves, by the reference's
+ * element's place and its name, with the reference's kind: Media type holds each to be no fetched
+ * reference's.
  */
 const UnservedPath = derived(
   "UnservedPath",
   query(QtiMediaPolicy).rule((r) => {
-    const { kind, name, node } = v(ReferencePath, "path");
+    const { kind, name, package: pkg, path, start } = v(ReferencePath, "path");
 
     return r
-      .match(ReferencePath, { kind, name, node })
-      .where(r.not(servedPaths, { name, node }))
-      .find({ kind, name, node });
+      .match(ReferencePath, { kind, name, package: pkg, path, start })
+      .where(r.not(servedPaths, { name, package: pkg, path, start }))
+      .find({ kind, name, package: pkg, path, start });
   }),
 );
 
 /**
- * The resolved text paths, by the text reference's element, whose extension a {@link MediaType} row
- * lists.
+ * The resolved text references, by the text reference's element's place, whose target's extension
+ * a {@link MediaType} row lists.
  */
 const servedTextPaths = query(QtiMediaPolicy).rule((r) => {
-  const { node, path } = v(TextReferencePath, "path");
+  const { package: pkg, path, start, target } = v(TextReferencePath, "path");
   const { suffix } = v(MediaType, "media");
 
   return r
-    .match(TextReferencePath, { node, path })
+    .match(TextReferencePath, { package: pkg, path, start, target })
     .match(MediaType, { suffix })
-    .where(Compute.matches(path, extensionPattern))
-    .where(Compute.eq(Compute.endsWith(path, suffix), true))
-    .find({ node });
+    .where(Compute.matches(target, extensionPattern))
+    .where(Compute.eq(Compute.endsWith(target, suffix), true))
+    .find({ package: pkg, path, start });
 });
 
 /**
- * Every resolved text path no {@link MediaType} row serves, by the text reference's element, with
- * its kind: Media type holds each to be no fetched text's.
+ * Every resolved text reference whose target no {@link MediaType} row serves, by the text
+ * reference's element's place, with its kind: Media type holds each to be no fetched text's.
  */
 const UnservedTextPath = derived(
   "UnservedTextPath",
   query(QtiMediaPolicy).rule((r) => {
-    const { kind, node } = v(TextReferencePath, "path");
+    const { kind, package: pkg, path, start } = v(TextReferencePath, "path");
 
     return r
-      .match(TextReferencePath, { kind, node })
-      .where(r.not(servedTextPaths, { node }))
-      .find({ kind, node });
+      .match(TextReferencePath, { kind, package: pkg, path, start })
+      .where(r.not(servedTextPaths, { package: pkg, path, start }))
+      .find({ kind, package: pkg, path, start });
   }),
 );
 
 /**
- * The entries no document is at and no reference resolves to, by package and path. Each negation is
- * a filter of its own.
+ * The entries no document is at and no reference resolves to, by package and path: no `Document`
+ * at the entry's path, and no `ReferencePath` or `TextReferencePath` whose `target` it is. Each
+ * negation is a filter of its own.
  */
 const UnusedEntry = derived(
   "UnusedEntry",
@@ -455,8 +462,8 @@ const UnusedEntry = derived(
     return r
       .match(Entry, { package: pkg, path })
       .where(r.not(Document, { package: pkg, path }))
-      .where(r.not(ReferencePath, { package: pkg, path }))
-      .where(r.not(TextReferencePath, { package: pkg, path }))
+      .where(r.not(ReferencePath, { package: pkg, target: path }))
+      .where(r.not(TextReferencePath, { package: pkg, target: path }))
       .find({ package: pkg, path });
   }),
 );
@@ -509,7 +516,7 @@ export const mediaLawsByName = {
     ),
   ],
   "Media foreign": [
-    check("Media_foreign", Attribute, (a) => a.not(a.in(a.name, uninterpretedClasses))),
+    check("Media_foreign", OpenAttribute, (a) => a.not(a.in(a.class, uninterpretedClasses))),
     check("Media_foreign", MediaNode, (n) => n.not(n.in(n.kind, Object.values(foreignKinds)))),
   ],
   "Media path": [
@@ -565,9 +572,9 @@ export const mediaLawsByName = {
 
 /**
  * The package-media level over {@link QtiMediaPolicy}: every derived relation its rules read, and
- * the laws, the row checks over `Attribute` among them. An application lists it, or a level of its
- * own over it, in its grizzle config's `schemas`, so the installation holds `Qti`, the policy and
- * these laws, and writes its policy as {@link MediaType} rows.
+ * the laws, the row checks over `Attribute` and `OpenAttribute` among them. An application lists
+ * it, or a level of its own over it, in its grizzle config's `schemas`, so the installation holds
+ * `Qti`, the policy and these laws, and writes its policy as {@link MediaType} rows.
  */
 export const QtiMedia = schema.extend(
   QtiMediaPolicy,
@@ -587,11 +594,13 @@ export const QtiMedia = schema.extend(
 /**
  * The author role over {@link QtiMedia}, for an application whose author login is over the media
  * level: it holds every stored relation and roster of the installation whole, the policy's and the
- * level's derived relations among them (grizzle's `wholeEntriesOf`), and inserts into `Qti`'s
- * stored relations (`writableNamesOf(Qti)`), as `Author` of `#pantry/qti/roles.ts` does, and into
- * no relation of the policy: {@link MediaType} is written through a role of its own, one that writes
- * nothing a READ COMMITTED reader reads ({@link QtiMediaPolicy}). It holds SELECT and INSERT only,
- * no UPDATE and no DELETE.
+ * level's derived relations among them (grizzle's `wholeEntriesOf`), and writes `Qti`'s stored
+ * relations (`authorWrites` of `#pantry/qti/logins.ts`), as `Author` of `#pantry/qti/roles.ts`
+ * does, and no relation of the policy: {@link MediaType} is written through a role of its own, one
+ * that writes nothing a READ COMMITTED reader reads ({@link QtiMediaPolicy}). grizzle's `write`
+ * grants SELECT, INSERT and DELETE on each table it names, and no UPDATE, since no relation of
+ * `Qti` is mutable: the import inserts a package's rows, and the replace deletes them under the
+ * package's identifier and inserts the new ones (`replaceWrite`).
  *
  * Over `QtiMedia`, a refusal by a media law is the law's own, `every` with the row's key as its
  * witness where the host judges the row; over `Qti`, it is `{ kind: "above", level: "QtiMedia",
@@ -599,7 +608,7 @@ export const QtiMedia = schema.extend(
  * (`lawNameOf` of `#pantry/import/refusal.ts`).
  */
 export const MediaAuthor = role(QtiMedia, "author", wholeEntriesOf(QtiMedia), {
-  insert: writableNamesOf(Qti),
+  write: authorWrites,
 });
 
 /**
@@ -608,13 +617,19 @@ export const MediaAuthor = role(QtiMedia, "author", wholeEntriesOf(QtiMedia), {
 export type MediaAuthorRole = typeof MediaAuthor;
 
 /**
- * The author application's login over {@link QtiMedia}, over {@link MediaAuthor}, with the two
- * workloads `AuthorApp` of `#pantry/qti/logins.ts` holds, `authorReads` and `importWrite`, in its
- * order: every program is over `Qti`,
- * so its served file holds the same members, `importWrite` among them. It bears `AuthorApp`'s name,
- * so grizzle writes it as `migrations/<root>/served/author_app.json`. An application's grizzle
- * config lists this or `AuthorApp`, never both, since their names convert alike.
+ * The author application's login over {@link QtiMedia}, over {@link MediaAuthor}, with the
+ * workloads `AuthorApp` of `#pantry/qti/logins.ts` holds, `authorReads`, then the import's write,
+ * `importWrite`: every program is over `Qti`, so its served file holds the same members. It bears
+ * `AuthorApp`'s name, so grizzle writes it as `migrations/<root>/served/author_app.json`. An
+ * application's grizzle config lists this or `AuthorApp`, never both, since their names convert
+ * alike. An application that writes rows of its own beside a package's in one transaction declares
+ * its own role over its own level instead, writing `authorWrites` beside its relations, and
+ * composes `replaceWrite` of a package's rows with its own writes (`ChangeSet.union`,
+ * `ChangeSet.sequence`) into its one ChangeSet.
  */
+// GRIZZLE-PENDING(WHOLEDEL): `replaceWrite` is a function of a package's rows, and a function is no
+// workload member; once grizzle's set-difference replace has a rowless, served form, it joins
+// `importWrite` in the write workload.
 export const MediaAuthorApp = login(QtiMedia, "author_app", [MediaAuthor], {
   workload: [workload(MediaAuthor, authorReads), workload(MediaAuthor, { importWrite })],
 });

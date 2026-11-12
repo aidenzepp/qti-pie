@@ -1,7 +1,8 @@
 /**
  * The mapping overlays' rows (plan §1.7 O5, §C's `rowsOf`): from one document's view
- * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation `#pantry/qti/mapping.ts`
- * declares, each relation's rows a keyed set by its element's node.
+ * (`DocumentView` of `#pantry/import/fold.ts`) and its place in its package, the rows of every
+ * relation `#pantry/qti/mapping.ts` declares, each relation's rows a keyed set by its element's
+ * place, `(package, path, start)`.
  *
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
@@ -14,13 +15,13 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import { declarationOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
-import type { TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
+import { declarationOf, keyTextOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
+import type { Place, TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import { itemsOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import type {
   AreaMapping,
@@ -39,7 +40,7 @@ import type {
 
 /**
  * A document's mapping rows, one keyed set per relation: each map from the text of a row's key,
- * its element's node id, to the row as its writer writes it.
+ * its element's place ({@link keyTextOf}), to the row as its writer writes it.
  */
 export interface MappingRows {
   readonly AreaMapping: ReadonlyMap<string, Addition<typeof AreaMapping>>;
@@ -57,8 +58,7 @@ export interface MappingRows {
 }
 
 /**
- * The fields a declared overlay copies from its declaration, `declarationRef`'s less its node and
- * document.
+ * The fields a declared overlay copies from its declaration, `declarationRef`'s less its place.
  */
 type DeclarationCopy = Pick<
   Addition<typeof Mapping>,
@@ -148,35 +148,40 @@ const matchingOf = (baseType: Option.Option<BaseTypeHandle>, caseText = "") => (
  *
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), whose interaction an included fragment's nodes take as their nearest.
+ * @param place - Where the document stands in its package, the key every row holds.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (view: DocumentView): MappingRows => {
+export const rowsOf = (view: DocumentView, place: Place): MappingRows => {
   const { folds, rows } = view;
-  const document = rows.document.node;
-  const byId = new Map(rows.nodes.map((node) => [node.id, node]));
-  const attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>> = new Map(
-    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
-      ([node, held]) => [node, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node]));
+  const attributes: ReadonlyMap<bigint, ReadonlyMap<string, string>> = new Map(
+    [...Map.groupBy(rows.attributes, ({ start }) => start)].map(
+      ([start, held]) =>
+        [start, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
     ),
   );
 
-  const valueOf = (node: NodeId, name: string): string | undefined =>
-    attributes.get(node)?.get(name);
-  const tupleOf = (node: NodeRow<Composed>) => ({
-    document,
-    kind: node.kind,
-    nearest: foldAt(folds, node.id).nearest,
-    node: node.id,
+  const valueOf = (start: bigint, name: string): string | undefined =>
+    attributes.get(start)?.get(name);
+  const placeOf = (node: NodeRow<Composed>) => ({
+    package: place.package,
+    path: place.path,
     start: node.start,
+  });
+  const tupleOf = (node: NodeRow<Composed>) => ({
+    ...placeOf(node),
+    kind: node.kind,
+    nearest: foldAt(folds, node.start).nearest,
     version: node.version,
   });
+  const keyOf = (node: NodeRow<Composed>): string => keyTextOf(place, node.start);
   // Each declaration, as its rows hold it (`declarationOf`), whatever its identifier, cardinality
   // and base type spell (spec readings 157 and 158): a table hangs below one, and copies it.
   const declarations = new Map(
     rows.nodes.flatMap((node) =>
       Option.toArray(
-        declarationOf(node.kind, (name) => Option.fromUndefinedOr(valueOf(node.id, name))),
-      ).map((declared): readonly [NodeId, Declared] => [node.id, declared]),
+        declarationOf(node.kind, (name) => Option.fromUndefinedOr(valueOf(node.start, name))),
+      ).map((declared): readonly [bigint, Declared] => [node.start, declared]),
     ),
   );
 
@@ -212,20 +217,20 @@ export const rowsOf = (view: DocumentView): MappingRows => {
   ]);
   const addTable = (node: NodeRow<Composed>, declaration: Declared): void => {
     for (const table of Option.toArray(Option.fromUndefinedOr(tables.get(node.kind)))) {
-      table.rows.set(node.id, {
+      table.rows.set(keyOf(node), {
         ...tupleOf(node),
         ...copyOf(declaration),
         declaration: node.parent,
       });
       for (const cardinality of Option.toArray(declaration.cardinality)) {
-        table.beside.set(node.id, { cardinality, declaration: node.parent, node: node.id });
+        table.beside.set(keyOf(node), { ...placeOf(node), cardinality, declaration: node.parent });
       }
     }
 
     for (const baseType of node.kind === "qti-mapping"
       ? Option.toArray(declaration.baseType)
       : []) {
-      mappingBaseTypes.set(node.id, { baseType, declaration: node.parent, node: node.id });
+      mappingBaseTypes.set(keyOf(node), { ...placeOf(node), baseType, declaration: node.parent });
     }
   };
 
@@ -236,11 +241,11 @@ export const rowsOf = (view: DocumentView): MappingRows => {
 
     const lookupAttribute = lookupAttributeOf.get(node.kind);
     const lookupValue =
-      lookupAttribute === undefined ? undefined : valueOf(node.id, lookupAttribute);
-    const table = lookupAttribute === "default-value" ? node : byId.get(node.parent);
+      lookupAttribute === undefined ? undefined : valueOf(node.start, lookupAttribute);
+    const table = lookupAttribute === "default-value" ? node : byStart.get(node.parent);
     const tableDeclaration = table === undefined ? undefined : declarations.get(table.parent);
     if (lookupValue !== undefined && table !== undefined && tableDeclaration !== undefined) {
-      lookupValues.set(node.id, {
+      lookupValues.set(keyOf(node), {
         ...tupleOf(node),
         baseTypes: typedCountOf(tableDeclaration.baseType),
         declaration: table.parent,
@@ -248,35 +253,35 @@ export const rowsOf = (view: DocumentView): MappingRows => {
         value: lookupValue,
       });
       for (const baseType of Option.toArray(tableDeclaration.baseType)) {
-        lookupValueTypes.set(node.id, {
+        lookupValueTypes.set(keyOf(node), {
+          ...placeOf(node),
           baseType,
           declaration: table.parent,
-          node: node.id,
           value: lookupValue,
         });
       }
     }
 
-    const key = node.kind === "qti-map-entry" ? valueOf(node.id, "map-key") : undefined;
-    const mapping = byId.get(node.parent);
+    const key = node.kind === "qti-map-entry" ? valueOf(node.start, "map-key") : undefined;
+    const mapping = byStart.get(node.parent);
     const mappingDeclaration = mapping === undefined ? undefined : declarations.get(mapping.parent);
     if (key === undefined || mappingDeclaration === undefined) {
       continue;
     }
 
-    mapKeys.set(node.id, {
+    mapKeys.set(keyOf(node), {
       ...tupleOf(node),
-      ...matchingOf(mappingDeclaration.baseType, valueOf(node.id, "case-sensitive")),
+      ...matchingOf(mappingDeclaration.baseType, valueOf(node.start, "case-sensitive")),
       baseTypes: typedCountOf(mappingDeclaration.baseType),
       key,
       mapping: node.parent,
     });
     for (const baseType of Option.toArray(mappingDeclaration.baseType)) {
-      mapKeyTypes.set(node.id, { baseType, key, mapping: node.parent, node: node.id });
+      mapKeyTypes.set(keyOf(node), { ...placeOf(node), baseType, key, mapping: node.parent });
       for (const items of twoItemBaseTypes.has(baseType)
         ? Option.toArray(Option.fromUndefinedOr(itemsOf(key)))
         : []) {
-        mapKeyItems.set(node.id, { ...items, key, mapping: node.parent, node: node.id });
+        mapKeyItems.set(keyOf(node), { ...placeOf(node), ...items, key, mapping: node.parent });
       }
     }
   }

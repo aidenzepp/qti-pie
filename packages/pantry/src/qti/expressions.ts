@@ -3,9 +3,15 @@
  * C22; the orchestrator's rulings for Q5.10 of 2026-11-06): the typing the old processing checker
  * did on the host, stated over overlay rows PostgreSQL judges.
  *
- * Every overlay row is keyed by its element's node (or by node and attribute) and copies its
- * node's `nodeRef` tuple; its existence follows from `Node` or `Attribute` by containment, so no
- * element escapes its laws.
+ * Every overlay row is keyed by its element's place, `(package, path, start)`: its package's
+ * manifest identifier, its document's path and the element's pre-order position there, the key
+ * `Node` holds it by (or by that place and an attribute's name), and copies its node's `nodeRef`
+ * tuple; its existence follows from `Node` or `Attribute` by containment, so no element escapes its
+ * laws. A link to another element of the same document (a parent, an operator, a declaration) is
+ * that element's `start` alone, in the row's own package and path; a link to an element of
+ * another document of the package is that document's path beside the element's `start`
+ * (`itemDocument` and `declaration`, `namedDocument` and `named`), and an assembly is named by its
+ * head document's path, `assembly`, an instance by its place in that assembly's instance tree.
  *
  * - **{@link Expression}**, one row per expression element, typed with the expression-typing codes of
  *   `#pantry/qti/expression-types.ts`. Its operands are a counted family (C16): each
@@ -82,7 +88,6 @@ import {
   relation,
   select,
   str,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
@@ -105,7 +110,7 @@ import {
   SchemaVersion,
   VariableReference,
 } from "#pantry/grammar/install.ts";
-import { Attribute, closedName, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
@@ -149,7 +154,7 @@ import {
   ValueCardinalityBit,
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, ItemRefDocument, VariableMapping } from "#pantry/qti/tests.ts";
@@ -211,13 +216,13 @@ const noBases = Bits.of(ValueBase, []);
 const noCardinalities = Bits.of(ValueCardinality, []);
 
 /**
- * One expression element, keyed by its node: its `nodeRef` tuple, its parent's kind, the
+ * One expression element, keyed by its place: its `nodeRef` tuple, its parent's kind, the
  * processing language it is written in, the type the host gives its value, and its operands.
  *
- * - **the host's:** the `nodeRef` tuple (`node`, `document`, `kind`, `start`, `nearest`, `version`,
- *   `parent`), `parentKind`, `language`, `baseType` and `cardinality`, each proved: the tuple and
- *   the parent's kind by containment, the language by its parent's row, the type by `E1_derived`,
- *   `ResultBase` and `ResultCardinality`;
+ * - **the host's:** the `nodeRef` tuple (`package`, `path`, `start`, `kind`, `nearest`, `version`,
+ *   `parent`, its parent's `start`), `parentKind`, `language`, `baseType` and `cardinality`, each
+ *   proved: the tuple and the parent's kind by containment, the language by its parent's row, the
+ *   type by `E1_derived`, `ResultBase` and `ResultCardinality`;
  * - **drawn:** `operands`, the count of its {@link Operand} rows;
  * - **accumulated,** each a `Monoid.or` fold's end over its operands: `operandBaseTypes` and
  *   `operandCardinalities`, every operand's; `leadCardinalities`, its first operand's;
@@ -228,38 +233,48 @@ export const Expression = relation(
   {
     baseType: closedId(ValueBase),
     cardinality: closedId(ValueCardinality),
-    document: uuid,
     kind: closedId(NodeKind),
     language: closedId(Language),
     leadCardinalities: accumulated(bits(ValueCardinality), noCardinalities),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
     operandBaseTypes: accumulated(bits(ValueBase), noBases),
     operandCardinalities: accumulated(bits(ValueCardinality), noCardinalities),
     operands: drawn(natural),
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     start: natural,
     tailBaseTypes: accumulated(bits(ValueBase), noBases),
     tailCardinalities: accumulated(bits(ValueCardinality), noCardinalities),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * The one tuple of an expression every containment into `Expression` targets, as `nodeRef` is
- * Node's (C18): its node, parent, kind, language and type. An operand, a variable reference, an
+ * Node's (C18): its place, parent, kind, language and type. An operand, a variable reference, an
  * attribute an expression's type follows from and a literal each copy it, so `Expression` carries
  * one superkey UNIQUE for them all.
  */
-const exprRef = on(Expression, "node", "parent", "kind", "language", "baseType", "cardinality");
+const exprRef = on(
+  Expression,
+  "package",
+  "path",
+  "start",
+  "parent",
+  "kind",
+  "language",
+  "baseType",
+  "cardinality",
+);
 
 /**
- * One operand: an expression whose parent is an expression, keyed by its node (C16).
+ * One operand: an expression whose parent is an expression, keyed by its place (C16).
  *
- * - **the host's:** `operator`, its parent; `rank`, its element rank among its siblings, and
- *   `children`, its own element children, both `Node`'s (`nodeCounts`); and its own `kind`,
+ * - **the host's:** `operator`, its parent's `start`; `rank`, its element rank among its siblings,
+ *   and `children`, its own element children, both `Node`'s (`nodeCounts`); and its own `kind`,
  *   `language`, `baseType` and `cardinality`, its {@link Expression} row's;
  * - **generated:** `baseTypeBit` and `cardinalityBit`, its type as one-bit sets (C6), the steps of
  *   its operator's folds: ∅ for `qti-null`'s `any` base type and for an `unknown` cardinality.
@@ -272,11 +287,13 @@ export const Operand = relation.generated(
     children: natural,
     kind: closedId(NodeKind),
     language: closedId(Language),
-    node: uuid,
-    operator: uuid,
+    operator: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     rank: natural,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
   (r) => ({
     baseTypeBit: generated(bits(ValueBase), ValueBaseBit.row(r.baseType)),
     cardinalityBit: generated(bits(ValueCardinality), ValueCardinalityBit.row(r.cardinality)),
@@ -287,30 +304,33 @@ export const Operand = relation.generated(
  * Each expression's operands, counted by `Expression.operands`: a flat row whose group key names
  * its operator.
  */
-const operandFamily = counted(on(Operand, "operator"), fin(Expression, "operands"));
+const operandFamily = counted(
+  on(Operand, "package", "path", "operator"),
+  fin(Expression, "operands"),
+);
 
 /**
- * One rule or processing element, keyed by its node: its `nodeRef` tuple, its parent's kind, and
+ * One rule or processing element, keyed by its place: its `nodeRef` tuple, its parent's kind, and
  * the processing language it is written in, which its root opens and every rule below it carries.
  */
 export const Processing = relation(
   "Processing",
   {
-    document: uuid,
     kind: closedId(NodeKind),
     language: closedId(Language),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One variable reference a processing element makes, keyed by the element's node and the attribute
+ * One variable reference a processing element makes, keyed by the element's place and the attribute
  * it makes it by (`VariableReference`'s rows over the processing kinds), and what it names.
  *
  * - **the copy:** `kind` and `lexical`, the attribute's, from `Attribute`;
@@ -321,11 +341,10 @@ export const Processing = relation(
  *   `cardinality`, the variable's type.
  *
  * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
- * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
- * uuid), and so are the table its element needs that declaration to hold, {@link VariableRefTable},
- * where it claims one, and the type of a setter's or a lookup's one expression, `HeldType`, a
- * derived relation of `#pantry/qti/queries.ts`. A type field its element leaves unread holds
- * `unknown`.
+ * (lane NIL's NS1: a reference that names no declaration has no declaration row, never a sentinel),
+ * and so are the table its element needs that declaration to hold, {@link VariableRefTable}, where
+ * it claims one, and the type of a setter's or a lookup's one expression, `HeldType`, a derived
+ * relation of `#pantry/qti/queries.ts`. A type field its element leaves unread holds `unknown`.
  *
  * The import writes its rows where its form names something (`namedBy` of
  * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
@@ -339,25 +358,27 @@ export const VariableRef = relation(
     baseType: closedId(ValueBase),
     before: Affix,
     cardinality: closedId(ValueCardinality),
-    document: uuid,
     elementBase: closedId(ValueBase),
     elementCardinality: closedId(ValueCardinality),
     identifier: keyText,
     kind: closedId(NodeKind),
     language: closedId(Language),
     lexical: keyText,
-    node: uuid,
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     resolution: closedId(ReferenceResolution),
     rootKind: closedId(NodeKind),
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
  * The declaration a declared {@link VariableRef} names, keyed as the reference: its
- * `declarationIdentifierRef` tuple (`declaration`, `declarationKind`, `declCardinalities` and
- * `declBaseTypes`, with its reference's `document` and `identifier`), whatever the declaration's
+ * `declarationIdentifierRef` tuple (`declaration`, the declaration's `start` in the reference's own
+ * document, `declarationKind`, `declCardinalities` and `declBaseTypes`, with its reference's
+ * `package`, `path` and `identifier`), whatever the declaration's
  * cardinality spells (spec reading 159), and the reference's fields its laws read beside it, each
  * copied from the reference: its `baseType` is `unknown` where the declaration has no base type, a
  * record's or one that spells nothing, and else its {@link DeclarationBaseType}'s `valueBase` (lane
@@ -373,15 +394,16 @@ export const VariableRefDeclaration = relation(
     cardinality: closedId(ValueCardinality),
     declBaseTypes: natural,
     declCardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
     language: closedId(Language),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
@@ -399,10 +421,12 @@ export const VariableRefCardinality = relation.generated(
   {
     attribute: closedId(AttributeName),
     declCardinality: closedId(Cardinality),
-    declaration: uuid,
-    node: uuid,
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
   (c) => ({
     cardinality: generated(
       closedId(ValueCardinality),
@@ -430,75 +454,87 @@ export const VariableRefTable = relation(
   "VariableRefTable",
   {
     attribute: closedId(AttributeName),
-    declaration: uuid,
+    declaration: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     table: closedId(ReferencedTable),
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
  * One variable reference of an instance of an item's assembly (Q5.13's `Instance`, spec reading
- * 117), keyed by the instance and the reference's element node and attribute: a
- * {@link VariableRef} of the instance's document, its name resolved among the item's
- * declarations, else to one of the item's built-in variables, else to nothing, so a response or
- * outcome rule fragment's references name its item's variables ("Variable declared" over the
- * assembly). `rootKind` is the assembly's root's, an item's. The declaration a declared one names
- * is a row of its own, {@link PlacedVariableRefDeclaration} (lane NIL's NS1).
+ * 117), keyed by the instance (its assembly's head path, `assembly`, and its place in that
+ * assembly's instance tree, `instance`) and the reference's element place and attribute: a
+ * {@link VariableRef} of the instance's document, whose path is the reference's `path`, its name
+ * resolved among the item's declarations, else to one of the item's built-in variables, else to
+ * nothing, so a response or outcome rule fragment's references name its item's variables ("Variable
+ * declared" over the assembly). `rootKind` is the assembly's root's, an item's. The declaration a
+ * declared one names is a row of its own, {@link PlacedVariableRefDeclaration} (lane NIL's NS1).
  */
 export const PlacedVariableRef = relation(
   "PlacedVariableRef",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
-    document: uuid,
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     resolution: closedId(ReferenceResolution),
     rootKind: closedId(NodeKind),
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "path", "start", "attribute"],
 );
 
 /**
  * The declaration a declared {@link PlacedVariableRef} names among its assembly's item's
  * declarations, keyed as the placed reference: its `declarationIdentifierRef` tuple (with its
- * `assembly` as its document and its `identifier`), whatever the declaration's cardinality spells
- * (spec reading 159), and its reference's `kind` and `attribute`. A placed reference exactly where
- * its `resolution` is `declared` has one (lane NIL's NS1).
+ * `assembly` as its document, `declaration` its `start` there, and its `identifier`), whatever the
+ * declaration's cardinality spells (spec reading 159), and its reference's `kind` and `attribute`.
+ * A placed reference exactly where its `resolution` is `declared` has one (lane NIL's NS1).
  */
 export const PlacedVariableRefDeclaration = relation(
   "PlacedVariableRefDeclaration",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     declBaseTypes: natural,
     declCardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "path", "start", "attribute"],
 );
 
 /**
  * Each document's variable references, counted by `Document.variables`.
  */
-const documentVariableFamily = counted(on(VariableRef, "document"), fin(Document, "variables"));
+const documentVariableFamily = counted(
+  on(VariableRef, "package", "path"),
+  fin(Document, "variables"),
+);
 
 /**
  * Each item instance's variable references, counted by `Instance.variables`, its document's count.
  */
-const placedVariableFamily = counted(on(PlacedVariableRef, "instance"), fin(Instance, "variables"));
+const placedVariableFamily = counted(
+  on(PlacedVariableRef, "package", "assembly", "instance"),
+  fin(Instance, "variables"),
+);
 
 /**
- * One attribute an expression's type follows from, keyed by its element's node and its name: a
+ * One attribute an expression's type follows from, keyed by its element's place and its name: a
  * base value's and a test variables' `base-type`, a test variables' `weight-identifier`, and a math
  * operator's `name`, with its lexical form and its element's `exprRef` tuple.
  *
@@ -521,16 +557,19 @@ export const ExpressionAttribute = relation(
     kind: closedId(NodeKind),
     language: closedId(Language),
     lexical: keyText,
-    node: uuid,
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
+    start: natural,
     written: pg.boolean,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
- * A base value, keyed by its `qti-base-value` node: its `exprRef` tuple and its text, its node's
- * string value. The code its `base-type` spells is its optional part, {@link LiteralTyped}.
+ * A base value, keyed by its `qti-base-value` element's place: its `exprRef` tuple and its text,
+ * its node's string value. The code its `base-type` spells is its optional part,
+ * {@link LiteralTyped}.
  */
 export const Literal = relation(
   "Literal",
@@ -539,74 +578,92 @@ export const Literal = relation(
     cardinality: closedId(ValueCardinality),
     kind: closedId(NodeKind),
     language: closedId(Language),
-    node: uuid,
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
+    start: natural,
     text: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A base value's type, keyed by its `qti-base-value` node, where its `base-type` spells a base: its
- * text, the declaration code `BaseTypePattern` is keyed by, each its {@link Literal} row's, and its
- * base type, the code's `ValueBaseOf` image, which the database derives and its {@link Literal}
- * holds. A base value whose `base-type` spells none has an `unknown` base type and
+ * A base value's type, keyed by its `qti-base-value` element's place, where its `base-type` spells
+ * a base: its text, the declaration code `BaseTypePattern` is keyed by, each its {@link Literal}
+ * row's, and its base type, the code's `ValueBaseOf` image, which the database derives and its
+ * {@link Literal} holds. A base value whose `base-type` spells none has an `unknown` base type and
  * no row here, so no law reads its text in a type it does not have, and AL1's value domain refuses
  * its `base-type` alone.
  */
 export const LiteralTyped = relation.generated(
   "LiteralTyped",
-  { node: uuid, text: keyText, typeCode: closedId(BaseType) },
-  ["node"],
+  {
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    text: keyText,
+    typeCode: closedId(BaseType),
+  },
+  ["package", "path", "start"],
   (l) => ({ baseType: generated(closedId(ValueBase), ValueBaseOf.at("value", l.typeCode)) }),
 );
 
 /**
- * A response processing's `template` URI, keyed by its `qti-response-processing` node, and the
+ * A response processing's `template` URI, keyed by its `qti-response-processing` element's place,
+ * and the
  * published template it names, `none` for one it names none of (`template-derivation`, C17).
  */
 export const ProcessingTemplate = relation(
   "ProcessingTemplate",
-  { node: uuid, template: closedId(RpTemplate), uri: keyText },
-  ["node"],
+  {
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    template: closedId(RpTemplate),
+    uri: keyText,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A test's template default, keyed by its `qti-template-default` node (the UP audit's A37 and A38;
- * spec reading 108): its item ref (`itemRef`, its parent) and its `template-identifier` as written
- * (`lexical`) and collapsed (`lead`, `template`, `trail`). It exists exactly where the attribute is
- * written, which every template default must write (AL3). What only a template the item declares
- * has, its declaration and its expression's type, is {@link TemplateDefaultTarget}'s. The
- * information model says of TemplateDefault (§5.152) "The default value of a template variable in
- * an item can be overridden based on the test context ... The value is obtained by evaluating an
- * expression defined within the reference to the item at test level", and of `template-identifier`
- * (§5.152.1) "The identifier of the template variable affected".
+ * A test's template default, keyed by its `qti-template-default` element's place (the UP audit's
+ * A37 and A38; spec reading 108): its item ref (`itemRef`, its parent's `start`) and its
+ * `template-identifier` as written (`lexical`) and collapsed (`lead`, `template`, `trail`). It
+ * exists exactly where the attribute is written, which every template default must write (AL3).
+ * What only a template the item declares has, its declaration and its expression's type, is
+ * {@link TemplateDefaultTarget}'s. The information model says of TemplateDefault (§5.152) "The
+ * default value of a template variable in an item can be overridden based on the test context ...
+ * The value is obtained by evaluating an expression defined within the reference to the item at
+ * test level", and of `template-identifier` (§5.152.1) "The identifier of the template variable
+ * affected".
  */
 export const TemplateDefault = relation(
   "TemplateDefault",
   {
-    itemRef: uuid,
+    itemRef: natural,
     lead: Space,
     lexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     template: keyText,
     trail: Space,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * The variable a template default affects, keyed by its `qti-template-default` node: a row of its
- * own, since a template default whose item declares no such variable has none (the ruling of
- * 2026-11-06, AGENTS.md's Schema intent: a value that may be missing is a row of its own relation).
- * It holds the item its item ref names (`itemDocument`, through `ItemRefDocument`), the
- * declaration of that item `template` names, whatever its cardinality spells (spec reading 159),
- * with its kind and its counts of cardinalities and base types, and `heldBase` and
- * `heldCardinality`, its one expression's type, with its `TemplateDefault`'s `itemRef` and
- * `template`. Every template default has one ("Template default target"), whose declaration is a
- * template declaration (`Template_default_target`) of a type its expression fits
- * (`Template_default_type`): its base type, where the declaration has one, its
- * {@link DeclarationBaseType}'s, and its cardinality, where it has one, its
+ * The variable a template default affects, keyed by its `qti-template-default` element's place: a
+ * row of its own, since a template default whose item declares no such variable has none (the
+ * ruling of 2026-11-06, AGENTS.md's Schema intent: a value that may be missing is a row of its own
+ * relation). It holds the item its item ref names (`itemDocument`, the item's path, through
+ * `ItemRefDocument`), the declaration of that item `template` names (`declaration`, its `start` in
+ * `itemDocument`), whatever its cardinality spells (spec reading 159), with its kind and its counts
+ * of cardinalities and base types, and `heldBase` and `heldCardinality`, its one expression's type,
+ * with its `TemplateDefault`'s `itemRef` and `template`. Every template default has one ("Template
+ * default target"), whose declaration is a template declaration (`Template_default_target`) of a
+ * type its expression fits (`Template_default_type`): its base type, where the declaration has one,
+ * its {@link DeclarationBaseType}'s, and its cardinality, where it has one, its
  * {@link TemplateDefaultCardinality}'s.
  */
 export const TemplateDefaultTarget = relation(
@@ -614,22 +671,24 @@ export const TemplateDefaultTarget = relation(
   {
     declBaseTypes: natural,
     declCardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
     heldBase: closedId(ValueBase),
     heldCardinality: closedId(ValueCardinality),
-    itemDocument: uuid,
-    itemRef: uuid,
-    node: uuid,
+    itemDocument: EntryPath,
+    itemRef: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     template: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * A template default's target beside its declaration's cardinality, keyed by the template default's
- * node, where the declaration has one (spec reading 159): `declaration` and `heldCardinality`, its
- * {@link TemplateDefaultTarget}'s, and `declCardinality`, the declaration's
+ * place, where the declaration has one (spec reading 159): `itemDocument`, `declaration` and
+ * `heldCardinality`, its {@link TemplateDefaultTarget}'s, and `declCardinality`, the declaration's
  * {@link DeclarationCardinality}'s, which `Template_default_type` holds the expression's
  * cardinality to. A target whose declaration's cardinality is unwritten or spells nothing has none,
  * so the law reads no cardinality the declaration does not have, and AL3 or its value domain
@@ -639,60 +698,72 @@ export const TemplateDefaultCardinality = relation(
   "TemplateDefaultCardinality",
   {
     declCardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     heldCardinality: closedId(ValueCardinality),
-    node: uuid,
+    itemDocument: EntryPath,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's A34;
- * spec readings 97 and 107): a row of its own, since a mapping whose item declares no variable of
- * its source's name has none (the ruling of 2026-11-06). It holds its item ref and the item that
- * names (`itemDocument`, through `ItemRefDocument`), its collapsed `source` and `target`
- * (`VariableMapping`'s, each copied by a containment of its own, since one index holds at most one
- * key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names, whatever its
- * cardinality spells (spec reading 159), with its kind and its counts of cardinalities and base
- * types. Every mapping has one ("Variable mapping source"), whose declaration is an outcome
- * declaration (`Variable_mapping_source`); where the item declares `target` too, that is the
- * source itself (`Variable_mapping_target`, over `DeclaredTarget` of `#pantry/qti/queries.ts`).
+ * A variable mapping's source in the item it maps, keyed by the mapping's place (the UP audit's
+ * A34; spec readings 97 and 107): a row of its own, since a mapping whose item declares no variable
+ * of its source's name has none (the ruling of 2026-11-06). It holds its item ref and the item that
+ * names (`itemDocument`, the item's path, through `ItemRefDocument`), its collapsed `source` and
+ * `target` (`VariableMapping`'s, each copied by a containment of its own, since one index holds at
+ * most one key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names
+ * (`declaration`, its `start` in `itemDocument`), whatever its cardinality spells (spec reading
+ * 159), with its kind and its counts of cardinalities and base types. Every mapping has one
+ * ("Variable mapping source"), whose declaration is an outcome declaration
+ * (`Variable_mapping_source`); where the item declares `target` too, that is the source itself
+ * (`Variable_mapping_target`, over `DeclaredTarget` of `#pantry/qti/queries.ts`).
  */
 export const MappingSourceDeclaration = relation(
   "MappingSourceDeclaration",
   {
     declBaseTypes: natural,
     declCardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    itemDocument: uuid,
-    itemRef: uuid,
-    node: uuid,
+    itemDocument: EntryPath,
+    itemRef: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     source: keyText,
+    start: natural,
     target: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A variable mapping's item ref, keyed by the mapping's node (spec reading 110): `itemRef`,
- * `VariableMapping`'s `parent`, and `types`, drawn: its count of {@link MappingItemRefType} rows, 1
- * where the item ref has a target and 0 where it has none: it writes no href, which AL3 alone
- * refuses (spec reading 155), or its href names no resource of the item type or an LTI type, which
- * "Item ref target" refuses over the item ref unless a resource of an unread type names its path,
- * itself AL1's refusal (`#pantry/qti/tests.ts` `ItemRefHref`). Every mapping has one. A mapping
- * whose item ref names an LTI link has no item, so no source declaration, and is accepted
- * unchecked; every other, one under an item ref with no target among them, must have its
- * {@link MappingSourceDeclaration} ("Variable mapping source").
+ * A variable mapping's item ref, keyed by the mapping's place (spec reading 110): `itemRef`,
+ * `VariableMapping`'s `parent`, the item ref's `start`, and `types`, drawn: its count of
+ * {@link MappingItemRefType} rows, 1 where the item ref has a target and 0 where it has none: it
+ * writes no href, which AL3 alone refuses (spec reading 155), or its href names no resource of the
+ * item type or an LTI type, which "Item ref target" refuses over the item ref unless a resource of
+ * an unread type names its path, itself AL1's refusal (`#pantry/qti/tests.ts` `ItemRefHref`). Every
+ * mapping has one. A mapping whose item ref names an LTI link has no item, so no source
+ * declaration, and is accepted unchecked; every other, one under an item ref with no target among
+ * them, must have its {@link MappingSourceDeclaration} ("Variable mapping source").
  */
 export const MappingItemRef = relation(
   "MappingItemRef",
-  { itemRef: uuid, node: uuid, types: drawn(natural) },
-  ["node"],
+  {
+    itemRef: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    types: drawn(natural),
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * What a variable mapping's item ref names, keyed by the mapping's node, where the item ref has a
+ * What a variable mapping's item ref names, keyed by the mapping's place, where the item ref has a
  * target, a counted member of its {@link MappingItemRef}: its item ref (`itemRef`) and `type`, its
  * target's (the query `ItemRefTarget`, `#pantry/qti/queries.ts`), copied from it. A mapping under
  * an item ref with no target has no row, so no type stands for it (decision 428, as
@@ -700,8 +771,14 @@ export const MappingItemRef = relation(
  */
 export const MappingItemRefType = relation(
   "MappingItemRefType",
-  { itemRef: uuid, node: uuid, type: closedId(ResourceType) },
-  ["node"],
+  {
+    itemRef: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    type: closedId(ResourceType),
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -709,15 +786,15 @@ export const MappingItemRefType = relation(
  * under an item ref with no target.
  */
 const mappingItemRefTypeFamily = counted(
-  on(MappingItemRefType, "node"),
+  on(MappingItemRefType, "package", "path", "start"),
   fin(MappingItemRef, "types"),
 );
 
 /**
- * A `section-identifier`, keyed by its element's node (the UP audit's A61): the attribute, its
- * element's kind and its lexical form, copied from `Attribute` (C18); its element's document and
- * that document's root kind; and its split around the name it spells, `lexical = before ‖
- * identifier ‖ after`, the whitespace an `IdentifierDType` collapses.
+ * A `section-identifier`, keyed by its element's place (the UP audit's A61): the attribute, its
+ * element's kind and its lexical form, copied from `Attribute` (C18); its document's root kind; and
+ * its split around the name it spells, `lexical = before ‖ identifier ‖ after`, the whitespace an
+ * `IdentifierDType` collapses.
  */
 export const SectionIdentifier = relation(
   "SectionIdentifier",
@@ -725,20 +802,21 @@ export const SectionIdentifier = relation(
     after: Space,
     attribute: closedId(AttributeName),
     before: Space,
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
     lexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     rootKind: closedId(NodeKind),
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * A reference a document that is no item makes, keyed by its element and the attribute it makes it
  * by: every `VariableRef` of such a document (role `variable`) and every `section-identifier` there
- * (role `section`), with its document, root kind, element kind and the name it spells. These
+ * (role `section`), with its document's root kind, its element's kind and the name it spells. These
  * resolve against each test that places the document, not against the document alone (spec
  * reading 5), each once per test ({@link AssembledReference}): a test's own, a section document's,
  * and a fragment's that a test or a section document splices, as the merged test holds it (spec
@@ -750,60 +828,66 @@ export const TestReference = relation(
   "TestReference",
   {
     attribute: closedId(AttributeName),
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     role: closedId(ReferenceRole),
     rootKind: closedId(NodeKind),
+    start: natural,
   },
-  ["node", "attribute"],
+  ["package", "path", "start", "attribute"],
 );
 
 /**
- * A document that is no item, keyed by its node: the owner of its {@link TestReference} rows,
- * `references` their count, 0 for a document that makes none. Every such document has its row, as
- * every document whose references resolve in another's has its `ReferringDocument`, so any of them
- * a test places counts its references there.
+ * A document that is no item, keyed by its `(package, path)`: the owner of its {@link TestReference}
+ * rows, `references` their count, 0 for a document that makes none. Every such document has its
+ * row, as every document whose references resolve in another's has its `ReferringDocument`, so any
+ * of them a test places counts its references there.
  */
 export const ReferenceDocument = relation(
   "ReferenceDocument",
-  { document: uuid, references: drawn(natural) },
-  ["document"],
+  { package: ManifestIdentifier, path: EntryPath, references: drawn(natural) },
+  ["package", "path"],
 );
 
 /**
  * One instance of a test's assembly whose document is no item (`Instance`, RG3), keyed by the
- * instance: its assembly, its assembly's root kind and the document it places, and `references`,
- * its {@link PlacedReference} rows' count, which equals its document's (`ReferenceDocument`).
+ * instance, its package, its assembly's head path (`assembly`) and its place in the assembly's
+ * instance tree (`instance`): its assembly's root kind and the path of the document it places, and
+ * `references`, its {@link PlacedReference} rows' count, which equals its document's
+ * (`ReferenceDocument`).
  */
 export const PlacedDocument = relation(
   "PlacedDocument",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     assemblyKind: closedId(NodeKind),
-    document: uuid,
-    instance: uuid,
+    document: EntryPath,
+    instance: natural,
+    package: ManifestIdentifier,
     references: drawn(natural),
   },
-  ["instance"],
+  ["package", "assembly", "instance"],
 );
 
 /**
- * One reference of one instance of a test's assembly, keyed by the instance and the reference: so
+ * One reference of one instance of a test's assembly, keyed by the instance and the reference, its
+ * element's place in the instance's document and its attribute: so
  * every reference of every document a test places is placed once per instance, the dependent sum
  * of `representation-gaps.md` §1 M1 over the instances.
  */
 export const PlacedReference = relation(
   "PlacedReference",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
-    document: uuid,
-    instance: uuid,
-    node: uuid,
+    instance: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node", "attribute"],
+  ["package", "assembly", "instance", "path", "start", "attribute"],
 );
 
 /**
@@ -820,22 +904,23 @@ export const PlacedReference = relation(
 export const AssembledReference = relation(
   "AssembledReference",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     digits: accumulated(natural, 0n),
-    document: uuid,
     identifier: keyText,
     joined: accumulated(keyText, ""),
     kind: closedId(NodeKind),
     lastDigit: pg.boolean,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     placements: drawn(natural),
     readings: drawn(natural),
     role: closedId(ReferenceRole),
     rootKind: closedId(NodeKind),
     segments: drawn(natural),
+    start: natural,
   },
-  ["assembly", "node", "attribute"],
+  ["package", "assembly", "path", "start", "attribute"],
 );
 
 /**
@@ -855,16 +940,18 @@ export const ReferenceSegment = relation.generated(
   "ReferenceSegment",
   {
     after: accumulated(keyText, ""),
-    assembly: uuid,
+    assembly: EntryPath,
     at: drawn(natural),
     attribute: closedId(AttributeName),
     before: accumulated(keyText, ""),
     digit: pg.boolean,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     piece: keyText,
     separator: Separator,
+    start: natural,
   },
-  ["assembly", "node", "attribute", "at"],
+  ["package", "assembly", "path", "start", "attribute", "at"],
   (s) => ({ token: generated(keyText, Compute.concat(s.separator, s.piece)) }),
 );
 
@@ -877,10 +964,11 @@ export const ReferenceSegment = relation.generated(
  *   variable` (split), `scope.number.variable` (numbered) or `scope` (name), each piece copied from
  *   its {@link ReferenceSegment} and the whole equal to `identifier` (A59, G-concat);
  * - **the scope:** `found`, `named`, `namedKind`, `placements` and `replaced`: the written element of
- *   the assembly whose identifier is `scope`, its node, kind and placements and whether a
- *   replacement can repeat it in an instance that places it (`FoundName` of
- *   `#pantry/qti/queries.ts`), and the test itself for an unsplit reading. A scope the assembly
- *   holds no element of is not `found` (`HeldScope`), and holds the test, its kind `document`, no
+ *   the assembly whose identifier is `scope`, its document's path and its `start` there
+ *   (`namedDocument`, `named`), its kind and placements and whether a replacement can repeat it in
+ *   an instance that places it (`FoundName` of `#pantry/qti/queries.ts`), and the test itself, its
+ *   document node at the assembly's head path, for an unsplit reading. A scope the assembly holds
+ *   no element of is not `found` (`HeldScope`), and holds the test, its kind `document`, no
  *   placement and no replacement in the other four, the null objects RG4's design gives a probe
  *   (`representation-gaps.md` §4.3), which no law reads of a scope not found;
  * - **the variable:** `source`, what names it: `declared`, where the test's declarations, unsplit, or
@@ -900,36 +988,40 @@ export const ReferenceSegment = relation.generated(
 export const Reading = relation(
   "Reading",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     form: closedId(ReadingForm),
     found: pg.boolean,
     identifier: keyText,
     kind: closedId(NodeKind),
-    named: uuid,
+    named: natural,
+    namedDocument: EntryPath,
     namedKind: closedId(NodeKind),
-    node: uuid,
     number: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
     placements: natural,
     replaced: pg.boolean,
     role: closedId(ReferenceRole),
     scope: keyText,
     source: closedId(ReadingSource),
     split: natural,
+    start: natural,
     variable: keyText,
   },
-  ["assembly", "node", "attribute", "form", "split"],
+  ["package", "assembly", "path", "start", "attribute", "form", "split"],
 );
 
 /**
  * The declaration a resolving {@link Reading} reads, keyed as the reading, where its variable is
- * declared or mapped (spec readings 48 and 88): `declaration`, `declarationKind`,
- * `declCardinalities` and `declBaseTypes`, the declaration, its kind and its counts of
- * cardinalities and base types, whatever its cardinality spells (spec reading 159), beside the
- * reading's `kind`, `source`, `named` and `variable`, each copied from it. A declared variable's
+ * declared or mapped (spec readings 48 and 88): `declarationDocument` and `declaration`, the
+ * declaration's document's path and its `start` there, `declarationKind`, `declCardinalities` and
+ * `declBaseTypes`, its kind and its counts of cardinalities and base types, whatever its
+ * cardinality spells (spec reading 159), beside the reading's `kind`, `source`, `namedDocument`,
+ * `named` and `variable`, each copied from it. A declared variable's
  * declaration is the one the document it reads declares of its name, the test's or its item ref's
  * item's (`DeclaredReading` of `#pantry/qti/queries.ts`); a mapped variable's is its mapping's
- * source's, its item ref's {@link MappingSourceDeclaration} at `(named, variable)`.
+ * source's, its item ref's {@link MappingSourceDeclaration} at `(namedDocument, named, variable)`.
  *
  * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
  * relation, never a sentinel). A reading of a built-in variable or of nothing names no
@@ -942,28 +1034,33 @@ export const Reading = relation(
 export const ReadingDeclaration = relation(
   "ReadingDeclaration",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     declBaseTypes: natural,
     declCardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
+    declarationDocument: EntryPath,
     declarationKind: closedId(DeclarationKind),
     form: closedId(ReadingForm),
     kind: closedId(NodeKind),
-    named: uuid,
-    node: uuid,
+    named: natural,
+    namedDocument: EntryPath,
+    package: ManifestIdentifier,
+    path: EntryPath,
     source: closedId(ReadingSource),
     split: natural,
+    start: natural,
     variable: keyText,
   },
-  ["assembly", "node", "attribute", "form", "split"],
+  ["package", "assembly", "path", "start", "attribute", "form", "split"],
 );
 
 /**
  * A reading that stands for a literal beside its declaration's cardinality, keyed as its
  * {@link Reading}, where the reading resolves to a declared or mapped variable by an attribute
  * other than `identifier` and the variable's declaration has a cardinality (spec reading 159):
- * `declaration`, its {@link ReadingDeclaration}'s, and `declCardinality`, the declaration's
+ * `declarationDocument` and `declaration`, its {@link ReadingDeclaration}'s, and `declCardinality`,
+ * the declaration's
  * {@link DeclarationCardinality}'s, which `Reference_type` holds to a single value (P24). A reading
  * whose declaration's cardinality is unwritten or spells nothing has none, so the law reads no
  * cardinality the declaration does not have, and AL3 or its value domain refuses it alone (spec
@@ -972,15 +1069,18 @@ export const ReadingDeclaration = relation(
 export const ReadingCardinality = relation(
   "ReadingCardinality",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     attribute: closedId(AttributeName),
     declCardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
+    declarationDocument: EntryPath,
     form: closedId(ReadingForm),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     split: natural,
+    start: natural,
   },
-  ["assembly", "node", "attribute", "form", "split"],
+  ["package", "assembly", "path", "start", "attribute", "form", "split"],
 );
 
 /**
@@ -1065,7 +1165,6 @@ const referringKinds = [...new Set(processingReferences.map(({ kind }) => kind))
  */
 const references = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.in(a.kind, referringKinds),
     a.eq(Compute.subset(Compute.singleton(a.name), VariableReference.row(a.kind)), true),
     a.or(
@@ -1089,13 +1188,10 @@ const references = select(Attribute, (a) =>
  * The attributes an expression's type follows from, `ExpressionAttribute`'s source.
  */
 const typingAttributes = select(Attribute, (a) =>
-  a.and(
-    closedName(a),
-    a.or(
-      a.and(a.eq(a.kind, "qti-base-value"), a.eq(a.name, "base-type")),
-      a.and(a.eq(a.kind, "qti-test-variables"), a.in(a.name, ["base-type", "weight-identifier"])),
-      a.and(a.eq(a.kind, "qti-math-operator"), a.eq(a.name, "name")),
-    ),
+  a.or(
+    a.and(a.eq(a.kind, "qti-base-value"), a.eq(a.name, "base-type")),
+    a.and(a.eq(a.kind, "qti-test-variables"), a.in(a.name, ["base-type", "weight-identifier"])),
+    a.and(a.eq(a.kind, "qti-math-operator"), a.eq(a.name, "name")),
   ),
 );
 
@@ -1103,7 +1199,7 @@ const typingAttributes = select(Attribute, (a) =>
  * The `template` of each response processing, `ProcessingTemplate`'s source.
  */
 const templateAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "qti-response-processing"), a.eq(a.name, "template")),
+  a.and(a.eq(a.kind, "qti-response-processing"), a.eq(a.name, "template")),
 );
 
 /**
@@ -1744,9 +1840,7 @@ const digitSegments = select(ReferenceSegment, (s) => s.eq(s.digit, true));
 /**
  * The `section-identifier` attributes, `SectionIdentifier`'s source.
  */
-const sectionIdentifierAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.name, "section-identifier")),
-);
+const sectionIdentifierAttributes = select(Attribute, (a) => a.eq(a.name, "section-identifier"));
 
 /**
  * The one expression each template default holds (TemplateDefaultDType's content), whose type its
@@ -1760,7 +1854,7 @@ const templateDefaultExpressions = select(Expression, (e) =>
  * The `template-identifier` of each template default, `TemplateDefault`'s source.
  */
 const templateIdentifiers = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "qti-template-default"), a.eq(a.name, "template-identifier")),
+  a.and(a.eq(a.kind, "qti-template-default"), a.eq(a.name, "template-identifier")),
 );
 
 /**
@@ -1787,7 +1881,7 @@ const testSectionIdentifiers = select(SectionIdentifier, (s) => s.ne(s.rootKind,
  * Each test or section document's references, counted by `ReferenceDocument.references`.
  */
 const testReferenceFamily = counted(
-  on(TestReference, "document"),
+  on(TestReference, "package", "path"),
   fin(ReferenceDocument, "references"),
 );
 
@@ -1795,7 +1889,7 @@ const testReferenceFamily = counted(
  * Each instance's placed references, counted by `PlacedDocument.references`.
  */
 const placedReferenceFamily = counted(
-  on(PlacedReference, "instance"),
+  on(PlacedReference, "package", "assembly", "instance"),
   fin(PlacedDocument, "references"),
 );
 
@@ -1803,7 +1897,7 @@ const placedReferenceFamily = counted(
  * Each reference's placements in a test's assembly, counted by `AssembledReference.placements`.
  */
 const placementFamily = counted(
-  on(PlacedReference, "assembly", "node", "attribute"),
+  on(PlacedReference, "package", "assembly", "path", "start", "attribute"),
   fin(AssembledReference, "placements"),
 );
 
@@ -1811,7 +1905,7 @@ const placementFamily = counted(
  * Each reference's name pieces in order, at `AssembledReference.segments`.
  */
 const segmentFamily = ordered(
-  on(ReferenceSegment, "assembly", "node", "attribute", "at"),
+  on(ReferenceSegment, "package", "assembly", "path", "start", "attribute", "at"),
   fin(AssembledReference, "segments"),
 );
 
@@ -1819,7 +1913,7 @@ const segmentFamily = ordered(
  * Each reference's readings, counted by `AssembledReference.readings`.
  */
 const readingFamily = counted(
-  on(Reading, "assembly", "node", "attribute"),
+  on(Reading, "package", "assembly", "path", "start", "attribute"),
   fin(AssembledReference, "readings"),
 );
 
@@ -1851,9 +1945,18 @@ export const referenceLawsByName = {
   "E1 derived": [
     // TemplateDefault: its template-identifier, written exactly where its element writes one (AL3
     // requires it), and its item ref; its target's copy of both, and its expression's type.
-    contained(on(templateIdentifiers, "node", "lexical"), on(TemplateDefault, "node", "lexical")),
-    contained(on(TemplateDefault, "node"), on(templateIdentifiers, "node")),
-    contained(on(TemplateDefault, "node", "itemRef"), on(Node, "id", "parent")),
+    contained(
+      on(templateIdentifiers, "package", "path", "start", "lexical"),
+      on(TemplateDefault, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(TemplateDefault, "package", "path", "start"),
+      on(templateIdentifiers, "package", "path", "start"),
+    ),
+    contained(
+      on(TemplateDefault, "package", "path", "start", "itemRef"),
+      on(Node, "package", "path", "start", "parent"),
+    ),
     check("E1_derived", TemplateDefault, (t) =>
       t.and(
         t.eq(t.lexical, Compute.concat(Compute.concat(t.lead, t.template), t.trail)),
@@ -1861,47 +1964,70 @@ export const referenceLawsByName = {
       ),
     ),
     contained(
-      on(TemplateDefaultTarget, "node", "itemRef", "template"),
-      on(TemplateDefault, "node", "itemRef", "template"),
+      on(TemplateDefaultTarget, "package", "path", "start", "itemRef", "template"),
+      on(TemplateDefault, "package", "path", "start", "itemRef", "template"),
     ),
-    key(on(templateDefaultExpressions, "parent")),
+    key(on(templateDefaultExpressions, "package", "path", "parent")),
     contained(
-      on(TemplateDefaultTarget, "node", "heldBase", "heldCardinality"),
-      on(templateDefaultExpressions, "parent", "baseType", "cardinality"),
+      on(TemplateDefaultTarget, "package", "path", "start", "heldBase", "heldCardinality"),
+      on(templateDefaultExpressions, "package", "path", "parent", "baseType", "cardinality"),
     ),
     // TemplateDefaultCardinality: a target's declaration's cardinality where it has one (spec
     // reading 159), copied from its target and its declaration.
     contained(
       on(
         select(TemplateDefaultTarget, (t) => t.eq(t.declCardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(TemplateDefaultCardinality, "node"),
+      on(TemplateDefaultCardinality, "package", "path", "start"),
     ),
     contained(
-      on(TemplateDefaultCardinality, "node", "declaration", "heldCardinality"),
-      on(TemplateDefaultTarget, "node", "declaration", "heldCardinality"),
+      on(
+        TemplateDefaultCardinality,
+        "package",
+        "path",
+        "start",
+        "itemDocument",
+        "declaration",
+        "heldCardinality",
+      ),
+      on(
+        TemplateDefaultTarget,
+        "package",
+        "path",
+        "start",
+        "itemDocument",
+        "declaration",
+        "heldCardinality",
+      ),
     ),
     contained(
-      on(TemplateDefaultCardinality, "declaration", "declCardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(TemplateDefaultCardinality, "package", "itemDocument", "declaration", "declCardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     // MappingSourceDeclaration's copy of its mapping (A34, A35).
     contained(
-      on(MappingSourceDeclaration, "node", "itemRef", "source"),
-      on(VariableMapping, "node", "parent", "source"),
+      on(MappingSourceDeclaration, "package", "path", "start", "itemRef", "source"),
+      on(VariableMapping, "package", "path", "start", "parent", "source"),
     ),
     contained(
-      on(MappingSourceDeclaration, "node", "target"),
-      on(VariableMapping, "node", "target"),
+      on(MappingSourceDeclaration, "package", "path", "start", "target"),
+      on(VariableMapping, "package", "path", "start", "target"),
     ),
     contained(
-      on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
-      on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
+      on(sectionIdentifierAttributes, "package", "path", "start", "name", "kind", "lexical"),
+      on(SectionIdentifier, "package", "path", "start", "attribute", "kind", "lexical"),
     ),
-    contained(on(SectionIdentifier, "node"), on(sectionIdentifierAttributes, "node")),
-    contained(on(SectionIdentifier, "node", "document"), on(Node, "id", "document")),
-    contained(on(SectionIdentifier, "document", "rootKind"), on(Document, "node", "rootKind")),
+    contained(
+      on(SectionIdentifier, "package", "path", "start"),
+      on(sectionIdentifierAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(SectionIdentifier, "package", "path", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
+    ),
     check("E1_derived", SectionIdentifier, (s) =>
       s.and(
         s.eq(s.lexical, Compute.concat(Compute.concat(s.before, s.identifier), s.after)),
@@ -1909,34 +2035,48 @@ export const referenceLawsByName = {
       ),
     ),
     // TestReference: every reference of a document that is no item, and each document's count.
-    contained(on(testVariableRefs, "node", "attribute"), on(TestReference, "node", "attribute")),
+    contained(
+      on(testVariableRefs, "package", "path", "start", "attribute"),
+      on(TestReference, "package", "path", "start", "attribute"),
+    ),
     contained(
       on(
         select(TestReference, (t) => t.eq(t.role, "variable")),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
-        "document",
         "identifier",
         "kind",
         "rootKind",
       ),
-      on(VariableRef, "node", "attribute", "document", "identifier", "kind", "rootKind"),
+      on(VariableRef, "package", "path", "start", "attribute", "identifier", "kind", "rootKind"),
     ),
     contained(
-      on(testSectionIdentifiers, "node", "attribute"),
-      on(TestReference, "node", "attribute"),
+      on(testSectionIdentifiers, "package", "path", "start", "attribute"),
+      on(TestReference, "package", "path", "start", "attribute"),
     ),
     contained(
       on(
         select(TestReference, (t) => t.eq(t.role, "section")),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
-        "document",
         "identifier",
         "kind",
         "rootKind",
       ),
-      on(SectionIdentifier, "node", "attribute", "document", "identifier", "kind", "rootKind"),
+      on(
+        SectionIdentifier,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "identifier",
+        "kind",
+        "rootKind",
+      ),
     ),
     check("E1_derived", TestReference, (t) =>
       t.and(
@@ -1948,61 +2088,91 @@ export const referenceLawsByName = {
       ),
     ),
     testReferenceFamily,
-    mirrors(on(ReferenceDocument, "document"), on(referenceDocuments, "node")),
+    mirrors(on(ReferenceDocument, "package", "path"), on(referenceDocuments, "package", "path")),
     // PlacedDocument and PlacedReference: every reference once per instance of a test's assembly.
     contained(
-      on(placingInstances, "id", "assembly", "assemblyKind", "document"),
-      on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
+      on(placingInstances, "package", "assembly", "start", "assemblyKind", "document"),
+      on(PlacedDocument, "package", "assembly", "instance", "assemblyKind", "document"),
     ),
     contained(
-      on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
-      on(Instance, "id", "assembly", "assemblyKind", "document"),
+      on(PlacedDocument, "package", "assembly", "instance", "assemblyKind", "document"),
+      on(Instance, "package", "assembly", "start", "assemblyKind", "document"),
     ),
     check("E1_derived", PlacedDocument, (p) => p.eq(p.assemblyKind, testKind)),
     contained(
-      on(PlacedDocument, "document", "references"),
-      on(ReferenceDocument, "document", "references"),
+      on(PlacedDocument, "package", "document", "references"),
+      on(ReferenceDocument, "package", "path", "references"),
     ),
     placedReferenceFamily,
     contained(
-      on(PlacedReference, "instance", "assembly", "document"),
-      on(PlacedDocument, "instance", "assembly", "document"),
+      on(PlacedReference, "package", "assembly", "instance", "path"),
+      on(PlacedDocument, "package", "assembly", "instance", "document"),
     ),
     contained(
-      on(PlacedReference, "document", "node", "attribute"),
-      on(TestReference, "document", "node", "attribute"),
+      on(PlacedReference, "package", "path", "start", "attribute"),
+      on(TestReference, "package", "path", "start", "attribute"),
     ),
     placementFamily,
     // AssembledReference: each reference once per test, its name's pieces and its readings' count.
     contained(
       on(
         AssembledReference,
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
-        "document",
         "identifier",
         "kind",
         "role",
         "rootKind",
       ),
-      on(TestReference, "node", "attribute", "document", "identifier", "kind", "role", "rootKind"),
+      on(
+        TestReference,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "identifier",
+        "kind",
+        "role",
+        "rootKind",
+      ),
     ),
     segmentFamily,
     fold(
       segmentFamily,
       Monoid.concat,
-      on(ReferenceSegment, "assembly", "node", "attribute", "token", "before", "after"),
-      on(AssembledReference, "assembly", "node", "attribute", "joined"),
+      on(
+        ReferenceSegment,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "token",
+        "before",
+        "after",
+      ),
+      on(AssembledReference, "package", "assembly", "path", "start", "attribute", "joined"),
     ),
     fold(
       segmentFamily,
       Monoid.count,
-      on(digitSegments, "assembly", "node", "attribute"),
-      on(AssembledReference, "assembly", "node", "attribute", "digits"),
+      on(digitSegments, "package", "assembly", "path", "start", "attribute"),
+      on(AssembledReference, "package", "assembly", "path", "start", "attribute", "digits"),
     ),
     contained(
-      on(AssembledReference, "assembly", "node", "attribute", pred("segments"), "lastDigit"),
-      on(ReferenceSegment, "assembly", "node", "attribute", "at", "digit"),
+      on(
+        AssembledReference,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        pred("segments"),
+        "lastDigit",
+      ),
+      on(ReferenceSegment, "package", "assembly", "path", "start", "attribute", "at", "digit"),
     ),
     check("E1_derived", ReferenceSegment, (s) =>
       s.and(
@@ -2057,47 +2227,73 @@ export const referenceLawsByName = {
     // Reading: its copy, its pieces, its source and its laws; its scope and the declaration or the
     // mapping its source names are rules over the queries of `#pantry/qti/queries.ts`.
     contained(
-      on(Reading, "assembly", "node", "attribute", "identifier", "kind", "role"),
-      on(AssembledReference, "assembly", "node", "attribute", "identifier", "kind", "role"),
+      on(
+        Reading,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "identifier",
+        "kind",
+        "role",
+      ),
+      on(
+        AssembledReference,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "identifier",
+        "kind",
+        "role",
+      ),
     ),
     contained(
-      on(segmentReadings, "assembly", "node", "attribute", "split", "scope"),
-      on(ReferenceSegment, "assembly", "node", "attribute", "at", "before"),
+      on(segmentReadings, "package", "assembly", "path", "start", "attribute", "split", "scope"),
+      on(ReferenceSegment, "package", "assembly", "path", "start", "attribute", "at", "before"),
     ),
     contained(
-      on(numberedReadings, "assembly", "node", "attribute", "split", "number"),
-      on(ReferenceSegment, "assembly", "node", "attribute", "at", "piece"),
+      on(numberedReadings, "package", "assembly", "path", "start", "attribute", "split", "number"),
+      on(ReferenceSegment, "package", "assembly", "path", "start", "attribute", "at", "piece"),
     ),
     // ReadingDeclaration: a resolving declared reading's declaration, forced in, a resolving
     // reading's fields copied, and its mapping's source's declaration (a mapped reading's force-in
     // is "Variable mapping source"'s); a declared one's is the declaration the document it reads
     // declares of its name, a rule over `DeclaredReading`.
     contained(
-      on(declaredReadings, "assembly", "node", "attribute", "form", "split"),
-      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split"),
+      on(declaredReadings, "package", "assembly", "path", "start", "attribute", "form", "split"),
+      on(ReadingDeclaration, "package", "assembly", "path", "start", "attribute", "form", "split"),
     ),
     contained(
       on(
         ReadingDeclaration,
+        "package",
         "assembly",
-        "node",
+        "path",
+        "start",
         "attribute",
         "form",
         "split",
         "kind",
         "source",
+        "namedDocument",
         "named",
         "variable",
       ),
       on(
         resolvingReadings,
+        "package",
         "assembly",
-        "node",
+        "path",
+        "start",
         "attribute",
         "form",
         "split",
         "kind",
         "source",
+        "namedDocument",
         "named",
         "variable",
       ),
@@ -2106,8 +2302,11 @@ export const referenceLawsByName = {
     contained(
       on(
         select(ReadingDeclaration, (d) => d.eq(d.source, "mapped")),
+        "package",
+        "namedDocument",
         "named",
         "variable",
+        "declarationDocument",
         "declaration",
         "declarationKind",
         "declCardinalities",
@@ -2115,8 +2314,11 @@ export const referenceLawsByName = {
       ),
       on(
         MappingSourceDeclaration,
+        "package",
+        "path",
         "itemRef",
         "target",
+        "itemDocument",
         "declaration",
         "declarationKind",
         "declCardinalities",
@@ -2134,7 +2336,8 @@ export const referenceLawsByName = {
             r.eq(r.number, ""),
             r.eq(r.variable, r.identifier),
             r.eq(r.found, true),
-            r.eq(r.named, r.assembly),
+            r.eq(r.namedDocument, r.assembly),
+            r.eq(r.named, 0n),
             r.eq(r.namedKind, testKind),
             r.eq(r.placements, 1n),
             r.eq(r.replaced, false),
@@ -2172,7 +2375,8 @@ export const referenceLawsByName = {
         r.or(
           r.eq(r.found, true),
           r.and(
-            r.eq(r.named, r.assembly),
+            r.eq(r.namedDocument, r.assembly),
+            r.eq(r.named, 0n),
             r.eq(r.namedKind, "document"),
             r.eq(r.placements, 0n),
             r.eq(r.replaced, false),
@@ -2192,16 +2396,38 @@ export const referenceLawsByName = {
     // ReadingCardinality: a reading that stands for a literal, its declaration's cardinality where
     // it has one (spec reading 159), copied from its reading's declaration and the declaration.
     contained(
-      on(standInDeclarations, "assembly", "node", "attribute", "form", "split"),
-      on(ReadingCardinality, "assembly", "node", "attribute", "form", "split"),
+      on(standInDeclarations, "package", "assembly", "path", "start", "attribute", "form", "split"),
+      on(ReadingCardinality, "package", "assembly", "path", "start", "attribute", "form", "split"),
     ),
     contained(
-      on(ReadingCardinality, "assembly", "node", "attribute", "form", "split", "declaration"),
-      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split", "declaration"),
+      on(
+        ReadingCardinality,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "form",
+        "split",
+        "declarationDocument",
+        "declaration",
+      ),
+      on(
+        ReadingDeclaration,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "form",
+        "split",
+        "declarationDocument",
+        "declaration",
+      ),
     ),
     contained(
-      on(ReadingCardinality, "declaration", "declCardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(ReadingCardinality, "package", "declarationDocument", "declaration", "declCardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
   ],
   "Item ref target": [
@@ -2211,13 +2437,22 @@ export const referenceLawsByName = {
     // no type row (decision 428): AL3 refuses an unwritten href and "Item ref target" one that
     // names nothing, over the item ref alone, and "Variable mapping source" judges the mapping, as
     // it judges every mapping but an LTI one.
-    contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
-    contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
+    contained(
+      on(VariableMapping, "package", "path", "start", "parent"),
+      on(MappingItemRef, "package", "path", "start", "itemRef"),
+    ),
+    contained(
+      on(MappingItemRef, "package", "path", "start", "itemRef"),
+      on(VariableMapping, "package", "path", "start", "parent"),
+    ),
     mappingItemRefTypeFamily,
-    contained(on(MappingItemRefType, "node", "itemRef"), on(MappingItemRef, "node", "itemRef")),
+    contained(
+      on(MappingItemRefType, "package", "path", "start", "itemRef"),
+      on(MappingItemRef, "package", "path", "start", "itemRef"),
+    ),
   ],
   "Prefixed reference": [
-    key(on(resolvingReadings, "assembly", "node", "attribute")),
+    key(on(resolvingReadings, "package", "assembly", "path", "start", "attribute")),
     contained(
       on(
         select(AssembledReference, (a) =>
@@ -2229,11 +2464,13 @@ export const referenceLawsByName = {
             a.eq(VariableReference.at("spelling", a.kind, a.attribute), "bare"),
           ),
         ),
+        "package",
         "assembly",
-        "node",
+        "path",
+        "start",
         "attribute",
       ),
-      on(resolvingReadings, "assembly", "node", "attribute"),
+      on(resolvingReadings, "package", "assembly", "path", "start", "attribute"),
     ),
     check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
   ],
@@ -2271,11 +2508,15 @@ export const referenceLawsByName = {
               ),
             ),
           ),
+          "package",
+          "declarationDocument",
           "declaration",
         ),
         on(
           select(DeclarationBaseType, (b) => b.eq(b.valueBase, base)),
-          "node",
+          "package",
+          "path",
+          "start",
         ),
       ),
     ),
@@ -2293,16 +2534,20 @@ export const referenceLawsByName = {
     ),
   ],
   "Template default target": [
-    contained(on(TemplateDefault, "node"), on(TemplateDefaultTarget, "node")),
     contained(
-      on(TemplateDefaultTarget, "itemRef", "itemDocument"),
-      on(ItemRefDocument, "node", "document"),
+      on(TemplateDefault, "package", "path", "start"),
+      on(TemplateDefaultTarget, "package", "path", "start"),
+    ),
+    contained(
+      on(TemplateDefaultTarget, "package", "path", "itemRef", "itemDocument"),
+      on(ItemRefDocument, "package", "path", "start", "target"),
     ),
     contained(
       on(
         TemplateDefaultTarget,
-        "declaration",
+        "package",
         "itemDocument",
+        "declaration",
         "template",
         "declarationKind",
         "declBaseTypes",
@@ -2326,10 +2571,12 @@ export const referenceLawsByName = {
         select(TemplateDefaultTarget, (t) =>
           t.and(t.eq(t.declBaseTypes, 1n), t.not(t.in(t.heldBase, silentBases))),
         ),
+        "package",
+        "itemDocument",
         "declaration",
         "heldBase",
       ),
-      on(DeclarationBaseType, "node", "valueBase"),
+      on(DeclarationBaseType, "package", "path", "start", "valueBase"),
     ),
   ],
   "Variable declared": [
@@ -2350,12 +2597,14 @@ export const referenceLawsByName = {
         select(AssembledReference, (a) =>
           a.and(a.eq(a.role, "variable"), a.in(a.kind, setterKinds)),
         ),
+        "package",
         "assembly",
-        "node",
+        "path",
+        "start",
         "attribute",
         "kind",
       ),
-      on(resolvingReadings, "assembly", "node", "attribute", "kind"),
+      on(resolvingReadings, "package", "assembly", "path", "start", "attribute", "kind"),
     ),
     contained(
       on(
@@ -2371,17 +2620,24 @@ export const referenceLawsByName = {
   "Variable mapping source": [
     // Every mapping has its source's declaration, but one under an LTI item ref (reading 110): one
     // whose item ref has no target, and one whose item ref names anything but a link.
-    contained(on(untargetedMappings, "node"), on(MappingSourceDeclaration, "node")),
-    contained(on(heldMappings, "node"), on(MappingSourceDeclaration, "node")),
     contained(
-      on(MappingSourceDeclaration, "itemRef", "itemDocument"),
-      on(ItemRefDocument, "node", "document"),
+      on(untargetedMappings, "package", "path", "start"),
+      on(MappingSourceDeclaration, "package", "path", "start"),
+    ),
+    contained(
+      on(heldMappings, "package", "path", "start"),
+      on(MappingSourceDeclaration, "package", "path", "start"),
+    ),
+    contained(
+      on(MappingSourceDeclaration, "package", "path", "itemRef", "itemDocument"),
+      on(ItemRefDocument, "package", "path", "start", "target"),
     ),
     contained(
       on(
         MappingSourceDeclaration,
-        "declaration",
+        "package",
         "itemDocument",
+        "declaration",
         "source",
         "declarationKind",
         "declBaseTypes",
@@ -2397,11 +2653,35 @@ export const referenceLawsByName = {
     // refused under the mapping's law; one through an LTI item ref is accepted unchecked (reading
     // 110).
     contained(
-      on(mappedReadings, "assembly", "node", "attribute", "form", "split", "named"),
-      on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split", "named"),
+      on(
+        mappedReadings,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "form",
+        "split",
+        "namedDocument",
+        "named",
+      ),
+      on(
+        ReadingDeclaration,
+        "package",
+        "assembly",
+        "path",
+        "start",
+        "attribute",
+        "form",
+        "split",
+        "namedDocument",
+        "named",
+      ),
     ),
   ],
-  "Variable mapping target": [key(on(MappingSourceDeclaration, "itemRef", "target"))],
+  "Variable mapping target": [
+    key(on(MappingSourceDeclaration, "package", "path", "itemRef", "target")),
+  ],
 } as const;
 
 /**
@@ -2437,73 +2717,88 @@ export const expressionLawsByName = {
     fold(
       operandFamily,
       Monoid.or,
-      on(Operand, "operator", "baseTypeBit"),
-      on(Expression, "node", "operandBaseTypes"),
+      on(Operand, "package", "path", "operator", "baseTypeBit"),
+      on(Expression, "package", "path", "start", "operandBaseTypes"),
     ),
     fold(
       operandFamily,
       Monoid.or,
-      on(Operand, "operator", "cardinalityBit"),
-      on(Expression, "node", "operandCardinalities"),
+      on(Operand, "package", "path", "operator", "cardinalityBit"),
+      on(Expression, "package", "path", "start", "operandCardinalities"),
     ),
     fold(
       operandFamily,
       Monoid.or,
       on(
         select(Operand, (o) => o.eq(o.rank, 1n)),
+        "package",
+        "path",
         "operator",
         "cardinalityBit",
       ),
-      on(Expression, "node", "leadCardinalities"),
+      on(Expression, "package", "path", "start", "leadCardinalities"),
     ),
     fold(
       operandFamily,
       Monoid.or,
       on(
         select(Operand, (o) => o.gt(o.rank, 1n)),
+        "package",
+        "path",
         "operator",
         "baseTypeBit",
       ),
-      on(Expression, "node", "tailBaseTypes"),
+      on(Expression, "package", "path", "start", "tailBaseTypes"),
     ),
     fold(
       operandFamily,
       Monoid.or,
       on(
         select(Operand, (o) => o.gt(o.rank, 1n)),
+        "package",
+        "path",
         "operator",
         "cardinalityBit",
       ),
-      on(Expression, "node", "tailCardinalities"),
+      on(Expression, "package", "path", "start", "tailCardinalities"),
     ),
     // Expression: its tuple, its existence, its parent's kind and its language.
     contained(
-      on(Expression, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Expression, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
       on(
         select(Node, (n) => n.in(n.kind, expressionKinds)),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(Expression, "node"),
+      on(Expression, "package", "path", "start"),
     ),
-    contained(on(Expression, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(Expression, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
     contained(
       on(
         select(Expression, (e) => e.in(e.parentKind, ruleKindHandles)),
+        "package",
+        "path",
         "parent",
         "language",
       ),
-      on(Processing, "node", "language"),
+      on(Processing, "package", "path", "start", "language"),
     ),
     contained(
       on(
         select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
+        "package",
+        "path",
         "parent",
         "language",
       ),
-      on(Expression, "node", "language"),
+      on(Expression, "package", "path", "start", "language"),
     ),
     contained(on(resultTyped, "kind", "baseType"), on(ResultBase, "kind", "base")),
     contained(on(Expression, "kind", "cardinality"), on(ResultCardinality, "kind", "cardinality")),
@@ -2519,39 +2814,58 @@ export const expressionLawsByName = {
     ),
     // Operand: its expression, its place, and one for every expression an expression holds.
     contained(
-      on(Operand, "node", "operator", "kind", "language", "baseType", "cardinality"),
+      on(
+        Operand,
+        "package",
+        "path",
+        "start",
+        "operator",
+        "kind",
+        "language",
+        "baseType",
+        "cardinality",
+      ),
       exprRef,
     ),
-    contained(on(Operand, "node", "rank", "children"), nodeCounts),
+    contained(on(Operand, "package", "path", "start", "rank", "children"), nodeCounts),
     contained(
       on(
         select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(Operand, "node"),
+      on(Operand, "package", "path", "start"),
     ),
     // Processing: its tuple, its existence, its parent's kind and its language.
     contained(
-      on(Processing, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Processing, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
       on(
         select(Node, (n) => n.in(n.kind, ruleKindHandles)),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(Processing, "node"),
+      on(Processing, "package", "path", "start"),
     ),
-    contained(on(Processing, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(Processing, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
     contained(
       on(
         select(Processing, (p) =>
           p.and(p.not(p.in(p.kind, rootKinds)), p.in(p.parentKind, ruleKindHandles)),
         ),
+        "package",
+        "path",
         "parent",
         "language",
       ),
-      on(Processing, "node", "language"),
+      on(Processing, "package", "path", "start", "language"),
     ),
     check("E1_derived", Processing, (p) =>
       p.or(
@@ -2568,13 +2882,15 @@ export const expressionLawsByName = {
     ),
     // VariableRef: its copy, its element, its document, its declaration and its laws.
     contained(
-      on(references, "node", "name", "kind", "lexical"),
-      on(VariableRef, "node", "attribute", "kind", "lexical"),
+      on(references, "package", "path", "start", "name", "kind", "lexical"),
+      on(VariableRef, "package", "path", "start", "attribute", "kind", "lexical"),
     ),
     contained(
       on(
         select(VariableRef, (v) => v.in(v.kind, expressionKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
         "parent",
         "kind",
         "language",
@@ -2586,31 +2902,45 @@ export const expressionLawsByName = {
     contained(
       on(
         select(VariableRef, (v) => v.in(v.kind, ruleKindHandles)),
-        "node",
+        "package",
+        "path",
+        "start",
         "language",
       ),
-      on(Processing, "node", "language"),
+      on(Processing, "package", "path", "start", "language"),
     ),
-    contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
+    contained(
+      on(VariableRef, "package", "path", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
+    ),
     // A declaration's tables, each a row of its own keyed by the declaration, at most one of each
     // slot, and each table a reference claims (VariableRefTable), a declared reference's by its
     // identifier, of a table its kind reads, its declaration's: a slot the declaration leaves empty
     // has no row, so no reference claims it, and a reference that claims none has no claim row.
-    key(on(Mapping, "declaration")),
-    key(on(AreaMapping, "declaration")),
-    key(on(LookupTable, "declaration")),
+    key(on(Mapping, "package", "path", "declaration")),
+    key(on(AreaMapping, "package", "path", "declaration")),
+    key(on(LookupTable, "package", "path", "declaration")),
     contained(
-      on(VariableRefTable, "node", "attribute", "declaration", "kind"),
-      on(VariableRefDeclaration, "node", "attribute", "declaration", "kind"),
+      on(VariableRefTable, "package", "path", "start", "attribute", "declaration", "kind"),
+      on(VariableRefDeclaration, "package", "path", "start", "attribute", "declaration", "kind"),
     ),
     check("E1_derived", VariableRefTable, (t) => t.eq(t.attribute, "identifier")),
     contained(on(VariableRefTable, "kind", "table"), on(TableReader, "kind", "table")),
-    contained(on(tableClaims("qti-mapping"), "declaration"), on(Mapping, "declaration")),
-    contained(on(tableClaims("qti-area-mapping"), "declaration"), on(AreaMapping, "declaration")),
-    contained(on(tableClaims("qti-match-table"), "declaration"), on(matchTables, "declaration")),
     contained(
-      on(tableClaims("qti-interpolation-table"), "declaration"),
-      on(interpolationTables, "declaration"),
+      on(tableClaims("qti-mapping"), "package", "path", "declaration"),
+      on(Mapping, "package", "path", "declaration"),
+    ),
+    contained(
+      on(tableClaims("qti-area-mapping"), "package", "path", "declaration"),
+      on(AreaMapping, "package", "path", "declaration"),
+    ),
+    contained(
+      on(tableClaims("qti-match-table"), "package", "path", "declaration"),
+      on(matchTables, "package", "path", "declaration"),
+    ),
+    contained(
+      on(tableClaims("qti-interpolation-table"), "package", "path", "declaration"),
+      on(interpolationTables, "package", "path", "declaration"),
     ),
     check("E1_derived", VariableRef, (v) =>
       v.and(
@@ -2627,30 +2957,34 @@ export const expressionLawsByName = {
     mirrors(
       on(
         select(VariableRef, (v) => v.eq(v.resolution, "declared")),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(VariableRefDeclaration, "node", "attribute"),
+      on(VariableRefDeclaration, "package", "path", "start", "attribute"),
     ),
     contained(
       on(
         VariableRefDeclaration,
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
         "baseType",
         "cardinality",
-        "document",
         "identifier",
         "kind",
         "language",
       ),
       on(
         VariableRef,
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
         "baseType",
         "cardinality",
-        "document",
         "identifier",
         "kind",
         "language",
@@ -2668,36 +3002,57 @@ export const expressionLawsByName = {
     contained(
       on(
         select(VariableRefDeclaration, (d) => d.eq(d.declCardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(VariableRefCardinality, "node", "attribute"),
+      on(VariableRefCardinality, "package", "path", "start", "attribute"),
     ),
     contained(
-      on(VariableRefCardinality, "node", "attribute", "declaration", "cardinality"),
-      on(VariableRefDeclaration, "node", "attribute", "declaration", "cardinality"),
+      on(
+        VariableRefCardinality,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "declaration",
+        "cardinality",
+      ),
+      on(
+        VariableRefDeclaration,
+        "package",
+        "path",
+        "start",
+        "attribute",
+        "declaration",
+        "cardinality",
+      ),
     ),
     contained(
-      on(VariableRefCardinality, "declaration", "declCardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(VariableRefCardinality, "package", "path", "declaration", "declCardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(typedVariableRefs, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "valueBase"),
+      on(typedVariableRefs, "package", "path", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "valueBase"),
     ),
     // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
     // resolved among the item's declarations, under "Variable declared" over the assembly.
     documentVariableFamily,
     placedVariableFamily,
     contained(
-      on(PlacedVariableRef, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(PlacedVariableRef, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(PlacedVariableRef, "node", "attribute", "document", "identifier", "kind"),
-      on(VariableRef, "node", "attribute", "document", "identifier", "kind"),
+      on(PlacedVariableRef, "package", "path", "start", "attribute", "identifier", "kind"),
+      on(VariableRef, "package", "path", "start", "attribute", "identifier", "kind"),
     ),
-    contained(on(PlacedVariableRef, "assembly", "rootKind"), on(Document, "node", "rootKind")),
+    contained(
+      on(PlacedVariableRef, "package", "assembly", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
+    ),
     check("E1_derived", PlacedVariableRef, (v) =>
       v.or(
         v.eq(v.resolution, "declared"),
@@ -2721,45 +3076,82 @@ export const expressionLawsByName = {
     mirrors(
       on(
         select(PlacedVariableRef, (v) => v.eq(v.resolution, "declared")),
+        "package",
+        "assembly",
         "instance",
-        "node",
+        "path",
+        "start",
         "attribute",
       ),
-      on(PlacedVariableRefDeclaration, "instance", "node", "attribute"),
+      on(
+        PlacedVariableRefDeclaration,
+        "package",
+        "assembly",
+        "instance",
+        "path",
+        "start",
+        "attribute",
+      ),
     ),
     contained(
       on(
         PlacedVariableRefDeclaration,
-        "instance",
-        "node",
-        "attribute",
+        "package",
         "assembly",
+        "instance",
+        "path",
+        "start",
+        "attribute",
         "identifier",
         "kind",
       ),
-      on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
+      on(
+        PlacedVariableRef,
+        "package",
+        "assembly",
+        "instance",
+        "path",
+        "start",
+        "attribute",
+        "identifier",
+        "kind",
+      ),
     ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     contained(
-      on(typingAttributes, "node", "name", "kind", "lexical"),
-      on(ExpressionAttribute, "node", "attribute", "kind", "lexical"),
+      on(typingAttributes, "package", "path", "start", "name", "kind", "lexical"),
+      on(ExpressionAttribute, "package", "path", "start", "attribute", "kind", "lexical"),
     ),
     contained(
-      on(ExpressionAttribute, "node", "parent", "kind", "language", "baseType", "cardinality"),
+      on(
+        ExpressionAttribute,
+        "package",
+        "path",
+        "start",
+        "parent",
+        "kind",
+        "language",
+        "baseType",
+        "cardinality",
+      ),
       exprRef,
     ),
-    // A written row's attribute exists, by the closed attributes' key `(node, name)`
-    // (`closedAttributes`, `#pantry/qti/attributes.ts`). Its kind and lexical form are the forward
-    // containment's: both sides are keyed by node and name, so that containment's row for the
-    // attribute is this row. `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
-    contained(on(writtenAttributes, "node", "attribute"), on(typingAttributes, "node", "name")),
-    key(on(typeAttributes, "node")),
+    // A written row's attribute exists, by `Attribute`'s key `(package, path, start, name)`
+    // (`#pantry/qti/attributes.ts`). Its kind and lexical form are the forward containment's: both
+    // sides are keyed by place and name, so that containment's row for the attribute is this row. `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
+    contained(
+      on(writtenAttributes, "package", "path", "start", "attribute"),
+      on(typingAttributes, "package", "path", "start", "name"),
+    ),
+    key(on(typeAttributes, "package", "path", "start")),
     contained(
       on(
         select(Expression, (e) => e.in(e.kind, optionallyTypedKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(typeAttributes, "node"),
+      on(typeAttributes, "package", "path", "start"),
     ),
     // A test variables' weight, written or not (decision 434): every test variables has its row,
     // and an unwritten `base-type` is `unknown` only where the weight is unwritten, float only
@@ -2767,15 +3159,20 @@ export const expressionLawsByName = {
     contained(
       on(
         select(Expression, (e) => e.eq(e.kind, "qti-test-variables")),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(weightAttributes, "node"),
+      on(weightAttributes, "package", "path", "start"),
     ),
     contained(
-      on(unknownUnwrittenBases, "node", "written"),
-      on(weightAttributes, "node", "written"),
+      on(unknownUnwrittenBases, "package", "path", "start", "written"),
+      on(weightAttributes, "package", "path", "start", "written"),
     ),
-    contained(on(floatUnwrittenBases, "node"), on(writtenWeights, "node")),
+    contained(
+      on(floatUnwrittenBases, "package", "path", "start"),
+      on(writtenWeights, "package", "path", "start"),
+    ),
     check("E1_derived", ExpressionAttribute, (x) =>
       x.or(
         x.and(
@@ -2820,21 +3217,39 @@ export const expressionLawsByName = {
     contained(
       on(
         select(Node, (n) => n.eq(n.kind, "qti-base-value")),
-        "id",
+        "package",
+        "path",
+        "start",
         "stringValue",
       ),
-      on(Literal, "node", "text"),
-    ),
-    contained(on(typedBaseValues, "node"), on(LiteralTyped, "node")),
-    contained(
-      on(LiteralTyped, "node", "text", "baseType"),
-      on(Literal, "node", "text", "baseType"),
+      on(Literal, "package", "path", "start", "text"),
     ),
     contained(
-      on(Literal, "node", "parent", "kind", "language", "baseType", "cardinality"),
+      on(typedBaseValues, "package", "path", "start"),
+      on(LiteralTyped, "package", "path", "start"),
+    ),
+    contained(
+      on(LiteralTyped, "package", "path", "start", "text", "baseType"),
+      on(Literal, "package", "path", "start", "text", "baseType"),
+    ),
+    contained(
+      on(
+        Literal,
+        "package",
+        "path",
+        "start",
+        "parent",
+        "kind",
+        "language",
+        "baseType",
+        "cardinality",
+      ),
       exprRef,
     ),
-    contained(on(templateAttributes, "node", "lexical"), on(ProcessingTemplate, "node", "uri")),
+    contained(
+      on(templateAttributes, "package", "path", "start", "lexical"),
+      on(ProcessingTemplate, "package", "path", "start", "uri"),
+    ),
     check("E1_derived", ProcessingTemplate, (t) =>
       t.or(
         ...publishedTemplates.map(([template, pattern]) =>
@@ -2860,10 +3275,12 @@ export const expressionLawsByName = {
         select(VariableRefDeclaration, (d) =>
           d.and(d.eq(d.attribute, "identifier"), d.eq(d.kind, lookupKindHandle)),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(VariableRefTable, "node", "attribute"),
+      on(VariableRefTable, "package", "path", "start", "attribute"),
     ),
   ],
   "Mapped response": [
@@ -2871,23 +3288,28 @@ export const expressionLawsByName = {
     // response's mapping or area mapping, and one of a built-in response, which declares no table,
     // is refused (reading 166).
     contained(
-      on(prefixedTableReaders("qti-map-response"), "declaration"),
-      on(Mapping, "declaration"),
+      on(prefixedTableReaders("qti-map-response"), "package", "declarationDocument", "declaration"),
+      on(Mapping, "package", "path", "declaration"),
     ),
     contained(
-      on(prefixedTableReaders("qti-map-response-point"), "declaration"),
-      on(AreaMapping, "declaration"),
+      on(
+        prefixedTableReaders("qti-map-response-point"),
+        "package",
+        "declarationDocument",
+        "declaration",
+      ),
+      on(AreaMapping, "package", "path", "declaration"),
     ),
     check("Mapped_response", Reading, mapsNoBuiltInResponse),
     // A placed one, an included rules fragment's or the item's own, reads the mapping or area
     // mapping of the declaration it names among its item's (readings 117 and 166).
     contained(
-      on(placedTableReaders("qti-map-response"), "declaration"),
-      on(Mapping, "declaration"),
+      on(placedTableReaders("qti-map-response"), "package", "assembly", "declaration"),
+      on(Mapping, "package", "path", "declaration"),
     ),
     contained(
-      on(placedTableReaders("qti-map-response-point"), "declaration"),
-      on(AreaMapping, "declaration"),
+      on(placedTableReaders("qti-map-response-point"), "package", "assembly", "declaration"),
+      on(AreaMapping, "package", "path", "declaration"),
     ),
     // An unprefixed one never names a built-in response, which declares no table (reading 166).
     check("Mapped_response", VariableRef, mapsNoBuiltIn),
@@ -2909,10 +3331,12 @@ export const expressionLawsByName = {
         select(VariableRefDeclaration, (d) =>
           d.and(d.eq(d.attribute, "identifier"), d.in(d.kind, mappedKinds)),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
         "attribute",
       ),
-      on(VariableRefTable, "node", "attribute"),
+      on(VariableRefTable, "package", "path", "start", "attribute"),
     ),
   ],
   "One base": [
@@ -2987,8 +3411,9 @@ export const expressionLawsByName = {
     contained(
       on(
         VariableRefDeclaration,
+        "package",
+        "path",
         "declaration",
-        "document",
         "identifier",
         "declarationKind",
         "declBaseTypes",
@@ -3012,8 +3437,9 @@ export const expressionLawsByName = {
     contained(
       on(
         PlacedVariableRefDeclaration,
-        "declaration",
+        "package",
         "assembly",
+        "declaration",
         "identifier",
         "declarationKind",
         "declBaseTypes",

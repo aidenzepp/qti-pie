@@ -32,25 +32,27 @@ export type Outcome =
   | { kind: "differs"; at: string };
 
 /**
- * The comparison of an export with its record: one outcome per path of the record, in the record's
- * order, then one per path only the export writes, in the export's order.
+ * The comparison of an export with its record: one outcome per path of the record, in the order
+ * the record lists its paths, then one per path only the export writes, in the export's order.
  */
 export type Report = readonly { path: string; outcome: Outcome }[];
 
 /**
- * A package's entries, a set keyed by path: each path's bytes, in listing order. A path is the key
- * of a package's entries, so neither side of a comparison holds one twice: the record is the
- * `Entry` family, keyed by package and path (`#pantry/qti/package.ts`, "Entry family"), the export
- * writes one entry per entry of the record, a directory holds one file at a path, and a zip that
- * holds two entries with one name is refused before it is read (`#pantry/package/zip.ts`).
+ * A package's entries, a set keyed by path: each path's bytes, listed in the order they were read,
+ * which carries no meaning (IMS Content Packaging gives none to a zip's order, and the record keeps
+ * none). A path is the key of a package's entries, so neither side of a comparison holds one twice:
+ * the record is the `Entry` relation, keyed by package and path (`#pantry/qti/package.ts`, "Entry
+ * family"), which the export reads by path, the export writes one entry per entry of the record, a
+ * directory holds one file at a path, and a zip that holds two entries with one name is refused
+ * before it is read (`#pantry/package/zip.ts`).
  */
 export type Entries = ReadonlyMap<string, Uint8Array>;
 
 /**
  * Key a package's entries by path, as {@link Entries} holds them.
  *
- * @param entries - The entries, in listing order, each path once.
- * @returns Each path's bytes, in that order.
+ * @param entries - The entries, each path once.
+ * @returns Each path's bytes, listed in the order the entries are.
  */
 export const byPath = (entries: readonly ZipEntry[]): Entries =>
   new Map(entries.map(({ bytes, path }) => [path, bytes]));
@@ -168,7 +170,7 @@ const compareEntry = Effect.fnUntraced(function* compareEntry(
  * `missing`, and any other is compared by {@link compareEntry}. Then each path only the export
  * writes differs at `extra`, so the report is one outcome per path.
  *
- * @param record - The entries the import read, in listing order: the `Entry` family's bytes.
+ * @param record - The entries the import read: the `Entry` relation's bytes, by path.
  * @param exported - The entries the export wrote, in the order it wrote them.
  * @returns One outcome per path, the record's paths first.
  */

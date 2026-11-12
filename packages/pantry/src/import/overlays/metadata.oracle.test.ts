@@ -34,12 +34,16 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { languageTagPattern, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import type {
   LomEntry,
+  LomGeneral,
+  LomString,
+  LomStringLanguage,
+  LomTitle,
   LomTitleString,
   ObjectIdentifier,
   ObjectLang,
@@ -58,6 +62,7 @@ import type {
 } from "#pantry/test/gen/lom-resource-type.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
 
 /**
@@ -85,31 +90,41 @@ const namespaces = {
 } as const;
 
 /**
- * Draw the ids of one document's rows: a uuid whose groups spell the document's number and the
- * row's, so two documents' rows never share an id.
- *
- * @param document - The document's number in its package, the manifest 0.
- * @param documentType - The type it is listed under, `manifest` for the manifest.
- * @returns Its type, and the ids its rows are written under.
+ * The manifest identifier every generated package is read under.
  */
-const idsFor = (
-  document: number,
-  documentType: MetadataIds["documentType"],
-): MetadataIds & { readonly idOf: (index: number) => NodeId } => ({
+const packageIdentifier = "MANIFEST-metadata";
+
+/**
+ * Place one document of a package: its path there and the type it is listed under, the key its
+ * rows hold beside each node's `start`.
+ *
+ * @param path - The document's path in its package.
+ * @param documentType - The type it is listed under, `manifest` for the manifest.
+ * @returns Its place.
+ */
+const idsFor = (path: string, documentType: MetadataIds["documentType"]): MetadataIds => ({
   documentType,
-  idOf: (index) =>
-    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
+  package: packageIdentifier,
+  path,
 });
 
 /**
+ * Index a relation's rows of one document by their node's `start`, as a query joins them by the
+ * node's key within the document.
+ *
+ * @param rows - The rows, all of one document.
+ * @returns Each row by its `start`.
+ */
+const startsOf = <R extends { readonly start: bigint }>(
+  rows: ReadonlyMap<string, R>,
+): ReadonlyMap<bigint, R> => new Map([...rows.values()].map((row) => [row.start, row] as const));
+
+/**
  * A package's documents as the builder reads them: the manifest's tree, and each other XML entry's
- * that shreds, by its path, with its number.
+ * that shreds, by its path.
  */
 interface Shredded {
-  readonly documents: ReadonlyMap<
-    string,
-    { readonly number: number; readonly tree: XdmDocument<Composed> }
-  >;
+  readonly documents: ReadonlyMap<string, { readonly tree: XdmDocument<Composed> }>;
   readonly manifest: XdmDocument<Composed>;
 }
 
@@ -130,10 +145,7 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
     versionOf(grammar.kinds.versions.handles, declaredVersionOf(manifestXml)),
   );
   const manifest = yield* Effect.orDie(shred(manifestXml, version, shredGrammar));
-  const documents = new Map<
-    string,
-    { readonly number: number; readonly tree: XdmDocument<Composed> }
-  >();
+  const documents = new Map<string, { readonly tree: XdmDocument<Composed> }>();
 
   for (const file of files.filter(({ kind, path }) => kind === "file" && path.endsWith(".xml"))) {
     const tree = yield* readXml(file.bytes).pipe(
@@ -141,7 +153,7 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
       Effect.option,
     );
     if (Option.isSome(tree)) {
-      documents.set(file.path, { number: documents.size + 1, tree: tree.value });
+      documents.set(file.path, { tree: tree.value });
     }
   }
 
@@ -149,16 +161,21 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
 });
 
 /**
- * A package's metadata rows as the importer builds them: the manifest's {@link rowsOf}; each
- * document's identifier and title, each by its document, and its `xml:lang`, by its root; and
- * `named`, each record that names a document, with that document, as the database derives it from
- * the package's rows (`namingRecords`, `#pantry/qti/queries.ts`).
+ * A package's metadata rows as the importer builds them: the manifest's {@link rowsOf}, and the
+ * manifest's general categories, titles, strings and string languages by their node's `start`;
+ * each document's identifier, title and root `xml:lang`, each by its document's path; and `named`,
+ * each record that names a document, by the record's `start`, with that document's path, as the
+ * database derives it from the package's rows (`namingRecords`, `#pantry/qti/queries.ts`).
  */
 interface Built {
+  readonly generals: ReadonlyMap<bigint, Addition<typeof LomGeneral>>;
   readonly identifiers: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
   readonly langs: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly manifest: MetadataRows;
-  readonly named: ReadonlyMap<NodeId, NodeId>;
+  readonly named: ReadonlyMap<bigint, string>;
+  readonly stringLanguages: ReadonlyMap<bigint, Addition<typeof LomStringLanguage>>;
+  readonly strings: ReadonlyMap<bigint, Addition<typeof LomString>>;
+  readonly titleNodes: ReadonlyMap<bigint, Addition<typeof LomTitle>>;
   readonly titles: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
 }
 
@@ -179,33 +196,31 @@ const languageTagForm = new RegExp(languageTagPattern.source, patternFlags);
  * at the path its `href` is compared by (`resourcePathsOf`).
  *
  * @param manifest - The manifest's tree.
- * @param ids - The ids its rows are written under.
  * @param records - Its {@link rowsOf}'s records.
- * @param documents - Each listed document's node, by its path.
- * @returns Each naming record's document, by the record.
+ * @param documents - The paths of the listed documents.
+ * @returns Each naming record's document's path, by the record's `start`.
  */
 const namedOf = (
   manifest: XdmDocument<Composed>,
-  ids: { readonly idOf: (index: number) => NodeId },
   records: MetadataRows["LomRecord"],
-  documents: ReadonlyMap<string, NodeId>,
-): ReadonlyMap<NodeId, NodeId> => {
-  const flat = flatten(manifest, ids.idOf);
+  documents: ReadonlySet<string>,
+): ReadonlyMap<bigint, string> => {
+  const flat = flatten(manifest);
   const paths = resourcePathsOf(flat);
   const types = new Map(
-    flat.attributes.flatMap(({ lexical, name, node }) =>
-      name === "type" ? [[node, lexical] as const] : [],
+    flat.attributes.flatMap(({ lexical, name, start }) =>
+      name === "type" ? [[start, lexical] as const] : [],
     ),
   );
 
   return new Map(
-    [...records.values()].flatMap(({ node, owner, ownerParent }) =>
+    [...records.values()].flatMap(({ owner, ownerParent, start }) =>
       Option.toArray(
         Option.fromUndefinedOr(types.get(ownerParent)).pipe(
           Option.filter((type) => owner === resourceMetadata && namingTypes.has(type)),
           Option.flatMap(() => Option.fromUndefinedOr(paths.get(ownerParent))),
-          Option.flatMap((path) => Option.fromUndefinedOr(documents.get(path))),
-          Option.map((document) => [node, document] as const),
+          Option.filter((path) => documents.has(path)),
+          Option.map((path) => [start, path] as const),
         ),
       ),
     ),
@@ -219,41 +234,43 @@ const namedOf = (
  * @returns Its rows.
  */
 const builtOf = (input: Shredded): Built => {
-  const documents = new Map<string, NodeId>();
+  const documents = new Set<string>();
   const identifiers = new Map<string, Addition<typeof ObjectIdentifier>>();
   const titles = new Map<string, Addition<typeof ObjectTitle>>();
   const langs = new Map<string, Addition<typeof ObjectLang>>();
 
-  for (const [path, { number, tree }] of input.documents) {
+  for (const [path, { tree }] of input.documents) {
     const listed = grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind);
     if (listed === undefined) {
       continue;
     }
 
-    const ids = idsFor(number, listed.type);
-    const rows = rowsOf(ownViewOf(tree, ids.idOf), ids);
-    documents.set(path, ids.idOf(0));
+    const rows = rowsOf(ownViewOf(tree), idsFor(path, listed.type));
+    documents.add(path);
     for (const identifier of rows.ObjectIdentifier.values()) {
-      identifiers.set(identifier.document, identifier);
+      identifiers.set(identifier.path, identifier);
     }
 
     for (const title of rows.ObjectTitle.values()) {
-      titles.set(title.document, title);
+      titles.set(title.path, title);
     }
 
     for (const lang of rows.ObjectLang.values()) {
-      langs.set(lang.node, lang);
+      langs.set(lang.path, lang);
     }
   }
 
-  const manifestIds = idsFor(0, "manifest");
-  const manifest = rowsOf(ownViewOf(input.manifest, manifestIds.idOf), manifestIds);
+  const manifest = rowsOf(ownViewOf(input.manifest), idsFor(manifestPath, "manifest"));
 
   return {
+    generals: startsOf(manifest.LomGeneral),
     identifiers,
     langs,
     manifest,
-    named: namedOf(input.manifest, manifestIds, manifest.LomRecord, documents),
+    named: namedOf(input.manifest, manifest.LomRecord, documents),
+    stringLanguages: startsOf(manifest.LomStringLanguage),
+    strings: startsOf(manifest.LomString),
+    titleNodes: startsOf(manifest.LomTitle),
     titles,
   };
 };
@@ -263,14 +280,12 @@ const builtOf = (input: Shredded): Built => {
  * parent.
  *
  * @param built - The package's rows.
- * @param general - The category's node, or none.
- * @returns The record; none where the node has no `LomGeneral`.
+ * @param general - The category's `start`, or none.
+ * @returns The record's `start`; none where the node has no `LomGeneral`.
  */
-const generalRecordOf = (built: Built, general: NodeId | undefined): Option.Option<NodeId> =>
+const generalRecordOf = (built: Built, general: bigint | undefined): Option.Option<bigint> =>
   Option.map(
-    Option.fromUndefinedOr(
-      general === undefined ? undefined : built.manifest.LomGeneral.get(general),
-    ),
+    Option.fromUndefinedOr(general === undefined ? undefined : built.generals.get(general)),
     ({ parent }) => parent,
   );
 
@@ -282,7 +297,7 @@ const generalRecordOf = (built: Built, general: NodeId | undefined): Option.Opti
  * @param entry - The entry's row.
  * @returns The record; none where the identifier is no general category's.
  */
-const entryRecordOf = (built: Built, entry: Addition<typeof LomEntry>): Option.Option<NodeId> =>
+const entryRecordOf = (built: Built, entry: Addition<typeof LomEntry>): Option.Option<bigint> =>
   generalRecordOf(built, entry.holder);
 
 /**
@@ -296,8 +311,7 @@ const entryRecordOf = (built: Built, entry: Addition<typeof LomEntry>): Option.O
 const stringRecordOf = (
   built: Built,
   string: Addition<typeof LomTitleString>,
-): Option.Option<NodeId> =>
-  generalRecordOf(built, built.manifest.LomTitle.get(string.parent)?.parent);
+): Option.Option<bigint> => generalRecordOf(built, built.titleNodes.get(string.parent)?.parent);
 
 /**
  * Judge the `lom-identifier` law over a package's rows as PostgreSQL does: every naming record
@@ -305,9 +319,9 @@ const stringRecordOf = (
  * (`MatchedIdentifier`, `#pantry/qti/queries.ts`).
  *
  * @param built - The package's rows.
- * @returns The records that break the law, by id.
+ * @returns The records that break the law, by `start`.
  */
-const identifierRefusals = (built: Built): ReadonlySet<string> => {
+const identifierRefusals = (built: Built): ReadonlySet<bigint> => {
   const entries = [...built.manifest.LomEntry.values()];
 
   return new Set(
@@ -362,16 +376,20 @@ const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.
  * and the root's form states no language, the string has none, or the two are one tag.
  *
  * @param built - The package's rows.
- * @param root - The document's root.
+ * @param document - The document's path, whose root's `xml:lang` is read.
  * @param string - The string's row.
  * @returns Whether it is.
  */
-const inLanguage = (built: Built, root: NodeId, string: Addition<typeof LomTitleString>): boolean =>
-  Option.match(Option.fromUndefinedOr(built.langs.get(root)), {
+const inLanguage = (
+  built: Built,
+  document: string,
+  string: Addition<typeof LomTitleString>,
+): boolean =>
+  Option.match(Option.fromUndefinedOr(built.langs.get(document)), {
     onNone: () => true,
     onSome: ({ lang }) =>
       Option.exists(
-        Option.fromUndefinedOr(built.manifest.LomString.get(string.node)),
+        Option.fromUndefinedOr(built.strings.get(string.start)),
         ({ languageTag }) =>
           !languageTagForm.test(asciiFolded(collapse(lang))) ||
           languageTag === noLanguage ||
@@ -385,9 +403,9 @@ const inLanguage = (built: Built, root: NodeId, string: Addition<typeof LomTitle
  * document's language (`MatchedTitle`, `#pantry/qti/queries.ts`; {@link inLanguage}).
  *
  * @param built - The package's rows.
- * @returns The records that break the law, by id.
+ * @returns The records that break the law, by `start`.
  */
-const titleRefusals = (built: Built): ReadonlySet<string> =>
+const titleRefusals = (built: Built): ReadonlySet<bigint> =>
   new Set(
     [...built.named].flatMap(([record, document]) => {
       const listed = [...built.manifest.LomTitle.values()].some(({ parent }) =>
@@ -399,8 +417,8 @@ const titleRefusals = (built: Built): ReadonlySet<string> =>
           Option.contains(stringRecordOf(built, string), record) &&
           Option.exists(
             title,
-            ({ node: root, title: text }) =>
-              normalize(text) === normalize(string.text) && inLanguage(built, root, string),
+            ({ title: text }) =>
+              normalize(text) === normalize(string.text) && inLanguage(built, document, string),
           ),
       );
 
@@ -718,10 +736,10 @@ const filesOf = (sketch: PackageSketch): readonly PackageFile[] => {
  */
 const comparedFormBreaches = (built: Built): readonly string[] =>
   [...built.manifest.LomTitleString.values()].flatMap((string) => {
-    const language = built.manifest.LomStringLanguage.get(string.node);
+    const language = built.stringLanguages.get(string.start);
     const tag = language === undefined ? noLanguage : asciiFolded(language.language);
 
-    return built.manifest.LomString.get(string.node)?.languageTag === tag ? [] : [string.node];
+    return built.strings.get(string.start)?.languageTag === tag ? [] : [String(string.start)];
   });
 
 /**
@@ -947,9 +965,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               const built = builtOf(input);
               const { manifest, named } = built;
               const nodes = new Map(
-                flatten(input.manifest, idsFor(0, "manifest").idOf).nodes.map(
-                  (node) => [node.id, node] as const,
-                ),
+                flatten(input.manifest).nodes.map((node) => [node.start, node] as const),
               );
               const listed = [
                 ...sketch.manifestRecords,
@@ -982,7 +998,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
                     .filter(({ holder }) => {
                       const node = nodes.get(holder);
 
-                      return node?.kind === holderKind && node.parent === record.node;
+                      return node?.kind === holderKind && node.parent === record.start;
                     })
                     .map(({ text }) => text);
                 const texts = (ids: readonly (readonly EntrySketch[])[]) =>
@@ -991,7 +1007,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
                 assert.deepStrictEqual(of("lom:general"), texts(sketched.general), "general");
                 assert.deepStrictEqual(
                   entriesByStart
-                    .filter((e) => Option.contains(entryRecordOf(built, e), record.node))
+                    .filter((e) => Option.contains(entryRecordOf(built, e), record.start))
                     .map(({ text }) => text),
                   texts(sketched.general),
                   "general, as ListedIdentifier joins them",
@@ -999,9 +1015,9 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
                 assert.deepStrictEqual(of("lom:metaMetadata"), texts(sketched.meta), "meta");
                 assert.deepStrictEqual(
                   stringsByStart
-                    .filter((s) => Option.contains(stringRecordOf(built, s), record.node))
-                    .map(({ node, text }) => ({
-                      languageTag: manifest.LomString.get(node)?.languageTag,
+                    .filter((s) => Option.contains(stringRecordOf(built, s), record.start))
+                    .map(({ start, text }) => ({
+                      languageTag: built.strings.get(start)?.languageTag,
                       text,
                     })),
                   sketched.titles.flat().map(({ language, text }) => ({
@@ -1130,23 +1146,16 @@ describe("import/overlays/metadata.ts, the manifest's resources", () => {
         const recordFile = yield* shreddedText(
           `<manifest xmlns="${namespaces.cp}"><resources><resource/></resources></manifest>`,
         );
-        const manifestIds = idsFor(0, "manifest");
-
         assert.deepStrictEqual(
-          countsOf(rowsOf(ownViewOf(manifest, manifestIds.idOf), manifestIds)),
+          countsOf(rowsOf(ownViewOf(manifest), idsFor(manifestPath, "manifest"))),
           {},
         );
         assert.deepStrictEqual(
-          countsOf(
-            rowsOf(
-              ownViewOf(recordFile, idsFor(1, "resourcemetadata/xml").idOf),
-              idsFor(1, "resourcemetadata/xml"),
-            ),
-          ),
+          countsOf(rowsOf(ownViewOf(recordFile), idsFor("metadata.xml", "resourcemetadata/xml"))),
           {},
         );
         assert.deepStrictEqual(
-          [...resourcePathsOf(flatten(manifest, manifestIds.idOf)).values()],
+          [...resourcePathsOf(flatten(manifest)).values()],
           ["test.xml", "test.xml"],
           "the manifest's two resources, by the paths their hrefs name",
         );
@@ -1331,10 +1340,7 @@ describe("import/overlays/metadata.ts, usage values", () => {
               ].join("");
               const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
-              const built = rowsOf(
-                ownViewOf(tree, idsFor(1, "qtiusagedata/xml").idOf),
-                idsFor(1, "qtiusagedata/xml"),
-              );
+              const built = rowsOf(ownViewOf(tree), idsFor("usage.xml", "qtiusagedata/xml"));
               const rows = [...built.UsageValue.values()];
               const typed = [...built.UsageValueBaseType.values()];
               const copies = [...built.UsageBaseType.values()];
@@ -1365,8 +1371,8 @@ describe("import/overlays/metadata.ts, usage values", () => {
                 input.baseType === undefined ? [] : [input.baseType],
               );
               assert.deepStrictEqual(
-                copies.map(({ node }) => node),
-                [...built.UsageBaseType.keys()],
+                copies.map(({ start }) => start),
+                [...built.UsageBaseType.values()].map(({ start }) => start),
               );
             }),
         ),
@@ -1447,14 +1453,16 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
                 const xml = yield* Effect.orDie(readXml(file.bytes));
                 const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammar));
                 const ids = idsFor(
-                  1,
-                  path === "imsmanifest.xml" ? "manifest" : "resourcemetadata/xml",
+                  path,
+                  path === manifestPath ? "manifest" : "resourcemetadata/xml",
                 );
-                const rows = rowsOf(ownViewOf(tree, ids.idOf), ids);
-                const { nodes } = flatten(tree, ids.idOf);
+                const rows = rowsOf(ownViewOf(tree), ids);
+                const { nodes } = flatten(tree);
                 const typeNodes = nodes.filter(({ kind }) => kind === "lom:learningResourceType");
-                const firstOf = (parent: string, kind: string) =>
-                  nodes.find((node) => node.parent === parent && node.kind === kind)?.id;
+                const firstOf = (parent: bigint, kind: string) =>
+                  nodes.find((node) => node.parent === parent && node.kind === kind)?.start;
+                const valuesAt = startsOf(rows.LomResourceType);
+                const sourcesAt = startsOf(rows.LomResourceTypeSource);
 
                 assert.lengthOf(typeNodes, types.length, path);
                 assert.strictEqual(
@@ -1474,8 +1482,8 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
                     return;
                   }
 
-                  const value = rows.LomResourceType.get(node.id);
-                  const source = rows.LomResourceTypeSource.get(node.id);
+                  const value = valuesAt.get(node.start);
+                  const source = sourcesAt.get(node.start);
                   assert.deepStrictEqual(
                     Option.fromNullishOr(value).pipe(Option.map(({ text }) => text)),
                     termText(type.value),
@@ -1486,8 +1494,8 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
                     termText(type.source),
                     `${path}: the source of type ${String(at)}`,
                   );
-                  assert.strictEqual(value?.term, value && firstOf(node.id, "lom:value"));
-                  assert.strictEqual(source?.term, source && firstOf(node.id, "lom:source"));
+                  assert.strictEqual(value?.term, value && firstOf(node.start, "lom:value"));
+                  assert.strictEqual(source?.term, source && firstOf(node.start, "lom:source"));
                 }
               }
             }),

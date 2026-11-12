@@ -25,11 +25,11 @@
                 "additionalProperties": true
               }
             },
-            "package_id": { "type": "string" },
+            "package": { "type": "string" },
             "target": { "type": "string" },
             "target_action": { "type": "string", "enum": ["create", "replace"] }
           },
-          "required": ["dry_run", "entries", "package_id", "target", "target_action"],
+          "required": ["dry_run", "entries", "package", "target", "target_action"],
           "additionalProperties": true
         },
         {
@@ -51,10 +51,10 @@
                 "additionalProperties": true
               }
             },
-            "package_id": { "type": "string" },
+            "package": { "type": "string" },
             "target": { "type": "string" }
           },
-          "required": ["entries", "package_id", "target"],
+          "required": ["entries", "package", "target"],
           "additionalProperties": true
         }
       ]

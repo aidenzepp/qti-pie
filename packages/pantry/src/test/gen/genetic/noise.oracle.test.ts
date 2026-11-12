@@ -42,7 +42,7 @@ const salt = 706;
  */
 const packageOf = (resource: string, file: string): PackageEntries => {
   const declaration = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  const manifest = `${declaration}<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource${resource}><file href="${file}"/></resource></resources></manifest>`;
+  const manifest = `${declaration}<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource${resource}><file href="${file}"/></resource></resources></manifest>`;
   const encoder = new TextEncoder();
 
   return new Map([

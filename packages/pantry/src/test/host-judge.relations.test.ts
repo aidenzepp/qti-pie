@@ -40,7 +40,6 @@ import {
   schema,
   select,
   str,
-  uuid,
   v,
 } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
@@ -68,10 +67,10 @@ const testTimeoutMs = 300_000;
  */
 const twoLevel = (() => {
   const Path = str.regex("^[a-z]{1,8}$");
-  const Resource = relation("Resource", { id: uuid }, ["id"]);
-  const ResourceHref = relation("ResourceHref", { path: Path, resource: uuid }, ["resource"]);
-  const ResourceTyped = relation("ResourceTyped", { resource: uuid, type: Path }, ["resource"]);
-  const Catalog = relation("Catalog", { path: Path, resource: uuid, type: Path }, ["resource"]);
+  const Resource = relation("Resource", { id: Path }, ["id"]);
+  const ResourceHref = relation("ResourceHref", { path: Path, resource: Path }, ["resource"]);
+  const ResourceTyped = relation("ResourceTyped", { resource: Path, type: Path }, ["resource"]);
+  const Catalog = relation("Catalog", { path: Path, resource: Path, type: Path }, ["resource"]);
   const stored = {
     check: check("Catalog_typed", Catalog, (c) => c.ne(c.type, "x")),
     into: contained(on(ResourceHref, "resource"), on(Resource, "id")),

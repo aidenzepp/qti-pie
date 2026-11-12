@@ -19,25 +19,27 @@
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-5.2 | RFC 3986, §5.2}
  */
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { namedBy } from "#pantry/import/names.ts";
 import { hrefPiecesOf, piecesOf } from "#pantry/import/pieces.ts";
 import type { HrefPieces, Space } from "#pantry/import/pieces.ts";
 import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   Dependency,
   DependencyTarget,
   File,
   FileHref,
   ManifestId,
+  Package,
   Reference,
   ReferencePath,
   Resource,
@@ -52,17 +54,16 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
- * Where a manifest stands, as this builder reads it beside the manifest's view: its package's id,
- * the part of the importer's `NodeIds` (Q5.15) it needs.
+ * Where a manifest stands, as this builder reads it beside the manifest's view: its package's
+ * manifest identifier, the part of the importer's `DocumentPlace` (Q5.15) it needs.
  */
 export interface ManifestIds {
-  readonly package: Uuid;
+  readonly package: Addition<typeof Package>["identifier"];
 }
 
 /**
  * The manifest's overlay rows, one keyed set per relation: each map from the text of a row's key
- * to the row as its writer writes it. A node-keyed overlay's key text is its node's id; a
- * projection's is its heading's values in key order, as a JSON array.
+ * to the row as its writer writes it, the key's values in key order as a JSON array.
  */
 export interface PackageRows {
   readonly Dependency: ReadonlyMap<string, Addition<typeof Dependency>>;
@@ -491,16 +492,16 @@ export const baseIn = (value: string, base: HrefBase): HrefBase => {
  * Read the base of a node of a document.
  *
  * @param bases - The document's bases, as {@link basesOf} computes them.
- * @param node - The id of a node of the document.
+ * @param node - The position of a node of the document.
  * @returns Its base.
  * @throws {Error} When the node has none: every node of a document has a base, each computed after
  *   its parent's, so a miss names a node of another document, or one read before its parent.
  */
-const baseAt = (bases: ReadonlyMap<NodeId, HrefBase>, node: NodeId): HrefBase => {
+const baseAt = (bases: ReadonlyMap<bigint, HrefBase>, node: bigint): HrefBase => {
   const base = bases.get(node);
   if (base === undefined) {
     throw new Error(
-      `Node ${node} has no base: every node of a document has one, each computed after its parent's. Resolve each href against its own document's rows, in document order.`,
+      `The node at ${String(node)} has no base: every node of a document has one, each computed after its parent's. Resolve each href against its own document's rows, in document order.`,
     );
   }
 
@@ -514,21 +515,21 @@ const baseAt = (bases: ReadonlyMap<NodeId, HrefBase>, node: NodeId): HrefBase =>
  *
  * @param rows - The document's flat rows, in document order, so each parent precedes its children.
  * @param path - The document's path in its package.
- * @returns Each node's base, by its id.
+ * @returns Each node's base, by its position.
  */
-export const basesOf = (rows: FlatRows<Composed>, path: string): ReadonlyMap<NodeId, HrefBase> => {
+export const basesOf = (rows: FlatRows<Composed>, path: string): ReadonlyMap<bigint, HrefBase> => {
   const written = new Map(
-    rows.attributes.flatMap(({ lexical, name, node }) =>
-      name === "xml:base" ? [[node, lexical] as const] : [],
+    rows.attributes.flatMap(({ lexical, name, start }) =>
+      name === "xml:base" ? [[start, lexical] as const] : [],
     ),
   );
   const root = documentBase(path);
-  const bases = new Map<NodeId, HrefBase>();
+  const bases = new Map<bigint, HrefBase>();
   for (const node of rows.nodes) {
-    const inherited = node.parent === node.id ? root : baseAt(bases, node.parent);
-    const own = written.get(node.id);
+    const inherited = node.start === 0n ? root : baseAt(bases, node.parent);
+    const own = written.get(node.start);
     bases.set(
-      node.id,
+      node.start,
       own === undefined ? inherited : baseIn(hrefValueOf(own, "collapse"), inherited),
     );
   }
@@ -539,7 +540,7 @@ export const basesOf = (rows: FlatRows<Composed>, path: string): ReadonlyMap<Nod
 /**
  * Resolve an attribute of a node of a document as an href, its value read by its whitespace class.
  */
-type HrefResolver = (node: NodeId, lexical: string, whiteSpace?: WhiteSpace) => HrefResolution;
+type HrefResolver = (node: bigint, lexical: string, whiteSpace?: WhiteSpace) => HrefResolution;
 
 /**
  * Build the resolver of a document's hrefs: each against its element's base ({@link basesOf}).
@@ -567,7 +568,7 @@ export const entryPathOf = (resolution: HrefResolution): Option.Option<string> =
   resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
- * The path an href is compared by, `ResourceHref`'s and `File`'s `path`, and an item ref's or a
+ * The path an href is compared by, `ResourceHref`'s and `File`'s `target`, and an item ref's or a
  * site's (`#pantry/import/overlays/tests.ts` `ResolvedHref`): the entry path it resolves to in the
  * package, and otherwise its path piece as read, so two external hrefs are compared as written
  * (reading 102).
@@ -580,23 +581,17 @@ export const comparedPathOf = (resolution: HrefResolution, lexical: string): str
   resolution.scope === "entry" ? resolution.path : hrefPathOf(hrefValueOf(lexical, "collapse"));
 
 /**
- * Write the key text of a projection's row.
- *
- * @param values - The heading's values, in the relation's key order.
- * @returns Their JSON array.
- */
-const headingKey = (values: readonly string[]): string => JSON.stringify(values);
-
-/**
  * Index a document's attribute rows by their element and name.
  *
  * @param rows - The document's flat rows.
- * @returns Each element's attributes' lexical forms, by the element's id and the attribute's name.
+ * @returns Each element's attributes' lexical forms, by the element's position and the attribute's
+ *   name.
  */
-const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap<string, string>> =>
+const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<bigint, ReadonlyMap<string, string>> =>
   new Map(
-    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
-      ([node, held]) => [node, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
+    [...Map.groupBy(rows.attributes, ({ start }) => start)].map(
+      ([start, held]) =>
+        [start, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
     ),
   );
 
@@ -614,26 +609,32 @@ const dependencyTargetsOf = (
   dependencies: Iterable<Addition<typeof Dependency>>,
   resourceIds: Iterable<Addition<typeof ResourceId>>,
 ): ReadonlyMap<string, Addition<typeof DependencyTarget>> => {
-  const firsts = new Map<string, NodeId>();
+  const firsts = new Map<string, bigint>();
   const owns = new Set<string>();
-  for (const { lexical, node } of resourceIds) {
+  for (const { lexical, start } of resourceIds) {
     const identifier = collapse(lexical);
     if (!firsts.has(identifier)) {
-      firsts.set(identifier, node);
+      firsts.set(identifier, start);
     }
 
-    owns.add(headingKey([node, identifier]));
+    owns.add(keyTextOf(start, identifier));
   }
 
   return new Map(
-    [...dependencies].flatMap(({ lexical, node, package: pkg, resource }) => {
+    [...dependencies].flatMap(({ lexical, package: pkg, path, resource, start }) => {
       const ref = collapse(lexical);
 
       return Option.toArray(
-        owns.has(headingKey([resource, ref]))
+        owns.has(keyTextOf(resource, ref))
           ? Option.some(resource)
           : Option.fromUndefinedOr(firsts.get(ref)),
-      ).map((target) => [node, { node, package: pkg, ref, resource, target }] as const);
+      ).map(
+        (target) =>
+          [
+            keyTextOf(pkg, path, start),
+            { package: pkg, path, ref, resource, start, target },
+          ] as const,
+      );
     }),
   );
 };
@@ -673,17 +674,18 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
   const { folds, rows } = view;
   const attributes = attributesOf(rows);
   const resolve = hrefResolverOf(rows, manifestPath);
-  const document = rows.document.node;
+  const at = { package: ids.package, path: manifestPath };
+  const keyAt = (node: NodeRow<Composed>): string =>
+    keyTextOf(ids.package, manifestPath, node.start);
   const tupleOf = (node: NodeRow<Composed>) => ({
-    document,
+    ...at,
     kind: node.kind,
-    nearest: foldAt(folds, node.id).nearest,
-    node: node.id,
+    nearest: foldAt(folds, node.start).nearest,
     start: node.start,
     version: node.version,
   });
   const valueOf = (node: NodeRow<Composed>, name: string): Option.Option<string> =>
-    Option.fromUndefinedOr(attributes.get(node.id)?.get(name));
+    Option.fromUndefinedOr(attributes.get(node.start)?.get(name));
   const dependencies = new Map<string, Addition<typeof Dependency>>();
   const files = new Map<string, Addition<typeof File>>();
   const fileHrefs = new Map<string, Addition<typeof FileHref>>();
@@ -697,56 +699,55 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
   for (const node of rows.nodes) {
     if (node.kind === "cp:manifest") {
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
-        manifests.set(node.id, {
-          ...tupleOf(node),
-          lexical,
-          package: ids.package,
-          parent: node.parent,
-        });
+        manifests.set(keyTextOf(ids.package), { ...tupleOf(node), lexical, parent: node.parent });
       }
     }
 
     if (node.kind === "cp:resource") {
-      resources.set(node.id, { ...tupleOf(node), package: ids.package, parent: node.parent });
+      resources.set(keyAt(node), { ...tupleOf(node), parent: node.parent });
       for (const lexical of Option.toArray(valueOf(node, "identifier"))) {
-        resourceIds.set(node.id, { lexical, node: node.id, package: ids.package });
+        resourceIds.set(keyAt(node), { ...at, lexical, start: node.start });
       }
 
       for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
         for (const code of Option.toArray(typeOf(typeLexical))) {
-          resourceTypes.set(node.id, { node: node.id, package: ids.package, type: code });
+          resourceTypes.set(keyAt(node), { ...at, start: node.start, type: code });
         }
       }
 
       for (const href of Option.toArray(valueOf(node, "href"))) {
-        const resolution = resolve(node.id, href);
-        resourceHrefs.set(node.id, {
+        const resolution = resolve(node.start, href);
+        resourceHrefs.set(keyAt(node), {
+          ...at,
           href,
-          node: node.id,
-          package: ids.package,
-          path: comparedPathOf(resolution, href),
           scope: resolution.scope,
+          start: node.start,
+          target: comparedPathOf(resolution, href),
         });
       }
     }
 
     for (const href of node.kind === "cp:file" ? Option.toArray(valueOf(node, "href")) : []) {
-      const resolution = resolve(node.id, href);
-      const path = comparedPathOf(resolution, href);
+      const resolution = resolve(node.start, href);
+      const target = comparedPathOf(resolution, href);
       const { scope } = resolution;
-      files.set(node.id, {
+      files.set(keyAt(node), {
         ...tupleOf(node),
         href,
-        package: ids.package,
-        path,
         resource: node.parent,
         scope,
+        target,
       });
-      fileHrefs.set(headingKey([ids.package, scope, path]), { package: ids.package, path, scope });
-      resourceFiles.set(headingKey([node.parent, scope, path]), {
-        path,
+      fileHrefs.set(keyTextOf(ids.package, scope, target), {
+        package: ids.package,
+        scope,
+        target,
+      });
+      resourceFiles.set(keyTextOf(ids.package, manifestPath, node.parent, scope, target), {
+        ...at,
         resource: node.parent,
         scope,
+        target,
       });
     }
 
@@ -755,12 +756,7 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
           Option.filter(valueOf(node, "identifierref"), (value) => Option.isSome(namedBy(value))),
         )
       : []) {
-      dependencies.set(node.id, {
-        ...tupleOf(node),
-        lexical,
-        package: ids.package,
-        resource: node.parent,
-      });
+      dependencies.set(keyAt(node), { ...tupleOf(node), lexical, resource: node.parent });
     }
   }
 
@@ -781,7 +777,10 @@ export const rowsOf = (view: DocumentView, ids: ManifestIds): PackageRows => {
 /**
  * A typed href as the host reads it: a resource's `ResourceHref` beside its `ResourceTyped`'s code.
  */
-type TypedHrefRow = Pick<Addition<typeof ResourceHref>, "node" | "package" | "path" | "scope"> &
+type TypedHrefRow = Pick<
+  Addition<typeof ResourceHref>,
+  "package" | "path" | "scope" | "start" | "target"
+> &
   Pick<Addition<typeof ResourceTyped>, "type">;
 
 /**
@@ -798,12 +797,13 @@ type TypedHrefRow = Pick<Addition<typeof ResourceHref>, "node" | "package" | "pa
 export const typedHrefsOf = (
   rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
 ): readonly TypedHrefRow[] =>
-  [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path, scope }) =>
-    Option.toArray(Option.fromUndefinedOr(rows.ResourceTyped.get(node))).map(({ type }) => ({
-      node,
+  [...rows.ResourceHref.entries()].flatMap(([key, { package: pkg, path, scope, start, target }]) =>
+    Option.toArray(Option.fromUndefinedOr(rows.ResourceTyped.get(key))).map(({ type }) => ({
       package: pkg,
       path,
       scope,
+      start,
+      target,
       type,
     })),
   );
@@ -824,9 +824,9 @@ export const namedDocuments = (
   rows: PackageRows,
 ): ReadonlyMap<string, { readonly path: string; readonly type: ResourceTypeHandle }> =>
   new Map(
-    typedHrefsOf(rows).flatMap(({ path, scope, type }) =>
+    typedHrefsOf(rows).flatMap(({ scope, target, type }) =>
       scope === "entry" && documentTyped.has(type)
-        ? [[headingKey([path, type]), { path, type }] as const]
+        ? [[keyTextOf(target, type), { path: target, type }] as const]
         : [],
     ),
   );
@@ -837,18 +837,18 @@ export const namedDocuments = (
  * reading 62).
  *
  * @param rows - The manifest's flat rows.
- * @returns Each `cp:resource`'s path, by its node, for every resource that writes an `href`.
+ * @returns Each `cp:resource`'s path, by its position, for every resource that writes an `href`.
  */
-export const resourcePathsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> => {
+export const resourcePathsOf = (rows: FlatRows<Composed>): ReadonlyMap<bigint, string> => {
   const resolve = hrefResolverOf(rows, manifestPath);
   const resources = new Set(
-    rows.nodes.flatMap((node) => (node.kind === "cp:resource" ? [node.id] : [])),
+    rows.nodes.flatMap((node) => (node.kind === "cp:resource" ? [node.start] : [])),
   );
 
   return new Map(
-    rows.attributes.flatMap(({ lexical, name, node }) =>
-      name === "href" && resources.has(node)
-        ? [[node, comparedPathOf(resolve(node, lexical), lexical)] as const]
+    rows.attributes.flatMap(({ lexical, name, start }) =>
+      name === "href" && resources.has(start)
+        ? [[start, comparedPathOf(resolve(start, lexical), lexical)] as const]
         : [],
     ),
   );
@@ -856,7 +856,7 @@ export const resourcePathsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, s
 
 /**
  * Where a document stands, as its reference rows read it: its package, and its own path in the
- * package. It is the part of the importer's `NodeIds` (Q5.15) this builder reads.
+ * package. It is the part of the importer's `DocumentPlace` (Q5.15) this builder reads.
  */
 export interface DocumentIds extends ManifestIds {
   readonly path: string;
@@ -967,9 +967,9 @@ export const referenceRowsOf = (
   census: ReferenceCensus,
 ): ReferenceRows => {
   const { rows } = view;
-  const document = rows.document.node;
+  const at = { package: ids.package, path: ids.path };
   const resolve = hrefResolverOf(rows, ids.path);
-  const nodes = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const nodes = new Map(rows.nodes.map((node) => [node.start, node] as const));
   const references = new Map<string, Addition<typeof Reference>>();
   const paths = new Map<string, Addition<typeof ReferencePath>>();
   const textReferences = new Map<string, Addition<typeof TextReference>>();
@@ -982,33 +982,32 @@ export const referenceRowsOf = (
       continue;
     }
 
-    const lexical = values.get(element.id) ?? "";
-    const resolution = resolve(element.id, lexical, whiteSpace);
-    const key = headingKey([element.id]);
+    const lexical = values.get(element.start) ?? "";
+    const resolution = resolve(element.start, lexical, whiteSpace);
+    const key = keyTextOf(ids.package, ids.path, element.start);
     textReferences.set(key, {
-      document,
+      ...at,
       kind: element.kind,
       lexical,
-      node: element.id,
       scope: resolution.scope,
+      start: element.start,
       ...referencePiecesOf(lexical),
     });
     if (resolution.scope === "entry") {
       textPaths.set(key, {
-        document,
+        ...at,
         kind: element.kind,
-        node: element.id,
-        package: ids.package,
-        path: resolution.path,
+        start: element.start,
+        target: resolution.path,
       });
     }
   }
 
-  for (const { lexical, name: attribute, node } of rows.attributes) {
-    const element = nodes.get(node);
+  for (const { lexical, name: attribute, start } of rows.attributes) {
+    const element = nodes.get(start);
     if (element === undefined) {
       throw new Error(
-        `flatten wrote an attribute ${attribute} of node ${node}, and wrote no such node. Correct flatten.`,
+        `flatten wrote an attribute ${attribute} of the node at ${String(start)}, and wrote no node there. Correct flatten.`,
       );
     }
 
@@ -1017,25 +1016,24 @@ export const referenceRowsOf = (
       continue;
     }
 
-    const resolution = resolve(node, lexical, listed.value);
-    const key = headingKey([node, attribute]);
+    const resolution = resolve(start, lexical, listed.value);
+    const key = keyTextOf(ids.package, ids.path, start, attribute);
     references.set(key, {
-      document,
+      ...at,
       kind: element.kind,
       lexical,
       name: attribute,
-      node,
       scope: resolution.scope,
+      start,
       ...referencePiecesOf(lexical),
     });
     if (resolution.scope === "entry") {
       paths.set(key, {
-        document,
+        ...at,
         kind: element.kind,
         name: attribute,
-        node,
-        package: ids.package,
-        path: resolution.path,
+        start,
+        target: resolution.path,
       });
     }
   }

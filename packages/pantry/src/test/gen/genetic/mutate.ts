@@ -25,7 +25,7 @@
  * percent-encoded; one path listed under two types, the second a document type `RootOfType` pairs
  * two times in three; a content packaging element outside the manifest; an include in foreign or
  * wildcard content. And absence (hot spot 8): a present value equal to a sentinel the import or the
- * schema spells (empty, `0`, `none`, `single`, the nil uuid, the document's own identifier). And a
+ * schema spells (empty, `0`, `none`, `single`, the document's own identifier). And a
  * wild attribute: one or two names no kind admits, or that name an open class no name of which they
  * are, on one element, the order of whose refusals no law may read (reading 137).
  *
@@ -201,9 +201,10 @@ const wildTypes = ["imsqti_item_xmlv2p2", "imsqti_xmlv3p0", "x"] as const;
 
 /**
  * The values a present attribute is set to where a reader may stand one for absence: the empty
- * text, zero, the base type and cardinality a declaration with none is held as, and the nil uuid.
+ * text, zero, which is also the document node's position, and the base type and cardinality a
+ * declaration with none is held as.
  */
-const sentinels = ["", "0", "none", "single", "00000000-0000-0000-0000-000000000000"] as const;
+const sentinels = ["", "0", "none", "single"] as const;
 
 /**
  * The attribute names a wild attribute writes: names no kind admits, and names that open a class

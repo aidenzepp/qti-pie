@@ -27,15 +27,15 @@ import { laws } from "#pantry/test/installed-laws.ts";
 const testTimeoutMs = 600_000;
 
 /**
- * The keys the box must read somewhere, each a key a refusal of the DB tier named: a document per
- * path, a binding per response, a hottext per identifier, and an id per document, each over its
- * assembly where one places a fragment.
+ * The keys the box must read somewhere, each a key a refusal of the DB tier named: a binding per
+ * response, a hottext per identifier, and an id per document, each over its assembly where one
+ * places a fragment. A document per path is `Document`'s primary key, `(package, path)`, which a
+ * keyed set of the import's inputs holds of itself.
  */
 const requiredKeys = [
-  "Document(package, path)",
-  "IdBinding(document, id)",
-  "PlacedBinding(assembly, identifier)",
-  "PlacedHottext(assembly, identifier)",
+  "IdBinding(package, path, id)",
+  "PlacedBinding(package, assembly, identifier)",
+  "PlacedHottext(package, assembly, identifier)",
 ] as const;
 
 layer(NodeServices.layer, { excludeTestServices: true })(

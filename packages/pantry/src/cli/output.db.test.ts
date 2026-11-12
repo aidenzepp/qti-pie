@@ -1,4 +1,3 @@
-import { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, Layer, Schema } from "effect";
@@ -14,16 +13,10 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 const fixtures = inject("fixtures");
 
 /**
- * The report the exporter gives for the package a run stored: `compareWithRecord` of its id, the
- * comparison `roundtrip` prints, read again from the database.
+ * The report the exporter gives for the package a run stored: `compareWithRecord` of its manifest
+ * identifier, the comparison `roundtrip` prints, read again from the database.
  */
-const recordReport = Effect.fn("test.output.db.recordReport")(function* recordReport(
-  packageId: string,
-) {
-  const id = Uuid.parse(packageId);
-
-  return id.ok ? yield* compareWithRecord(id.value) : assert.fail(`${packageId} is not a UUID`);
-});
+const recordReport = compareWithRecord;
 
 /**
  * The envelope of `import`, as a reader decodes it from a line of standard output.
@@ -44,7 +37,7 @@ const summaryEnvelope = Schema.fromJsonString(
     Schema.Struct({
       differing: Schema.Number,
       export_dir: Schema.String,
-      package_id: Schema.String,
+      package: Schema.String,
     }),
   ),
 );
@@ -67,32 +60,40 @@ describe.skipIf(!hasLease)(
       excludeTestServices: true,
       timeout: "120 seconds",
     })("--output on the lease", (it) => {
-      it.effect("--json import prints one line, the envelope with the package id", () =>
-        Effect.gen(function* importJson() {
-          const { exit, stderr, stdout } = yield* captureCli(["--json", "import", fixtures.simple]);
+      it.effect(
+        "--json import prints one line, the envelope with the manifest identifier, and the same package again is no-change under it",
+        () =>
+          // Oracle: the contract's identity: a package is keyed by its manifest identifier and an
+          // import mints nothing, so a second import of the same bytes names the same package and
+          // changes nothing, whatever the first found stored.
+          Effect.gen(function* importJson() {
+            const first = yield* captureCli(["--json", "import", fixtures.simple]);
+            const again = yield* captureCli(["--json", "import", fixtures.simple]);
 
-          assert.isTrue(Exit.isSuccess(exit), stderr);
-          assert.strictEqual(stdout.split("\n").length, 1);
+            assert.isTrue(Exit.isSuccess(first.exit), first.stderr);
+            assert.isTrue(Exit.isSuccess(again.exit), again.stderr);
+            assert.strictEqual(first.stdout.split("\n").length, 1);
 
-          const envelope = Schema.decodeUnknownSync(importEnvelope)(stdout);
+            const stored = Schema.decodeUnknownSync(importEnvelope)(first.stdout);
+            const repeated = Schema.decodeUnknownSync(importEnvelope)(again.stdout);
 
-          assert.isTrue(envelope.ok);
-          assert.strictEqual(envelope.schema_version, 1);
-          if ("dry_run" in envelope.data) {
-            assert.fail("a real import printed the dry-run arm");
-          }
+            assert.isTrue(stored.ok);
+            assert.strictEqual(stored.schema_version, 1);
+            if ("dry_run" in stored.data || "dry_run" in repeated.data) {
+              assert.fail("a real import printed the dry-run arm");
+            }
 
-          assert.match(
-            envelope.data.package_id,
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
-          );
-        }),
+            assert.deepStrictEqual(repeated.data, {
+              outcome: "no-change",
+              package: stored.data.package,
+            });
+          }),
       );
 
       it.effect(
         "--json roundtrip prints the exporter's report of the stored package, no differing",
         () =>
-          // Oracle: the exporter's `compareWithRecord` of the package id the envelope names, read
+          // Oracle: the exporter's `compareWithRecord` of the package the envelope names, read
           // again from the database, and the committed schema of the envelope.
           Effect.gen(function* roundtripJson() {
             const copy = yield* packageCopy(fixtures.simple, "copy-output-json-simple");
@@ -115,7 +116,7 @@ describe.skipIf(!hasLease)(
 
             assert.strictEqual(envelope.data.differing, 0);
             assert.deepStrictEqual(envelope.data.entries, [
-              ...(yield* recordReport(envelope.data.package_id)),
+              ...(yield* recordReport(envelope.data.package)),
             ]);
           }),
       );
@@ -139,7 +140,7 @@ describe.skipIf(!hasLease)(
 
             const lines = stdout.split("\n");
             const summary = Schema.decodeUnknownSync(summaryEnvelope)(lines.at(-1));
-            const report = yield* recordReport(summary.data.package_id);
+            const report = yield* recordReport(summary.data.package);
 
             assert.strictEqual(lines.length, report.length + 1);
             assert.deepStrictEqual(

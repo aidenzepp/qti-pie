@@ -4,28 +4,29 @@
  * each copies.
  *
  * Each of these overlays' way back to its attribute was a containment into a selection of
- * `Attribute` with a key of its own over `node`, which a wider key already implied: an element
- * holds at most one ID-typed attribute (`idAttributes` of `#pantry/qti/identity.ts`, whose key
- * holds `namingIdAttributes` too). Each is now stated into a target whose conditions are the wider
- * selection's and whose key is the wider selection's, the target fixing what the narrower selection
- * read beyond it to a value outside its terms (grizzle's fixed target, `#fixedTarget` of
- * `packages/engine/src/laws/model/plan.ts:1526-1582` at `698880ac`):
+ * `Attribute` with a key of its own over the element, which a wider key already implied: an
+ * element holds at most one ID-typed attribute (`idAttributes` of `#pantry/qti/identity.ts`, whose
+ * key holds `namingIdAttributes` too). Each is now stated into a target whose conditions are the
+ * wider selection's and whose key is the wider selection's, the target fixing what the narrower
+ * selection read beyond it to a value outside its terms (grizzle's fixed target, `#fixedTarget` of
+ * `packages/engine/src/laws/model/plan.ts:1526-1582` at `698880ac`), each side read at the
+ * element, `(package, path, start)`:
  *
- * - **ManifestId:** `ManifestId(node) ⊆ manifestIdentifiers(node)`, the `cp:manifest` `identifier`s
- *   of the manifest (type `none`), is now `ManifestId(node) ⊆ manifestIdAttributes("cp:manifest")
- *   (node)`, the ID-typed attributes whose kind is `cp:manifest` and whose document is the
- *   manifest, held by `idAttributes`' key;
+ * - **ManifestId:** `ManifestId(e) ⊆ manifestIdentifiers(e)`, the `cp:manifest` `identifier`s of the
+ *   manifest (type `none`), is now `ManifestId(e) ⊆ manifestIdAttributes("cp:manifest")(e)`, the
+ *   ID-typed attributes whose kind is `cp:manifest` and whose document is the manifest, held by
+ *   `idAttributes`' key;
  * - **ResourceId:** the same over `cp:resource`;
- * - **TableHeader:** `TableHeader(node) ⊆ headerIds(node)`, each `th`'s `id` that is an ID value, is
- *   now `TableHeader(node) ⊆ namingIdAttributesOf("th")(node)`, held by `idAttributes`' key.
+ * - **TableHeader:** `TableHeader(e) ⊆ headerIds(e)`, each `th`'s `id` that is an ID value, is now
+ *   `TableHeader(e) ⊆ namingIdAttributesOf("th")(e)`, held by `idAttributes`' key.
  *
- * A containment from a row at a node holds where some attribute at that node is in its target, so
- * the two laws are one exactly where the narrower selection holds an attribute row if and only if
- * the restated target does. No fixed field names the attribute: the kind's one ID-typed attribute
- * is the copied one, which this search proves. A row of another kind fails both laws, the old by
- * its kind and the new by the kind its target fixes, so the box is the kind's rows: each (version,
- * governs) `GoverningOf` gives the kind, each name the governor's attribute model admits, every
- * document type, and a value of each verdict of the ID-value pattern, the one thing either
+ * A containment from a row at an element holds where some attribute at that element is in its
+ * target, so the two laws are one exactly where the narrower selection holds an attribute row if
+ * and only if the restated target does. No fixed field names the attribute: the kind's one ID-typed
+ * attribute is the copied one, which this search proves. A row of another kind fails both laws, the
+ * old by its kind and the new by the kind its target fixes, so the box is the kind's rows: each
+ * (version, governs) `GoverningOf` gives the kind, each name the governor's attribute model admits,
+ * every document type, and a value of each verdict of the ID-value pattern, the one thing either
  * selection reads of the lexical form. The restated laws are read from the schema's own statements
  * (`#pantry/test/judged-laws.ts` `containmentsOf`), each target's selection, its fixed fields
  * included, evaluated as the statement holds it; the replaced ones are restated over plain rows.
@@ -168,8 +169,9 @@ const rowsOf = (kind: string): readonly AttributeCase[] =>
 
 /**
  * Read the restated copy-back from the schema: its one containment from the relation into
- * `Attribute`, whose source pairs `node` with `node` alone, so the law holds at a node exactly
- * where some attribute row there is in its target's selection, the fields it fixes included.
+ * `Attribute`, whose source pairs the element's key `(package, path, start)` with the attribute's
+ * alone, so the law holds at an element exactly where some attribute row there is in its target's
+ * selection, the fields it fixes included.
  *
  * @param from - The relation it copies back from.
  * @returns The containment.
@@ -181,7 +183,11 @@ const restatedOf = (from: CopyBack["from"]): Containment => {
   const law = Option.getOrThrow(Arr.head(laws));
   assert.deepStrictEqual(
     Arr.zip(law.fromFields, law.toFields),
-    [["node", "node"]],
+    [
+      ["package", "package"],
+      ["path", "path"],
+      ["start", "start"],
+    ],
     `${from}: the fields its source pairs`,
   );
 

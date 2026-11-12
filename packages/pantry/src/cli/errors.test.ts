@@ -104,9 +104,9 @@ describe("describeFailure, what to do next", () => {
   });
 });
 
-describe("describeFailure, a package id no package has", () => {
+describe("describeFailure, a manifest identifier no package has", () => {
   it("a PackageNotFound exits 1 as not-found, with the help of its kind", () => {
-    const failure = new PackageNotFound({ packageId: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40" });
+    const failure = new PackageNotFound({ package: "MANIFEST-1" });
 
     assert.deepStrictEqual(identity(failure), { exitCode: 1, kind: "not-found" });
     assert.strictEqual(describeFailure(failure).help, kindHelp["not-found"]);
@@ -121,16 +121,13 @@ describe("describeFailure, a package id no package has", () => {
  */
 const exportDefects = {
   CursorError: CursorError.make({ _tag: "cursorMalformed" }),
-  DocumentRowCount: new DocumentRowCount({
-    document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
-    found: 2,
-  }),
+  DocumentRowCount: new DocumentRowCount({ found: 2, package: "MANIFEST-1", path: "item.xml" }),
   EncodeError: new EncodeError({ codePoint: 0x1_f6_00, threshold: 0xff, where: "comment" }),
-  RootMissing: new RootMissing({ node: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40" }),
-  RowMissing: new RowMissing({ key: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40", rows: "texts" }),
+  RootMissing: new RootMissing({}),
+  RowMissing: new RowMissing({ key: "3", rows: "texts" }),
   RowsOutsideImage: new RowsOutsideImage({
     departure: { _tag: "differs", field: "at", found: "2", written: "1" },
-    key: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+    key: "3",
     rows: "nodes",
   }),
 } as const satisfies { readonly [K in ExportDefectTag]: { readonly _tag: K } };

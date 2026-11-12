@@ -145,10 +145,15 @@ class TargetProtected extends Schema.TaggedError<TargetProtected>()("TargetProte
 }
 
 /**
- * The package id is not a UUID.
+ * The manifest identifier is not one: no package can hold it, so no export can name a package by
+ * it.
  */
-class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackageId", {
-  packageId: Schema.String,
+class BadIdentifier extends Schema.TaggedError<BadIdentifier>()("BadIdentifier", {
+  identifier: Schema.String,
+  /**
+   * The most UTF-8 bytes a manifest identifier holds.
+   */
+  maxBytes: Schema.Number,
 }) {
   /**
    * This error's kind, `cli-bad-argument`. A getter, so the kind stays on the prototype and is no
@@ -167,10 +172,10 @@ class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackageId", {
   }
 
   /**
-   * The id and what an id looks like.
+   * The text and what a manifest identifier is.
    */
   override get message(): string {
-    return `${this.packageId} is not a package id. A package id is a UUID, like 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40.`;
+    return `${JSON.stringify(this.identifier)} is not a manifest identifier. A manifest identifier is the identifier attribute of a package's manifest element, an XML name with no colon and no space (an NCName) of at most ${String(this.maxBytes)} UTF-8 bytes, like MANIFEST-1.`;
   }
 
   /**
@@ -178,28 +183,32 @@ class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackageId", {
    */
   // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
   get help(): string {
-    return "Use the id that `qti import` printed.";
+    return "Use the manifest identifier that `qti import` printed.";
   }
 }
 
 /**
- * Parse the package id the person named, once, before anything opens the database. The engine
- * loads here, as it does in the handler, so the command line's static graph reaches none of it.
+ * Parse the manifest identifier the person named, once, before anything opens the database: an
+ * NCName (`xs:ID`'s lexical space, collapsed, as the import stores it) of at most `identityBytes`
+ * UTF-8 bytes, `ManifestIdentifier`'s language (`#pantry/qti/limits.ts`), so every text it accepts
+ * is one a package can hold. The grammar and the bound load here, as the
+ * engine does in the handler, so the command line's static graph reaches none of it.
  *
- * @param packageId - The id the person named.
- * @returns The id as a `Uuid`. Fails with `BadPackageId` when the text is not a UUID.
+ * @param identifier - The identifier the person named.
+ * @returns The identifier. Fails with `BadIdentifier` when no package can hold the text.
  */
-export const requirePackageId = Effect.fn("cli.requirePackageId")(function* requirePackageId(
-  packageId: string,
+export const requireIdentifier = Effect.fn("cli.requireIdentifier")(function* requireIdentifier(
+  identifier: string,
 ) {
-  const { Uuid } = yield* Effect.promise(() => import("@bjornpagen/grizzle"));
-  const id = Uuid.parse(packageId);
+  const [{ isNcName }, { identityBytes }] = yield* Effect.promise(() =>
+    Promise.all([import("#pantry/grammar/domains.ts"), import("#pantry/qti/limits.ts")]),
+  );
 
-  if (!id.ok) {
-    return yield* new BadPackageId({ packageId });
+  if (!isNcName(identifier) || new TextEncoder().encode(identifier).length > identityBytes) {
+    return yield* new BadIdentifier({ identifier, maxBytes: identityBytes });
   }
 
-  return id.value;
+  return identifier;
 });
 
 /**

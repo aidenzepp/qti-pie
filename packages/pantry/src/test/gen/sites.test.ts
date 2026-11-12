@@ -70,6 +70,22 @@ const siteRules: ReadonlySet<string> = new Set([
 type Situation = `${SiteName} ${HrefCase}`;
 
 /**
+ * Write an element's key, `(package, path, start)`, as one text, so the rows of one element are
+ * found by it.
+ *
+ * @param row - A row over an element.
+ * @param row.package - Its package's manifest identifier.
+ * @param row.path - Its document's path.
+ * @param row.start - The element's position in its document.
+ * @returns The text.
+ */
+const placeOf = (row: {
+  readonly package: string;
+  readonly path: string;
+  readonly start: bigint;
+}): string => JSON.stringify([row.package, row.path, String(row.start)]);
+
+/**
  * Find the one site row of a named site of the box: its document's and its element's.
  *
  * @param inputs - The package's import inputs.
@@ -77,9 +93,8 @@ type Situation = `${SiteName} ${HrefCase}`;
  * @returns The row.
  */
 const siteOf = (inputs: PackageInputs, name: SiteName): Addition<typeof Site> => {
-  const paths = new Map([...inputs.Document.values()].map(({ node, path }) => [node, path]));
   const found = [...inputs.Site.values()].filter(
-    (site) => paths.get(site.document) === sites[name].path && site.kind === sites[name].kind,
+    (site) => site.path === sites[name].path && site.kind === sites[name].kind,
   );
   assert.lengthOf(found, 1, `${name}: one site row`);
 
@@ -111,28 +126,26 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
   const hrefPaths = new Set(
     [...inputs.ReferencePath.values()]
       .filter(({ name }) => name === "href")
-      .map(({ node, package: pkg, path }) => JSON.stringify([node, pkg, path])),
+      .map((row) => JSON.stringify([placeOf(row), row.target])),
   );
   const hrefs = new Set(
-    [...inputs.Reference.values()].flatMap(({ name, node }) => (name === "href" ? [node] : [])),
+    [...inputs.Reference.values()].flatMap((row) => (row.name === "href" ? [placeOf(row)] : [])),
   );
   const externalHrefs = new Set(
-    [...inputs.Reference.values()].flatMap(({ name, node, scope }) =>
-      name === "href" && scope === "external" ? [node] : [],
+    [...inputs.Reference.values()].flatMap((row) =>
+      row.name === "href" && row.scope === "external" ? [placeOf(row)] : [],
     ),
   );
-  const entries = new Set(
-    [...inputs.Package.values()].flatMap(({ entries: held }) => held.map(({ path }) => path)),
-  );
-  const documents = new Map([...inputs.Document.values()].map(({ node, path }) => [path, node]));
-  const pathOf = new Map([...inputs.SitePath.values()].map((row) => [row.node, row]));
-  const targetOf = new Map([...inputs.SiteTarget.values()].map((row) => [row.node, row]));
+  const entries = new Set([...inputs.Entry.values()].map(({ path }) => path));
+  const documents = new Set([...inputs.Document.values()].map(({ path }) => path));
+  const pathOf = new Map([...inputs.SitePath.values()].map((row) => [placeOf(row), row]));
+  const targetOf = new Map([...inputs.SiteTarget.values()].map((row) => [placeOf(row), row]));
   const sectionPaths = new Set(
     [...inputs.TestDocument.values()]
       .filter(({ rootKind }) => rootKind === "qti-assessment-section")
       .map(({ path }) => path),
   );
-  const siteNodes = new Set([...inputs.Site.values()].map(({ node }) => node));
+  const siteNodes = new Set([...inputs.Site.values()].map(placeOf));
   assert.isTrue(
     [...pathOf.keys(), ...targetOf.keys()].every((node) => siteNodes.has(node)),
     `${literal}: a path or a target of no site`,
@@ -141,30 +154,26 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
   const broken = new Set<string>();
   for (const name of siteNames) {
     const site = siteOf(inputs, name);
-    const path = pathOf.get(site.node);
-    const target = targetOf.get(site.node);
+    const path = pathOf.get(placeOf(site));
+    const target = targetOf.get(placeOf(site));
     assert.strictEqual(
       site.external,
-      externalHrefs.has(site.node),
+      externalHrefs.has(placeOf(site)),
       `${literal}: ${name}'s external mark`,
     );
     if (path !== undefined) {
       assert.isTrue(
-        hrefPaths.has(JSON.stringify([path.node, path.package, path.path])),
-        `${literal}: ${name}'s path ${path.path} is no ReferencePath of its href`,
+        hrefPaths.has(JSON.stringify([placeOf(path), path.target])),
+        `${literal}: ${name}'s path ${path.target} is no ReferencePath of its href`,
       );
-      assert.strictEqual(path.entry, entries.has(path.path), `${literal}: ${name}'s entry`);
+      assert.strictEqual(path.entry, entries.has(path.target), `${literal}: ${name}'s entry`);
       assert.strictEqual(path.kind, site.kind, `${literal}: ${name}'s path's kind`);
     }
 
     assert.strictEqual(
       target?.target,
-      path === undefined ? undefined : documents.get(path.path),
+      path !== undefined && documents.has(path.target) ? path.target : undefined,
       `${literal}: ${name}'s target`,
-    );
-    assert.isTrue(
-      target === undefined || (target.path === path?.path && target.package === path.package),
-      `${literal}: ${name}'s target copies no path of its site`,
     );
 
     if (path?.entry === false) {
@@ -176,8 +185,8 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
     } else if (site.external) {
       broken.add("remote-section");
     } else if (path === undefined) {
-      broken.add(hrefs.has(site.node) ? "entry-kind" : "required-attribute");
-    } else if (!sectionPaths.has(path.path)) {
+      broken.add(hrefs.has(placeOf(site)) ? "entry-kind" : "required-attribute");
+    } else if (!sectionPaths.has(path.target)) {
       broken.add("entry-kind");
     }
   }
@@ -232,15 +241,13 @@ const siteContainments = [
  * of.
  *
  * @param inputs - The package's import inputs.
- * @returns The rules each site's rows break, by its node.
+ * @returns The rules each site's rows break, by its element's key ({@link placeOf}).
  */
 const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<string>> => {
   const held: ReadonlyMap<string, readonly Row[]> = new Map<string, readonly Row[]>([
     [
       "Entry",
-      [...inputs.Package.values()].flatMap(({ entries, id }) =>
-        entries.map(({ path }) => ({ package: id, path })),
-      ),
+      [...inputs.Entry.values()].map((entry) => ({ package: entry.package, path: entry.path })),
     ],
     ["Reference", [...inputs.Reference.values()]],
     ["ReferencePath", [...inputs.ReferencePath.values()]],
@@ -250,19 +257,19 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
     ["TestDocument", [...inputs.TestDocument.values()]],
   ]);
   const broken = new Map<string, Set<string>>();
-  const breach = (node: Datum | undefined, rule: string) => {
-    const at = datumText(node);
+  const breach = (row: Row, rule: string) => {
+    const at = JSON.stringify([row["package"], row["path"], row["start"]].map(datumText));
     broken.set(at, new Set([...(broken.get(at) ?? []), rule]));
   };
   for (const path of inputs.SitePath.values()) {
     if (!fileExists(path)) {
-      breach(path.node, "file-exists");
+      breach(path, "file-exists");
     }
   }
 
   for (const site of inputs.Site.values()) {
     if (!remoteSection(site)) {
-      breach(site.node, "remote-section");
+      breach(site, "remote-section");
     }
   }
 
@@ -281,7 +288,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
       const sought = keyOf(containment.fromFields.map((field) => row[field]));
       if (containment.selected(row) && !present.has(sought)) {
         breach(
-          row["node"],
+          row,
           Option.getOrElse(schemaRuleOfLaw(containment.law), () => "unnamed"),
         );
       }
@@ -349,7 +356,11 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
       const site = siteOf(program.inputs, name);
       const expected = ruleOfCase(name, box[name]);
       assert.deepStrictEqual(
-        [...(broken.get(site.node) ?? [])].toSorted(),
+        [
+          ...(broken.get(
+            JSON.stringify([site.package, site.path, site.start].map((value) => datumText(value))),
+          ) ?? []),
+        ].toSorted(),
         expected === undefined || expected === "required-attribute" ? [] : [expected],
         `${literal}: ${name} by the schema's statements`,
       );

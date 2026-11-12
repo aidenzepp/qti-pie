@@ -189,7 +189,7 @@ export const lawTable = {
   "AL2 distinct": {
     rule: "attribute-admission",
     source:
-      "XML 1.0 §3.1, WFC Unique Att Spec, by position (fin.md §16, masked by the open classes, D2)",
+      "XML 1.0 §3.1, WFC Unique Att Spec, and Namespaces in XML 1.0 §6.3: a closed attribute is its element's at its name, Attribute's key (package, path, start, name), an open class's attribute an OpenAttribute (fin.md §16, D2)",
   },
   "AL2 fold": {
     rule: "attribute-admission",
@@ -216,11 +216,13 @@ export const lawTable = {
   },
   "AL4 open name key": {
     rule: "attribute-admission",
-    source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
+    source:
+      "fin.md D2 and Namespaces in XML 1.0 §6.3: an open-class attribute keeps its exact name, its expanded name its element's at most once, OpenAttribute's key (package, path, start, uri, local); reading 13",
   },
   "AL4 open names": {
     rule: "attribute-admission",
-    source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
+    source:
+      "fin.md D2, an open-class attribute keeps its exact name: an Attribute's name is no open class, and an OpenAttribute's class is one; reading 13",
   },
   "AL5 attribute count": {
     rule: "attribute-count",
@@ -394,7 +396,7 @@ export const lawTable = {
   "Entry family": {
     rule: "reachability",
     source:
-      "plan §1.6: the package's entries in listing order, an ordered family under Package at entries, one entry per path; the record the model is rebuilt from",
+      "plan §1.6: the package's entries, one per path, Entry's key (package, path), each its package's; a set, since IMS Content Packaging 1.2 gives an entry's place in the zip no meaning; the record the model is rebuilt from",
   },
   "Entry used": {
     rule: "entry-used",
@@ -717,7 +719,8 @@ export const lawTable = {
   },
   "Namespace family": {
     rule: "reachability",
-    source: "Namespaces in XML 1.0 §3, declarations in source order (fin.md §5.2)",
+    source:
+      "Namespaces in XML 1.0 §3 and the XML Infoset's [namespace attributes], a set: an element declares each prefix at most once, Namespace's key (package, path, start, prefix) (fin.md §5.2)",
   },
   "Namespace name": {
     rule: "namespace-name",
@@ -757,10 +760,15 @@ export const lawTable = {
     source:
       "R10-a: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_PortableCustomInteraction.Attr_module (§5.106.2: 'If this characteristic is provided the qti-interaction-modules child attribute is not required, if omitted then the modules child element is mandatory'): a portable custom interaction names its module by a module attribute, by a qti-interaction-modules child, or by both (interactions.ts PCI_module_source)",
   },
+  "Package identifier": {
+    rule: "derived",
+    source:
+      "IMS Content Packaging 1.2, the manifest's identifier, an xs:ID (decision 457 (3)): a package is keyed by its manifest identifier, cp:manifest/@identifier collapsed, which ManifestId's written form is (package.ts Package_identifier)",
+  },
   "Package key": {
     rule: "reachability",
     source:
-      "plan §1.6: one Package row per imported package, keyed by the id the importer mints for it",
+      "plan §1.6: one Package row per manifest identifier, the key every row of the package holds; a different package under a stored identifier is refused on its keys",
   },
   "Picture source srcset": {
     rule: "source-srcset",

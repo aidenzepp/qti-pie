@@ -40,7 +40,7 @@ const declaration = '<?xml version="1.0" encoding="UTF-8"?>';
 /**
  * The manifest's opening, through its metadata.
  */
-const manifestHead = `${declaration}<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata>`;
+const manifestHead = `${declaration}<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata>`;
 
 /**
  * The value written where GEN-A wrote one U+00A0: that character, or an ASCII space.

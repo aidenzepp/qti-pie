@@ -9,11 +9,11 @@
  * qualifiers), which {@link HeadQualifier} holds. The importer refused neither before: only the
  * law oracle judged them.
  *
- * - **{@link MathApply}**, one row per `m:apply` with an element child, keyed by its node: its
- *   `nodeRef` tuple (C18), its element rank and element count (`nodeCounts`), its `operator`, the
- *   kind of its first element child, and two counts of the rows below it, `arguments` and `owned`.
- *   Both ways between the rows and the `m:apply` nodes that have an element child, so no
- *   application escapes the law.
+ * - **{@link MathApply}**, one row per `m:apply` with an element child, keyed by its node's
+ *   `(package, path, start)`: its `nodeRef` tuple (C18), its element rank and element count
+ *   (`nodeCounts`), its `operator`, the kind of its first element child, and two counts of the rows
+ *   below it, `arguments` and `owned`. Both ways between the rows and the `m:apply` nodes that have
+ *   an element child, so no application escapes the law.
  * - **{@link MathArgument}**, one row per element child after the operator that is none of Content
  *   MathML's qualifier kinds ({@link mathQualifiers}), counted by `MathApply.arguments`. Both ways
  *   between the rows and exactly those nodes, so the host's count is proved.
@@ -52,7 +52,6 @@ import {
   on,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import { mathArities, mathHeadQualifiers, mathQualifiers } from "#pantry/grammar/expression.ts";
 import {
@@ -63,6 +62,7 @@ import {
   nonElementKinds,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { EntryPath, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -92,12 +92,13 @@ const headQualifierKinds = handlesOf(new Set(mathHeadQualifiers.map(({ qualifier
 const arityKinds = handlesOf(new Set(mathArities.keys()));
 
 /**
- * One `m:apply` with an element child, keyed by its node.
+ * One `m:apply` with an element child, keyed by its node's `(package, path, start)`.
  *
- * - **the host's:** the `nodeRef` tuple (`node`, `document`, `kind`, `start`, `nearest`, `version`,
- *   `parent`), proved by containment; `elements` and `elementChildren`, the node's own element rank
- *   and element count, which `nodeCounts` proves; and `operator`, its first element child's kind,
- *   proved by containment into the first element children;
+ * - **the host's:** the `nodeRef` tuple (`package`, `path`, `start`, `kind`, `nearest`, `version`,
+ *   `parent`), `nearest` and `parent` positions in the same document, proved by containment;
+ *   `elements` and `elementChildren`, the node's own element rank and element count, which
+ *   `nodeCounts` proves; and `operator`, its first element child's kind, proved by containment into
+ *   the first element children;
  * - **drawn:** `arguments`, the count of its {@link MathArgument} rows, and `owned`, the count of its
  *   {@link MathQualifier} rows.
  *
@@ -108,57 +109,59 @@ export const MathApply = relation(
   "MathApply",
   {
     arguments: drawn(natural),
-    document: uuid,
     elementChildren: natural,
     elements: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
     operator: closedId(NodeKind),
     owned: drawn(natural),
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One argument of an `m:apply`: an element child after its operator that is no qualifier, keyed by
- * its node, with the `nodeRef` tuple of the node, whose `parent` is the application.
+ * its node's `(package, path, start)`, with the `nodeRef` tuple of the node, whose `parent` is the
+ * application.
  */
 export const MathArgument = relation(
   "MathArgument",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One head qualifier of an `m:apply` whose operator is a {@link MathHeadOperator}: a `degree`,
- * `momentabout` or `logbase` after the operator, keyed by its node, with the `nodeRef` tuple of the
- * node, whose `parent` is the application, and its operator as `head`. Its `kind` is the qualifier.
+ * `momentabout` or `logbase` after the operator, keyed by its node's `(package, path, start)`, with
+ * the `nodeRef` tuple of the node, whose `parent` is the application, and its operator as `head`.
+ * Its `kind` is the qualifier.
  */
 export const MathQualifier = relation(
   "MathQualifier",
   {
-    document: uuid,
     head: closedId(NodeKind),
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -176,7 +179,8 @@ const applications = select(Node, (n) =>
 
 /**
  * The first element child of an `m:apply`: an element whose element rank is 1. A parent has one,
- * so `(parent, kind)` is a key of them and a {@link MathApply} row's `operator` is among them.
+ * so `(package, path, parent, kind)` is a key of them and a {@link MathApply} row's `operator` is
+ * among them.
  */
 const operators = select(Node, (n) =>
   n.and(n.not(n.in(n.kind, nonElementKinds)), n.eq(n.parentKind, "m:apply"), n.eq(n.elements, 1n)),
@@ -211,12 +215,18 @@ const headQualifierNodes = select(Node, (n) =>
 /**
  * The family of an application's arguments, counted by `MathApply.arguments`.
  */
-const argumentFamily = counted(on(MathArgument, "parent"), fin(MathApply, "arguments"));
+const argumentFamily = counted(
+  on(MathArgument, "package", "path", "parent"),
+  fin(MathApply, "arguments"),
+);
 
 /**
  * The family of an application's head qualifiers, counted by `MathApply.owned`.
  */
-const qualifierFamily = counted(on(MathQualifier, "parent"), fin(MathApply, "owned"));
+const qualifierFamily = counted(
+  on(MathQualifier, "package", "path", "parent"),
+  fin(MathApply, "owned"),
+);
 
 /**
  * An application's head qualifier is a pair the syntax tables list: each {@link MathQualifier}'s
@@ -246,27 +256,39 @@ export const headQualifierLaw = contained(
  */
 export const applyLaws = [
   contained(
-    on(MathApply, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    on(MathApply, "package", "path", "start", "kind", "nearest", "version", "parent"),
     nodeRef,
   ),
-  contained(on(MathApply, "node", "elements", "elementChildren"), nodeCounts),
-  mirrors(on(MathApply, "node"), on(applications, "id")),
-  key(on(operators, "parent", "kind")),
-  contained(on(MathApply, "node", "operator"), on(operators, "parent", "kind")),
+  contained(on(MathApply, "package", "path", "start", "elements", "elementChildren"), nodeCounts),
+  mirrors(on(MathApply, "package", "path", "start"), on(applications, "package", "path", "start")),
+  key(on(operators, "package", "path", "parent", "kind")),
+  contained(
+    on(MathApply, "package", "path", "start", "operator"),
+    on(operators, "package", "path", "parent", "kind"),
+  ),
 
   contained(
-    on(MathArgument, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    on(MathArgument, "package", "path", "start", "kind", "nearest", "version", "parent"),
     nodeRef,
   ),
-  mirrors(on(MathArgument, "node"), on(argumentNodes, "id")),
+  mirrors(
+    on(MathArgument, "package", "path", "start"),
+    on(argumentNodes, "package", "path", "start"),
+  ),
   argumentFamily,
 
   contained(
-    on(MathQualifier, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    on(MathQualifier, "package", "path", "start", "kind", "nearest", "version", "parent"),
     nodeRef,
   ),
-  contained(on(MathQualifier, "node"), on(headQualifierNodes, "id")),
-  contained(on(MathQualifier, "parent", "head"), on(MathApply, "node", "operator")),
+  contained(
+    on(MathQualifier, "package", "path", "start"),
+    on(headQualifierNodes, "package", "path", "start"),
+  ),
+  contained(
+    on(MathQualifier, "package", "path", "parent", "head"),
+    on(MathApply, "package", "path", "start", "operator"),
+  ),
   contained(on(MathQualifier, "head"), on(MathHeadOperator, "kind")),
   qualifierFamily,
   headQualifierLaw,

@@ -7,7 +7,7 @@
  * No package text breaks these laws: the folds write the rows they read. So each mutation edits the
  * rows the folds wrote, with the generator's own corruptions, whose law `lawOf` names, at a target
  * drawn from the item's rows: a node number in document order, the start each node holds, or an
- * attribute's place among the attribute rows.
+ * attribute's place among the closed or the open attribute rows.
  */
 import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
@@ -16,7 +16,7 @@ import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedAttribute, FoldedRows } from "#pantry/model/folds.ts";
-import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import { corrupt } from "#pantry/test/gen/xdm.ts";
 import type { Corruption } from "#pantry/test/gen/xdm.ts";
 import { indexesOf } from "#pantry/test/indexes.ts";
@@ -146,14 +146,13 @@ const ownerCopyIsolates = (
 /**
  * The owner-copy fields AL1 owner's mutation corrupts.
  */
-const ownerCopyFields = ["kind", "version", "document"] as const;
+const ownerCopyFields = ["kind", "version"] as const;
 
 /**
  * Each law's mutation, by law.
  */
 export const rowMutations = {
-  // AL1 owner (AL1): an attribute's copy of its owner's kind, version or document that is not
-  // its owner's, drawn among the attributes whose every such corruption breaks AL1 owner alone
+  // AL1 owner (AL1): an attribute's copy of its owner's kind or version that is not its owner's, drawn among the attributes whose every such corruption breaks AL1 owner alone
   // ({@link ownerCopyIsolates}): the context declaration's identifier, an ID a context variable
   // names, copied as its item's would leave CTX no ID and raise Idref target ahead of it.
   "AL1 owner": {
@@ -190,7 +189,7 @@ export const rowMutations = {
       const pairs = rows.attributes.flatMap((attribute, index) =>
         rows.attributes.flatMap((earlier, at) =>
           at < index &&
-          earlier.node === attribute.node &&
+          earlier.start === attribute.start &&
           earlier.name !== attribute.name &&
           unread.has(attribute.name) &&
           unread.has(earlier.name)
@@ -216,13 +215,7 @@ export const rowMutations = {
   // contradicts.
   "Foreign attribute class": corrupting(item, (rows) => (source) => ({
     _tag: "wrongAttributeClass",
-    attribute: source.draw(
-      oneOf(
-        rows.attributes.flatMap((attribute, index) =>
-          openClasses.some((open) => open === attribute.name) ? [index] : [],
-        ),
-      ),
-    ),
+    attribute: source.draw(oneOf(rows.openAttributes.map((_, index) => index))),
   })),
   // Foreign element class (§1.4): a foreign element given a class its stored namespace
   // contradicts.
@@ -253,14 +246,29 @@ export const rowMutations = {
     _tag: "startTaken",
     node: source.draw(int(2, rows.nodes.length - 1)),
   })),
-  // T3 first child (T3): a text's or whitespace's copy of its parent's document that is not its
-  // parent's. An element's copy feeds its attributes' owner copies (AL1), and its other parent
-  // fields the admission, nearest and ancestry laws, each ranked ahead, so none is drawn.
-  "T3 first child": corrupting(item, (rows) => (source) => ({
-    _tag: "parentCopy",
-    field: "document",
-    node: source.draw(oneOf(numbersOf(rows, (node) => node.kind === "text" || node.kind === "ws"))),
-  })),
+  // T3 first child (T3): a text's or whitespace's copy of its parent's nearest interaction that is
+  // not its parent's, under a parent that is an interaction, where N8 reads the parent itself and
+  // never the copy. An element's copy feeds its attributes' owner copies (AL1), and its other
+  // parent fields the admission, nearest and ancestry laws, each ranked ahead, so none is drawn.
+  "T3 first child": {
+    document: item,
+    mutate: (rows, grammar) => (source) =>
+      corrupt(rows, {
+        _tag: "parentCopy",
+        field: "parentNearest",
+        node: source.draw(
+          oneOf(
+            numbersOf(
+              rows,
+              (node) =>
+                (node.kind === "text" || node.kind === "ws") &&
+                Option.isSome(grammar.kinds.interaction.lookup({ kind: node.parentKind })),
+            ),
+          ),
+        ),
+      }),
+    over: "rows",
+  },
   // T4 next sibling (T4): a sibling that starts other than where its predecessor ends.
   "T4 next sibling": corrupting(item, (rows) => (source) => ({
     _tag: source.draw(element(["overlappingSiblings", "gapBetweenSiblings"] as const)),
@@ -274,7 +282,7 @@ export const rowMutations = {
       }
 
       const last = rows.nodes.find(
-        (held) => held.parent === node.id && held.at === node.children - 1n && held.start > 0n,
+        (held) => held.parent === node.start && held.at === node.children - 1n && held.start > 0n,
       );
 
       return last !== undefined && last.children > 0n;

@@ -21,7 +21,8 @@
  *
  * - **a sequence's members**, each an ordered family's or a tree's, as rows of their own relation,
  *   their group the owner's primary key and their index their place, a tree's member its parent's
- *   child under its root's root field, the tree's root its own parent;
+ *   child under its root's root fields, the tree's root its own parent: its group its own key,
+ *   `start` 0;
  * - **every count**: an ordered family's or a tree's members, a counted family's by its group, and a
  *   tree's pre-order interval `[start, end)`;
  * - **each fold** of `Monoid.count`, `Monoid.or`, `Monoid.concat`, `Monoid.sum` or `Monoid.max`: its
@@ -341,12 +342,13 @@ const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
 });
 
 /**
- * A family as grizzle keeps it: its kind, its member's side, its slots and a tree's root field.
+ * A family as grizzle keeps it: its kind, its member's side, its slots and a tree's root fields
+ * (`Node`'s `(package, path)`, `Instance`'s `(package, assembly)`).
  */
 const FamilySchema = Schema.Struct({
   family: SideSchema,
   kind: Schema.Literals(["counted", "ordered", "tree"]),
-  root: Schema.optionalKey(Schema.String),
+  root: Schema.optionalKey(Schema.Array(Schema.String)),
   slots: Schema.Struct({ count: Schema.String, owner: Schema.Struct({ name: Schema.String }) }),
 });
 
@@ -364,7 +366,7 @@ const FoldSchema = Schema.Struct({
 /**
  * A family as the host fills it: its member, its owner and the owner's count, the member's group in
  * the order the owner's primary key pairs it, an ordered family's or a tree's index, and a tree's
- * root field.
+ * root fields, none for a family.
  */
 interface Family {
   readonly count: string;
@@ -373,7 +375,7 @@ interface Family {
   readonly kind: "counted" | "ordered" | "tree";
   readonly member: string;
   readonly owner: string;
-  readonly root: Option.Option<string>;
+  readonly root: readonly string[];
 }
 
 /**
@@ -386,15 +388,21 @@ const familyOf = (read: typeof FamilySchema.Type): Family => {
   const side = judgedSideOf(read.family);
   const terms = side.law.terms.map(({ field }) => field);
   const indexed = read.kind !== "counted";
+  const root = read.root ?? [];
 
   return {
     count: read.slots.count,
-    group: indexed ? terms.slice(0, -1) : terms,
+    // A tree names a member by its root fields and its parent's position, `(package, path,
+    // parent)`, its member side stating the parent and the slot alone.
+    group: [
+      ...root.filter((field) => !terms.includes(field)),
+      ...(indexed ? terms.slice(0, -1) : terms),
+    ],
     index: indexed ? Option.fromUndefinedOr(terms.at(-1)) : Option.none(),
     kind: read.kind,
     member: side.relation,
     owner: read.slots.owner.name,
-    root: Option.fromUndefinedOr(read.root),
+    root,
   };
 };
 
@@ -498,16 +506,16 @@ const familyLawOf = (read: typeof FamilySchema.Type): readonly JudgedLaw[] => {
           kind: "tree",
           member: member.law,
           root: Option.getOrThrowWith(
-            family.root,
+            Option.liftPredicate(family.root, Arr.isReadonlyArrayNonEmpty),
             () =>
               new Error(
-                `The tree over ${family.member} states no root field. Read a tree's root as grizzle's tree keeps it.`,
+                `The tree over ${family.member} states no root field, and grizzle's tree law names its root by its fields. Read a tree's root as grizzle's tree law keeps it.`,
               ),
           ),
           slots,
         }
       : { kind: "family", member: member.law, order: read.kind, slots };
-  const group = member.law.terms.slice(0, family.group.length);
+  const group = family.group.map((field) => ({ field, kind: "field" as const }));
   const ownerKey = keyOf(family.owner).map((field) => ({ field, kind: "field" as const }));
   if (!Arr.isReadonlyArrayNonEmpty(group) || !Arr.isReadonlyArrayNonEmpty(ownerKey)) {
     return [];
@@ -714,7 +722,8 @@ const readsLaw = (stated: Law, read: Law): boolean => {
 
   if (stated.kind === "tree" && read.kind === "tree") {
     return (
-      stated.root === read.root &&
+      stated.root.length === read.root.length &&
+      stated.root.every((field, at) => read.root[at] === field) &&
       readsSide(stated.member, read.member) &&
       stated.slots.owner === read.slots.owner &&
       stated.slots.count === read.slots.count
@@ -856,16 +865,23 @@ const indexed = (
 };
 
 /**
- * Whether a row is a tree's root, its own parent, which no family of its owner holds.
+ * Whether a row is a tree's root, its own parent: its group, `(package, path, parent)` for `Node`,
+ * is its own primary key, `(package, path, start)`, which no family of its owner holds.
  *
  * @param family - The family.
  * @param row - The member's row.
  * @returns Whether the row is a root of the family's tree.
  */
-const isRoot = (family: Family, row: HostRow): boolean =>
-  family.kind === "tree" &&
-  row[family.group[0] ?? ""] !== undefined &&
-  row[family.group[0] ?? ""] === row[keyOf(family.owner)[0] ?? ""];
+const isRoot = (family: Family, row: HostRow): boolean => {
+  const ownerKey = keyOf(family.owner);
+
+  return (
+    family.kind === "tree" &&
+    family.group.every(
+      (field, index) => row[field] !== undefined && row[field] === row[ownerKey[index] ?? ""],
+    )
+  );
+};
 
 /**
  * Fill each counted family's count on its owners: its members by their group.
@@ -1380,7 +1396,7 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
           filled[index] = BigInt(at);
         }
 
-        for (const root of Option.toArray(family.root)) {
+        for (const root of family.root) {
           const value = row[root];
           if (value !== undefined) {
             filled[root] = value;
@@ -1401,9 +1417,14 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
     for (const written of keyed.values()) {
       const root: FilledRow = {};
       for (const family of Option.toArray(Option.fromUndefinedOr(tree))) {
-        const id = written[keyOf(relation)[0] ?? ""];
-        if (Predicate.isString(id)) {
-          root[family.group[0] ?? ""] = id;
+        // The root is its own parent: its group holds its own key, the root fields as written and
+        // the position the tree draws it at, 0.
+        for (const [index, field] of family.group.entries()) {
+          const own = keyOf(relation)[index] ?? "";
+          const value = own === "start" ? 0n : written[own];
+          if (isDatum(value)) {
+            root[field] = value;
+          }
         }
 
         for (const index of Option.toArray(family.index)) {

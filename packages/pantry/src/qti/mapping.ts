@@ -3,8 +3,9 @@
  * with the tier-1 addendum's G-parse and "Text in keys" and the orchestrator's rulings of
  * 2026-11-06).
  *
- * Each overlay is a flat row keyed by its element's node, copying the node's {@link nodeRef} tuple
- * with its parent under its own name, and naming a node of its own kind:
+ * Each overlay is a flat row keyed by its element's place, `(package, path, start)`, the key `Node`
+ * holds it by, copying the node's {@link nodeRef} tuple with its parent's `start` under its own
+ * name, and naming a node of its own kind:
  *
  * - {@link Mapping} (`qti-mapping`) and {@link AreaMapping} (`qti-area-mapping`), under a response
  *   declaration, and {@link LookupTable} (`qti-match-table` and `qti-interpolation-table`, its
@@ -67,7 +68,6 @@ import {
   relation,
   select,
   str,
-  uuid,
 } from "@bjornpagen/grizzle";
 import {
   BaseType,
@@ -78,14 +78,14 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
-import { Attribute, closedName } from "#pantry/qti/attributes.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import {
   DeclarationBaseType,
   DeclarationCardinality,
   declarationRef,
 } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
-import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, keyTextBytes, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -126,41 +126,49 @@ export const exactValuePattern = Compute.pattern(
 );
 
 /**
- * A mapping's overlay, keyed by its `qti-mapping` node: its {@link nodeRef} tuple, its
- * `declaration` the node's parent, and the declaration's `declarationRef` tuple. The base type its
- * entries' keys are read in is its {@link MappingBaseType}'s, where `baseTypes` is 1.
+ * A mapping's overlay, keyed by its `qti-mapping` element's place: its {@link nodeRef} tuple, its
+ * `declaration` the node's parent's `start`, and the declaration's `declarationRef` tuple. The base
+ * type its entries' keys are read in is its {@link MappingBaseType}'s, where `baseTypes` is 1.
  */
 export const Mapping = relation(
   "Mapping",
   {
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A mapping's declaration's base type, keyed by its `qti-mapping` node, where the declaration has
+ * A mapping's declaration's base type, keyed by its `qti-mapping` element's place, where the
+ * declaration has
  * one: `declaration`, its {@link Mapping}'s, and `baseType`, the declaration's
  * {@link DeclarationBaseType}'s. A record has none, and its mapping no row.
  */
 export const MappingBaseType = relation(
   "MappingBaseType",
-  { baseType: closedId(BaseType), declaration: uuid, node: uuid },
-  ["node"],
+  {
+    baseType: closedId(BaseType),
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A map entry's overlay, keyed by its `qti-map-entry` node: its {@link nodeRef} tuple, its
- * `mapping` the node's parent, its mapping's `baseTypes`, and its `map-key` as written.
+ * A map entry's overlay, keyed by its `qti-map-entry` element's place: its {@link nodeRef} tuple,
+ * its `mapping` the node's parent's `start`, its mapping's `baseTypes`, and its `map-key` as
+ * written.
  *
  * It also holds how the key is matched (reading 98, §7.21.3): `caseText`, the entry's
  * `case-sensitive` as written, empty where it is unwritten; `folded`, whether a response is matched
@@ -174,17 +182,17 @@ export const MapKey = relation.generated(
   {
     baseTypes: natural,
     caseText: keyText,
-    document: uuid,
     folded: pg.boolean,
     key: keyText,
     kind: closedId(NodeKind),
-    mapping: uuid,
-    nearest: uuid,
-    node: uuid,
+    mapping: natural,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
   (k) => ({
     matched: generated(
       keyText,
@@ -194,14 +202,21 @@ export const MapKey = relation.generated(
 );
 
 /**
- * A map key beside the base type it is read in, keyed by its `qti-map-entry` node, where its
- * mapping's declaration has one: `mapping` and `key`, its {@link MapKey}'s, and `baseType`, its
+ * A map key beside the base type it is read in, keyed by its `qti-map-entry` element's place, where
+ * its mapping's declaration has one: `mapping` and `key`, its {@link MapKey}'s, and `baseType`, its
  * mapping's {@link MappingBaseType}'s. The typed keys and `Typed_attribute_value` read it.
  */
 export const MapKeyType = relation(
   "MapKeyType",
-  { baseType: closedId(BaseType), key: keyText, mapping: uuid, node: uuid },
-  ["node"],
+  {
+    baseType: closedId(BaseType),
+    key: keyText,
+    mapping: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -218,7 +233,7 @@ export const Gap = str.regex("^[\\t\\n\\r ]$");
 export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
 
 /**
- * A two-item map key's split, keyed by its entry's node: its `key`, a point's, a pair's or a
+ * A two-item map key's split, keyed by its entry's place: its `key`, a point's, a pair's or a
  * directed pair's written as two runs and the one whitespace character between them
  * ({@link twoItemPattern}), its `mapping`, and its `first` run, the `gap` and its `second` run,
  * which the host writes and `E1_derived` proves.
@@ -231,8 +246,17 @@ export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
  */
 export const MapKeyItems = relation.generated(
   "MapKeyItems",
-  { first: Run, gap: Gap, key: keyText, mapping: uuid, node: uuid, second: Run },
-  ["node"],
+  {
+    first: Run,
+    gap: Gap,
+    key: keyText,
+    mapping: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    second: Run,
+    start: natural,
+  },
+  ["package", "path", "start"],
   (r) => ({
     ordered: generated(keyText, Compute.concat(Compute.concat(r.first, " "), r.second)),
     unordered: generated(
@@ -246,7 +270,7 @@ export const MapKeyItems = relation.generated(
 );
 
 /**
- * A lookup table's typed attribute value, keyed by the node that carries it: a
+ * A lookup table's typed attribute value, keyed by the place of the element that carries it: a
  * `qti-match-table-entry`'s or `qti-interpolation-table-entry`'s `target-value`, or a
  * `qti-match-table`'s or `qti-interpolation-table`'s `default-value`, as written, with its
  * {@link nodeRef} tuple and its table's `declaration` and `baseTypes`, the outcome declaration's.
@@ -259,109 +283,135 @@ export const LookupValue = relation(
   "LookupValue",
   {
     baseTypes: natural,
-    declaration: uuid,
-    document: uuid,
+    declaration: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     value: keyText,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A lookup table's typed attribute value beside the base type it is read in, keyed by the node that
- * carries it, where its outcome declaration has one: `declaration` and `value`, its
- * {@link LookupValue}'s, and `baseType`, the declaration's {@link DeclarationBaseType}'s.
+ * A lookup table's typed attribute value beside the base type it is read in, keyed by the place of
+ * the element that carries it, where its outcome declaration has one: `declaration` and `value`,
+ * its {@link LookupValue}'s, and `baseType`, the declaration's {@link DeclarationBaseType}'s.
  */
 export const LookupValueType = relation(
   "LookupValueType",
-  { baseType: closedId(BaseType), declaration: uuid, node: uuid, value: keyText },
-  ["node"],
+  {
+    baseType: closedId(BaseType),
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    value: keyText,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * An area mapping's overlay, keyed by its `qti-area-mapping` node: its {@link nodeRef} tuple and
- * its declaration's `declarationRef` tuple.
+ * An area mapping's overlay, keyed by its `qti-area-mapping` element's place: its {@link nodeRef}
+ * tuple and its declaration's `declarationRef` tuple.
  */
 export const AreaMapping = relation(
   "AreaMapping",
   {
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A lookup table's overlay, keyed by its node: a `qti-match-table` or a `qti-interpolation-table`,
- * which its {@link nodeRef} tuple's `kind` tells apart, and its outcome declaration's
- * `declarationRef` tuple, whose base type, where it has one, its targets and default value are
- * values of (reading 8).
- * The two tables differ in how their entries' sources match, which no law here reads: only each
- * entry's `target-value` and the table's `default-value` are modeled, so they are one shape.
+ * A lookup table's overlay, keyed by its element's place: a `qti-match-table` or a
+ * `qti-interpolation-table`, which its {@link nodeRef} tuple's `kind` tells apart, and its outcome
+ * declaration's `declarationRef` tuple, whose base type, where it has one, its targets and default
+ * value are values of (reading 8). The two tables differ in how their entries' sources match, which
+ * no law here reads: only each entry's `target-value` and the table's `default-value` are modeled,
+ * so they are one shape.
  */
 export const LookupTable = relation(
   "LookupTable",
   {
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
+    declaration: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A mapping beside its declaration's cardinality, keyed by its `qti-mapping` node, where the
- * declaration has one: `declaration`, its {@link Mapping}'s, and `cardinality`, the declaration's
- * `DeclarationCardinality`'s, which `MappableBaseType` holds to no record. A mapping of a
- * declaration with no cardinality has no row, and no law reads a cardinality it does not have
+ * A mapping beside its declaration's cardinality, keyed by its `qti-mapping` element's place, where
+ * the declaration has one: `declaration`, its {@link Mapping}'s, and `cardinality`, the
+ * declaration's `DeclarationCardinality`'s, which `MappableBaseType` holds to no record. A mapping
+ * of a declaration with no cardinality has no row, and no law reads a cardinality it does not have
  * (spec reading 158).
  */
 export const MappingCardinality = relation(
   "MappingCardinality",
-  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
-  ["node"],
+  {
+    cardinality: closedId(Cardinality),
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * An area mapping beside its declaration's cardinality, keyed by its `qti-area-mapping` node, where
+ * An area mapping beside its declaration's cardinality, keyed by its `qti-area-mapping` element's
+ * place, where
  * the declaration has one, as {@link MappingCardinality} holds a mapping's: `AreaMapping_base_type`
  * holds it to no record.
  */
 export const AreaMappingCardinality = relation(
   "AreaMappingCardinality",
-  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
-  ["node"],
+  {
+    cardinality: closedId(Cardinality),
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A lookup table beside its outcome declaration's cardinality, keyed by its node, where the
- * declaration has one, as {@link MappingCardinality} holds a mapping's: `Lookup_table_cardinality`
- * holds it to single.
+ * A lookup table beside its outcome declaration's cardinality, keyed by its element's place, where
+ * the declaration has one, as {@link MappingCardinality} holds a mapping's:
+ * `Lookup_table_cardinality` holds it to single.
  */
 export const LookupTableCardinality = relation(
   "LookupTableCardinality",
-  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
-  ["node"],
+  {
+    cardinality: closedId(Cardinality),
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -376,7 +426,7 @@ type OverlayKind =
 
 /**
  * Select the nodes of one kind, a constant selection: every containment into it references the one
- * `UNIQUE (id, kind)` on `Node` the document layer's arms share.
+ * `UNIQUE (package, path, start, kind)` on `Node` the document layer's arms share.
  *
  * @param kind - The kind.
  * @returns The selection.
@@ -397,13 +447,13 @@ const lookupTableKinds = [
 const lookupEntryKinds = ["qti-interpolation-table-entry", "qti-match-table-entry"] as const;
 
 /**
- * The `map-key` of each `qti-map-entry`: the source of {@link MapKey}'s copy (C18), keyed by the
- * closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the
- * selection's node serves the copy's reverse probe, so no index holds the attribute's lexical form
- * (the addendum's "Text in keys").
+ * The `map-key` of each `qti-map-entry`: the source of {@link MapKey}'s copy (C18), keyed at its
+ * element's place by `Attribute`'s key, `(package, path, start, name)`, since it fixes the name,
+ * whose index over the selection's place serves the copy's reverse probe, so no index holds the
+ * attribute's lexical form (the addendum's "Text in keys").
  */
 const mapKeyAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.name, "map-key"), a.eq(a.kind, "qti-map-entry")),
+  a.and(a.eq(a.name, "map-key"), a.eq(a.kind, "qti-map-entry")),
 );
 
 /**
@@ -411,7 +461,7 @@ const mapKeyAttributes = select(Attribute, (a) =>
  * keyed as {@link mapKeyAttributes} is.
  */
 const caseAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.name, "case-sensitive"), a.eq(a.kind, "qti-map-entry")),
+  a.and(a.eq(a.name, "case-sensitive"), a.eq(a.kind, "qti-map-entry")),
 );
 
 /**
@@ -460,8 +510,8 @@ const twoItemKeys = select(MapKeyType, (k) =>
  * The lookup tables' typed attribute values: each table entry's `target-value` and each table's
  * `default-value`, the source of {@link LookupValue}'s copy, beside its key (C18; AL2 makes it
  * hold). It states a key of its own: its two names lie under an `or`, so no conjunct fixes `name`,
- * and the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys no
- * containment into it at `node` alone.
+ * and `Attribute`'s key, `(package, path, start, name)`, keys no containment into it at its
+ * element's place alone.
  */
 const lookupAttributes = select(Attribute, (a) =>
   a.or(
@@ -507,21 +557,31 @@ export const mappingLawsByName = {
     contained(
       on(
         select(AreaMapping, (a) => a.eq(a.baseTypes, 1n)),
+        "package",
+        "path",
         "declaration",
       ),
       on(
         select(DeclarationBaseType, (b) => b.eq(b.baseType, "point")),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
   ],
-  "DocumentId key": [key(on(lookupAttributes, "node"))],
+  "DocumentId key": [key(on(lookupAttributes, "package", "path", "start"))],
   "E1 derived": [
     check("E1_derived", MapKey, (k) =>
       k.or(k.eq(k.folded, false), k.not(k.in(Compute.collapse(k.caseText), booleanTrue))),
     ),
-    contained(on(foldedKeys, "node"), on(stringKeys, "node")),
-    contained(on(stringKeys, "node"), on(foldedOrCaseKeys, "node")),
+    contained(
+      on(foldedKeys, "package", "path", "start"),
+      on(stringKeys, "package", "path", "start"),
+    ),
+    contained(
+      on(stringKeys, "package", "path", "start"),
+      on(foldedOrCaseKeys, "package", "path", "start"),
+    ),
     check("E1_derived", MapKeyItems, (m) =>
       m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
     ),
@@ -529,157 +589,241 @@ export const mappingLawsByName = {
   "Lookup table cardinality": [
     check("Lookup_table_cardinality", LookupTableCardinality, (t) => t.eq(t.cardinality, "single")),
   ],
-  "Map key": [key(on(MapKey, "mapping", "key"))],
+  "Map key": [key(on(MapKey, "package", "path", "mapping", "key"))],
   MappableBaseType: [
     check("MappableBaseType", MappingCardinality, (m) => m.ne(m.cardinality, "record")),
     contained(on(MappingBaseType, "baseType"), on(MappableBaseType, "baseType")),
   ],
   "Mapping overlay": [
     contained(
-      on(Mapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      on(Mapping, "package", "path", "start", "kind", "nearest", "version", "declaration"),
       nodeRef,
     ),
-    contained(on(Mapping, "node"), on(nodesOf("qti-mapping"), "id")),
     contained(
-      on(Mapping, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
+      on(Mapping, "package", "path", "start"),
+      on(nodesOf("qti-mapping"), "package", "path", "start"),
+    ),
+    contained(
+      on(
+        Mapping,
+        "package",
+        "path",
+        "declaration",
+        "declarationKind",
+        "cardinalities",
+        "baseTypes",
+      ),
       declarationRef,
     ),
     contained(
       on(
         select(Mapping, (m) => m.eq(m.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(MappingCardinality, "node"),
-    ),
-    contained(on(MappingCardinality, "node", "declaration"), on(Mapping, "node", "declaration")),
-    contained(
-      on(MappingCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(MappingCardinality, "package", "path", "start"),
     ),
     contained(
-      on(MapKey, "node", "document", "kind", "start", "nearest", "version", "mapping"),
+      on(MappingCardinality, "package", "path", "start", "declaration"),
+      on(Mapping, "package", "path", "start", "declaration"),
+    ),
+    contained(
+      on(MappingCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
+    ),
+    contained(
+      on(MapKey, "package", "path", "start", "kind", "nearest", "version", "mapping"),
       nodeRef,
     ),
     contained(
       on(
         select(Mapping, (m) => m.eq(m.baseTypes, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(MappingBaseType, "node"),
+      on(MappingBaseType, "package", "path", "start"),
     ),
     contained(
-      on(MappingBaseType, "node", "declaration"),
+      on(MappingBaseType, "package", "path", "start", "declaration"),
       on(
         select(Mapping, (m) => m.eq(m.baseTypes, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
         "declaration",
       ),
     ),
     contained(
-      on(MappingBaseType, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
+      on(MappingBaseType, "package", "path", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "baseType"),
     ),
-    contained(on(MapKey, "node"), on(nodesOf("qti-map-entry"), "id")),
-    contained(on(MapKey, "mapping", "baseTypes"), on(Mapping, "node", "baseTypes")),
-    contained(on(typedMapKeys, "node"), on(MapKeyType, "node")),
-    contained(on(MapKeyType, "node", "mapping", "key"), on(typedMapKeys, "node", "mapping", "key")),
-    contained(on(MapKeyType, "mapping", "baseType"), on(MappingBaseType, "node", "baseType")),
-    contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
-    contained(on(caseAttributes, "node", "lexical"), on(MapKey, "node", "caseText")),
+    contained(
+      on(MapKey, "package", "path", "start"),
+      on(nodesOf("qti-map-entry"), "package", "path", "start"),
+    ),
+    contained(
+      on(MapKey, "package", "path", "mapping", "baseTypes"),
+      on(Mapping, "package", "path", "start", "baseTypes"),
+    ),
+    contained(
+      on(typedMapKeys, "package", "path", "start"),
+      on(MapKeyType, "package", "path", "start"),
+    ),
+    contained(
+      on(MapKeyType, "package", "path", "start", "mapping", "key"),
+      on(typedMapKeys, "package", "path", "start", "mapping", "key"),
+    ),
+    contained(
+      on(MapKeyType, "package", "path", "mapping", "baseType"),
+      on(MappingBaseType, "package", "path", "start", "baseType"),
+    ),
+    contained(
+      on(mapKeyAttributes, "package", "path", "start", "lexical"),
+      on(MapKey, "package", "path", "start", "key"),
+    ),
+    contained(
+      on(caseAttributes, "package", "path", "start", "lexical"),
+      on(MapKey, "package", "path", "start", "caseText"),
+    ),
     contained(
       on(
         select(MapKey, (k) => k.ne(k.caseText, "")),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(caseAttributes, "node"),
+      on(caseAttributes, "package", "path", "start"),
     ),
-    mirrors(on(twoItemKeys, "node", "mapping", "key"), on(MapKeyItems, "node", "mapping", "key")),
+    mirrors(
+      on(twoItemKeys, "package", "path", "start", "mapping", "key"),
+      on(MapKeyItems, "package", "path", "start", "mapping", "key"),
+    ),
     contained(
-      on(AreaMapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      on(AreaMapping, "package", "path", "start", "kind", "nearest", "version", "declaration"),
       nodeRef,
     ),
-    mirrors(on(AreaMapping, "node"), on(nodesOf("qti-area-mapping"), "id")),
+    mirrors(
+      on(AreaMapping, "package", "path", "start"),
+      on(nodesOf("qti-area-mapping"), "package", "path", "start"),
+    ),
     contained(
-      on(AreaMapping, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
+      on(
+        AreaMapping,
+        "package",
+        "path",
+        "declaration",
+        "declarationKind",
+        "cardinalities",
+        "baseTypes",
+      ),
       declarationRef,
     ),
     contained(
       on(
         select(AreaMapping, (a) => a.eq(a.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(AreaMappingCardinality, "node"),
+      on(AreaMappingCardinality, "package", "path", "start"),
     ),
     contained(
-      on(AreaMappingCardinality, "node", "declaration"),
-      on(AreaMapping, "node", "declaration"),
+      on(AreaMappingCardinality, "package", "path", "start", "declaration"),
+      on(AreaMapping, "package", "path", "start", "declaration"),
     ),
     contained(
-      on(AreaMappingCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(AreaMappingCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(LookupTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      on(LookupTable, "package", "path", "start", "kind", "nearest", "version", "declaration"),
       nodeRef,
     ),
     mirrors(
-      on(LookupTable, "node"),
+      on(LookupTable, "package", "path", "start"),
       on(
         select(Node, (n) => n.in(n.kind, lookupTableKinds)),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
     ),
     contained(
-      on(LookupTable, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
+      on(
+        LookupTable,
+        "package",
+        "path",
+        "declaration",
+        "declarationKind",
+        "cardinalities",
+        "baseTypes",
+      ),
       declarationRef,
     ),
     contained(
       on(
         select(LookupTable, (t) => t.eq(t.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(LookupTableCardinality, "node"),
+      on(LookupTableCardinality, "package", "path", "start"),
     ),
     contained(
-      on(LookupTableCardinality, "node", "declaration"),
-      on(LookupTable, "node", "declaration"),
+      on(LookupTableCardinality, "package", "path", "start", "declaration"),
+      on(LookupTable, "package", "path", "start", "declaration"),
     ),
     contained(
-      on(LookupTableCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(LookupTableCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(LookupValue, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(LookupValue, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(lookupAttributes, "node", "lexical"), on(LookupValue, "node", "value")),
-    contained(on(LookupValue, "node"), on(lookupAttributes, "node")),
+    contained(
+      on(lookupAttributes, "package", "path", "start", "lexical"),
+      on(LookupValue, "package", "path", "start", "value"),
+    ),
+    contained(
+      on(LookupValue, "package", "path", "start"),
+      on(lookupAttributes, "package", "path", "start"),
+    ),
     contained(
       on(
         select(LookupValue, (v) => v.in(v.kind, lookupEntryKinds)),
+        "package",
+        "path",
         "parent",
         "baseTypes",
         "declaration",
       ),
-      on(LookupTable, "node", "baseTypes", "declaration"),
+      on(LookupTable, "package", "path", "start", "baseTypes", "declaration"),
     ),
     contained(
       on(
         select(LookupValue, (v) => v.in(v.kind, lookupTableKinds)),
-        "node",
+        "package",
+        "path",
+        "start",
         "baseTypes",
         "declaration",
       ),
-      on(LookupTable, "node", "baseTypes", "declaration"),
-    ),
-    contained(on(typedLookupValues, "node"), on(LookupValueType, "node")),
-    contained(
-      on(LookupValueType, "node", "declaration", "value"),
-      on(typedLookupValues, "node", "declaration", "value"),
+      on(LookupTable, "package", "path", "start", "baseTypes", "declaration"),
     ),
     contained(
-      on(LookupValueType, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
+      on(typedLookupValues, "package", "path", "start"),
+      on(LookupValueType, "package", "path", "start"),
+    ),
+    contained(
+      on(LookupValueType, "package", "path", "start", "declaration", "value"),
+      on(typedLookupValues, "package", "path", "start", "declaration", "value"),
+    ),
+    contained(
+      on(LookupValueType, "package", "path", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "baseType"),
     ),
   ],
   "Typed attribute value": [

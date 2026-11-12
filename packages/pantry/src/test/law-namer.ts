@@ -24,7 +24,6 @@ import {
   CommentText,
   DoctypeText,
   EncName,
-  EntryPath,
   ForeignNamespace,
   NamespacePrefix,
   NamespaceUri,
@@ -33,7 +32,7 @@ import {
   PiTarget,
   XmlVersion,
 } from "#pantry/qti/chardata.ts";
-import { keyText, namespaceText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier, namespaceText } from "#pantry/qti/limits.ts";
 import { interactionLawsByName, interactionRelations } from "#pantry/qti/interactions.ts";
 import { Gap, mappingLawsByName, Run } from "#pantry/qti/mapping.ts";
 import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/metadata.ts";
@@ -297,10 +296,10 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("Namespace family", "Namespace"),
   ...namedBy("OpenElementName", "OpenElementName"),
   ...namedBy("E1 derived", "OpenElementType"),
-  ...namedBy("AL2 count", "Attribute"),
-  ...namedBy("AL4 open names", "OpenAttributeName"),
+  ...namedBy("AL2 distinct", "Attribute"),
+  ...namedBy("AL4 open name key", "OpenAttribute"),
   ...namedBy("E1 derived", "Idref"),
-  ...namedBy("AttributeEntity owner", "AttributeEntity"),
+  ...namedBy("AttributeEntity owner", "AttributeEntity", "OpenAttributeEntity"),
   ...namedBy("Package key", "Package"),
   ...namedBy("Entry family", "Entry"),
   ...namedBy(
@@ -516,6 +515,7 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [NamespacePrefix, "Key text bound"],
   [ForeignNamespace, "Key text bound"],
   [EntryPath, "Key text bound"],
+  [ManifestIdentifier, "Package identifier"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
   [CommentText, "XML production"],

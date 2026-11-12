@@ -67,8 +67,9 @@ export const cli = Command.make("qti").pipe(
   Command.withExamples([
     { command: "qti import ./my-package", description: "Import a package into the database" },
     {
-      command: "qti export ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
-      description: "Write an imported package back to files",
+      command: "qti export ./out MANIFEST-1",
+      description:
+        "Write the imported package whose manifest identifier is MANIFEST-1 back to files",
     },
     {
       command: "qti roundtrip ./my-package",

@@ -11,12 +11,13 @@
  * prove one, which a B-tree entry could not hold. The string value that TextDomain judges is
  * `Node`'s `Monoid.concat` fold over those characters (Q5.05's law).
  *
- * The other arms, {@link Comment}, {@link Pi} and {@link Doctype}, and the {@link Document} row are
- * narrow relations keyed by `node`, each mirrored with `select(Node, kind = k)`: an arm row names a
+ * The other arms, {@link Comment}, {@link Pi} and {@link Doctype}, are narrow relations keyed by their
+ * node, `(package, path, start)`, each mirrored with `select(Node, kind = k)`: an arm row names a
  * node of its kind, and a node of its kind has its arm row. A target selected by `kind = k` is a
- * constant selection, so the arm carries the constant and every one of them references one
- * `UNIQUE (id, kind)` on `Node` (grizzle's README, "Fixed fields": the UNIQUE a fixed target
- * references is the key it holds, or one over more columns).
+ * constant selection, so the arm carries the constant and every one of them references one `UNIQUE
+ * (package, path, start, kind)` on `Node` (grizzle's README, "Fixed fields": the UNIQUE a fixed
+ * target references is the key it holds, or one over more columns). The {@link Document} row and its
+ * XML declaration's rows are the document's, keyed `(package, path)`.
  *
  * Each text field's pattern is XML's own production for what it holds, no tighter, except where a
  * key or an index over the field needs a byte bound, which each such field states.
@@ -33,18 +34,16 @@ import {
   closedId,
   Compute,
   contained,
+  counted,
   drawn,
   fin,
-  key,
   mirrors,
   natural,
   on,
-  ordered,
   pg,
   relation,
   select,
   str,
-  uuid,
 } from "@bjornpagen/grizzle";
 import { uriReference } from "@qti-pie/crust/uri.ts";
 import {
@@ -65,7 +64,7 @@ import {
   TypeName,
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
-import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
+import { EntryPath, ManifestIdentifier, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
 import { Chars, Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -249,22 +248,9 @@ export const XmlVersion = str.regex("^1\\.[0-9]+$");
 export const XmlStandalone = closed("XmlStandalone", ["yes", "no"]);
 
 /**
- * A package entry's path, relative to the package root, as the package reader gives it: no leading
- * `/`, its segments `/`-separated, any other character allowed, at most `keyTextBytes` UTF-8 bytes
- * (`#pantry/qti/limits.ts`).
- *
- * The reader refuses an absolute path, a backslash and a `..` segment (`#pantry/package/zip.ts`,
- * `#pantry/package/read.ts`); the pattern restates none of that, and the byte bound bounds the
- * length alone. `Entry.path` (Q5.06) and `Document.path` are both of this type, both sit in keys
- * over `(package, path)`, and a path meets the key texts a manifest's hrefs are copied into, so its
- * bound is the schema-wide key-text bound, read from grizzle's B-tree rule in one place.
- */
-export const EntryPath = str.bytes(keyTextBytes, str.regex("^[^/].*$", "su"));
-
-/**
  * A namespace declaration's prefix as written: an NCName, or empty for a default declaration
  * (`xmlns="…"`), of at most `prefixBytes` UTF-8 bytes (`#pantry/qti/limits.ts`), what the key
- * `Namespace(node, prefix)` leaves it beside its element's id.
+ * `Namespace(package, path, start, prefix)` leaves it beside its element's key.
  *
  * @see {@link https://www.w3.org/TR/xml-names/#ns-decl | Namespaces in XML 1.0, §3 Declaring Namespaces}
  *
@@ -299,7 +285,8 @@ export const NamespaceUri = str.regex(`^${uriReference}$`);
  * A foreign element's namespace name, empty for none, of XML `Char`s and at most `namespaceBytes`
  * UTF-8 bytes (`#pantry/qti/limits.ts`): the one bound every key a namespace name rides leaves it,
  * so a name one relation holds is never refused by another. A foreign parent's namespace is read
- * through a containment into `OpenElementName(node, namespace)`, and an open attribute's element
+ * through a containment into `OpenElementName(package, path, start, namespace)`, and an open
+ * attribute's element
  * namespace through another.
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
@@ -316,28 +303,40 @@ export const NcName = str.regex(`^${ncName}$`);
 /**
  * A comment node's text, keyed by its node (`XdmComment`).
  */
-export const Comment = relation("Comment", { node: uuid, value: CommentText }, ["node"]);
+export const Comment = relation(
+  "Comment",
+  { package: ManifestIdentifier, path: EntryPath, start: natural, value: CommentText },
+  ["package", "path", "start"],
+);
 
 /**
  * A processing instruction node's target and data, keyed by its node (`XdmPi`).
  */
-export const Pi = relation("Pi", { data: PiData, node: uuid, target: PiTarget }, ["node"]);
+export const Pi = relation(
+  "Pi",
+  { data: PiData, package: ManifestIdentifier, path: EntryPath, start: natural, target: PiTarget },
+  ["package", "path", "start"],
+);
 
 /**
  * The document node's doctype child, its declaration as written, keyed by its node (`XdmDoctype`).
  */
-export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, ["node"]);
+export const Doctype = relation(
+  "Doctype",
+  { package: ManifestIdentifier, path: EntryPath, start: natural, value: DoctypeText },
+  ["package", "path", "start"],
+);
 
 /**
- * The document row, one per document node, keyed by the node (plan §1.4): the entry it was read
- * from, the charset it was decoded under and the one it is written back in, its root element's
- * kind, and its type: the manifest, or the type of the resource that lists it, which is a row of
- * its own (`ResourceDocument` of `#pantry/qti/package.ts`). Its XML declaration is no field of it:
- * the declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each
- * is a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
- * the document writes it.
+ * The document row, one per document node, keyed by its entry's `(package, path)` (plan §1.4): the
+ * entry it was read from, the charset it was decoded under and the one it is written back in, its
+ * root element's kind, and its type: the manifest, or the type of the resource that lists it, which
+ * is a row of its own (`ResourceDocument` of `#pantry/qti/package.ts`). Its XML declaration is no
+ * field of it: the declaration is optional, and so are its encoding and standalone parts (XML 1.0
+ * §2.8), so each is a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl},
+ * written only where the document writes it.
  *
- * - `package` and `path` are its `Entry`'s, which Q5.06's P3 states, with the key over them.
+ * - `package` and `path` are its `Entry`'s, its key, which Q5.06's P3 states.
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
  * - `documentType` is the document's type in its package (spec reading 176): `manifest` for the
@@ -350,9 +349,10 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   fragment's content is judged where it is included. `context` is the union of the ancestries of
  *   the sites that name the document (Q5.13's `Site`, counted by `targetedBy` and folded by
  *   `Monoid.or`), empty where none does: a ban is a disjointness, so the union is exact for every
- *   placement. `contextNearest` and `contextNearestKind` are the host's: the document node itself
- *   and `document`, or the one interaction every site that names the document stands in, which
- *   Q5.13's "Fragment context" holds each site to.
+ *   placement. `contextPath`, `contextNearest` and `contextNearestKind` are the host's: its own
+ *   path, its document node's position, 0, and `document`, or the document and position of the one
+ *   interaction every site that names the document stands in, which Q5.13's "Fragment context"
+ *   holds each site to.
  * - **its assembly** (spec readings 85 and 117): `assembled`, the host's, whether the document is in
  *   an assembly (it has a Q5.13 `TestDocument` row: a test or a section, or a document that holds a
  *   site or that a site names), so its IDREFs resolve per instance of its assemblies rather than in
@@ -364,11 +364,11 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   rows).
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
  *   states the node's context. What every document node holds alike is no field: the containment's
- *   target is the document nodes, selected as their own `document`, governed by and of kind
- *   `document` under a `document` parent, at start 0, fields grizzle fixes beyond the target's
- *   terms (its fixed target, grizzle's README "Fixed fields"), held by `Node`'s key `id`. grizzle
- *   references a UNIQUE over the terms and then the fixed fields in field order, which no other
- *   containment into `Node` shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
+ *   target is the document nodes, governed by and of kind `document` under a `document` parent, at
+ *   start 0, fields grizzle fixes beyond the target's terms (its fixed target, grizzle's README
+ *   "Fixed fields"), held by `Node`'s key `(package, path, start)`. grizzle references a UNIQUE
+ *   over the terms and then the fixed fields in field order, which no other containment into `Node`
+ *   shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const Document = relation(
   "Document",
@@ -378,70 +378,87 @@ export const Document = relation(
     charset: EncName,
     choices: drawn(natural),
     context: accumulated(bits(Flag), Bits.of(Flag, [])),
-    contextNearest: uuid,
+    contextNearest: natural,
     contextNearestKind: closedId(NodeKind),
+    contextPath: EntryPath,
     documentType: closedId(DocumentType),
     exportCharset: EncName,
     hottexts: drawn(natural),
     idrefTargets: drawn(natural),
     ids: drawn(natural),
     langs: drawn(natural),
-    node: uuid,
     nodeChildren: natural,
-    package: uuid,
+    package: ManifestIdentifier,
     path: EntryPath,
     rootKind: closedId(NodeKind),
     targetedBy: drawn(natural),
     variables: drawn(natural),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path"],
 );
 
 /**
- * A document's XML declaration, keyed by its document node, where the document writes one: the
+ * A document's XML declaration, keyed by its document, where the document writes one: the
  * `version` its `VersionInfo` writes, which every declaration writes (XML 1.0 §2.8, `XMLDecl ::=
  * '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'`). A document that writes none has no row.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-XMLDecl | XML 1.0, XMLDecl}
  */
-export const XmlDecl = relation("XmlDecl", { node: uuid, version: XmlVersion }, ["node"]);
+export const XmlDecl = relation(
+  "XmlDecl",
+  { package: ManifestIdentifier, path: EntryPath, version: XmlVersion },
+  ["package", "path"],
+);
 
 /**
- * The `encoding` an XML declaration writes, keyed by its document node, where the declaration
+ * The `encoding` an XML declaration writes, keyed by its document, where the declaration
  * writes one (`EncodingDecl?`), as written: an encoding name. A declaration that writes none has
  * no row.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-EncodingDecl | XML 1.0, EncodingDecl}
  */
-export const EncodingDecl = relation("EncodingDecl", { encoding: EncName, node: uuid }, ["node"]);
+export const EncodingDecl = relation(
+  "EncodingDecl",
+  { encoding: EncName, package: ManifestIdentifier, path: EntryPath },
+  ["package", "path"],
+);
 
 /**
- * The `standalone` an XML declaration writes, keyed by its document node, where the declaration
+ * The `standalone` an XML declaration writes, keyed by its document, where the declaration
  * writes one (`SDDecl?`): `yes` or `no`, as written. A declaration that writes none has no row.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-SDDecl | XML 1.0, SDDecl}
  */
-export const SdDecl = relation("SdDecl", { node: uuid, standalone: closedId(XmlStandalone) }, [
-  "node",
-]);
-
-/**
- * A namespace declaration on an element, at its slot among the element's declarations in source
- * order (`XdmNamespace`): a member of {@link namespaceFamily}, written nested at
- * `Node.namespaces`, its `node` and `at` drawn by the nesting.
- */
-export const Namespace = relation(
-  "Namespace",
-  { at: drawn(natural), node: uuid, prefix: NamespacePrefix, uri: NamespaceUri },
-  ["node", "at"],
+export const SdDecl = relation(
+  "SdDecl",
+  { package: ManifestIdentifier, path: EntryPath, standalone: closedId(XmlStandalone) },
+  ["package", "path"],
 );
 
 /**
- * Each element's namespace declarations, in source order, counted by `Node.namespaces` (fin.md
- * §5.2): the law the oracle names "Namespace family".
+ * A namespace declaration on an element (`XdmNamespace`), keyed by its element and its prefix: a
+ * member of {@link namespaceFamily}, a set, since an element's namespace attributes are one
+ * (Infoset [namespace attributes]) and a prefix is declared once on an element (Namespaces in XML
+ * 1.0, §3: an element's attributes are distinct by name).
  */
-const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "namespaces"));
+export const Namespace = relation(
+  "Namespace",
+  {
+    package: ManifestIdentifier,
+    path: EntryPath,
+    prefix: NamespacePrefix,
+    start: natural,
+    uri: NamespaceUri,
+  },
+  ["package", "path", "start", "prefix"],
+);
+
+/**
+ * Each element's namespace declarations, counted by `Node.namespaces` (fin.md §5.2): the law the
+ * oracle names "Namespace family".
+ */
+const namespaceFamily = counted(on(Namespace, "package", "path", "start"), fin(Node, "namespaces"));
 
 /**
  * A foreign element's expanded name, keyed by its node (`OpenElementNameRow`): the namespace name,
@@ -449,28 +466,28 @@ const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "namespac
  *
  * The rest is what its laws read, each written by the host and proved:
  *
- * - `document`, `kind`, `start`, `nearest`, `version` and `parent` are its node's {@link nodeRef}
- *   tuple (C18);
- * - `parentKind` is its parent's kind, through `UNIQUE (id, kind)` on `Node`;
+ * - `package`, `path`, `start`, `kind`, `nearest`, `version` and `parent` are its node's
+ *   {@link nodeRef} tuple (C18);
+ * - `parentKind` is its parent's kind, through `UNIQUE (package, path, start, kind)` on `Node`;
  * - `parentNamespace` is its parent's namespace name: `KindNamespace`'s for a parent of a kind, the
  *   parent's own row's for a foreign parent.
  */
 export const OpenElementName = relation(
   "OpenElementName",
   {
-    document: uuid,
     kind: closedId(NodeKind),
     local: NcName,
     namespace: ForeignNamespace,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
     parentNamespace: ForeignNamespace,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -480,33 +497,40 @@ export const OpenElementName = relation(
  * readings 60 and 81). A foreign element with no `xsi:type`, or one naming no such type, is
  * assessed laxly and has none.
  *
- * - **the host's:** `type`, the shred's reading of the `xsi:type`; its node's `document`, `governor`,
- *   `kind` and `version`, through the `(id, kind, version, document, governor)` tuple the attribute
+ * - **the host's:** `type`, the shred's reading of the `xsi:type`; its node's `governor`, `kind` and
+ *   `version`, through the `(package, path, start, kind, version, governor)` tuple the attribute
  *   and identity overlays copy too; and its {@link OpenElementName}'s `parentNamespace`, which
  *   `TypeAvailable` reads the type against.
  */
 export const OpenElementType = relation(
   "OpenElementType",
   {
-    document: uuid,
     governor: closedId(Governor),
     kind: closedId(NodeKind),
-    node: uuid,
+    package: ManifestIdentifier,
     parentNamespace: ForeignNamespace,
+    path: EntryPath,
+    start: natural,
     type: closedId(TypeName),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * The root element of each document: the document node's one child that is an element. Its parent
- * copy reads `document`, and every other child of the document node is a doctype, a comment or an
- * instruction.
+ * copy reads `document`, its `(package, path)` its document's, and every other child of the
+ * document node is a doctype, a comment or an instruction.
  */
 const rootElements = select(Node, (n) =>
   n.and(n.eq(n.parentKind, "document"), n.not(n.in(n.kind, nonElementKinds))),
 );
+
+/**
+ * The document nodes, one per document at start 0 (N1), read at `(package, path)`: a fixed target,
+ * its `start` and `kind` fixed by the selection, so `Node`'s key keys it.
+ */
+const documentNodes = select(Node, (n) => n.and(n.eq(n.kind, "document"), n.eq(n.start, 0n)));
 
 /**
  * Every statement over the document layer's character data, documents, namespaces and foreign
@@ -521,9 +545,9 @@ const rootElements = select(Node, (n) =>
  *   declaration's, since neither is written outside one (XML 1.0 §2.8, `XMLDecl`).
  * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
  *   `context`, `contextNearest` and `contextNearestKind`, through a containment into the document
- *   node its target fixes; and (`E1_derived`) the nearest is the document node itself, unless sites
- *   name the document from inside one interaction.
- * - **"Namespace family":** each element's declarations in order, and one per prefix on an element
+ *   node its target fixes; and (`E1_derived`) the nearest is the document node itself, at 0 in its
+ *   own path, unless sites name the document from inside one interaction.
+ * - **"Namespace family":** each element's declarations, counted, one per prefix by the key
  *   (Namespaces in XML 1.0, §3: a prefix is declared once on an element, since an element's
  *   attributes are distinct by name).
  * - **"OpenElementName":** one row per foreign element, both ways: every node of a foreign kind has
@@ -563,62 +587,66 @@ const rootElements = select(Node, (n) =>
  */
 export const chardataLawsByName = {
   Document: [
-    mirrors(
-      on(Document, "node"),
-      on(
-        select(Node, (n) => n.eq(n.kind, "document")),
-        "id",
-      ),
+    mirrors(on(Document, "package", "path"), on(documentNodes, "package", "path")),
+    contained(
+      on(rootElements, "package", "path", "kind"),
+      on(Document, "package", "path", "rootKind"),
     ),
-    contained(on(rootElements, "document", "kind"), on(Document, "node", "rootKind")),
-    contained(on(XmlDecl, "node"), on(Document, "node")),
-    contained(on(EncodingDecl, "node"), on(XmlDecl, "node")),
-    contained(on(SdDecl, "node"), on(XmlDecl, "node")),
+    contained(on(XmlDecl, "package", "path"), on(Document, "package", "path")),
+    contained(on(EncodingDecl, "package", "path"), on(XmlDecl, "package", "path")),
+    contained(on(SdDecl, "package", "path"), on(XmlDecl, "package", "path")),
   ],
   "E1 derived": [
     contained(
       on(
         Document,
-        "node",
+        "package",
+        "path",
         "nodeChildren",
         "context",
         "documentType",
         "contextNearest",
         "contextNearestKind",
+        "contextPath",
         "version",
       ),
       on(
         select(Node, (n) =>
           n.and(
-            n.eq(n.document, n.id),
             n.eq(n.governor, "document"),
             n.eq(n.kind, "document"),
             n.eq(n.parentKind, "document"),
             n.eq(n.start, 0n),
           ),
         ),
-        "id",
+        "package",
+        "path",
         "children",
         "ancestry",
         "documentType",
         "nearest",
         "nearestKind",
+        "nearestPath",
         "version",
       ),
     ),
     check("E1_derived", Document, (d) =>
       d.or(
-        d.and(d.eq(d.contextNearestKind, "document"), d.eq(d.contextNearest, d.node)),
+        d.and(
+          d.eq(d.contextNearestKind, "document"),
+          d.eq(d.contextNearest, 0n),
+          d.eq(d.contextPath, d.path),
+        ),
         d.and(d.in(d.contextNearestKind, interactionKinds), d.gt(d.targetedBy, 0n)),
       ),
     ),
     contained(
-      on(OpenElementType, "node", "kind", "version", "document", "governor"),
-      on(Node, "id", "kind", "version", "document", "governor"),
+      on(OpenElementType, "package", "path", "start", "kind", "version", "governor"),
+      on(Node, "package", "path", "start", "kind", "version", "governor"),
     ),
     contained(
-      on(OpenElementType, "node", "parentNamespace"),
-      on(OpenElementName, "node", "parentNamespace"),
+      on(OpenElementType, "package", "path", "start", "parentNamespace"),
+      on(OpenElementName, "package", "path", "start", "parentNamespace"),
     ),
     check("E1_derived", OpenElementType, (t) =>
       t.eq(t.governor, typeGovernorOf(t.version, t.kind, t.type)),
@@ -631,13 +659,18 @@ export const chardataLawsByName = {
             n.ne(n.governor, KindGovernor.at("governor", n.kind)),
           ),
         ),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(OpenElementType, "node"),
+      on(OpenElementType, "package", "path", "start"),
     ),
   ],
   "Foreign element class": [
-    contained(on(OpenElementName, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(OpenElementName, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
     check("Foreign_element_class", OpenElementName, (o) =>
       o.and(
         o.or(
@@ -662,10 +695,12 @@ export const chardataLawsByName = {
     contained(
       on(
         select(OpenElementName, (o) => o.in(o.parentKind, openElementClasses)),
+        "package",
+        "path",
         "parent",
         "parentNamespace",
       ),
-      on(OpenElementName, "node", "namespace"),
+      on(OpenElementName, "package", "path", "start", "namespace"),
     ),
     check("Foreign_element_class", Node, (n) =>
       n.or(n.ne(n.kind, "no-namespace-element"), n.eq(n.prefix, "")),
@@ -674,18 +709,20 @@ export const chardataLawsByName = {
   "MathML foreign element": [
     check("MathML_foreign_element", OpenElementName, (o) => o.ne(o.namespace, mathmlNamespace)),
   ],
-  "Namespace family": [namespaceFamily, key(on(Namespace, "node", "prefix"))],
+  "Namespace family": [namespaceFamily],
   OpenElementName: [
     contained(
-      on(OpenElementName, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(OpenElementName, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
       on(
         select(Node, (n) => n.in(n.kind, openElementClasses)),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(OpenElementName, "node"),
+      on(OpenElementName, "package", "path", "start"),
     ),
   ],
   "OpenElementName canonical": [
@@ -725,9 +762,11 @@ export const chardataLawsByName = {
             ),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(OpenElementType, "node"),
+      on(OpenElementType, "package", "path", "start"),
     ),
   ],
   "XsiType available": [
@@ -740,19 +779,23 @@ export const chardataLawsByName = {
   ],
   "comment arm": [
     mirrors(
-      on(Comment, "node"),
+      on(Comment, "package", "path", "start"),
       on(
         select(Node, (n) => n.eq(n.kind, "comment")),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
     ),
   ],
   "doctype arm": [
     mirrors(
-      on(Doctype, "node"),
+      on(Doctype, "package", "path", "start"),
       on(
         select(Node, (n) => n.eq(n.kind, "doctype")),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
     ),
   ],
@@ -763,10 +806,12 @@ export const chardataLawsByName = {
   ],
   "pi arm": [
     mirrors(
-      on(Pi, "node"),
+      on(Pi, "package", "path", "start"),
       on(
         select(Node, (n) => n.eq(n.kind, "pi")),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
     ),
   ],

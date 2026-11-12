@@ -12,6 +12,8 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
+import type { Place } from "#pantry/import/write.ts";
 import type { DataSsml, DataSsmlMember, DataSsmlProperty } from "#pantry/qti/data-ssml.ts";
 import { dataSsmlOf } from "#pantry/vocab/data-ssml.ts";
 
@@ -26,43 +28,45 @@ export interface DataSsmlRows {
 }
 
 /**
- * The text of a row's key: its key's fields, in order.
- *
- * @param values - The key's fields.
- * @returns The text.
- */
-const keyOf = (values: readonly string[]): string => JSON.stringify(values);
-
-/**
  * Build the `data-ssml` overlay's rows of one document: for each closed `data-ssml` that reads as
  * one JSON object of objects of strings, its element's row, a row per member and a row per
  * property, each by its place as written.
  *
- * @param view - The document's view: its rows under the ids they are written under.
+ * @param view - The document's view: its rows.
+ * @param ids - Where it stands in its package: its `package` and `path`, every row's.
+ * @param ids.package - The package's manifest identifier.
+ * @param ids.path - The document's entry path.
  * @returns Its rows.
  */
-export const rowsOf = (view: DocumentView): DataSsmlRows => {
+export const rowsOf = (view: DocumentView, ids: Place): DataSsmlRows => {
+  const place = { package: ids.package, path: ids.path };
   const elements = new Map<string, Addition<typeof DataSsml>>();
   const members = new Map<string, Addition<typeof DataSsmlMember>>();
   const properties = new Map<string, Addition<typeof DataSsmlProperty>>();
 
-  for (const { lexical, name, node } of view.rows.attributes) {
+  for (const { lexical, name, start } of view.rows.attributes) {
     if (name !== "data-ssml") {
       continue;
     }
 
     for (const read of Option.toArray(dataSsmlOf(lexical))) {
-      elements.set(node, { node });
+      elements.set(keyTextOf(place.package, place.path, start), { ...place, start });
       for (const [memberAt, member] of read.entries()) {
         const at = BigInt(memberAt);
-        members.set(keyOf([node, String(at)]), { at, member: member.name, node });
+        members.set(keyTextOf(place.package, place.path, start, at), {
+          ...place,
+          at,
+          member: member.name,
+          start,
+        });
         for (const [propertyAt, property] of member.properties.entries()) {
-          properties.set(keyOf([node, String(at), String(propertyAt)]), {
+          properties.set(keyTextOf(place.package, place.path, start, at, String(propertyAt)), {
+            ...place,
             at: BigInt(propertyAt),
             member: at,
             memberName: member.name,
             name: property.name,
-            node,
+            start,
             value: property.value,
           });
         }

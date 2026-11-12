@@ -30,10 +30,9 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeMember } from "#pantry/import/write.ts";
 import {
   declarationCase,
   declarationSites,
@@ -41,10 +40,12 @@ import {
   expectedRulesOf,
 } from "#pantry/test/declaration-cases.ts";
 import { orphansOf, rowsByRelation } from "#pantry/test/family-owners.ts";
+import type { InputRow } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
+import { byPlace, nodePlacesOf, placeKey } from "#pantry/test/places.ts";
 
 /**
  * Every (site, state) of the scope, by its number: the first declaration of each kind in each
@@ -60,22 +61,37 @@ const cases = declarationSites
   );
 
 /**
- * The fields of a row this check reads: a `declaration`, a `parent`, a `node`, a `document`, an
- * `assembly` and an `identifier`, each where the row has it.
+ * The fields of a row this check reads: the `declaration` it names, a position, and the paths that
+ * say which document holds it, each where the row has it: `declarationDocument` or `itemDocument`
+ * where the row names it in another document, `assembly` for a row placed in an assembly, whose
+ * declarations are its head's, and else the row's own `path`.
  */
 const ReadSchema = Schema.Struct({
   assembly: Schema.optionalKey(Schema.String),
-  declaration: Schema.optionalKey(Schema.String),
-  document: Schema.optionalKey(Schema.String),
-  identifier: Schema.optionalKey(Schema.String),
-  node: Schema.optionalKey(Schema.String),
-  parent: Schema.optionalKey(Schema.String),
+  declaration: Schema.optionalKey(Schema.Unknown),
+  declarationDocument: Schema.optionalKey(Schema.String),
+  itemDocument: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
 });
 
 /**
  * Read a row's fields this check reads.
  */
 const readRow = Schema.decodeUnknownSync(ReadSchema);
+
+/**
+ * Name the declaration a row names, by its place: its position in the document that holds it.
+ *
+ * @param row - The row.
+ * @returns The declaration's place, none where the row names no declaration.
+ */
+const declarationNamed = (row: InputRow): string | undefined => {
+  const { assembly, declaration, declarationDocument, itemDocument, path } = readRow(row);
+
+  return Predicate.isBigInt(declaration)
+    ? placeKey(declarationDocument ?? itemDocument ?? assembly ?? path ?? "", declaration)
+    : undefined;
+};
 
 /**
  * The relations whose rows hang from a declaration whatever its cardinality spells, each naming it
@@ -153,32 +169,29 @@ const holds = (at: number) =>
     }
 
     const { inputs } = yield* readProgram(yield* scopedPackage(entries));
-    const document = [...inputs.Document.values()].find(({ path }) => path === site.path);
-    const root = [...inputs.Node.values()].find(({ id }) => id === document?.node);
-    const flat = (node: NodeMember): readonly NodeMember[] => [
-      node,
-      ...node.children.flatMap(flat),
-    ];
-    // The tree's nodes in document order, its pre-order: the site's place among its kind's.
-    const declarationNode = (root === undefined ? [] : flat(root)).filter(
-      ({ kind }) => kind === site.kind,
-    )[site.ordinal]?.id;
+    // The document's nodes in document order, its pre-order: the site's place among its kind's.
+    const places = [...nodePlacesOf(inputs).values()].filter(({ path }) => path === site.path);
+    const declarationNode = places
+      .toSorted((left, right) => Number(left.start - right.start))
+      .filter(({ kind }) => kind === site.kind)[site.ordinal];
     assert.isDefined(declarationNode, `${label}: its element has no Node row`);
 
-    const node = declarationNode ?? "";
+    const node = placeKey(site.path, declarationNode?.start ?? 0n);
     const cardinal = state.attribute === "cardinality";
-    assert.isTrue(inputs.Declaration.has(node), `${label}: it has no Declaration row`);
+    assert.isTrue(byPlace(inputs.Declaration).has(node), `${label}: it has no Declaration row`);
     assert.isFalse(
-      (cardinal ? inputs.DeclarationCardinality : inputs.DeclarationBaseType).has(node),
+      (cardinal ? byPlace(inputs.DeclarationCardinality) : byPlace(inputs.DeclarationBaseType)).has(
+        node,
+      ),
       `${label}: a typed row stands for its ${state.attribute}`,
     );
     if (cardinal) {
-      assert.isFalse(inputs.DeclarationName.has(node), `${label}: a name types it`);
+      assert.isFalse(byPlace(inputs.DeclarationName).has(node), `${label}: a name types it`);
     }
 
-    for (const [relation, rows] of rowsByRelation(inputs)) {
+    for (const [relation, rows] of Object.entries(rowsByRelation(inputs))) {
       for (const row of rows) {
-        const named = readRow(row).declaration === node;
+        const named = declarationNamed(row) === node;
         assert.isFalse(
           named && (cardinal ? !hanging.has(relation) : baseTypeReaders.has(relation)),
           `${label}: a ${relation} row reads what it does not spell`,
@@ -186,12 +199,19 @@ const holds = (at: number) =>
       }
     }
 
-    const sets = (root === undefined ? [] : flat(root))
-      .filter(({ id }) => id === node)
-      .flatMap(({ children }) => children)
-      .filter(({ kind }) => kind === "qti-default-value" || kind === "qti-correct-response");
+    const valueSets = byPlace(inputs.ValueSet);
+    const sets = places.filter(
+      ({ kind, parent, start }) =>
+        declarationNode !== undefined &&
+        start > 0n &&
+        parent === declarationNode.start &&
+        (kind === "qti-default-value" || kind === "qti-correct-response"),
+    );
     for (const set of sets) {
-      assert.isTrue(inputs.ValueSet.has(set.id), `${label}: a value set below it has no row`);
+      assert.isTrue(
+        valueSets.has(placeKey(set.path, set.start)),
+        `${label}: a value set below it has no row`,
+      );
     }
 
     const orphans = orphansOf(inputs);

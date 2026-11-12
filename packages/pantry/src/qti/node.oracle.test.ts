@@ -9,20 +9,18 @@ import {
   bits,
   Bits,
   ChangeSet,
-  drawn,
+  counted,
   fin,
   fold as foldOf,
   login,
   Monoid,
   natural,
   on,
-  ordered,
   relation,
   role,
   schema,
-  uuid,
 } from "@bjornpagen/grizzle";
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn as drawnCase, exhaust, explore } from "@grizzle/testing/explore";
@@ -44,9 +42,10 @@ import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { ElementType, EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
+import { EntryPath, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { datumText } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
@@ -70,29 +69,53 @@ const testTimeoutMs = 420_000;
 const { grammar } = install;
 
 /**
- * A stand-in for the attribute family (Q5.05's), so `Node`'s `attributes` and `attrs` are named by
- * a family and a fold as the composed schema names them: an ordered family under `Node`, its or
- * fold ending at `attrs`.
+ * The key fields of a stand-in member: its element's `(package, path, start)` and its own `name`.
+ */
+const standInKey = {
+  name: natural,
+  package: ManifestIdentifier,
+  path: EntryPath,
+  start: natural,
+} as const;
+
+/**
+ * A stand-in for the closed attribute family (Q5.05's), so `Node`'s `attributes` and `attrs` are
+ * named by a family and a fold as the composed schema names them: a counted family under `Node`,
+ * its or fold ending at `attrs`.
  */
 const StandInAttribute = relation(
   "StandInAttribute",
-  { at: drawn(natural), id: uuid, node: uuid, slot: bits(install.AttributeSlot) },
-  ["id"],
+  { ...standInKey, slot: bits(install.AttributeSlot) },
+  ["package", "path", "start", "name"],
 );
+
+/**
+ * A stand-in for the open attribute family, so `Node`'s `openAttributes` is named by a family.
+ */
+const StandInOpenAttribute = relation("StandInOpenAttribute", standInKey, [
+  "package",
+  "path",
+  "start",
+  "name",
+]);
 
 /**
  * A stand-in for the namespace family (Q5.04's), so `Node`'s `namespaces` is named by a family.
  */
-const StandInNamespace = relation(
-  "StandInNamespace",
-  { at: drawn(natural), id: uuid, node: uuid },
-  ["id"],
-);
+const StandInNamespace = relation("StandInNamespace", standInKey, [
+  "package",
+  "path",
+  "start",
+  "name",
+]);
 
 /**
  * The stand-in attribute family.
  */
-const standInAttributes = ordered(on(StandInAttribute, "node", "at"), fin(Node, "attributes"));
+const standInAttributes = counted(
+  on(StandInAttribute, "package", "path", "start"),
+  fin(Node, "attributes"),
+);
 
 /**
  * Build a schema of `Node`, the closed relations its statements read, and the two stand-in
@@ -133,6 +156,7 @@ const scratchSchema = () =>
       SharedModelOf: install.SharedModelOf,
       StandInAttribute,
       StandInNamespace,
+      StandInOpenAttribute,
       SymbolMember: install.SymbolMember,
       SymbolSet: install.SymbolSet,
       SymbolSetOf: install.SymbolSetOf,
@@ -147,10 +171,11 @@ const scratchSchema = () =>
       foldOf(
         standInAttributes,
         Monoid.or,
-        on(StandInAttribute, "node", "slot"),
-        on(Node, "id", "attrs"),
+        on(StandInAttribute, "package", "path", "start", "slot"),
+        on(Node, "package", "path", "start", "attrs"),
       ),
-      ordered(on(StandInNamespace, "node", "at"), fin(Node, "namespaces")),
+      counted(on(StandInNamespace, "package", "path", "start"), fin(Node, "namespaces")),
+      counted(on(StandInOpenAttribute, "package", "path", "start"), fin(Node, "openAttributes")),
     ],
   );
 
@@ -188,13 +213,8 @@ const checkedLaws: readonly LawName[] = [
 ];
 
 /**
- * A uuid for the write type's rows, spelled as `Uuid` holds it.
- */
-const someId: Uuid = "00000000-0000-4000-8000-000000000001";
-
-/**
- * The fields the host writes on every node but the root field: a lawful element's values, enough to
- * type a row.
+ * The fields the host writes on every node but the root fields: a lawful element's values, enough
+ * to type a row.
  */
 const written = {
   ancestry: Bits.of(install.Flag, []),
@@ -202,11 +222,11 @@ const written = {
   documentType: "imsqti_item_xmlv3p0",
   first: "",
   governor: "qti-assessment-item",
-  id: someId,
   kind: "qti-assessment-item",
   last: "",
-  nearest: someId,
+  nearest: 0n,
   nearestKind: "document",
+  nearestPath: "item.xml",
   prefix: "",
   state: "3",
   version: "3.0.1",
@@ -265,35 +285,38 @@ describe("Node's declarations", () => {
     const fields = {
       ancestry: true,
       chars: true,
-      document: true,
       documentType: true,
       first: true,
       governor: true,
-      id: true,
       kind: true,
       last: true,
       nearest: true,
       nearestKind: true,
-      parent: true,
+      nearestPath: true,
+      package: true,
+      path: true,
       prefix: true,
       state: true,
       version: true,
     } as const satisfies Record<keyof Addition<typeof Node>, true>;
-    const leaf = { ...written, attributes: [], children: [], namespaces: [] } as const;
+    const leaf = { ...written, children: [] } as const;
+    const root = { package: "M", path: "item.xml" } as const;
     const accepted = ChangeSet.empty(Scratch).insert(Node, [
-      { ...leaf, children: [leaf], document: someId, kind: "document", state: "0" },
+      { ...leaf, ...root, children: [leaf], kind: "document", state: "0" },
     ]);
     const refused = () => [
-      // @ts-expect-error -- The root names the root field: its own id.
+      // @ts-expect-error -- The root names the root fields: its package and path.
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf }]),
       // @ts-expect-error -- A slot is drawn by grizzle from the nesting.
-      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, at: 0n, document: someId }]),
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, ...root, at: 0n }]),
+      // @ts-expect-error -- A position is drawn by grizzle from the nesting.
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, ...root, start: 0n }]),
       // @ts-expect-error -- The predecessor's state is filled by grizzle along its axis.
-      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, was: "0" }]),
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, ...root, was: "0" }]),
       // @ts-expect-error -- The parent is the nesting's, never the caller's.
-      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, parent: someId }]),
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, ...root, parent: 0n }]),
       // @ts-expect-error -- No field copies a node's characters; the fold steps `chars`.
-      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, stringPiece: "x" }]),
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, ...root, stringPiece: "x" }]),
     ];
 
     assert.lengthOf(Object.keys(fields), 15);
@@ -506,7 +529,7 @@ type DocumentSituation = XdmFeature | "positioned character data" | "shared kind
  * @returns Its folded nodes; a defect when the fold refuses it.
  */
 const foldedNodes = (document: XdmDocument<Composed>) =>
-  Effect.orDie(Effect.fromResult(fold(document, idOf, foldGrammarOf(grammar)))).pipe(
+  Effect.orDie(Effect.fromResult(fold(document, foldGrammarOf(grammar)))).pipe(
     Effect.map(({ nodes }) => nodes),
   );
 
@@ -779,12 +802,14 @@ describe(
                 );
                 const tree = yield* Effect.orDie(shred(read, version, shredGrammarOf(grammar)));
                 const rows = yield* Effect.orDie(
-                  Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))),
+                  Effect.fromResult(fold(tree, foldGrammarOf(grammar))),
                 );
                 const ordering = rows.nodes.find(({ kind }) => kind === "qti-ordering");
                 assert.isDefined(ordering);
 
-                const held = rows.nodes.filter(({ parent }) => parent === ordering.id);
+                const held = rows.nodes.filter(
+                  ({ parent, start }) => parent === ordering.start && start !== 0n,
+                );
                 if (held.length === 0) {
                   c.note("empty");
                 }
@@ -890,9 +915,9 @@ const editedForeign = (
 
   return {
     ...rows,
-    nodes: rows.nodes.map((held) => (held.id === target.id ? { ...held, ...node } : held)),
+    nodes: rows.nodes.map((held) => (held.start === target.start ? { ...held, ...node } : held)),
     openElementNames: rows.openElementNames.map((held) =>
-      held.node === target.id ? { ...held, ...name } : held,
+      held.start === target.start ? { ...held, ...name } : held,
     ),
   };
 };
@@ -975,7 +1000,7 @@ const foldedOf = (xml: string) =>
     const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
     const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammarOf(grammar)));
 
-    return yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
+    return yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
   });
 
 describe("the foreign element laws, by the host oracle", () => {

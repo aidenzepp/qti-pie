@@ -32,7 +32,7 @@ import { ownViewOf } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { forbiddenResourceTypes, lomVocabularySources } from "#pantry/qti/metadata.ts";
 import type { LomResourceType, LomResourceTypeSource } from "#pantry/qti/metadata.ts";
@@ -490,37 +490,48 @@ export const repeats = (sketch: PackageSketch): boolean =>
     );
 
 /**
- * One node of a document as the tree's insert writes it: its id, kind, parent and `chars`.
+ * One node of a document as the tree's insert writes it: its position, the pre-order place grizzle
+ * draws from the nesting, its kind, its parent's position and kind, and its `chars`.
  */
 interface WrittenNode {
   readonly chars: string;
-  readonly id: string;
   readonly kind: string;
-  readonly parent: string;
+  readonly parent: bigint;
   readonly parentKind: string;
+  readonly start: bigint;
 }
 
 /**
- * Walk the tree's insert in document order, each node with its parent.
+ * Walk the tree's insert in document order, each node with its parent, numbering each as grizzle
+ * draws its `start`: the document node 0, every other node one past the node before it.
  *
  * @param root - The document node, its tree nested.
  * @returns Every node below it.
  */
 const writtenNodes = (root: NodeRoot): readonly WrittenNode[] => {
   const out: WrittenNode[] = [];
-  const stack: { readonly node: NodeMember; readonly parent: NodeRoot | NodeMember }[] =
-    root.children.map((node) => ({ node, parent: root })).toReversed();
+  const stack: {
+    readonly node: NodeMember;
+    readonly parent: { readonly kind: string; readonly start: bigint };
+  }[] = root.children
+    .map((node) => ({ node, parent: { kind: root.kind, start: 0n } }))
+    .toReversed();
 
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     const { node, parent } = next;
+    const start = BigInt(out.length + 1);
     out.push({
       chars: node.chars,
-      id: node.id,
       kind: node.kind,
-      parent: parent.id,
+      parent: parent.start,
       parentKind: parent.kind,
+      start,
     });
-    stack.push(...node.children.map((child) => ({ node: child, parent: node })).toReversed());
+    stack.push(
+      ...node.children
+        .map((child) => ({ node: child, parent: { kind: node.kind, start } }))
+        .toReversed(),
+    );
   }
 
   return out;
@@ -534,30 +545,31 @@ const writtenNodes = (root: NodeRoot): readonly WrittenNode[] => {
 export interface DocumentRows {
   readonly sources: ReadonlyMap<string, Addition<typeof LomResourceTypeSource>>;
   readonly terms: readonly {
-    readonly id: string;
     readonly kind: string;
-    readonly parent: string;
+    readonly parent: bigint;
+    readonly start: bigint;
     readonly stringValue: string;
   }[];
   readonly values: ReadonlyMap<string, Addition<typeof LomResourceType>>;
 }
 
 /**
+ * The place a generated manifest is read at: a package's manifest identifier and its path.
+ */
+const manifestPlace = { package: "MANIFEST", path: "imsmanifest.xml" } as const;
+
+/**
  * Build a manifest's rows as the importer will: the builder's overlay rows and the tree's insert,
- * under one id per node, the manifest's type `manifest`.
+ * each node at its position, the manifest's type `manifest`.
  *
  * @param tree - The manifest's tree.
- * @param idOf - Its ids.
  * @returns Its rows.
  */
-export const documentRowsOf = (
-  tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
-): DocumentRows => {
-  const view = ownViewOf(tree, idOf);
-  const rows: MetadataRows = rowsOf(view, { documentType: "manifest" });
-  const nodes = writtenNodes(rootInsertOf(view, { documentType: "manifest" }));
-  const folded = new Map<string, string>();
+export const documentRowsOf = (tree: XdmDocument<Composed>): DocumentRows => {
+  const view = ownViewOf(tree);
+  const rows: MetadataRows = rowsOf(view, { ...manifestPlace, documentType: "manifest" });
+  const nodes = writtenNodes(rootInsertOf(view, { ...manifestPlace, documentType: "manifest" }));
+  const folded = new Map<bigint, string>();
   for (const node of nodes) {
     folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.chars}`);
   }
@@ -570,32 +582,38 @@ export const documentRowsOf = (
           (kind === "lom:value" || kind === "lom:source") &&
           parentKind === "lom:learningResourceType",
       )
-      .map(({ id, kind, parent }) => ({ id, kind, parent, stringValue: folded.get(id) ?? "" })),
+      .map(({ kind, parent, start }) => ({
+        kind,
+        parent,
+        start,
+        stringValue: folded.get(start) ?? "",
+      })),
     values: rows.LomResourceType,
   };
 };
 
 /**
  * What the database's statements find over one document's rows: the copies that break, each named
- * (`E1 derived`), and the learning resource types the law refuses, by node.
+ * (`E1 derived`), and the learning resource types the law refuses, by their node's position.
  */
 export interface Judged {
   readonly derived: readonly string[];
-  readonly refused: ReadonlySet<string>;
+  readonly refused: ReadonlySet<bigint>;
 }
 
 /**
  * Judge the law's statements over one document's rows as PostgreSQL will, each as `metadataLaws`
  * states it:
  *
- * - Each term's `(id, parent, stringValue)` is a row's `(term, node, text)` (the copy from `Node`);
+ * - Each term's `(start, parent, stringValue)` is a row's `(term, start, text)` (the copy from
+ *   `Node`);
  * - Each row's `term` is a term of its relation's kind (the copy back), and no two rows share one
  *   (the key over `term`);
  * - Each row whose value collapses into `forbiddenResourceTypes` has its type's source row, whose
  *   text collapses outside `lomVocabularySources` (the law's containment).
  *
  * @param rows - The document's rows.
- * @returns The copies that break (`E1 derived`), and the types the law refuses, by node.
+ * @returns The copies that break (`E1 derived`), and the types the law refuses, by position.
  */
 export const databaseRefusals = (rows: DocumentRows): Judged => {
   const derived: string[] = [];
@@ -607,18 +625,18 @@ export const databaseRefusals = (rows: DocumentRows): Judged => {
     for (const term of terms) {
       const row = [...relation.values()].find(
         (held) =>
-          held.term === term.id && held.node === term.parent && held.text === term.stringValue,
+          held.term === term.start && held.start === term.parent && held.text === term.stringValue,
       );
       if (row === undefined) {
-        derived.push(`${kind} ${term.id} has no row`);
+        derived.push(`${kind} ${String(term.start)} has no row`);
       }
     }
 
-    const ids = new Set(terms.map(({ id }) => id));
+    const starts = new Set(terms.map(({ start }) => start));
     const held = [...relation.values()].map(({ term }) => term);
     for (const term of held) {
-      if (!ids.has(term)) {
-        derived.push(`a ${kind} row names ${term}, no ${kind} of a type`);
+      if (!starts.has(term)) {
+        derived.push(`a ${kind} row names ${String(term)}, no ${kind} of a type`);
       }
     }
 
@@ -630,12 +648,12 @@ export const databaseRefusals = (rows: DocumentRows): Judged => {
   const forbidden: ReadonlySet<string> = new Set(forbiddenResourceTypes);
   const lom: ReadonlySet<string> = new Set(lomVocabularySources);
   const refused = new Set(
-    [...rows.values.values()].flatMap(({ node, text }) => {
-      const source = rows.sources.get(node);
+    [...rows.values.values()].flatMap(({ start, text }) => {
+      const source = [...rows.sources.values()].find((held) => held.start === start);
 
       return forbidden.has(collapse(text)) &&
         (source === undefined || lom.has(collapse(source.text)))
-        ? [node]
+        ? [start]
         : [];
     }),
   );

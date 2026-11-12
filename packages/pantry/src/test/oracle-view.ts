@@ -1,8 +1,11 @@
 /**
  * One folded document indexed for the law oracle (`#pantry/test/oracle.ts`) and its producers
- * (`#pantry/test/oracle-laws/`): its rows by id, by slot and by owner, each element's closed
+ * (`#pantry/test/oracle-laws/`): its rows by position, by slot and by owner, each element's closed
  * attribute values by name, its character data, and the reads both make of it, an element's
  * attribute, its path, its ancestors, an href resolved against its `xml:base` values.
+ *
+ * A node is named by its `start`, its pre-order position in its document, the document node 0, as
+ * `Node`'s key `(package, path, start)` names it within one document.
  *
  * It shares no code with the importer's overlays (`#pantry/import/overlays/`), so every law the
  * oracle states over it is a second statement of the law, never a copy of the rows the database
@@ -11,8 +14,13 @@
 import { Option } from "effect";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FoldedAttribute, FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import type { ClosedName, NodeId, OpenNameRow } from "#pantry/model/xdm.ts";
+import type {
+  FoldedAttribute,
+  FoldedNode,
+  FoldedOpenAttribute,
+  FoldedRows,
+} from "#pantry/model/folds.ts";
+import type { ClosedName } from "#pantry/model/xdm.ts";
 import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import type { OracleResolution, OracleWhiteSpace } from "#pantry/test/resolution.ts";
 
@@ -51,67 +59,66 @@ export const field = (keys: Readonly<Record<string, string>>, name: string): str
 export type TypedReading = (attribute: FoldedAttribute<Composed>) => Option.Option<string>;
 
 /**
- * One folded document with its rows indexed for the laws: by id, by slot, by owner, and each
- * element's closed attribute values by name, as written and as their types read them.
+ * One folded document with its rows indexed for the laws: by position, by slot, by owner, and each
+ * element's closed attribute values by name, as written and as their types read them. Every map is
+ * keyed by a node's `start`.
  */
 export interface View {
-  readonly attributesOf: ReadonlyMap<NodeId, readonly FoldedAttribute<Composed>[]>;
   /**
-   * Each node row by its id, the first row that holds the id: a later row with the same id is in
-   * {@link View.repeated}, never in place of the first.
+   * Each element's closed attributes, `Attribute`'s rows, a set keyed by name.
    */
-  readonly byId: ReadonlyMap<NodeId, Row>;
+  readonly attributesOf: ReadonlyMap<bigint, readonly FoldedAttribute<Composed>[]>;
+  /**
+   * Each node row by its `start`, the first row that holds it: a later row at the same `start` is
+   * in {@link View.startTaken}, never in place of the first.
+   */
+  readonly byStart: ReadonlyMap<bigint, Row>;
   readonly bySlot: ReadonlyMap<string, Row>;
   /**
    * Each node's children in the order its rows hold them, which the node laws judge.
    */
-  readonly childrenOf: ReadonlyMap<NodeId, readonly Row[]>;
+  readonly childrenOf: ReadonlyMap<bigint, readonly Row[]>;
   /**
    * The name of each entity-reference node, by node.
    */
-  readonly entityOf: ReadonlyMap<NodeId, string>;
+  readonly entityOf: ReadonlyMap<bigint, string>;
   /**
    * The stored namespace of each foreign element, by node: its `OpenElementName` row's.
    */
-  readonly foreignNamespaceOf: ReadonlyMap<NodeId, string>;
+  readonly foreignNamespaceOf: ReadonlyMap<bigint, string>;
   /**
    * Every node row below the document node, in the order the rows hold them.
    */
   readonly members: readonly Row[];
   /**
-   * Each open-class attribute's exact name, by the attribute's id: its `OpenName` row.
+   * Each element's open-class attributes, `OpenAttribute`'s rows, a set keyed by expanded name.
    */
-  readonly openNameOf: ReadonlyMap<string, OpenNameRow>;
+  readonly openAttributesOf: ReadonlyMap<bigint, readonly FoldedOpenAttribute<Composed>[]>;
   /**
    * The document's path in its package.
    */
   readonly path: string;
-  /**
-   * The node rows whose id an earlier row already holds, which the `Node` key refuses.
-   */
-  readonly repeated: ReadonlySet<Row>;
   /**
    * The document's root element, its document node's first element child by slot, none when the
    * rows hold no element under the document node.
    */
   readonly root: Option.Option<Row>;
   readonly rows: FoldedRows<Composed>;
-  readonly self: NodeId;
   /**
-   * The node rows whose `start` an earlier row of the document already holds, which T1's key
-   * refuses.
+   * The node rows whose `start` an earlier row of the document already holds, which `Node`'s key
+   * `(package, path, start)` refuses.
    */
   readonly startTaken: ReadonlySet<Row>;
   /**
    * The character data of each text, whitespace and doctype node, by node.
    */
-  readonly textOf: ReadonlyMap<NodeId, string>;
+  readonly textOf: ReadonlyMap<bigint, string>;
   /**
    * Each element's closed attributes that hold a value, by name, each value as its type reads it
    * ({@link TypedReading}): an attribute whose form lies outside its domain is not here.
    */
-  readonly typedValuesOf: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
-  readonly valuesOf: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
+  readonly typedValuesOf: ReadonlyMap<bigint, ReadonlyMap<string, string>>;
+  readonly valuesOf: ReadonlyMap<bigint, ReadonlyMap<string, string>>;
 }
 
 /**
@@ -143,20 +150,20 @@ export const collapsed = (lexical: string): string =>
  * @param at - The slot.
  * @returns One string per (owner, slot).
  */
-export const slotKey = (owner: NodeId, at: bigint): string => `${owner} ${String(at)}`;
+export const slotKey = (owner: bigint, at: bigint): string => `${String(owner)} ${String(at)}`;
 
 /**
  * Group rows by the node that owns them, keeping their order within each group.
  *
  * @param rows - The rows.
- * @param ownerOf - The id of a row's owner.
+ * @param ownerOf - The `start` of a row's owner.
  * @returns Each owner's rows, in the order they came.
  */
 export const grouped = <Owned>(
   rows: readonly Owned[],
-  ownerOf: (row: Owned) => NodeId,
-): ReadonlyMap<NodeId, readonly Owned[]> => {
-  const groups = new Map<NodeId, Owned[]>();
+  ownerOf: (row: Owned) => bigint,
+): ReadonlyMap<bigint, readonly Owned[]> => {
+  const groups = new Map<bigint, Owned[]>();
   for (const row of rows) {
     const owner = ownerOf(row);
     const group = groups.get(owner);
@@ -226,9 +233,8 @@ const bySlotOrder = (left: Row, right: Row): number => Number(left.at - right.at
  * @returns The view.
  */
 export const viewOf = (path: string, rows: FoldedRows<Composed>, typed: TypedReading): View => {
-  const self = rows.document.node;
   const members = rows.nodes.filter(({ start }) => start > 0n);
-  const attributesOf = grouped(rows.attributes, ({ node }) => node);
+  const attributesOf = grouped(rows.attributes, ({ start }) => start);
   const closedValues = (read: TypedReading) =>
     new Map(
       [...attributesOf].map(([node, owned]) => [
@@ -243,45 +249,38 @@ export const viewOf = (path: string, rows: FoldedRows<Composed>, typed: TypedRea
       ]),
     );
   const valuesOf = closedValues((attribute) => Option.some(attribute.lexical));
-  const byId = new Map<NodeId, Row>();
-  const repeated = new Set<Row>();
-  const starts = new Set<bigint>();
+  const byStart = new Map<bigint, Row>();
   const startTaken = new Set<Row>();
   for (const node of rows.nodes) {
-    if (byId.has(node.id)) {
-      repeated.add(node);
-    } else {
-      byId.set(node.id, node);
-    }
-
-    if (starts.has(node.start)) {
+    if (byStart.has(node.start)) {
       startTaken.add(node);
+    } else {
+      byStart.set(node.start, node);
     }
-
-    starts.add(node.start);
   }
 
   const childrenOf = grouped(members, ({ parent }) => parent);
 
   return {
     attributesOf,
-    byId,
     bySlot: new Map(members.map((node) => [slotKey(node.parent, node.at), node])),
+    byStart,
     childrenOf,
-    entityOf: new Map(rows.entityRefs.map(({ name, node }) => [node, name])),
+    entityOf: new Map(rows.entityRefs.map(({ name, start }) => [start, name])),
     foreignNamespaceOf: new Map(
-      rows.openElementNames.map(({ namespace, node }) => [node, namespace]),
+      rows.openElementNames.map(({ namespace, start }) => [start, namespace]),
     ),
     members,
-    openNameOf: new Map(rows.openNames.map((row) => [row.attribute, row])),
+    openAttributesOf: grouped(rows.openAttributes, ({ start }) => start),
     path,
-    repeated,
-    root: Option.fromNullishOr((childrenOf.get(self) ?? []).toSorted(bySlotOrder).find(isElement)),
+    root: Option.fromNullishOr((childrenOf.get(0n) ?? []).toSorted(bySlotOrder).find(isElement)),
     rows,
-    self,
     startTaken,
     textOf: new Map(
-      [...rows.texts, ...rows.whitespace, ...rows.doctypes].map(({ node, value }) => [node, value]),
+      [...rows.texts, ...rows.whitespace, ...rows.doctypes].map(({ start, value }) => [
+        start,
+        value,
+      ]),
     ),
     typedValuesOf: closedValues(typed),
     valuesOf,
@@ -292,11 +291,11 @@ export const viewOf = (path: string, rows: FoldedRows<Composed>, typed: TypedRea
  * Read an element's closed attribute as written.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's closed name.
  * @returns Its lexical form, or none when the element carries no such attribute.
  */
-export const valueOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
+export const valueOf = (view: View, node: bigint, name: string): Option.Option<string> =>
   Option.fromNullishOr(view.valuesOf.get(node)?.get(name));
 
 /**
@@ -304,12 +303,12 @@ export const valueOf = (view: View, node: NodeId, name: string): Option.Option<s
  * law past AL1 compares an identifier, a number or a code in.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's closed name.
  * @returns Its value, or none when the element carries no such attribute or its form lies outside
  *   its value domain.
  */
-export const typedValueOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
+export const typedValueOf = (view: View, node: bigint, name: string): Option.Option<string> =>
   Option.fromNullishOr(view.typedValuesOf.get(node)?.get(name));
 
 /**
@@ -356,7 +355,7 @@ export const integerOf = (form: string): Option.Option<bigint> => {
  * meaning when unwritten.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @param name - The attribute's closed name.
  * @param unwritten - What the law reads where the element writes no such attribute.
  * @returns Its value, or `unwritten`; none where the element writes it outside its value domain,
@@ -364,7 +363,7 @@ export const integerOf = (form: string): Option.Option<bigint> => {
  */
 export const typedOr = (
   view: View,
-  node: NodeId,
+  node: bigint,
   name: string,
   unwritten: string,
 ): Option.Option<string> =>
@@ -376,20 +375,20 @@ export const typedOr = (
  * Read an element's text content: its text and whitespace children's characters, in order.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @returns The characters, empty when it holds none.
  */
-export const contentOf = (view: View, node: NodeId): string =>
-  (view.childrenOf.get(node) ?? []).map(({ id }) => view.textOf.get(id) ?? "").join("");
+export const contentOf = (view: View, node: bigint): string =>
+  (view.childrenOf.get(node) ?? []).map(({ start }) => view.textOf.get(start) ?? "").join("");
 
 /**
  * List an element's element children in slot order.
  *
  * @param view - The document.
- * @param node - The element's id.
+ * @param node - The element's `start`.
  * @returns Its children that are elements.
  */
-export const elementsOf = (view: View, node: NodeId): readonly Row[] =>
+export const elementsOf = (view: View, node: bigint): readonly Row[] =>
   (view.childrenOf.get(node) ?? []).filter(isElement).toSorted(bySlotOrder);
 
 /**
@@ -399,21 +398,21 @@ export const elementsOf = (view: View, node: NodeId): readonly Row[] =>
  *
  * @param view - The document.
  * @param start - The node to start at, none for no chain.
- * @param met - The ids the walk is not to enter again.
+ * @param met - The positions the walk is not to enter again.
  * @returns The chain, nearest first.
  */
 const chainFrom = (
   view: View,
   start: Row | undefined,
-  met: ReadonlySet<NodeId> = new Set(),
+  met: ReadonlySet<bigint> = new Set(),
 ): readonly Row[] => {
   const chain: Row[] = [];
   const seen = new Set(met);
   let at = start;
-  while (at !== undefined && !seen.has(at.id)) {
-    seen.add(at.id);
+  while (at !== undefined && !seen.has(at.start)) {
+    seen.add(at.start);
     chain.push(at);
-    at = at.start > 0n ? view.byId.get(at.parent) : undefined;
+    at = at.start > 0n ? view.byStart.get(at.parent) : undefined;
   }
 
   return chain;
@@ -424,13 +423,13 @@ const chainFrom = (
  * `kind[at]`.
  *
  * @param view - The document.
- * @param id - The node's id.
+ * @param start - The node's `start`.
  * @returns The path, `/` for the document node; on a cycle of parent links, the steps up to the
  *   first node met twice.
  */
-export const pathOf = (view: View, id: NodeId): string =>
-  `/${chainFrom(view, view.byId.get(id))
-    .filter(({ start }) => start > 0n)
+export const pathOf = (view: View, start: bigint): string =>
+  `/${chainFrom(view, view.byStart.get(start))
+    .filter((at) => at.start > 0n)
     .map((at) => `${at.kind}[${String(at.at)}]`)
     .toReversed()
     .join("/")}`;
@@ -443,7 +442,7 @@ export const pathOf = (view: View, id: NodeId): string =>
  * @returns Its ancestors; on a cycle of parent links, those up to the first node met twice.
  */
 export const ancestorsOf = (view: View, node: Row): readonly Row[] =>
-  node.start > 0n ? chainFrom(view, view.byId.get(node.parent), new Set([node.id])) : [];
+  node.start > 0n ? chainFrom(view, view.byStart.get(node.parent), new Set([node.start])) : [];
 
 /**
  * Make a producer's breach of a node: its document, its node's path, kind and version, and the
@@ -462,7 +461,7 @@ export const breachAt = <Law extends string>(
   keys: Readonly<Record<string, string>> = {},
 ): LawBreach<Law> => ({
   document: view.path,
-  keys: { kind: node.kind, node: pathOf(view, node.id), version: node.version, ...keys },
+  keys: { kind: node.kind, node: pathOf(view, node.start), version: node.version, ...keys },
   law,
 });
 
@@ -484,10 +483,10 @@ export interface ResolvedHref {
  * @param node - The node.
  * @returns The bases, the root's first.
  */
-const basesAt = (view: View, node: NodeId): readonly string[] =>
-  chainFrom(view, view.byId.get(node))
+const basesAt = (view: View, node: bigint): readonly string[] =>
+  chainFrom(view, view.byStart.get(node))
     .toReversed()
-    .flatMap(({ id }) => Option.toArray(valueOf(view, id, "xml:base")));
+    .flatMap(({ start }) => Option.toArray(valueOf(view, start, "xml:base")));
 
 /**
  * Resolve an attribute of a node as an href (readings 102 and 103), with the `xml:base` values in
@@ -504,7 +503,7 @@ const basesAt = (view: View, node: NodeId): readonly string[] =>
  */
 export const resolvedAt = (
   view: View,
-  node: NodeId,
+  node: bigint,
   lexical: string,
   read: { readonly srcset?: boolean; readonly whiteSpace?: OracleWhiteSpace } = {},
 ): ResolvedHref => {
@@ -530,7 +529,10 @@ export const resolvedAt = (
  * @returns The path, none where the element writes no href.
  */
 export const hrefPathOf = (view: View, node: Row): Option.Option<string> =>
-  Option.map(valueOf(view, node.id, "href"), (lexical) => resolvedAt(view, node.id, lexical).path);
+  Option.map(
+    valueOf(view, node.start, "href"),
+    (lexical) => resolvedAt(view, node.start, lexical).path,
+  );
 
 /**
  * One document a package's manifest lists, as the package-level producers read it: its path, the

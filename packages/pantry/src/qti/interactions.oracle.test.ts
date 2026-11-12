@@ -371,14 +371,17 @@ const choiceNameLawsOf = (laws: readonly { readonly law: Law }[]): readonly stri
   [...lawNamesOf(laws)].filter((law) => choiceNameLaws.has(law));
 
 /**
- * A name of a document, as {@link queryNameLawsOf} compares names: its document and identifier.
+ * A name of a document, as {@link queryNameLawsOf} compares names: its document's place, its
+ * package and path, and the identifier. An assembly is named by its head document's path, so a
+ * placed name and a declared one meet at one key.
  *
- * @param document - The document.
+ * @param pkg - The package's manifest identifier.
+ * @param path - The document's path.
  * @param identifier - The name.
  * @returns The name's key.
  */
-const nameKey = (document: string, identifier: string): string =>
-  JSON.stringify([document, identifier]);
+const nameKey = (pkg: string, path: string, identifier: string): string =>
+  JSON.stringify([pkg, path, identifier]);
 
 /**
  * Whether a list of names holds one name twice.
@@ -401,23 +404,20 @@ const repeats = (names: readonly string[]): boolean => new Set(names).size < nam
  */
 const queryNameLawsOf = (inputs: PackageInputs): readonly string[] => {
   const chosen = [...inputs.Choice.values(), ...inputs.Hottext.values()].map(
-    ({ document, identifier }) => nameKey(document, identifier),
+    ({ identifier, package: pkg, path }) => nameKey(pkg, path, identifier),
   );
   const placed = [...inputs.PlacedChoice.values(), ...inputs.PlacedHottext.values()].map(
-    ({ assembly, identifier }) => nameKey(assembly, identifier),
+    ({ assembly, identifier, package: pkg }) => nameKey(pkg, assembly, identifier),
   );
   const declared = new Set(
-    [...inputs.DeclarationIdentifier.values()].map(({ document, identifier }) =>
-      nameKey(document, identifier),
-    ),
-  );
-  const items = new Set(
-    [...inputs.Document.values()].flatMap(({ node, rootKind }) =>
-      rootKind === itemKind ? [node] : [],
+    [...inputs.DeclarationIdentifier.values()].map(({ identifier, package: pkg, path }) =>
+      nameKey(pkg, path, identifier),
     ),
   );
   const builtIns = new Set(
-    [...items].flatMap((node) => itemBuiltInNames.map((name) => nameKey(node, name))),
+    [...inputs.Document.values()].flatMap(({ package: pkg, path, rootKind }) =>
+      rootKind === itemKind ? itemBuiltInNames.map((name) => nameKey(pkg, path, name)) : [],
+    ),
   );
   const claimed = [...chosen, ...placed].some((name) => declared.has(name) || builtIns.has(name));
 

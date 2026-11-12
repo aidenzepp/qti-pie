@@ -24,7 +24,9 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { ownContext, ownViewOf, viewOf } from "#pantry/import/fold.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { rowsOf } from "#pantry/import/overlays/operators.ts";
+import type { Place } from "#pantry/import/write.ts";
 import { tokensOf } from "#pantry/import/pieces.ts";
 import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -40,8 +42,12 @@ import {
   toleranceValuesOf,
 } from "#pantry/test/operator-spec.ts";
 import type { RoundingKind } from "#pantry/test/operator-spec.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { equalRoundedMode } from "#pantry/vocab/terms/operators.ts";
+
+/**
+ * Where every document of these cases stands: one item of one package, the place every row holds.
+ */
+const place: Place = { package: "MANIFEST", path: "item.xml" };
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -258,37 +264,54 @@ const fourRounders = [
 
 describe("import/overlays/operators.ts, rowsOf", () => {
   it.effect(
-    "gives every rounding row its node's tuple, and its context's nearest, the document's own under its own context",
+    "gives every rounding row its element's tuple, and its context's nearest, the document's own under its own context",
     () =>
       // Oracle: the tree's own rows, `flatten`'s node of each operator, and N8: response processing
       // stands in no interaction, so each node's nearest is the document node's, its context's
       // where one is given.
       Effect.gen(function* tuples() {
         const tree = yield* itemOf(fourRounders);
-        const nodes = flatten(tree, idOf);
+        const nodes = flatten(tree);
         const context: DocumentContext = {
           ancestry: new Set(),
-          nearest: idOf(9999),
+          nearest: 9999n,
           nearestKind: "document",
+          nearestPath: Option.some("test.xml"),
         };
 
         for (const [given, nearest] of [
-          [ownContext(nodes.document.node), nodes.document.node],
-          [context, idOf(9999)],
+          [ownContext, 0n],
+          [context, 9999n],
         ] as const) {
-          const rows = rowsOf(viewOf(tree, nodes, given));
+          const rows = rowsOf(viewOf(tree, nodes, given), place);
           const rounders = nodes.nodes.filter(
             ({ kind }) => kind === "qti-equal-rounded" || kind === "qti-round-to",
           );
 
           assert.strictEqual(rows.Rounding.size, rounders.length);
           for (const node of rounders) {
-            const row = rows.Rounding.get(node.id);
+            const row = rows.Rounding.get(keyTextOf(place.package, place.path, node.start));
             assert.deepStrictEqual(
               row === undefined
                 ? undefined
-                : [row.document, row.kind, row.nearest, row.parent, row.start, row.version],
-              [nodes.document.node, node.kind, nearest, node.parent, node.start, node.version],
+                : [
+                    row.package,
+                    row.path,
+                    row.kind,
+                    row.nearest,
+                    row.parent,
+                    row.start,
+                    row.version,
+                  ],
+              [
+                place.package,
+                place.path,
+                node.kind,
+                nearest,
+                node.parent,
+                node.start,
+                node.version,
+              ],
             );
           }
         }
@@ -303,8 +326,8 @@ describe("import/overlays/operators.ts, rowsOf", () => {
           yield* itemOf(
             `<qti-set-outcome-value identifier="SCORE"><qti-variable identifier="SCORE"/></qti-set-outcome-value>`,
           ),
-          idOf,
         ),
+        place,
       );
 
       assert.strictEqual(rows.Rounding.size + rows.Tolerance.size, 0);
@@ -658,7 +681,7 @@ describe(
               Effect.gen(function* checks() {
                 c.note(drawnCase.form);
 
-                const rows = rowsOf(ownViewOf(yield* itemOf(ruleOfOperator(drawnCase)), idOf));
+                const rows = rowsOf(ownViewOf(yield* itemOf(ruleOfOperator(drawnCase))), place);
 
                 if (drawnCase.kind === "qti-equal") {
                   assertEquality(drawnCase, rows);

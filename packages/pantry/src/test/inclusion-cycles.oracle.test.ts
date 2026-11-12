@@ -19,7 +19,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Formatter, Option, Predicate } from "effect";
+import { Duration, Effect, FileSystem, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -98,9 +98,6 @@ const rowsOfCase = (files: readonly PackageFile[]) =>
       const program = yield* readProgram(dir);
       const rows = hostRowsOf(program.inputs);
       const { broken } = judgeRows(rows, hostLaws);
-      const paths = new Map(
-        (rows.get("Document") ?? []).map(({ node, path: entry }) => [node, entry] as const),
-      );
       const placed = new Set((rows.get("Instance") ?? []).map(({ document }) => document));
 
       return {
@@ -109,11 +106,9 @@ const rowsOfCase = (files: readonly PackageFile[]) =>
         ),
         laws: broken.map(({ law }) => Formatter.format(law)),
         rules: [...new Set(broken.flatMap(({ law }) => Option.toArray(schemaLawNameOf(law))))],
-        unplaced: (rows.get("TestDocument") ?? []).flatMap(({ node }) => {
-          const entry = paths.get(node);
-
-          return placed.has(node) ? [] : [Predicate.isString(entry) ? entry : datumText(node)];
-        }),
+        unplaced: (rows.get("TestDocument") ?? []).flatMap(({ path: entry }) =>
+          placed.has(entry) ? [] : [datumText(entry)],
+        ),
       };
     }),
   );

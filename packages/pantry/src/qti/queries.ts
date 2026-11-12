@@ -114,10 +114,11 @@ import {
 import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
 
 /**
- * The href of a resource that has a type, by the resource's node: its {@link ResourceHref}'s
- * package, path and scope beside its {@link ResourceTyped}'s code, so a document-typed resource's
- * href is judged as the document it names. A resource with an href and no type, or a type and no
- * href, has no typed href, so no rule over one asks anything of it.
+ * The href of a resource that has a type, by the resource's place, `(package, path, start)`: its
+ * {@link ResourceHref}'s scope and `target`, the path it is compared by, beside its
+ * {@link ResourceTyped}'s code, so a document-typed resource's href is judged as the document it
+ * names. A resource with an href and no type, or a type and no href, has no typed href, so no rule
+ * over one asks anything of it.
  *
  * Its rows are a join no table stores and no write keeps, which the importer reads on the host
  * before it writes a row, to name the documents it reads (`#pantry/import/overlays/package.ts`
@@ -125,13 +126,13 @@ import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
  * item ref's target ({@link itemRefTargets}, {@link targetHrefs}) match and negate it.
  */
 const typedHrefs = query(QtiBase).rule((r) => {
-  const { node, package: pkg, path, scope } = v(ResourceHref, "href");
+  const { package: pkg, path, scope, start, target } = v(ResourceHref, "href");
   const { type } = v(ResourceTyped, "typed");
 
   return r
-    .match(ResourceHref, { node, package: pkg, path, scope })
-    .match(ResourceTyped, { node, type })
-    .find({ node, package: pkg, path, scope, type });
+    .match(ResourceHref, { package: pkg, path, scope, start, target })
+    .match(ResourceTyped, { package: pkg, path, start, type })
+    .find({ package: pkg, path, scope, start, target, type });
 });
 
 /**
@@ -142,63 +143,65 @@ const TypedHref = derived("TypedHref", typedHrefs);
 
 /**
  * The href of a resource whose `type` is written and spells no `ResourceType` handle, by the
- * resource's node: its {@link ResourceHref}'s package and path, where the resource's manifest
- * `type` is nonempty and the resource has no {@link ResourceTyped}, whose rows are exactly the
- * resources whose `type` spells a handle (spec reading 67: AL1's value domain refuses the `type`
- * alone). The two conditions are two filters, the `type` nonempty and no {@link ResourceTyped}
- * naming the resource, so the query reads no pattern over the attribute's unbounded lexical form.
- * A resource that writes no `type` has none (AL3 refuses it alone), and neither has one that
- * writes no `href`, which names no path. Its rows are a join no table stores, which "Item ref
- * target" reads: an item ref with no target ({@link UntargetedItemRef}) names a path one of these
- * names, or is refused (the oracle's `itemRefTargetOf` names no target there).
+ * resource's place: its {@link ResourceHref}'s `target`, where the resource's manifest `type` is
+ * nonempty and the resource has no {@link ResourceTyped}, whose rows are exactly the resources
+ * whose `type` spells a handle (spec reading 67: AL1's value domain refuses the `type` alone). The
+ * two conditions are two filters, the `type` nonempty and no {@link ResourceTyped} naming the
+ * resource, so the query reads no pattern over the attribute's unbounded lexical form. A resource
+ * that writes no `type` has none (AL3 refuses it alone), and neither has one that writes no
+ * `href`, which names no path. Its rows are a join no table stores, which "Item ref target" reads:
+ * an item ref with no target ({@link UntargetedItemRef}) names a path one of these names, or is
+ * refused (the oracle's `itemRefTargetOf` names no target there).
  */
 const UnreadTypeHref = derived(
   "UnreadTypeHref",
   query(QtiBase).rule((r) => {
-    const { node, package: pkg, path } = v(ResourceHref, "href");
+    const { package: pkg, path, start, target } = v(ResourceHref, "href");
     const { lexical } = v(Attribute, "type");
 
     return r
-      .match(ResourceHref, { node, package: pkg, path })
+      .match(ResourceHref, { package: pkg, path, start, target })
       .match(Attribute, {
         documentType: "manifest",
         kind: "cp:resource",
         lexical,
         name: "type",
-        node,
+        package: pkg,
+        path,
+        start,
       })
       .where(r.ne(lexical, ""))
-      .where(r.not(ResourceTyped, { node }))
-      .find({ node, package: pkg, path });
+      .where(r.not(ResourceTyped, { package: pkg, path, start }))
+      .find({ package: pkg, path, start, target });
   }),
 );
 
 /**
  * The paths a resource of the item type or an LTI type names, by package: the paths an item ref's
- * target is named at (the UP audit's B2 and B3, R36). An item ref whose path none of them names
+ * target is named at (the UP audit's B2 and B3, R36). An item ref whose target none of them names
  * has no target ({@link UntargetedItemRef}).
  */
 const targetHrefs = query(QtiBase).rule((r) => {
-  const { package: pkg, path, type } = v(typedHrefs, "typed");
+  const { package: pkg, target, type } = v(typedHrefs, "typed");
 
   return r
-    .match(typedHrefs, { package: pkg, path, type })
+    .match(typedHrefs, { package: pkg, target, type })
     .where(r.inSet(type, [itemResourceType, ...linkResourceTypes]))
-    .find({ package: pkg, path });
+    .find({ package: pkg, target });
 });
 
 /**
- * What an item ref names, by the item ref's node (the UP audit's B2 and B3): its
- * {@link ItemRefHref}'s `package` and `path`, and `type`, the type of a resource of the package
- * whose href's path that is, of the item type where one is, and else of an LTI type: the URI an
+ * What an item ref names, by the item ref's place (the UP audit's B2 and B3): its
+ * {@link ItemRefHref}'s `target`, and `type`, the type of a resource of the package whose href's
+ * target that is, of the item type where one is, and else of an LTI type: the URI an
  * item ref holds is "the URI used to refer to the item's file (e.g., elsewhere in the same
  * content package)" (information model §5.6.5, `href`), so it names an item of the package, or an
  * LTI link (R36). Two rules state it, one per kind of target, and the link's negates the item's,
  * so an href that a resource of each type names is an item's alone. A path that several LTI types
  * name is a row per type, each a link.
  *
- * An item ref whose path no resource of either kind names has no target, and "Item ref target"
- * holds its path to one a resource of an unread type names ({@link UntargetedItemRef}): a path
+ * An item ref whose target no resource of either kind names has no target, and "Item ref target"
+ * holds it to one a resource of an unread type names ({@link UntargetedItemRef}): a path
  * only a resource of another type the importer reads names, a test's or a stimulus's, is refused
  * there. One that writes no href has no {@link ItemRefHref} and names nothing, which AL3 alone
  * refuses (spec reading 155).
@@ -209,25 +212,25 @@ const targetHrefs = query(QtiBase).rule((r) => {
  */
 const itemRefTargets = query(QtiBase)
   .rule((r) => {
-    const { node, package: pkg, path } = v(ItemRefHref, "href");
+    const { package: pkg, path, start, target } = v(ItemRefHref, "href");
     const { type } = v(typedHrefs, "item");
 
     return r
-      .match(ItemRefHref, { node, package: pkg, path })
-      .match(typedHrefs, { package: pkg, path, type })
+      .match(ItemRefHref, { package: pkg, path, start, target })
+      .match(typedHrefs, { package: pkg, target, type })
       .where(r.eq(type, itemResourceType))
-      .find({ node, package: pkg, path, type });
+      .find({ package: pkg, path, start, target, type });
   })
   .rule((r) => {
-    const { node, package: pkg, path } = v(ItemRefHref, "href");
+    const { package: pkg, path, start, target } = v(ItemRefHref, "href");
     const { type } = v(typedHrefs, "link");
 
     return r
-      .match(ItemRefHref, { node, package: pkg, path })
-      .match(typedHrefs, { package: pkg, path, type })
+      .match(ItemRefHref, { package: pkg, path, start, target })
+      .match(typedHrefs, { package: pkg, target, type })
       .where(r.inSet(type, linkResourceTypes))
-      .where(r.not(typedHrefs, { package: pkg, path, type: itemResourceType }))
-      .find({ node, package: pkg, path, type });
+      .where(r.not(typedHrefs, { package: pkg, target, type: itemResourceType }))
+      .find({ package: pkg, path, start, target, type });
   });
 
 /**
@@ -238,19 +241,19 @@ const itemRefTargets = query(QtiBase)
 const ItemRefTarget = derived("ItemRefTarget", itemRefTargets);
 
 /**
- * The item refs that have no target, by the item ref's node: each {@link ItemRefHref} whose path
- * no resource of the item type or an LTI type names ({@link targetHrefs}). Its negation reads
- * those hrefs alone, never {@link itemRefTargets}, whose link rule negates in turn.
+ * The item refs that have no target, by the item ref's place: each {@link ItemRefHref} whose
+ * target no resource of the item type or an LTI type names ({@link targetHrefs}). Its negation
+ * reads those hrefs alone, never {@link itemRefTargets}, whose link rule negates in turn.
  */
 const UntargetedItemRef = derived(
   "UntargetedItemRef",
   query(QtiBase).rule((r) => {
-    const { node, package: pkg, path } = v(ItemRefHref, "href");
+    const { package: pkg, path, start, target } = v(ItemRefHref, "href");
 
     return r
-      .match(ItemRefHref, { node, package: pkg, path })
-      .where(r.not(targetHrefs, { package: pkg, path }))
-      .find({ node, package: pkg, path });
+      .match(ItemRefHref, { package: pkg, path, start, target })
+      .where(r.not(targetHrefs, { package: pkg, target }))
+      .find({ package: pkg, path, start, target });
   }),
 );
 
@@ -269,15 +272,16 @@ const documentHrefs = select(TypedHref, (h) => h.in(h.type, documentTypes));
  * underscores, the halves of P2 and P3 that `#pantry/qti/package.ts` states over the tables:
  *
  * - **P3 `entry-kind` ("Document entry"):** every document-typed href resolves in the package and
- *   names the one document at its path, of the href's type (reading 93). That document is an entry
- *   by `ResourceDocument`'s copy of its `Document` and the `Document`'s containment into `Entry`,
- *   so no rule here restates it.
- * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the path of a
+ *   names the one document at its target, of the href's type (reading 93). That document is an
+ *   entry by `ResourceDocument`'s copy of its `Document` and the `Document`'s containment into
+ *   `Entry`, so no rule here restates it.
+ * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the target of a
  *   typed href of its type (spec reading 176).
  * - **B2 and B3 ("Item ref target"):** an item ref with no target names a path an unread-type
  *   resource names ({@link UntargetedItemRef}, {@link UnreadTypeHref}); an item ref names an item
- *   exactly where it has its `ItemRefDocument`, the document at its path; and a mapping's copy of
- *   its item ref's type is that item ref's target's.
+ *   exactly where it has its `ItemRefDocument`, the document at its target; and a mapping's copy of
+ *   its item ref's type, the item ref its `itemRef` places in the mapping's own document, is that
+ *   item ref's target's.
  */
 const packageQueryLawsByName = {
   "Document entry": [
@@ -285,7 +289,7 @@ const packageQueryLawsByName = {
       h.or(h.not(h.in(h.type, documentTypes)), h.eq(h.scope, "entry")),
     ),
     contained(
-      on(documentHrefs, "package", "path", "type"),
+      on(documentHrefs, "package", "target", "type"),
       on(ResourceDocument, "package", "path", "type"),
     ),
   ],
@@ -293,21 +297,24 @@ const packageQueryLawsByName = {
     // An item ref whose href names no resource of the item type or an LTI type names a path a
     // resource of an unread type names, so the type of what it names is unread, and nothing
     // judges it (spec reading 67).
-    contained(on(UntargetedItemRef, "package", "path"), on(UnreadTypeHref, "package", "path")),
+    contained(on(UntargetedItemRef, "package", "target"), on(UnreadTypeHref, "package", "target")),
     contained(
-      on(itemTargets, "node", "package", "path"),
-      on(ItemRefDocument, "node", "package", "path"),
+      on(itemTargets, "package", "path", "start", "target"),
+      on(ItemRefDocument, "package", "path", "start", "target"),
     ),
     contained(
-      on(ItemRefDocument, "node", "package", "path"),
-      on(itemTargets, "node", "package", "path"),
+      on(ItemRefDocument, "package", "path", "start", "target"),
+      on(itemTargets, "package", "path", "start", "target"),
     ),
-    contained(on(MappingItemRefType, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
+    contained(
+      on(MappingItemRefType, "package", "path", "itemRef", "type"),
+      on(ItemRefTarget, "package", "path", "start", "type"),
+    ),
   ],
   RootOfType: [
     contained(
       on(ResourceDocument, "package", "path", "type"),
-      on(TypedHref, "package", "path", "type"),
+      on(TypedHref, "package", "target", "type"),
     ),
   ],
 } as const;
@@ -317,9 +324,10 @@ const packageQueryLawsByName = {
  * Packaging 1.2): each collapsed identifier beside the kind of element that writes it,
  * `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}), the constant that
  * tells the two rules apart. Two resources of one identifier are one row, which "DocumentId key"
- * refuses over `ResourceId`; a resource of the manifest's identifier is a second row of its
- * (package, identifier), which "Manifest id space" refuses. A side that writes no identifier has
- * no row, so it is compared with nothing.
+ * refuses over `ResourceId`; a resource of the manifest's identifier, the package's own key, is a
+ * second row of its (package, identifier), which "Manifest id space" refuses. Every manifest writes
+ * one, since the package is keyed by it; a resource that writes none has no row, so it is
+ * compared with nothing.
  */
 const ManifestIdSpace = derived(
   "ManifestIdSpace",
@@ -361,150 +369,164 @@ const packageQueryLaws = Object.values(packageQueryLawsByName).flat();
 /**
  * The records that name a document, each with that document (spec reading 62): a `lom:lom` of a
  * resource's `cp:metadata`, its resource of an item's or a test's type, and the document a
- * resource lists at the path the resource's `href` names ({@link ResourceDocument}), whatever
+ * resource lists at the target the resource's `href` names ({@link ResourceDocument}), whatever
  * type it is read as (reading 162). A record whose resource has no `href`, no such type, or an
  * `href` that names no listed document names none, and no law reads it: "Document entry" refuses
  * that `href` (reading 93). The manifest is no resource's document (reading 146), so an `href`
  * that names it names none (NS6).
  *
- * The record keys a row, since a record's resource has one `href` and one type, and the package
- * lists one document at a path (`ResourceDocument`'s key over `package` and `path`).
+ * A row is the record's place, `(package, path, record)`, its `record` its `start` in the
+ * manifest, and `document`, the path of the document it names. The record keys a row, since a
+ * record's resource has one `href` and one type, and the package lists one document at a path
+ * (`ResourceDocument`'s key over `package` and `path`).
  */
 const namingRecords = query(QtiBase).rule((r) => {
-  const { node: record, ownerParent: resource } = v(LomRecord, "record");
-  const { package: pkg, path } = v(ResourceHref, "href");
+  const { ownerParent: resource, package: pkg, path, start: record } = v(LomRecord, "record");
+  const { target: document } = v(ResourceHref, "href");
   const { type } = v(ResourceTyped, "typed");
-  const { node: document } = v(ResourceDocument, "document");
 
   return r
-    .match(LomRecord, { node: record, owner: resourceMetadata, ownerParent: resource })
-    .match(ResourceHref, { node: resource, package: pkg, path })
-    .match(ResourceTyped, { node: resource, package: pkg, type })
-    .match(ResourceDocument, { node: document, package: pkg, path })
+    .match(LomRecord, {
+      owner: resourceMetadata,
+      ownerParent: resource,
+      package: pkg,
+      path,
+      start: record,
+    })
+    .match(ResourceHref, { package: pkg, path, start: resource, target: document })
+    .match(ResourceTyped, { package: pkg, path, start: resource, type })
+    .match(ResourceDocument, { package: pkg, path: document })
     .where(r.inSet(type, objectTypes))
-    .find({ document, record });
+    .find({ document, package: pkg, path, record });
 });
 
 /**
  * The general categories of the records that name a document, each with its record and that
- * document: a {@link LomGeneral}, whose parent is its record. Every `lom-identifier` and
- * `lom-title` query reaches its record through one, from an entry's `holder` or a title's
- * `parent`, so a meta-metadata's or a relation's identifier, whose holder is no general category,
- * is read by none; and R26 reads a document's languages against each category that describes it
- * (`DescribedLang`).
+ * document: a {@link LomGeneral}, whose parent is its record, both in the record's document. Every
+ * `lom-identifier` and `lom-title` query reaches its record through one, from an entry's `holder`
+ * or a title's `parent`, so a meta-metadata's or a relation's identifier, whose holder is no
+ * general category, is read by none; and R26 reads a document's languages against each category
+ * that describes it (`DescribedLang`).
  *
- * The category keys a row, since a node has one parent, and a category describes one document,
- * the one its record names.
+ * The category keys a row, its place `(package, path, general)`, since a node has one parent, and
+ * a category describes one document, the one its record names.
  */
 const namingGenerals = query(QtiBase).rule((r) => {
-  const { node: general, parent: record } = v(LomGeneral, "general");
+  const { package: pkg, parent: record, path, start: general } = v(LomGeneral, "general");
   const { document } = v(namingRecords, "named");
 
   return r
-    .match(LomGeneral, { node: general, parent: record })
-    .match(namingRecords, { document, record })
-    .find({ document, general, record });
+    .match(LomGeneral, { package: pkg, parent: record, path, start: general })
+    .match(namingRecords, { document, package: pkg, path, record })
+    .find({ document, general, package: pkg, path, record });
 });
 
 /**
  * The records that name a document and whose general category lists an `identifier`, each by its
- * record: `lom-identifier` reads each (§2.7.1.1). A meta-metadata's or a relation's identifier is
- * no general one.
+ * record's place: `lom-identifier` reads each (§2.7.1.1). A meta-metadata's or a relation's
+ * identifier is no general one.
  */
 const ListedIdentifier = derived(
   "ListedIdentifier",
   query(QtiBase).rule((r) => {
-    const { holder: general } = v(LomEntry, "entry");
+    const { holder: general, package: pkg, path } = v(LomEntry, "entry");
     const { record } = v(namingGenerals, "general");
 
     return r
-      .match(LomEntry, { holder: general })
-      .match(namingGenerals, { general, record })
-      .find({ record });
+      .match(LomEntry, { holder: general, package: pkg, path })
+      .match(namingGenerals, { general, package: pkg, path, record })
+      .find({ package: pkg, path, record });
   }),
 );
 
 /**
  * The records that name a document one of whose general `identifier` entries is that document's
- * identifier, each by its record (§2.7.1.1: "One of the values given for the identifier must have
- * an entry that matches the identifier of the associated item, test or object bank"): the entry's
- * trimmed token is the root's collapsed `identifier` ({@link ObjectIdentifier}), so a document
- * that writes none is named by no entry.
+ * identifier, each by its record's place (§2.7.1.1: "One of the values given for the identifier
+ * must have an entry that matches the identifier of the associated item, test or object bank"):
+ * the entry's trimmed token is the root's collapsed `identifier` ({@link ObjectIdentifier}, in the
+ * named document), so a document that writes none is named by no entry.
  */
 const MatchedIdentifier = derived(
   "MatchedIdentifier",
   query(QtiBase).rule((r) => {
-    const { holder: general, token } = v(LomEntry, "entry");
+    const { holder: general, package: pkg, path, token } = v(LomEntry, "entry");
     const { document, record } = v(namingGenerals, "general");
 
     return r
-      .match(LomEntry, { holder: general, token })
-      .match(namingGenerals, { document, general, record })
-      .match(ObjectIdentifier, { document, identifier: token })
-      .find({ record });
+      .match(LomEntry, { holder: general, package: pkg, path, token })
+      .match(namingGenerals, { document, general, package: pkg, path, record })
+      .match(ObjectIdentifier, { identifier: token, package: pkg, path: document })
+      .find({ package: pkg, path, record });
   }),
 );
 
 /**
- * The records that name a document and whose general category has a `title`, each by its record:
- * `lom-title` reads each (§2.7.1.2).
+ * The records that name a document and whose general category has a `title`, each by its record's
+ * place: `lom-title` reads each (§2.7.1.2).
  */
 const ListedTitle = derived(
   "ListedTitle",
   query(QtiBase).rule((r) => {
-    const { parent: general } = v(LomTitle, "title");
+    const { package: pkg, parent: general, path } = v(LomTitle, "title");
     const { record } = v(namingGenerals, "general");
 
     return r
-      .match(LomTitle, { parent: general })
-      .match(namingGenerals, { general, record })
-      .find({ record });
+      .match(LomTitle, { package: pkg, parent: general, path })
+      .match(namingGenerals, { general, package: pkg, path, record })
+      .find({ package: pkg, path, record });
   }),
 );
 
 /**
  * The strings of a general title of the records that name a document whose value is that
- * document's title, each with its record and the document's root: the string's `textValue` is the
- * root's `titleValue` ({@link ObjectTitle}), both in `xs:normalizedString`'s value space. A
- * string reaches its record through its {@link LomTitle}, whose parent is a general category.
+ * document's title, each with its record, the string, and the document's path and root: the
+ * string's `textValue` is the root's `titleValue` ({@link ObjectTitle}), both in
+ * `xs:normalizedString`'s value space. A string reaches its record through its {@link LomTitle},
+ * whose parent is a general category, all three in the record's document.
  */
 const titledStrings = query(QtiBase).rule((r) => {
-  const { node: string, parent: title, textValue } = v(LomTitleString, "string");
+  const {
+    package: pkg,
+    parent: title,
+    path,
+    start: string,
+    textValue,
+  } = v(LomTitleString, "string");
   const { parent: general } = v(LomTitle, "title");
   const { document, record } = v(namingGenerals, "general");
-  const { node: root } = v(ObjectTitle, "objectTitle");
+  const { start: root } = v(ObjectTitle, "objectTitle");
 
   return r
-    .match(LomTitleString, { node: string, parent: title, textValue })
-    .match(LomTitle, { node: title, parent: general })
-    .match(namingGenerals, { document, general, record })
-    .match(ObjectTitle, { document, node: root, titleValue: textValue })
-    .find({ record, root, string });
+    .match(LomTitleString, { package: pkg, parent: title, path, start: string, textValue })
+    .match(LomTitle, { package: pkg, parent: general, path, start: title })
+    .match(namingGenerals, { document, general, package: pkg, path, record })
+    .match(ObjectTitle, { package: pkg, path: document, start: root, titleValue: textValue })
+    .find({ document, package: pkg, path, record, root, string });
 });
 
 /**
  * The records that name a document one of whose title strings is that document's title in its
- * language, each by its record (§2.7.1.2: "The title must have a value that matches the value of
- * the title attribute of the associated item, test or object bank. The language used to interpret
- * the title is taken from the language attribute"): a {@link titledStrings} row whose root states
- * no language or whose string is in the root's. Two rules state it, one for each state of the
- * root's optional `xml:lang`: where the root writes one ({@link ObjectLang}), its compared form
- * is no language tag (spec reading 151), or the string's {@link LomString} has none ({@link
- * noLanguage}), or the two are one tag without regard to case; and where it writes none, any
- * string is in its language.
+ * language, each by its record's place (§2.7.1.2: "The title must have a value that matches the
+ * value of the title attribute of the associated item, test or object bank. The language used to
+ * interpret the title is taken from the language attribute"): a {@link titledStrings} row whose
+ * root states no language or whose string is in the root's. Two rules state it, one for each
+ * state of the root's optional `xml:lang`: where the root writes one ({@link ObjectLang}), its
+ * compared form is no language tag (spec reading 151), or the string's {@link LomString} has none
+ * ({@link noLanguage}), or the two are one tag without regard to case; and where it writes none,
+ * any string is in its language.
  */
 const MatchedTitle = derived(
   "MatchedTitle",
   query(QtiBase)
     .rule((r) => {
-      const { record, root, string } = v(titledStrings, "titled");
+      const { document, package: pkg, path, record, root, string } = v(titledStrings, "titled");
       const { languageTag } = v(LomString, "string");
       const { langTag } = v(ObjectLang, "lang");
 
       return r
-        .match(titledStrings, { record, root, string })
-        .match(LomString, { languageTag, node: string })
-        .match(ObjectLang, { langTag, node: root })
+        .match(titledStrings, { document, package: pkg, path, record, root, string })
+        .match(LomString, { languageTag, package: pkg, path, start: string })
+        .match(ObjectLang, { langTag, package: pkg, path: document, start: root })
         .where(
           r.or(
             Compute.not(Compute.matches(langTag, languageTagPattern)),
@@ -512,37 +534,37 @@ const MatchedTitle = derived(
             r.eq(languageTag, langTag),
           ),
         )
-        .find({ record });
+        .find({ package: pkg, path, record });
     })
     .rule((r) => {
-      const { record, root } = v(titledStrings, "titled");
+      const { document, package: pkg, path, record, root } = v(titledStrings, "titled");
 
       return r
-        .match(titledStrings, { record, root })
-        .where(r.not(ObjectLang, { node: root }))
-        .find({ record });
+        .match(titledStrings, { document, package: pkg, path, record, root })
+        .where(r.not(ObjectLang, { package: pkg, path: document, start: root }))
+        .find({ package: pkg, path, record });
     }),
 );
 
 /**
  * Each language a document's `xml:lang` states, under each general category that describes the
- * document (`namingGenerals`): the form's compared value ({@link DocumentLang}'s generated
- * `value`), which R26 asks the category to list. A form that states no language
- * ({@link statedLanguagePattern}: the empty one, one of whitespace alone, or one that is no tag
- * once collapsed) asks nothing, so its value domain alone refuses one that is no tag (spec
- * reading 174), and an empty one is lawful beside an empty `lom:language`.
+ * document (`namingGenerals`), by the category's place: the form's compared value
+ * ({@link DocumentLang}'s generated `value`), which R26 asks the category to list. A form that
+ * states no language ({@link statedLanguagePattern}: the empty one, one of whitespace alone, or
+ * one that is no tag once collapsed) asks nothing, so its value domain alone refuses one that is
+ * no tag (spec reading 174), and an empty one is lawful beside an empty `lom:language`.
  */
 const DescribedLang = derived(
   "DescribedLang",
   query(QtiBase).rule((r) => {
-    const { document, lang, value } = v(DocumentLang, "form");
-    const { general } = v(namingGenerals, "described");
+    const { lang, value } = v(DocumentLang, "form");
+    const { document, general, package: pkg, path } = v(namingGenerals, "described");
 
     return r
-      .match(DocumentLang, { document, lang, value })
-      .match(namingGenerals, { document, general })
+      .match(DocumentLang, { lang, package: pkg, path: document, value })
+      .match(namingGenerals, { document, general, package: pkg, path })
       .where(Compute.matches(lang, statedLanguagePattern))
-      .find({ general, value });
+      .find({ general, package: pkg, path, value });
   }),
 );
 
@@ -555,13 +577,13 @@ const DescribedAssembledLang = derived(
   "DescribedAssembledLang",
   query(QtiBase).rule((r) => {
     const { assembly, lang, value } = v(AssembledLang, "form");
-    const { general } = v(namingGenerals, "described");
+    const { general, package: pkg, path } = v(namingGenerals, "described");
 
     return r
-      .match(AssembledLang, { assembly, lang, value })
-      .match(namingGenerals, { document: assembly, general })
+      .match(AssembledLang, { assembly, lang, package: pkg, value })
+      .match(namingGenerals, { document: assembly, general, package: pkg, path })
       .where(Compute.matches(lang, statedLanguagePattern))
-      .find({ general, value });
+      .find({ general, package: pkg, path, value });
   }),
 );
 
@@ -572,10 +594,13 @@ const DescribedAssembledLang = derived(
  */
 const identityQueryLawsByName = {
   "Document lang": [
-    contained(on(DescribedLang, "general", "value"), on(ResourceLomLanguageSet, "general", "lang")),
     contained(
-      on(DescribedAssembledLang, "general", "value"),
-      on(ResourceLomLanguageSet, "general", "lang"),
+      on(DescribedLang, "package", "path", "general", "value"),
+      on(ResourceLomLanguageSet, "package", "path", "general", "lang"),
+    ),
+    contained(
+      on(DescribedAssembledLang, "package", "path", "general", "value"),
+      on(ResourceLomLanguageSet, "package", "path", "general", "lang"),
     ),
   ],
 } as const;
@@ -589,8 +614,18 @@ const identityQueryLawsByName = {
  *   title in its language ("LomObjectTitle").
  */
 const metadataQueryLawsByName = {
-  LomObjectIdentifier: [contained(on(ListedIdentifier, "record"), on(MatchedIdentifier, "record"))],
-  LomObjectTitle: [contained(on(ListedTitle, "record"), on(MatchedTitle, "record"))],
+  LomObjectIdentifier: [
+    contained(
+      on(ListedIdentifier, "package", "path", "record"),
+      on(MatchedIdentifier, "package", "path", "record"),
+    ),
+  ],
+  LomObjectTitle: [
+    contained(
+      on(ListedTitle, "package", "path", "record"),
+      on(MatchedTitle, "package", "path", "record"),
+    ),
+  ],
 } as const;
 
 /**
@@ -604,12 +639,12 @@ const identityQueryLaws = Object.values(identityQueryLawsByName).flat();
 const metadataQueryLaws = Object.values(metadataQueryLawsByName).flat();
 
 /**
- * The type a setter or a lookup sets its variable to, one row per expression it holds: its
- * `VariableRef` by `identifier` (`node`, `kind`, `baseType`, `cardinality` and `resolution`, the
- * reference's) joined with each `Expression` whose parent it is (`heldBase` and
- * `heldCardinality`, that expression's type). Its content model allows one expression, and a
- * second breaks N5's `Follow`, so a lawful setter or lookup has one row. `Set_type` (P20) and
- * `Lookup_type` (P22) read it.
+ * The type a setter or a lookup sets its variable to, one row per expression it holds, by the
+ * setter's place: its `VariableRef` by `identifier` (`kind`, `baseType`, `cardinality` and
+ * `resolution`, the reference's) joined with each `Expression` whose parent it is, in its own
+ * document (`heldBase` and `heldCardinality`, that expression's type). Its content model allows
+ * one expression, and a second breaks N5's `Follow`, so a lawful setter or lookup has one row.
+ * `Set_type` (P20) and `Lookup_type` (P22) read it.
  *
  * A setter whose `identifier` names no variable, unwritten or no NCName (spec reading 152), has
  * no reference, and one that holds no expression holds no type, so neither has a row, and AL3,
@@ -618,7 +653,15 @@ const metadataQueryLaws = Object.values(metadataQueryLawsByName).flat();
 const HeldType = derived(
   "HeldType",
   query(QtiBase).rule((r) => {
-    const { baseType, cardinality, kind, node, resolution } = v(VariableRef, "reference");
+    const {
+      baseType,
+      cardinality,
+      kind,
+      package: pkg,
+      path,
+      resolution,
+      start,
+    } = v(VariableRef, "reference");
     const { baseType: heldBase, cardinality: heldCardinality } = v(Expression, "held");
 
     return r
@@ -627,12 +670,30 @@ const HeldType = derived(
         baseType,
         cardinality,
         kind,
-        node,
+        package: pkg,
+        path,
         resolution,
+        start,
       })
-      .match(Expression, { baseType: heldBase, cardinality: heldCardinality, parent: node })
+      .match(Expression, {
+        baseType: heldBase,
+        cardinality: heldCardinality,
+        package: pkg,
+        parent: start,
+        path,
+      })
       .where(r.inSet(kind, heldKinds))
-      .find({ baseType, cardinality, heldBase, heldCardinality, kind, node, resolution });
+      .find({
+        baseType,
+        cardinality,
+        heldBase,
+        heldCardinality,
+        kind,
+        package: pkg,
+        path,
+        resolution,
+        start,
+      });
   }),
 );
 
@@ -646,39 +707,64 @@ const HeldType = derived(
 const DeclaredReference = derived(
   "DeclaredReference",
   query(QtiBase).rule((r) => {
-    const { attribute, document, identifier, node, resolution } = v(VariableRef, "reference");
+    const {
+      attribute,
+      identifier,
+      package: pkg,
+      path,
+      resolution,
+      start,
+    } = v(VariableRef, "reference");
 
     return r
-      .match(VariableRef, { attribute, document, identifier, node, resolution })
-      .match(DeclarationIdentifier, { document, identifier })
-      .find({ attribute, node, resolution });
+      .match(VariableRef, { attribute, identifier, package: pkg, path, resolution, start })
+      .match(DeclarationIdentifier, { identifier, package: pkg, path })
+      .find({ attribute, package: pkg, path, resolution, start });
   }),
 );
 
 /**
  * A placed reference to a name its assembly's item declares (spec reading 117), as
  * {@link DeclaredReference} is a document's own: each `PlacedVariableRef` joined with the item's
- * `DeclarationIdentifier` of the name it spells, every row `declared`.
+ * `DeclarationIdentifier` of the name it spells, the item the document at the assembly's path,
+ * every row `declared`. A row is the placed reference: its element's place, its instance in its
+ * assembly, and its attribute.
  */
 const DeclaredPlacement = derived(
   "DeclaredPlacement",
   query(QtiBase).rule((r) => {
-    const { assembly, attribute, identifier, instance, node, resolution } = v(
-      PlacedVariableRef,
-      "placed",
-    );
+    const {
+      assembly,
+      attribute,
+      identifier,
+      instance,
+      package: pkg,
+      path,
+      resolution,
+      start,
+    } = v(PlacedVariableRef, "placed");
 
     return r
-      .match(PlacedVariableRef, { assembly, attribute, identifier, instance, node, resolution })
-      .match(DeclarationIdentifier, { document: assembly, identifier })
-      .find({ attribute, instance, node, resolution });
+      .match(PlacedVariableRef, {
+        assembly,
+        attribute,
+        identifier,
+        instance,
+        package: pkg,
+        path,
+        resolution,
+        start,
+      })
+      .match(DeclarationIdentifier, { identifier, package: pkg, path: assembly })
+      .find({ assembly, attribute, instance, package: pkg, path, resolution, start });
   }),
 );
 
 /**
  * A declared placed reference's type in its item (spec reading 117), keyed as the placed
- * reference: each `PlacedVariableRefDeclaration`, its `kind` and `declaration`, joined with its
- * element's `Expression`, for `parentKind`, its parent's kind, and with the declaration's
+ * reference: each `PlacedVariableRefDeclaration`, its `kind` and `declaration`, the declaration's
+ * place in the item, the document at the assembly's path, joined with its element's
+ * `Expression`, for `parentKind`, its parent's kind, and with the declaration's
  * `DeclarationBaseType` and `DeclarationCardinality`, for `baseType` and `cardinality`, as
  * `PlacedBindingBaseType`'s are a placed binding's (`#pantry/qti/interactions.ts`). A reference
  * in an included rules fragment is typed in the fragment's own document, where its name is
@@ -694,57 +780,110 @@ const DeclaredPlacement = derived(
 const PlacedReferenceType = derived(
   "PlacedReferenceType",
   query(QtiBase).rule((r) => {
-    const { attribute, declaration, instance, kind, node } = v(
-      PlacedVariableRefDeclaration,
-      "placed",
-    );
+    const {
+      assembly,
+      attribute,
+      declaration,
+      instance,
+      kind,
+      package: pkg,
+      path,
+      start,
+    } = v(PlacedVariableRefDeclaration, "placed");
     const { parentKind } = v(Expression, "element");
     const { baseType } = v(DeclarationBaseType, "base");
     const { cardinality } = v(DeclarationCardinality, "cardinality");
 
     return r
-      .match(PlacedVariableRefDeclaration, { attribute, declaration, instance, kind, node })
-      .match(Expression, { node, parentKind })
-      .match(DeclarationBaseType, { baseType, node: declaration })
-      .match(DeclarationCardinality, { cardinality, node: declaration })
-      .find({ attribute, baseType, cardinality, declaration, instance, kind, node, parentKind });
+      .match(PlacedVariableRefDeclaration, {
+        assembly,
+        attribute,
+        declaration,
+        instance,
+        kind,
+        package: pkg,
+        path,
+        start,
+      })
+      .match(Expression, { package: pkg, parentKind, path, start })
+      .match(DeclarationBaseType, { baseType, package: pkg, path: assembly, start: declaration })
+      .match(DeclarationCardinality, {
+        cardinality,
+        package: pkg,
+        path: assembly,
+        start: declaration,
+      })
+      .find({
+        assembly,
+        attribute,
+        baseType,
+        cardinality,
+        declaration,
+        instance,
+        kind,
+        package: pkg,
+        parentKind,
+        path,
+        start,
+      });
   }),
 );
 
 /**
  * A variable mapping whose item declares its target (spec reading 97): each
- * `MappingSourceDeclaration` joined with its item's `DeclarationIdentifier` of its target, which
- * `Variable_mapping_target` holds to the mapping's own source: a mapping may not rename a
- * variable of the item into another of the item's.
+ * `MappingSourceDeclaration` joined with its item's `DeclarationIdentifier` of its target, the
+ * item the document at its `itemDocument`, which `Variable_mapping_target` holds to the mapping's
+ * own source: a mapping may not rename a variable of the item into another of the item's.
  */
 const DeclaredTarget = derived(
   "DeclaredTarget",
   query(QtiBase).rule((r) => {
-    const { itemDocument, node, source, target } = v(MappingSourceDeclaration, "mapping");
+    const {
+      itemDocument,
+      package: pkg,
+      path,
+      source,
+      start,
+      target,
+    } = v(MappingSourceDeclaration, "mapping");
 
     return r
-      .match(MappingSourceDeclaration, { itemDocument, node, source, target })
-      .match(DeclarationIdentifier, { document: itemDocument, identifier: target })
-      .find({ node, source, target });
+      .match(MappingSourceDeclaration, {
+        itemDocument,
+        package: pkg,
+        path,
+        source,
+        start,
+        target,
+      })
+      .match(DeclarationIdentifier, { identifier: target, package: pkg, path: itemDocument })
+      .find({ package: pkg, path, source, start, target });
   }),
 );
 
 /**
  * A written element of a test's assembly as a reading's scope reads it (spec readings 48 and 86):
- * each `AssembledName`, its identifier, node and placements, joined with each `InstanceName` that
+ * each `AssembledName`, its identifier, place and placements, joined with each `InstanceName` that
  * places it, its kind and whether a replacement can repeat it there. A found reading's scope is
  * one of these rows, so a reading of an element placed twice reads one of its instances.
  */
 const FoundName = derived(
   "FoundName",
   query(QtiBase).rule((r) => {
-    const { assembly, identifier, node, placements } = v(AssembledName, "name");
+    const {
+      assembly,
+      identifier,
+      package: pkg,
+      path,
+      placements,
+      start,
+    } = v(AssembledName, "name");
     const { kind, replaced } = v(InstanceName, "placed");
 
     return r
-      .match(AssembledName, { assembly, identifier, node, placements })
-      .match(InstanceName, { assembly, kind, node, replaced })
-      .find({ assembly, identifier, kind, node, placements, replaced });
+      .match(AssembledName, { assembly, identifier, package: pkg, path, placements, start })
+      .match(InstanceName, { assembly, kind, package: pkg, path, replaced, start })
+      .find({ assembly, identifier, kind, package: pkg, path, placements, replaced, start });
   }),
 );
 
@@ -756,23 +895,34 @@ const FoundName = derived(
 const HeldScope = derived(
   "HeldScope",
   query(QtiBase).rule((r) => {
-    const { assembly, attribute, form, found, node, scope, split } = v(Reading, "reading");
+    const {
+      assembly,
+      attribute,
+      form,
+      found,
+      package: pkg,
+      path,
+      scope,
+      split,
+      start,
+    } = v(Reading, "reading");
 
     return r
-      .match(Reading, { assembly, attribute, form, found, node, scope, split })
-      .match(AssembledName, { assembly, identifier: scope })
-      .find({ assembly, attribute, form, found, node, split });
+      .match(Reading, { assembly, attribute, form, found, package: pkg, path, scope, split, start })
+      .match(AssembledName, { assembly, identifier: scope, package: pkg })
+      .find({ assembly, attribute, form, found, package: pkg, path, split, start });
   }),
 );
 
 /**
  * A reading whose variable the document it reads declares (spec readings 48 and 106): an unsplit
  * reading's in the test's declarations, and a split or numbered reading's through a found item
- * ref in the declarations of the item it names (`ItemRefDocument`), each joined with the
- * `DeclarationIdentifier` of its variable, whatever its cardinality spells (spec reading 159),
+ * ref in the declarations of the item it names (`ItemRefDocument`'s `target`), each joined with
+ * the `DeclarationIdentifier` of its variable, whatever its cardinality spells (spec reading 159),
  * with its kind and its counts of cardinalities and base types. An item ref that names an LTI
  * link, or an item whose document the package lacks, names no declarations, so a reading through
- * it has no row.
+ * it has no row. The declaration is named by its place, `declarationDocument` and `declaration`,
+ * the document that declares it and its `start` there.
  *
  * A reading is `declared` exactly where it is one of these (`E1_derived`), and a resolving one's
  * `ReadingDeclaration` names that declaration.
@@ -781,23 +931,41 @@ const DeclaredReading = derived(
   "DeclaredReading",
   query(QtiBase)
     .rule((r) => {
-      const { assembly, attribute, node, split, variable } = v(Reading, "reading");
+      const {
+        assembly,
+        attribute,
+        package: pkg,
+        path,
+        split,
+        start,
+        variable,
+      } = v(Reading, "reading");
       const {
         baseTypes,
         cardinalities,
         declarationKind,
-        node: declaration,
+        start: declaration,
       } = v(DeclarationIdentifier, "declared");
 
       return r
-        .match(Reading, { assembly, attribute, form: "unsplit", node, split, variable })
+        .match(Reading, {
+          assembly,
+          attribute,
+          form: "unsplit",
+          package: pkg,
+          path,
+          split,
+          start,
+          variable,
+        })
         .match(DeclarationIdentifier, {
           baseTypes,
           cardinalities,
           declarationKind,
-          document: assembly,
           identifier: variable,
-          node: declaration,
+          package: pkg,
+          path: assembly,
+          start: declaration,
         })
         .find({
           assembly,
@@ -805,20 +973,34 @@ const DeclaredReading = derived(
           baseTypes,
           cardinalities,
           declaration,
+          declarationDocument: assembly,
           declarationKind,
           form: ReadingForm.handle("unsplit"),
-          node,
+          package: pkg,
+          path,
           split,
+          start,
         });
     })
     .rule((r) => {
-      const { assembly, attribute, form, named, node, split, variable } = v(Reading, "reading");
-      const { document } = v(ItemRefDocument, "item");
+      const {
+        assembly,
+        attribute,
+        form,
+        named,
+        namedDocument,
+        package: pkg,
+        path,
+        split,
+        start,
+        variable,
+      } = v(Reading, "reading");
+      const { target: item } = v(ItemRefDocument, "item");
       const {
         baseTypes,
         cardinalities,
         declarationKind,
-        node: declaration,
+        start: declaration,
       } = v(DeclarationIdentifier, "declared");
 
       return r
@@ -828,19 +1010,23 @@ const DeclaredReading = derived(
           form,
           found: true,
           named,
+          namedDocument,
           namedKind: itemRefKind,
-          node,
+          package: pkg,
+          path,
           split,
+          start,
           variable,
         })
-        .match(ItemRefDocument, { document, node: named })
+        .match(ItemRefDocument, { package: pkg, path: namedDocument, start: named, target: item })
         .match(DeclarationIdentifier, {
           baseTypes,
           cardinalities,
           declarationKind,
-          document,
           identifier: variable,
-          node: declaration,
+          package: pkg,
+          path: item,
+          start: declaration,
         })
         .where(r.inSet(form, ["split", "numbered"]))
         .find({
@@ -849,10 +1035,13 @@ const DeclaredReading = derived(
           baseTypes,
           cardinalities,
           declaration,
+          declarationDocument: item,
           declarationKind,
           form,
-          node,
+          package: pkg,
+          path,
           split,
+          start,
         });
     }),
 );
@@ -860,16 +1049,25 @@ const DeclaredReading = derived(
 /**
  * A reading whose variable its item ref maps (spec reading 97): a split or numbered reading
  * through a found item ref, joined with the `VariableMapping` of that item ref whose target is
- * its variable. A mapped variable's reading is `declared`, where the item declares it too, or
- * `mapped` (`E1_derived`).
+ * its variable, a child of the item ref in its document. A mapped variable's reading is
+ * `declared`, where the item declares it too, or `mapped` (`E1_derived`).
  */
 const MappedReading = derived(
   "MappedReading",
   query(QtiBase).rule((r) => {
-    const { assembly, attribute, form, named, node, source, split, variable } = v(
-      Reading,
-      "reading",
-    );
+    const {
+      assembly,
+      attribute,
+      form,
+      named,
+      namedDocument,
+      package: pkg,
+      path,
+      source,
+      split,
+      start,
+      variable,
+    } = v(Reading, "reading");
 
     return r
       .match(Reading, {
@@ -878,15 +1076,23 @@ const MappedReading = derived(
         form,
         found: true,
         named,
+        namedDocument,
         namedKind: itemRefKind,
-        node,
+        package: pkg,
+        path,
         source,
         split,
+        start,
         variable,
       })
-      .match(VariableMapping, { parent: named, target: variable })
+      .match(VariableMapping, {
+        package: pkg,
+        parent: named,
+        path: namedDocument,
+        target: variable,
+      })
       .where(r.inSet(form, ["split", "numbered"]))
-      .find({ assembly, attribute, form, node, source, split });
+      .find({ assembly, attribute, form, package: pkg, path, source, split, start });
   }),
 );
 
@@ -901,7 +1107,18 @@ const MappedReading = derived(
 const LinkReading = derived(
   "LinkReading",
   query(QtiBase).rule((r) => {
-    const { assembly, attribute, form, named, node, source, split } = v(Reading, "reading");
+    const {
+      assembly,
+      attribute,
+      form,
+      named,
+      namedDocument,
+      package: pkg,
+      path,
+      source,
+      split,
+      start,
+    } = v(Reading, "reading");
     const { type } = v(itemRefTargets, "target");
 
     return r
@@ -911,21 +1128,25 @@ const LinkReading = derived(
         form,
         found: true,
         named,
+        namedDocument,
         namedKind: itemRefKind,
-        node,
+        package: pkg,
+        path,
         source,
         split,
+        start,
       })
-      .match(itemRefTargets, { node: named, type })
+      .match(itemRefTargets, { package: pkg, path: namedDocument, start: named, type })
       .where(r.and(r.inSet(form, ["split", "numbered"]), r.inSet(type, linkResourceTypes)))
-      .find({ assembly, attribute, form, node, source, split });
+      .find({ assembly, attribute, form, package: pkg, path, source, split, start });
   }),
 );
 
 /**
- * A reading's key: its reference in its test, its form and the dot it splits at.
+ * A reading's key: its reference in its test, its element's place in the assembly and its
+ * attribute, its form and the dot it splits at.
  */
-const readingKey = ["assembly", "node", "attribute", "form", "split"] as const;
+const readingKey = ["package", "assembly", "path", "start", "attribute", "form", "split"] as const;
 
 /**
  * The rules over the expression overlays' queries, grouped by the law each states, each `check`
@@ -953,19 +1174,31 @@ const expressionQueryLawsByName = {
     // resolves to that declaration.
     check("E1_derived", DeclaredReference, (d) => d.eq(d.resolution, "declared")),
     check("E1_derived", DeclaredPlacement, (d) => d.eq(d.resolution, "declared")),
-    // A reading's scope: a found one is a written element of its assembly, its node, kind,
+    // A reading's scope: a found one is a written element of its assembly, its place, kind,
     // placements and replacement copied, and one the assembly holds an element of is found.
     contained(
       on(
         select(Reading, (r) => r.and(r.ne(r.form, "unsplit"), r.eq(r.found, true))),
+        "package",
         "assembly",
         "scope",
+        "namedDocument",
         "named",
         "namedKind",
         "placements",
         "replaced",
       ),
-      on(FoundName, "assembly", "identifier", "node", "kind", "placements", "replaced"),
+      on(
+        FoundName,
+        "package",
+        "assembly",
+        "identifier",
+        "path",
+        "start",
+        "kind",
+        "placements",
+        "replaced",
+      ),
     ),
     check("E1_derived", HeldScope, (h) => h.eq(h.found, true)),
     // A reading's source: declared exactly where the document it reads declares its variable,
@@ -981,6 +1214,7 @@ const expressionQueryLawsByName = {
       on(
         select(ReadingDeclaration, (d) => d.eq(d.source, "declared")),
         ...readingKey,
+        "declarationDocument",
         "declaration",
         "declarationKind",
         "declBaseTypes",
@@ -989,6 +1223,7 @@ const expressionQueryLawsByName = {
       on(
         DeclaredReading,
         ...readingKey,
+        "declarationDocument",
         "declaration",
         "declarationKind",
         "baseTypes",
@@ -1035,13 +1270,17 @@ const expressionQueryLawsByName = {
             h.not(h.in(h.heldBase, ["integer", ...silentBases])),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
       on(
         select(VariableRefTable, (t) =>
           t.and(t.eq(t.table, "qti-interpolation-table"), t.eq(t.attribute, "identifier")),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
   ],
@@ -1075,35 +1314,38 @@ const expressionQueryLawsByName = {
 const expressionQueryLaws = Object.values(expressionQueryLawsByName).flat();
 
 /**
- * An integer map key's typed value, one row per entry whose key is in `xs:integer`'s lexical
- * space (`integerKeyPattern`) and whose mapping's base type is `integer`: its entry's `node`, its
- * `mapping`, and `value`, the integer the key names, which PostgreSQL reads from the key's text
- * by grizzle's `Compute.parseDecimal`, XML Schema's lexical mapping of `xs:decimal`, whose
- * restriction `xs:integer` is (Part 2 §3.3.13): `1`, `01`, `+1` and `+0001` are one value, and
- * `0` and `-0` another. The parse reads a text of any digits exactly (reading 45: no integer is
- * too long), and the key's text is `keyText`, inside the 16,384 bytes it reads.
+ * An integer map key's typed value, one row per entry whose key is in `xs:integer`'s lexical space
+ * (`integerKeyPattern`) and whose mapping's base type is `integer`: its entry's place, its
+ * `mapping`'s `start` in the entry's document, and `value`, the integer the key names, which
+ * PostgreSQL reads from the key's text by grizzle's `Compute.parseDecimal`, XML Schema's lexical
+ * mapping of `xs:decimal`, whose restriction `xs:integer` is (Part 2 §3.3.13): `1`, `01`, `+1` and
+ * `+0001` are one value, and `0` and `-0` another. The parse reads a text of any digits exactly
+ * (reading 45: no integer is too long), and the key's text is `keyText`, inside the 16,384 bytes it
+ * reads.
  *
  * The `where` selects by the match the parse needs as its guard, restated, since a query's
  * `where` narrows no term: `Compute.when`'s third argument is the value at a key the guard
  * refuses, and the `where` has taken that key out, so no row holds it.
  *
- * Its head holds the entry's node, so two entries whose keys name one integer are two rows, which
- * the key over `(mapping, value)` refuses ("Map key"); a key of no integer's form has no row, and
- * `Typed_attribute_value` refuses it on its `MapKeyType` row alone.
+ * Its head holds the entry's place, so two entries whose keys name one integer are two rows, which
+ * the key over the mapping's place and `value` refuses ("Map key"); a key of no integer's form has
+ * no row, and `Typed_attribute_value` refuses it on its `MapKeyType` row alone.
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#integer | XML Schema Part 2, §3.3.13 integer}
  */
 const MapKeyInteger = derived(
   "MapKeyInteger",
   query(QtiBase).rule((r) => {
-    const { key: form, mapping, node } = v(MapKeyType, "key");
+    const { key: form, mapping, package: pkg, path, start } = v(MapKeyType, "key");
 
     return r
-      .match(MapKeyType, { baseType: "integer", key: form, mapping, node })
+      .match(MapKeyType, { baseType: "integer", key: form, mapping, package: pkg, path, start })
       .where(Compute.matches(form, integerKeyPattern))
       .find({
         mapping,
-        node,
+        package: pkg,
+        path,
+        start,
         value: Compute.when(
           Compute.matches(form, integerKeyPattern),
           (integer) => Compute.parseDecimal(integer),
@@ -1116,7 +1358,7 @@ const MapKeyInteger = derived(
 /**
  * A float map key's typed value, one row per entry whose key is in `xs:double`'s lexical space as
  * an attribute writes it (`doublePattern`, XML Schema 1.0's, reading 71's edition, so `+INF` is
- * outside it) and whose mapping's base type is `float`: its entry's `node`, its `mapping`, and
+ * outside it) and whose mapping's base type is `float`: its entry's place, its `mapping`, and
  * `value`, the double the key names, which PostgreSQL reads from the key's text by grizzle's
  * `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144): the
  * decimal rounded once to the nearest double, ties to even, of any digits and any exponent, an
@@ -1138,14 +1380,16 @@ const MapKeyInteger = derived(
 const MapKeyFloat = derived(
   "MapKeyFloat",
   query(QtiBase).rule((r) => {
-    const { key: form, mapping, node } = v(MapKeyType, "key");
+    const { key: form, mapping, package: pkg, path, start } = v(MapKeyType, "key");
 
     return r
-      .match(MapKeyType, { baseType: "float", key: form, mapping, node })
+      .match(MapKeyType, { baseType: "float", key: form, mapping, package: pkg, path, start })
       .where(Compute.matches(form, doublePattern))
       .find({
         mapping,
-        node,
+        package: pkg,
+        path,
+        start,
         value: Compute.when(
           Compute.matches(form, doublePattern),
           (double) => Compute.parseDouble(double),
@@ -1157,7 +1401,7 @@ const MapKeyFloat = derived(
 
 /**
  * A point map key's typed value, one row per entry of a point mapping whose key splits into two
- * runs ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`,
+ * runs ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's place,
  * its `mapping`, and `x` and `y`, the integers its two runs name, each PostgreSQL's
  * `Compute.parseDecimal` of the run's text, as `MapKeyInteger` reads one. A point is "an
  * integer tuple" (information model §8.13), so the key over `(mapping, x, y)` is uniqueness by
@@ -1171,11 +1415,11 @@ const MapKeyFloat = derived(
 const MapKeyPoint = derived(
   "MapKeyPoint",
   query(QtiBase).rule((r) => {
-    const { first, mapping, node, second } = v(MapKeyItems, "items");
+    const { first, mapping, package: pkg, path, second, start } = v(MapKeyItems, "items");
 
     return r
-      .match(MapKeyItems, { first, mapping, node, second })
-      .match(MapKeyType, { baseType: "point", node })
+      .match(MapKeyItems, { first, mapping, package: pkg, path, second, start })
+      .match(MapKeyType, { baseType: "point", package: pkg, path, start })
       .where(
         r.and(
           Compute.matches(first, integerKeyPattern),
@@ -1184,7 +1428,9 @@ const MapKeyPoint = derived(
       )
       .find({
         mapping,
-        node,
+        package: pkg,
+        path,
+        start,
         x: Compute.when(
           Compute.matches(first, integerKeyPattern),
           (integer) => Compute.parseDecimal(integer),
@@ -1201,7 +1447,7 @@ const MapKeyPoint = derived(
 
 /**
  * A pair map key's typed value, one row per entry of a pair mapping whose key splits into two
- * runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's `node`, its
+ * runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's place, its
  * `mapping`, and `value`, the split's `unordered` text, its least and greatest item with one
  * space between. A pair's association "is undirected so (A,B) and (B,A) are equivalent"
  * (information model §8.13), so the key over `(mapping, value)` is uniqueness by typed value:
@@ -1210,20 +1456,28 @@ const MapKeyPoint = derived(
 const MapKeyPair = derived(
   "MapKeyPair",
   query(QtiBase).rule((r) => {
-    const { first, mapping, node, second, unordered } = v(MapKeyItems, "items");
+    const {
+      first,
+      mapping,
+      package: pkg,
+      path,
+      second,
+      start,
+      unordered,
+    } = v(MapKeyItems, "items");
 
     return r
-      .match(MapKeyItems, { first, mapping, node, second, unordered })
-      .match(MapKeyType, { baseType: "pair", node })
+      .match(MapKeyItems, { first, mapping, package: pkg, path, second, start, unordered })
+      .match(MapKeyType, { baseType: "pair", package: pkg, path, start })
       .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
-      .find({ mapping, node, value: unordered });
+      .find({ mapping, package: pkg, path, start, value: unordered });
   }),
 );
 
 /**
  * A directed pair map key's typed value, one row per entry of a directed pair mapping whose key
  * splits into two runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's
- * `node`, its `mapping`, and `value`, the split's `ordered` text. A directed pair's association
+ * place, its `mapping`, and `value`, the split's `ordered` text. A directed pair's association
  * "is directed so (A,B) and (B,A) are not equivalent" (information model §8.13), so the key over
  * `(mapping, value)` keeps the order and reads the whitespace between as one space: `A B` and
  * `A`, a tab, `B` are one directed pair, and `B A` another.
@@ -1231,13 +1485,13 @@ const MapKeyPair = derived(
 const MapKeyDirectedPair = derived(
   "MapKeyDirectedPair",
   query(QtiBase).rule((r) => {
-    const { first, mapping, node, ordered, second } = v(MapKeyItems, "items");
+    const { first, mapping, ordered, package: pkg, path, second, start } = v(MapKeyItems, "items");
 
     return r
-      .match(MapKeyItems, { first, mapping, node, ordered, second })
-      .match(MapKeyType, { baseType: "directedPair", node })
+      .match(MapKeyItems, { first, mapping, ordered, package: pkg, path, second, start })
+      .match(MapKeyType, { baseType: "directedPair", package: pkg, path, start })
       .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
-      .find({ mapping, node, value: ordered });
+      .find({ mapping, package: pkg, path, start, value: ordered });
   }),
 );
 
@@ -1250,11 +1504,11 @@ const MapKeyDirectedPair = derived(
  */
 const mappingQueryLawsByName = {
   "Map key": [
-    key(on(MapKeyInteger, "mapping", "value")),
-    key(on(MapKeyFloat, "mapping", "value")),
-    key(on(MapKeyPoint, "mapping", "x", "y")),
-    key(on(MapKeyPair, "mapping", "value")),
-    key(on(MapKeyDirectedPair, "mapping", "value")),
+    key(on(MapKeyInteger, "package", "path", "mapping", "value")),
+    key(on(MapKeyFloat, "package", "path", "mapping", "value")),
+    key(on(MapKeyPoint, "package", "path", "mapping", "x", "y")),
+    key(on(MapKeyPair, "package", "path", "mapping", "value")),
+    key(on(MapKeyDirectedPair, "package", "path", "mapping", "value")),
   ],
 } as const;
 
@@ -1264,38 +1518,38 @@ const mappingQueryLawsByName = {
 const mappingQueryLaws = Object.values(mappingQueryLawsByName).flat();
 
 /**
- * The documents that head an assembly, by the document's node (spec reading 117): each assembled
- * document (`Document.assembled`, it has its `TestDocument`) that no include splices in place, no
- * `SiteTarget` that splices naming it (`Inclusion.splices`: an include under one of
- * `splicingParents` that may stand for its target's root). An included fragment is judged where
- * it is included and not alone, and every other assembled document, a test, a section, an item, a
- * stimulus, a response processing template or a fragment no include splices, is judged as its own
- * merged document.
+ * The documents that head an assembly, by the document's package and path (spec reading 117): each
+ * assembled document (`Document.assembled`, it has its `TestDocument`) that no include splices in
+ * place, no `SiteTarget` that splices naming it as its `target` (`Inclusion.splices`: an include
+ * under one of `splicingParents` that may stand for its target's root). An included fragment is
+ * judged where it is included and not alone, and every other assembled document, a test, a section,
+ * an item, a stimulus, a response processing template or a fragment no include splices, is judged
+ * as its own merged document.
  */
 const HeadDocument = derived(
   "HeadDocument",
   query(QtiBase).rule((r) => {
-    const { node } = v(Document, "document");
+    const { package: pkg, path } = v(Document, "document");
 
     return r
-      .match(Document, { assembled: true, node })
-      .where(r.not(SiteTarget, { splices: true, target: node }))
-      .find({ node });
+      .match(Document, { assembled: true, package: pkg, path })
+      .where(r.not(SiteTarget, { package: pkg, splices: true, target: path }))
+      .find({ package: pkg, path });
   }),
 );
 
 /**
- * The documents some instance of an assembly places, by the document's node: the projection of
- * `Instance` on its `document`. A chain of section refs and includes that returns to a document
- * already on it, and that no head reaches, places none of its documents in any assembly, so its
- * documents are none of these (reading 85).
+ * The documents some instance of an assembly places, by the document's package and path: the
+ * projection of `Instance` on its `package` and `document`. A chain of section refs and includes
+ * that returns to a document already on it, and that no head reaches, places none of its documents
+ * in any assembly, so its documents are none of these (reading 85).
  */
 const InstanceDocument = derived(
   "InstanceDocument",
   query(QtiBase).rule((r) => {
-    const { document } = v(Instance, "instance");
+    const { document, package: pkg } = v(Instance, "instance");
 
-    return r.match(Instance, { document }).find({ document });
+    return r.match(Instance, { document, package: pkg }).find({ document, package: pkg });
   }),
 );
 
@@ -1308,10 +1562,12 @@ const InstanceDocument = derived(
  *   so a chain no head reaches is refused.
  */
 const testQueryLawsByName = {
-  "E1 derived": [contained(on(instanceRoots, "document"), on(HeadDocument, "node"))],
+  "E1 derived": [
+    contained(on(instanceRoots, "package", "document"), on(HeadDocument, "package", "path")),
+  ],
   "Inclusion cycle": [
-    contained(on(HeadDocument, "node"), on(instanceRoots, "document")),
-    contained(on(TestDocument, "node"), on(InstanceDocument, "document")),
+    contained(on(HeadDocument, "package", "path"), on(instanceRoots, "package", "document")),
+    contained(on(TestDocument, "package", "path"), on(InstanceDocument, "package", "document")),
   ],
 } as const;
 
@@ -1321,24 +1577,28 @@ const testQueryLawsByName = {
 const testQueryLaws = Object.values(testQueryLawsByName).flat();
 
 /**
- * Each choice and each hottext of a document, by its node, with the document and the identifier
- * it bears: the nine choice classes' `Choice` rows and `Hottext`'s. Every choice class says of
- * its identifier "This identifier must not be used by any other choice or item variable"
- * (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1 alike),
- * and the nine share one space of identifiers (spec reading 104 as amended, the stricter
- * normative reading), so "Choice identifier key" keys these rows by (document, identifier): at
- * most one choice or hottext of a document bears a name, of whichever class.
+ * Each choice and each hottext of a document, by its place, `(package, path, start)`, with the
+ * identifier it bears: the nine choice classes' `Choice` rows and `Hottext`'s. Every choice class
+ * says of its identifier "This identifier must not be used by any other choice or item variable"
+ * (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1 alike), and
+ * the nine share one space of identifiers (spec reading 104 as amended, the stricter normative
+ * reading), so "Choice identifier key" keys these rows by (package, path, identifier): at most one
+ * choice or hottext of a document bears a name, of whichever class.
  */
 const choicesAndHottexts = query(QtiBase)
   .rule((r) => {
-    const { document, identifier, node } = v(Choice, "choice");
+    const { identifier, package: pkg, path, start } = v(Choice, "choice");
 
-    return r.match(Choice, { document, identifier, node }).find({ document, identifier, node });
+    return r
+      .match(Choice, { identifier, package: pkg, path, start })
+      .find({ identifier, package: pkg, path, start });
   })
   .rule((r) => {
-    const { document, identifier, node } = v(Hottext, "hottext");
+    const { identifier, package: pkg, path, start } = v(Hottext, "hottext");
 
-    return r.match(Hottext, { document, identifier, node }).find({ document, identifier, node });
+    return r
+      .match(Hottext, { identifier, package: pkg, path, start })
+      .find({ identifier, package: pkg, path, start });
   });
 
 /**
@@ -1347,25 +1607,32 @@ const choicesAndHottexts = query(QtiBase)
 const ChoiceOrHottext = derived("ChoiceOrHottext", choicesAndHottexts);
 
 /**
- * Each choice and each hottext an assembly places, by its instance and node, with the assembly's
- * root document and the identifier it bears (spec reading 117): an included fragment's choices
- * are its item's, so "Choice identifier key" keys these rows by (assembly, identifier), and a
- * fragment placed twice in one item names each of its choices twice.
+ * Each choice and each hottext an assembly places, by its assembly, its instance there and its
+ * element's place, with the identifier it bears (spec reading 117): an included fragment's choices
+ * are its item's, so "Choice identifier key" keys these rows by (package, assembly, identifier),
+ * and a fragment placed twice in one item names each of its choices twice.
  */
 const placedChoicesAndHottexts = query(QtiBase)
   .rule((r) => {
-    const { assembly, identifier, instance, node } = v(PlacedChoice, "choice");
+    const { assembly, identifier, instance, package: pkg, path, start } = v(PlacedChoice, "choice");
 
     return r
-      .match(PlacedChoice, { assembly, identifier, instance, node })
-      .find({ assembly, identifier, instance, node });
+      .match(PlacedChoice, { assembly, identifier, instance, package: pkg, path, start })
+      .find({ assembly, identifier, instance, package: pkg, path, start });
   })
   .rule((r) => {
-    const { assembly, identifier, instance, node } = v(PlacedHottext, "hottext");
+    const {
+      assembly,
+      identifier,
+      instance,
+      package: pkg,
+      path,
+      start,
+    } = v(PlacedHottext, "hottext");
 
     return r
-      .match(PlacedHottext, { assembly, identifier, instance, node })
-      .find({ assembly, identifier, instance, node });
+      .match(PlacedHottext, { assembly, identifier, instance, package: pkg, path, start })
+      .find({ assembly, identifier, instance, package: pkg, path, start });
   });
 
 /**
@@ -1376,7 +1643,8 @@ const PlacedChoiceOrHottext = derived("PlacedChoiceOrHottext", placedChoicesAndH
 
 /**
  * The names a document's choices and hottexts bear, and those its assembly places, that no item
- * variable of the document bears, by (document, identifier): no `DeclarationIdentifier` of the
+ * variable of the document bears, by (package, path, identifier), an assembly's under its head
+ * document's path: no `DeclarationIdentifier` of the
  * document names it, whatever the declaration's cardinality spells (spec reading 159), and in an
  * item no built-in variable does ({@link itemBuiltInNames}), since the built-ins "are declared
  * implicitly" (§2.2.2). An assembly's placed names are its root document's, whose own
@@ -1387,26 +1655,26 @@ const UnclaimedName = derived(
   "UnclaimedName",
   query(QtiBase)
     .rule((r) => {
-      const { document, identifier } = v(choicesAndHottexts, "chosen");
+      const { identifier, package: pkg, path } = v(choicesAndHottexts, "chosen");
       const { rootKind } = v(Document, "root");
 
       return r
-        .match(choicesAndHottexts, { document, identifier })
-        .match(Document, { node: document, rootKind })
-        .where(r.not(DeclarationIdentifier, { document, identifier }))
+        .match(choicesAndHottexts, { identifier, package: pkg, path })
+        .match(Document, { package: pkg, path, rootKind })
+        .where(r.not(DeclarationIdentifier, { identifier, package: pkg, path }))
         .where(r.or(r.ne(rootKind, itemKind), Compute.not(r.inSet(identifier, itemBuiltInNames))))
-        .find({ document, identifier });
+        .find({ identifier, package: pkg, path });
     })
     .rule((r) => {
-      const { assembly, identifier } = v(placedChoicesAndHottexts, "placed");
+      const { assembly, identifier, package: pkg } = v(placedChoicesAndHottexts, "placed");
       const { rootKind } = v(Document, "root");
 
       return r
-        .match(placedChoicesAndHottexts, { assembly, identifier })
-        .match(Document, { node: assembly, rootKind })
-        .where(r.not(DeclarationIdentifier, { document: assembly, identifier }))
+        .match(placedChoicesAndHottexts, { assembly, identifier, package: pkg })
+        .match(Document, { package: pkg, path: assembly, rootKind })
+        .where(r.not(DeclarationIdentifier, { identifier, package: pkg, path: assembly }))
         .where(r.or(r.ne(rootKind, itemKind), Compute.not(r.inSet(identifier, itemBuiltInNames))))
-        .find({ document: assembly, identifier });
+        .find({ identifier, package: pkg, path: assembly });
     }),
 );
 
@@ -1421,17 +1689,17 @@ const UnclaimedName = derived(
  */
 const interactionQueryLawsByName = {
   "Choice identifier key": [
-    key(on(ChoiceOrHottext, "document", "identifier")),
-    key(on(PlacedChoiceOrHottext, "assembly", "identifier")),
+    key(on(ChoiceOrHottext, "package", "path", "identifier")),
+    key(on(PlacedChoiceOrHottext, "package", "assembly", "identifier")),
   ],
   "Choice not variable": [
     contained(
-      on(ChoiceOrHottext, "document", "identifier"),
-      on(UnclaimedName, "document", "identifier"),
+      on(ChoiceOrHottext, "package", "path", "identifier"),
+      on(UnclaimedName, "package", "path", "identifier"),
     ),
     contained(
-      on(PlacedChoiceOrHottext, "assembly", "identifier"),
-      on(UnclaimedName, "document", "identifier"),
+      on(PlacedChoiceOrHottext, "package", "assembly", "identifier"),
+      on(UnclaimedName, "package", "path", "identifier"),
     ),
   ],
 } as const;
@@ -1442,34 +1710,34 @@ const interactionQueryLawsByName = {
 const interactionQueryLaws = Object.values(interactionQueryLawsByName).flat();
 
 /**
- * Each property a `data-ssml` member requires, by the member's element, its place and the
- * property's name (Data-SSML 1.0 §3.4: `phoneme`'s `ph`, `say-as`'s `interpret-as`, `sub`'s
- * `alias`): one rule per required property, each a member of that name, beside the property's
- * name. "Data SSML" holds each to a property its member writes.
+ * Each property a `data-ssml` member requires, by the member's element's place, the member's place
+ * in the value and the property's name (Data-SSML 1.0 §3.4: `phoneme`'s `ph`, `say-as`'s
+ * `interpret-as`, `sub`'s `alias`): one rule per required property, each a member of that name,
+ * beside the property's name. "Data SSML" holds each to a property its member writes.
  */
 const RequiredSsmlProperty = derived(
   "RequiredSsmlProperty",
   query(QtiBase)
     .rule((r) => {
-      const { at, node } = v(DataSsmlMember, "member");
+      const { at, package: pkg, path, start } = v(DataSsmlMember, "member");
 
       return r
-        .match(DataSsmlMember, { at, member: "phoneme", node })
-        .find({ member: at, name: "ph", node });
+        .match(DataSsmlMember, { at, member: "phoneme", package: pkg, path, start })
+        .find({ member: at, name: "ph", package: pkg, path, start });
     })
     .rule((r) => {
-      const { at, node } = v(DataSsmlMember, "member");
+      const { at, package: pkg, path, start } = v(DataSsmlMember, "member");
 
       return r
-        .match(DataSsmlMember, { at, member: "say-as", node })
-        .find({ member: at, name: "interpret-as", node });
+        .match(DataSsmlMember, { at, member: "say-as", package: pkg, path, start })
+        .find({ member: at, name: "interpret-as", package: pkg, path, start });
     })
     .rule((r) => {
-      const { at, node } = v(DataSsmlMember, "member");
+      const { at, package: pkg, path, start } = v(DataSsmlMember, "member");
 
       return r
-        .match(DataSsmlMember, { at, member: "sub", node })
-        .find({ member: at, name: "alias", node });
+        .match(DataSsmlMember, { at, member: "sub", package: pkg, path, start })
+        .find({ member: at, name: "alias", package: pkg, path, start });
     }),
 );
 
@@ -1479,8 +1747,8 @@ const RequiredSsmlProperty = derived(
 const dataSsmlQueryLawsByName = {
   "Data SSML": [
     contained(
-      on(RequiredSsmlProperty, "node", "member", "name"),
-      on(DataSsmlProperty, "node", "member", "name"),
+      on(RequiredSsmlProperty, "package", "path", "start", "member", "name"),
+      on(DataSsmlProperty, "package", "path", "start", "member", "name"),
     ),
   ],
 } as const;

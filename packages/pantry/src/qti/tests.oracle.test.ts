@@ -260,8 +260,8 @@ describe("qti/tests.ts, an external include", () => {
     // in the package, read from its href's Reference (one that writes none is AL3's alone, reading
     // 115), each then into its ReferencePath.
     const [target, ...moreTargets] = containmentsOf(
-      ["Site", "node", "kind"],
-      ["SitePath", "node", "kind"],
+      ["Site", "package", "path", "start", "kind"],
+      ["SitePath", "package", "path", "start", "kind"],
     );
     assert.isDefined(target, "Include target");
     assert.deepStrictEqual(moreTargets, []);
@@ -271,7 +271,10 @@ describe("qti/tests.ts, an external include", () => {
       assert.isFalse(selects(target.left, { ...include, kind: sectionRef.kind }), "a section ref");
     }
 
-    const [entry, ...moreEntries] = containmentsOf(["Reference", "node"], ["SitePath", "node"]);
+    const [entry, ...moreEntries] = containmentsOf(
+      ["Reference", "package", "path", "start"],
+      ["SitePath", "package", "path", "start"],
+    );
     assert.isDefined(entry, "the section ref's entry path");
     assert.deepStrictEqual(moreEntries, []);
     if (entry !== undefined) {
@@ -297,8 +300,8 @@ describe("qti/tests.ts, an external include", () => {
     }
 
     const [reached, ...moreReached] = containmentsOf(
-      ["SitePath", "node", "package", "path"],
-      ["ReferencePath", "node", "package", "path"],
+      ["SitePath", "package", "path", "start", "target"],
+      ["ReferencePath", "package", "path", "start", "target"],
     );
     assert.isDefined(reached, "the site's href path");
     assert.deepStrictEqual(moreReached, []);
@@ -307,7 +310,10 @@ describe("qti/tests.ts, an external include", () => {
       assert.isTrue(selects(reached.left, { entry: false, kind: sectionRef.kind }));
     }
 
-    const [mark, ...moreMarks] = containmentsOf(["Site", "node"], ["Reference", "node"]);
+    const [mark, ...moreMarks] = containmentsOf(
+      ["Site", "package", "path", "start"],
+      ["Reference", "package", "path", "start"],
+    );
     assert.isDefined(mark, "the external mark's proof");
     assert.deepStrictEqual(moreMarks, []);
     if (mark !== undefined) {

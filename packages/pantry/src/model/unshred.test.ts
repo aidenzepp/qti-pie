@@ -15,7 +15,7 @@ import { names } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
-import { attributePrefixOf } from "#pantry/model/xdm.ts";
+import { attributePrefixOf, flatten } from "#pantry/model/xdm.ts";
 import type { XdmChild, XdmDocument } from "#pantry/model/xdm.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import {
@@ -59,6 +59,22 @@ const roundTrip = (document: XdmDocument<Composed>) =>
 
     return yield* shred(read, document.version, shredGrammar);
   });
+
+/**
+ * A document's rows as sets: each list's rows, each written as text, in sorted order. Two trees
+ * are one document exactly when their rows are one set, whatever order each lists an element's
+ * attributes and namespace declarations in, which unshred writes in Canonical XML's order.
+ *
+ * @param document - The tree.
+ * @returns Each list of `flatten`'s rows as sorted text, and the document row.
+ */
+const rowSetOf = (document: XdmDocument<Composed>) =>
+  Object.fromEntries(
+    Object.entries(flatten(document)).map(([list, rows]) => [
+      list,
+      Array.isArray(rows) ? rows.map((row) => Formatter.format(row)).toSorted() : rows,
+    ]),
+  );
 
 /**
  * A run of character data as its text says it is: text when it holds a character that is not
@@ -210,7 +226,7 @@ describe("unshred", { timeout: searchTimeout }, () => {
                 }),
               );
 
-              assert.deepStrictEqual(yield* roundTrip(edited), whole);
+              assert.deepStrictEqual(rowSetOf(yield* roundTrip(edited)), rowSetOf(whole));
             }),
         ),
       ),
@@ -271,12 +287,15 @@ describe("unshred", { timeout: searchTimeout }, () => {
 
               const back = yield* roundTrip({ ...labelled, exportCharset: decided });
 
-              assert.deepStrictEqual(back, {
-                ...labelled,
-                charset: decided,
-                declaration: Option.some({ ...written, encoding: Option.some(decided) }),
-                exportCharset: decided,
-              });
+              assert.deepStrictEqual(
+                rowSetOf(back),
+                rowSetOf({
+                  ...labelled,
+                  charset: decided,
+                  declaration: Option.some({ ...written, encoding: Option.some(decided) }),
+                  exportCharset: decided,
+                }),
+              );
             }),
         ),
       ),
@@ -339,9 +358,10 @@ describe("unshred", { timeout: searchTimeout }, () => {
 });
 
 /**
- * The documents spec reading 47's byte fidelity is proved on, each written as crust writes it
- * (its namespace declarations before its attributes, no CDATA, nothing after the root element), so
- * a round trip that keeps every prefix gives back its bytes, each with its version:
+ * The documents spec reading 47's byte fidelity is proved on, each written as unshred writes it
+ * (each element's namespace declarations by prefix, then its attributes by namespace name and local
+ * name, Canonical XML's order; no CDATA, nothing after the root element), so a round trip that
+ * keeps every prefix gives back its bytes, each with its version:
  *
  * - An item whose `xsi:schemaLocation` is written `zs:` on the root and `i:` below it, beside
  *   `xml:lang`;
@@ -352,9 +372,9 @@ describe("unshred", { timeout: searchTimeout }, () => {
  *   written `xlink:`, the closed names of XLink's globals on a kind of the content-packaging set.
  */
 const prefixed = (version: Composed["version"]) => ({
-  item: `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="${asiNamespace}" xmlns:zs="${xsiNamespace}" zs:schemaLocation="${asiNamespace} https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="i" title="t" adaptive="false" time-dependent="false" xml:lang="en"><qti-item-body><p xmlns:i="${xsiNamespace}" i:schemaLocation="urn:a b">a</p></qti-item-body></qti-assessment-item>`,
-  manifest: `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="${cpNamespace}" xmlns:xl="${xlinkNamespace}" xmlns:xlink="${xlinkNamespace}" xmlns:lom="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion><lom:lom><lom:general><lom:title xl:type="simple" xl:href="a.xml" xlink:title="T"><lom:string language="en">T</lom:string></lom:title></lom:general></lom:lom></metadata><organizations/><resources/></manifest>`,
-  test: `<qti-assessment-test xmlns="${asiNamespace}" xmlns:f="urn:f" xmlns:g="urn:g" xmlns:t="${xsiNamespace}" identifier="t" title="t"><qti-test-part identifier="p" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="s" title="s" visible="true"><qti-selection select="1"><f:x f:a="1" g:b="2"><f:y t:type="f:T"/></f:x></qti-selection><qti-assessment-item-ref identifier="i" href="i.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+  item: `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="${asiNamespace}" xmlns:zs="${xsiNamespace}" adaptive="false" identifier="i" time-dependent="false" title="t" zs:schemaLocation="${asiNamespace} https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" xml:lang="en"><qti-item-body><p xmlns:i="${xsiNamespace}" i:schemaLocation="urn:a b">a</p></qti-item-body></qti-assessment-item>`,
+  manifest: `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="${cpNamespace}" xmlns:lom="http://ltsc.ieee.org/xsd/LOM" xmlns:xl="${xlinkNamespace}" xmlns:xlink="${xlinkNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion><lom:lom><lom:general><lom:title xl:href="a.xml" xlink:title="T" xl:type="simple"><lom:string language="en">T</lom:string></lom:title></lom:general></lom:lom></metadata><organizations/><resources/></manifest>`,
+  test: `<qti-assessment-test xmlns="${asiNamespace}" xmlns:f="urn:f" xmlns:g="urn:g" xmlns:t="${xsiNamespace}" identifier="t" title="t"><qti-test-part identifier="p" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="s" title="s" visible="true"><qti-selection select="1"><f:x f:a="1" g:b="2"><f:y t:type="f:T"/></f:x></qti-selection><qti-assessment-item-ref href="i.xml" identifier="i"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
 });
 
 describe("the attribute prefix (spec reading 47, C54)", () => {

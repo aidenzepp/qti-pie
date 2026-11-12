@@ -37,9 +37,9 @@
  * orders them ({@link BranchShuffle}). A section document no test places resolves nothing.
  *
  * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
- * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
- * item ref names ({@link ItemRefHref} and {@link ItemRefDocument}, with the query `ItemRefTarget`
- * of `#pantry/qti/queries.ts`, B2 and B3).
+ * stimulus refs ({@link StimulusRef}), each keyed by its element with its law a key, and the item
+ * each item ref names ({@link ItemRefHref} and {@link ItemRefDocument}, with the query
+ * `ItemRefTarget` of `#pantry/qti/queries.ts`, B2 and B3).
  *
  * Every attribute value a law compares is copied from `Attribute` (C18), over a selection the
  * closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys, which keeps its
@@ -74,7 +74,6 @@ import {
   relation,
   select,
   tree,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
@@ -92,10 +91,10 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
-import { Document, EntryPath } from "#pantry/qti/chardata.ts";
-import { keyText } from "#pantry/qti/limits.ts";
-import { nilUuid, Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Document } from "#pantry/qti/chardata.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
+import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
 import { Entry, hrefPaths, Reference } from "#pantry/qti/package.ts";
 import {
   testKind,
@@ -166,11 +165,11 @@ export const collapsedPattern = Compute.pattern(
 );
 
 /**
- * A document of a test or a section, keyed by its document node: its entry, its root kind, and
- * the counts of its three families. Its hrefs resolve against its path or the `xml:base` in
- * scope (`#pantry/qti/package.ts` `ReferencePath`).
+ * A document of a test or a section, keyed by its `(package, path)`, its `Document`'s key: its root
+ * kind and the counts of its three families. Its hrefs resolve against its path or the `xml:base`
+ * in scope (`#pantry/qti/package.ts` `ReferencePath`).
  *
- * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
+ * - **the host's:** `package`, `path` and `rootKind` (its `Document` row's);
  * - **drawn:** `targets`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily}
  *   and {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
  *   {@link documentInstanceFamily}, which a placed share's and a placed catalog's `placements` copy
@@ -183,24 +182,23 @@ export const TestDocument = relation(
   {
     instances: drawn(natural),
     names: drawn(natural),
-    node: uuid,
-    package: uuid,
+    package: ManifestIdentifier,
     path: EntryPath,
     rootKind: closedId(NodeKind),
     rules: drawn(natural),
     sites: accumulated(natural, 0n),
     targets: drawn(natural),
   },
-  ["node"],
+  ["package", "path"],
 );
 
 /**
  * An attribute value this module compares across rows, collapsed: an identifier or a branch rule's
- * target, keyed by its element and its name.
+ * target, keyed by its element's `(package, path, start)` and its name.
  *
- * - **the host's:** `node` and `name`; `lexical`, the attribute's lexical form, which its copy from
- *   `Attribute` proves; and `lead`, `value` and `trail`, the whitespace before it, its collapsed
- *   value and the whitespace after, which `E1_derived` proves.
+ * - **the host's:** the element and `name`; `lexical`, the attribute's lexical form, which its copy
+ *   from `Attribute` proves; and `lead`, `value` and `trail`, the whitespace before it, its
+ *   collapsed value and the whitespace after, which `E1_derived` proves.
  *
  * A lexical form longer than `keyText` holds has no row, and is refused under the schema's key text
  * bound.
@@ -211,18 +209,20 @@ export const TestToken = relation(
     lead: Space,
     lexical: keyText,
     name: closedId(AttributeName),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     trail: Space,
     value: keyText,
   },
-  ["node", "name"],
+  ["package", "path", "start", "name"],
 );
 
 /**
  * An `xs:boolean` attribute this module reads, keyed by its element and its name: its lexical form,
  * copied from `Attribute`; its value, which `E1_derived` proves from the form; and its element's
- * kind and parent's kind, through `Node`'s `(id, kind, parentKind)`, so a required part is told
- * from a required section a test part holds.
+ * kind and parent's kind, through `Node`'s `(package, path, start, kind, parentKind)`, so a
+ * required part is told from a required section a test part holds.
  */
 export const TestFlag = relation(
   "TestFlag",
@@ -230,16 +230,18 @@ export const TestFlag = relation(
     kind: closedId(NodeKind),
     lexical: keyText,
     name: closedId(AttributeName),
-    node: uuid,
+    package: ManifestIdentifier,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
+    start: natural,
     value: pg.boolean,
   },
-  ["node", "name"],
+  ["package", "path", "start", "name"],
 );
 
 /**
  * A test part, section, section ref or item ref whose identifier names something, keyed by its
- * node: the elements whose identifiers are one namespace across the assembled test (reading 86),
+ * element: the elements whose identifiers are one namespace across the assembled test (reading 86),
  * and among which branch rules jump. One that writes none names nothing and has no row: AL3 refuses
  * it alone (reading 147). One whose identifier is no NCName once collapsed ({@link namingPattern})
  * names nothing either and has no row: its value domain refuses it alone (spec reading 152,
@@ -247,11 +249,12 @@ export const TestFlag = relation(
  *
  * - **the host's:** its {@link nodeRef} tuple; `end`, its node's; `parentKind`, its parent's kind;
  *   `identifier`, its collapsed identifier ({@link TestToken}); and its scope in its own document:
- *   `part`, the test part that holds it (itself for a test part, the document node where none
- *   does); `replaced`, whether a section above it selects with replacement; and, for a section,
- *   `mixes`, whether its children's order is drawn at delivery, and `looseChain`, whether it and
- *   every section above it in its document is invisible and not kept together, so the order of the
- *   section that places the document reaches it. Both are false on every other kind.
+ *   `part`, the start of the test part that holds it (its own for a test part, 0, the document
+ *   node's, where none does); `replaced`, whether a section above it selects with replacement; and,
+ *   for a section, `mixes`, whether its children's order is drawn at delivery, and `looseChain`,
+ *   whether it and every section above it in its document is invisible and not kept together, so
+ *   the order of the section that places the document reaches it. Both are false on every other
+ *   kind.
  *
  * The import writes its rows where its form names something (`namedBy` of
  * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
@@ -260,27 +263,27 @@ export const TestFlag = relation(
 export const Named = relation(
   "Named",
   {
-    document: uuid,
     end: natural,
     identifier: keyText,
     kind: closedId(NodeKind),
     looseChain: pg.boolean,
     mixes: pg.boolean,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
-    part: uuid,
+    part: natural,
+    path: EntryPath,
     replaced: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A section, keyed by its node: the owner of its parts ({@link sectionFamily}), with the facts of
- * its own attributes and children that the scope of its descendants reads.
+ * A section, keyed by its element: the owner of its parts ({@link sectionFamily}), with the facts
+ * of its own attributes and children that the scope of its descendants reads.
  *
  * - **the host's:** its {@link nodeRef} tuple; `parentKind`; `keepTogether`, its `keep-together`
  *   (true where it writes none); `loose`, whether it is invisible and not kept together, so its
@@ -300,20 +303,20 @@ export const Named = relation(
 export const Section = relation(
   "Section",
   {
-    document: uuid,
     keepTogether: pg.boolean,
     kind: closedId(NodeKind),
     loose: pg.boolean,
     looseChain: pg.boolean,
     members: drawn(natural),
     mixes: pg.boolean,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
     parentLooseChain: pg.boolean,
     parentMixes: pg.boolean,
-    part: uuid,
+    part: natural,
+    path: EntryPath,
     replaced: pg.boolean,
     replacing: pg.boolean,
     required: accumulated(natural, 0n),
@@ -322,32 +325,32 @@ export const Section = relation(
     version: closedId(SchemaVersion),
     withReplacement: pg.boolean,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One part of a section (C15): an item ref, section, section ref or include it holds as a child,
- * keyed by its node, its `section` the node's parent, and `required`, whether its `required` is
+ * keyed by its element, its `section` its parent's start, and `required`, whether its `required` is
  * true (false where it writes none, or its kind carries none). It owns no sequence.
  */
 export const SectionMember = relation(
   "SectionMember",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     required: pg.boolean,
-    section: uuid,
+    section: natural,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A section's `qti-selection`, keyed by its node, its `parent` the section: an optional child, so a
- * row of its own.
+ * A section's `qti-selection`, keyed by its element, its `parent` the section's start: an optional
+ * child, so a row of its own.
  *
  * - **the host's:** its {@link nodeRef} tuple; `selectLexical`, its `select` as written, and
  *   `selectLead`, `selectForm` and `selectTrail`, the form's split around its collapsed integer;
@@ -359,12 +362,12 @@ export const SectionMember = relation(
 export const SectionSelection = relation.generated(
   "SectionSelection",
   {
-    document: uuid,
     kind: closedId(NodeKind),
     members: natural,
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     required: natural,
     selectForm: SelectForm,
     selectLead: Space,
@@ -374,48 +377,48 @@ export const SectionSelection = relation.generated(
     version: closedId(SchemaVersion),
     withReplacement: pg.boolean,
   },
-  ["node"],
+  ["package", "path", "start"],
   (r) => ({ select: generated(pg.bigint, Compute.cast(r.selectForm, pg.bigint)) }),
 );
 
 /**
- * A section's `qti-ordering`, keyed by its node, its `parent` the section: its {@link nodeRef}
- * tuple and its `shuffle` (false where it writes none).
+ * A section's `qti-ordering`, keyed by its element, its `parent` the section's start: its
+ * {@link nodeRef} tuple and its `shuffle` (false where it writes none).
  */
 export const SectionOrdering = relation(
   "SectionOrdering",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     shuffle: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A site, keyed by its node: a section ref, or an include under a parent the information model
+ * A site, keyed by its element: a section ref, or an include under a parent the information model
  * gives an Include (spec reading 114), each the place where the document it names is merged into
  * its own (information model §7.5 and §2.12).
  *
- * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`, `start`,
- *   `document`, `ancestry`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
- *   `parentKind`, `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`;
- *   `external`, whether its href resolves outside the package, which its href's `Reference` row
- *   proves (an include's then is stored as written and never fetched, and a section ref's is
- *   refused under the stated limit "Remote section ref", reading 170); and the scope it is placed
- *   in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes` and
- *   `parentLooseChain`.
+ * - **the host's:** its node's context, the {@link nodeContext} tuple (`package`, `path`, `start`,
+ *   `children`, `ancestry`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
+ *   `nearestPath`, `parentKind`, `version`), which also holds its {@link nodeRef} fields but
+ *   `parent`; `parent`; `external`, whether its href resolves outside the package, which its href's
+ *   `Reference` row proves (an include's then is stored as written and never fetched, and a section
+ *   ref's is refused under the stated limit "Remote section ref", reading 170); and the scope it is
+ *   placed in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes`
+ *   and `parentLooseChain`.
  *
- * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
- * test part, and its own document under any other parent (an item's body or processing, a
- * fragment's content, a test's feedback), where its placement takes its placing instance's part
- * ({@link placedScope}). Only a section's scope is replaced, mixed or loose, so a site under any
- * other parent is none of them.
+ * Its `part` is the start of the test part it sits in: its parent section's under a section, its
+ * parent's under a test part, and 0, its document node's, under any other parent (an item's body
+ * or processing, a fragment's content, a test's feedback), where its placement takes its placing
+ * instance's part ({@link placedScope}). Only a section's scope is replaced, mixed or loose, so a
+ * site under any other parent is none of them.
  *
  * Its href's path is its {@link SitePath}, a row of its own, since an include may write no href;
  * and the document that path names is its {@link SiteTarget}, a row of its own, since a path may
@@ -426,31 +429,32 @@ export const Site = relation(
   {
     ancestry: bits(Flag),
     children: natural,
-    document: uuid,
     documentType: closedId(DocumentType),
     external: pg.boolean,
     governor: closedId(Governor),
     kind: closedId(NodeKind),
-    nearest: uuid,
+    nearest: natural,
     nearestKind: closedId(NodeKind),
-    node: uuid,
-    parent: uuid,
+    nearestPath: EntryPath,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
     parentLooseChain: pg.boolean,
     parentMixes: pg.boolean,
-    part: uuid,
+    part: natural,
+    path: EntryPath,
     replaced: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A site's href, keyed by the site's node: its `package` and `path`, the entry path its
- * `ReferencePath` resolves it to (`#pantry/qti/package.ts` `hrefPaths`), the site's `kind`, and
- * `entry`, whether the package holds an entry at that path. A row only where the site writes an
- * href that resolves to a path of the package.
+ * A site's href, keyed by the site's element: its `target`, the entry path its `ReferencePath`
+ * resolves it to (`#pantry/qti/package.ts` `hrefPaths`), in the site's own package, the site's
+ * `kind`, and `entry`, whether the package holds an entry at that path. A row only where the site
+ * writes an href that resolves to a path of the package.
  *
  * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that
  *   names its own document, and names no document of the package then, so it has no row and
@@ -466,23 +470,31 @@ export const Site = relation(
  */
 export const SitePath = relation(
   "SitePath",
-  { entry: pg.boolean, kind: closedId(NodeKind), node: uuid, package: uuid, path: keyText },
-  ["node"],
+  {
+    entry: pg.boolean,
+    kind: closedId(NodeKind),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    target: EntryPath,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A site's target, keyed by the site's node: the document its href names, a row only where the
+ * A site's target, keyed by the site's element: the document its href names, a row only where the
  * href names a document of the package, so a site whose href names none has no row, and "Include
  * target" refuses it (spec readings 114 and 115). It is the member of the family of the sites that
  * name a document ({@link siteTargetFamily}), so every member's owner is a document the package
  * writes, and of its own document's ({@link siteFamily}), so a site that names none places nothing.
  *
- * - **the host's:** `target`, the document, with its root kind (`targetRoot`) and its context's
- *   nearest interaction (`targetNearest`, `targetNearestKind`);
- * - **the site's copies:** its `document`; its {@link SitePath}'s `package` and `path`; its `kind`,
- *   `parentKind` and `version`; its own context's nearest interaction (`nearest`, `nearestKind`);
- *   and its `ancestry`, its part of the target's context (`Document.context`, the union over the
- *   sites that name a document, spec reading 117);
+ * - **the host's:** `target`, the document's path, with its root kind (`targetRoot`) and its
+ *   context's nearest interaction, the document and position that hold it and its kind
+ *   (`targetNearestPath`, `targetNearest`, `targetNearestKind`);
+ * - **the site's copies:** its {@link SitePath}'s `target`; its `kind`, `parentKind` and `version`;
+ *   its own context's nearest interaction (`nearest`, `nearestKind`), in its own document; and its
+ *   `ancestry`, its part of the target's context (`Document.context`, the union over the sites that
+ *   name a document, spec reading 117);
  * - **its include's:** `splices`, whether it splices its target in place, its {@link Inclusion}'s;
  *   false for a section ref, which places its target whole; and `places`, whether it places its
  *   target at all, its {@link Inclusion}'s; true for a section ref.
@@ -491,27 +503,27 @@ export const SiteTarget = relation(
   "SiteTarget",
   {
     ancestry: bits(Flag),
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
+    nearest: natural,
     nearestKind: closedId(NodeKind),
-    node: uuid,
-    package: uuid,
+    package: ManifestIdentifier,
     parentKind: closedId(NodeKind),
-    path: keyText,
+    path: EntryPath,
     places: pg.boolean,
     splices: pg.boolean,
-    target: uuid,
-    targetNearest: uuid,
+    start: natural,
+    target: EntryPath,
+    targetNearest: natural,
     targetNearestKind: closedId(NodeKind),
+    targetNearestPath: EntryPath,
     targetRoot: closedId(NodeKind),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An include's site as an include, keyed by its node: its version, its parent's kind and the
+ * An include's site as an include, keyed by its element: its version, its parent's kind and the
  * `IncludeParent` handle that kind is, its target's root kind, the kind the include stands for
  * (spec reading 114), and `splices`, whether it splices that document in place: its parent is one
  * of {@link splicingParents} and it may stand for the root (`IncludeRoot`), as the law oracle's
@@ -525,157 +537,170 @@ export const Inclusion = relation(
   "Inclusion",
   {
     includeParent: closedId(IncludeParent),
-    node: uuid,
+    package: ManifestIdentifier,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     places: pg.boolean,
     root: closedId(NodeKind),
     splices: pg.boolean,
+    start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A branch rule whose target is no reserved exit, keyed by its node: its {@link nodeRef} tuple,
+ * A branch rule whose target is no reserved exit, keyed by its element: its {@link nodeRef} tuple,
  * its owner's kind (`parentKind`, its parent being its source), and its collapsed `target`. A rule
  * that names an exit is valid wherever it stands and has no row.
  */
 export const BranchRule = relation(
   "BranchRule",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     start: natural,
     target: keyText,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One placement of a document in an assembly, the tree of RG3 (`representation-gaps.md` §3.3): its
  * root an assembly's own document, and each other row the section document one site of its
- * parent's document names.
+ * parent's document names. An assembly is named by its head document's path, so each
+ * `(package, assembly)` is one tree, and an instance by its pre-order position in it.
  *
- * - **the host's:** `id` (the root's is its document node's); `assembly`, the root field, on the root
- *   alone; `document`, the document it places, and `rootKind`, that document's root kind;
- *   `assemblyKind`, its root's; `site`, the site of its parent's document it is placed at (the
- *   root's own id), with that site's `siteStart`, `sitePart`, `siteReplaced`, `siteMixes` and
- *   `siteLooseChain`; and its scope in the assembly: `part`, the test part it sits in (the root's
- *   own id where none), `replaced`, whether a section above it selects with replacement, and
- *   `mixes`, whether the order its document's root section sits in is drawn at delivery;
- * - **the tree's group:** `parent`;
- * - **drawn:** `at`, `children`, `start` and `end`, and `names` and `rules`, the counts of its
- *   {@link instanceNameFamily} and {@link resolutionFamily}; and the counts of its document's rows
- *   it places (spec reading 117): `bindings`, Q5.09's `PlacedBinding` rows, under an item's
- *   assembly alone; `choices` and `hottexts`, Q5.09's `PlacedChoice` and `PlacedHottext` rows; and
- *   `ids` and `idrefTargets`, Q5.07's `PlacedId` and `PlacedIdref` rows, each its document's count;
- *   and `langs` and `variables`, Q5.07's `PlacedXmlLang` and Q5.10's `PlacedVariableRef` rows,
- *   under an item's assembly alone;
- * - **accumulated** along the tree's owner axis: `parentDocument`, `parentPart`, `parentReplaced` and
- *   `parentMixes`, its parent's.
+ * - **the host's:** `package` and `assembly`, the root fields, on the root alone; `document`, the
+ *   path of the document it places, and `rootKind`, that document's root kind; `assemblyKind`, its
+ *   root's; its site, `(siteDocument, site)`, the document of its parent and the start of the site
+ *   there it is placed at (the root's own document and 0, its document node), with that site's
+ *   `sitePart`, `siteReplaced`, `siteMixes` and `siteLooseChain`; and its scope in the assembly:
+ *   `part`, the start of the test part it sits in (0, the head's document node, where none),
+ *   `replaced`, whether a section above it selects with replacement, and `mixes`, whether the order
+ *   its document's root section sits in is drawn at delivery;
+ * - **drawn:** the tree's `parent`, `at`, `children`, `start` and `end`, and `names` and `rules`, the
+ *   counts of its {@link instanceNameFamily} and {@link resolutionFamily}; and the counts of its
+ *   document's rows it places (spec reading 117): `bindings`, Q5.09's `PlacedBinding` rows, under
+ *   an item's assembly alone; `choices` and `hottexts`, Q5.09's `PlacedChoice` and `PlacedHottext`
+ *   rows; and `ids` and `idrefTargets`, Q5.07's `PlacedId` and `PlacedIdref` rows, each its
+ *   document's count; and `langs` and `variables`, Q5.07's `PlacedXmlLang` and Q5.10's
+ *   `PlacedVariableRef` rows, under an item's assembly alone;
+ * - **accumulated** along the tree's owner axis: `parentPart`, `parentReplaced` and `parentMixes`,
+ *   its parent's.
+ *
+ * Every part is a position in the head's document, since only a test holds test parts, and a
+ * section document's names hold none.
  */
 export const Instance = relation(
   "Instance",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     assemblyKind: closedId(NodeKind),
     at: drawn(natural),
     bindings: drawn(natural),
     children: drawn(natural),
     choices: drawn(natural),
-    document: uuid,
+    document: EntryPath,
     end: drawn(natural),
     hottexts: drawn(natural),
-    id: uuid,
     idrefTargets: drawn(natural),
     ids: drawn(natural),
     langs: drawn(natural),
     mixes: pg.boolean,
     names: drawn(natural),
-    parent: uuid,
-    parentDocument: accumulated(uuid, nilUuid),
+    package: ManifestIdentifier,
+    parent: drawn(natural),
     parentMixes: accumulated(pg.boolean, false),
-    parentPart: accumulated(uuid, nilUuid),
+    parentPart: accumulated(natural, 0n),
     parentReplaced: accumulated(pg.boolean, false),
-    part: uuid,
+    part: natural,
     replaced: pg.boolean,
     rootKind: closedId(NodeKind),
     rules: drawn(natural),
-    site: uuid,
+    site: natural,
+    siteDocument: EntryPath,
     siteLooseChain: pg.boolean,
     siteMixes: pg.boolean,
-    sitePart: uuid,
+    sitePart: natural,
     siteReplaced: pg.boolean,
-    siteStart: natural,
     start: drawn(natural),
     variables: drawn(natural),
   },
-  ["id"],
+  ["package", "assembly", "start"],
 );
 
 /**
- * One name of one instance of a test's assembly, keyed by the instance and the name's node: a
+ * One name of one instance of a test's assembly, keyed by the instance and the name's start: a
  * {@link Named} of the instance's document, with its scope in the assembly.
  *
- * - **the host's:** `instance`, `node`, and `assembly`, the group key its projection counts it by;
- *   its {@link Named} row's `identifier`, `kind`, `start`, `end`, `namedPart`, `namedReplaced`,
+ * - **the host's:** `package`, `assembly` and `instance`, the instance, the group its family and its
+ *   projection count it by; `path`, the instance's document, and `start`, the name's element in it;
+ *   its {@link Named} row's `identifier`, `kind`, `parent`, `end`, `namedPart`, `namedReplaced`,
  *   `namedMixes` and `namedLooseChain`; and its scope in the assembly: `part` (its own document's
  *   where it has one, else its instance's), `replaced` (its own document's or its instance's) and
  *   `mixes` (its own document's, or its instance's through a loose chain);
- * - **accumulated** along {@link instanceNameFamily}'s owner axis: `document`, `instancePart`,
- *   `instanceReplaced` and `instanceMixes`, its instance's.
+ * - **accumulated** along {@link instanceNameFamily}'s owner axis: `instancePart`, `instanceReplaced`
+ *   and `instanceMixes`, its instance's.
  */
 export const InstanceName = relation(
   "InstanceName",
   {
-    assembly: uuid,
-    document: accumulated(uuid, nilUuid),
+    assembly: EntryPath,
     end: natural,
     identifier: keyText,
-    instance: uuid,
+    instance: natural,
     instanceMixes: accumulated(pg.boolean, false),
-    instancePart: accumulated(uuid, nilUuid),
+    instancePart: accumulated(natural, 0n),
     instanceReplaced: accumulated(pg.boolean, false),
     kind: closedId(NodeKind),
     mixes: pg.boolean,
     namedLooseChain: pg.boolean,
     namedMixes: pg.boolean,
-    namedPart: uuid,
+    namedPart: natural,
     namedReplaced: pg.boolean,
-    node: uuid,
-    part: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    part: natural,
+    path: EntryPath,
     replaced: pg.boolean,
     start: natural,
   },
-  ["instance", "node"],
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
- * A written element of a test's assembly, keyed by the test and the element's node, a projection
- * of {@link InstanceName}: a section document placed twice is one document, so each of its
- * elements is one row here however often it is placed (reading 86), its `placements` the instances
- * that place it.
+ * A written element of a test's assembly, keyed by the test and the element, a projection of
+ * {@link InstanceName}: a section document placed twice is one document, so each of its elements is
+ * one row here however often it is placed (reading 86), its `placements` the instances that place
+ * it.
  */
 export const AssembledName = relation(
   "AssembledName",
-  { assembly: uuid, identifier: keyText, node: uuid, placements: drawn(natural) },
-  ["assembly", "node"],
+  {
+    assembly: EntryPath,
+    identifier: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    placements: drawn(natural),
+    start: natural,
+  },
+  ["package", "assembly", "path", "start"],
 );
 
 /**
- * One branch rule of one instance of a test's assembly, keyed by the instance and the rule
+ * One branch rule of one instance of a test's assembly, keyed by the instance and the rule's start
  * (reading 87): what the rule is wherever it is placed, whether or not its target names anything.
  *
- * - **the host's:** `instance` and `rule`; the rule's `target`, the identifier it names, `owner` (its
- *   source) and `ownerKind`; and the owner's place in the instance, `ownerStart`, `ownerEnd` and
- *   `ownerPart`;
- * - **accumulated** along {@link resolutionFamily}'s owner axis: `assembly`, `document` and
- *   `instanceStart`, the instance's.
+ * - **the host's:** the instance (`package`, `assembly`, `instance`) and `rule`; `path`, the
+ *   instance's document, which holds the rule; the rule's `target`, the identifier it names,
+ *   `owner` (its source's start) and `ownerKind`; and the owner's place in the instance, `ownerEnd`
+ *   and `ownerPart`.
  *
  * Its target is a row of its own, {@link BranchTarget}, which a rule whose target names nothing
  * lacks: the existence law `BranchResolution(instance, rule, target) ⊆ BranchTarget(instance,
@@ -684,24 +709,23 @@ export const AssembledName = relation(
  * The instance's `end` is not copied, because the law needs only the start: a pre-order interval
  * `[start, end)` holds an instance exactly when it holds the instance's `start`, so
  * `Branch_target` places the rule's instance inside the target's instance and inside `via` by
- * `instanceStart` alone.
+ * `instance` alone.
  */
 export const BranchResolution = relation(
   "BranchResolution",
   {
-    assembly: accumulated(uuid, nilUuid),
-    document: accumulated(uuid, nilUuid),
-    instance: uuid,
-    instanceStart: accumulated(natural, 0n),
-    owner: uuid,
+    assembly: EntryPath,
+    instance: natural,
+    owner: natural,
     ownerEnd: natural,
     ownerKind: closedId(NodeKind),
-    ownerPart: uuid,
-    ownerStart: natural,
-    rule: uuid,
+    ownerPart: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    rule: natural,
     target: keyText,
   },
-  ["instance", "rule"],
+  ["package", "assembly", "instance", "rule"],
 );
 
 /**
@@ -709,151 +733,148 @@ export const BranchResolution = relation(
  * 87): the written element its identifier names in an instance that holds the rule's, the first
  * in pre-order where several do. A rule whose target names no such element has no row.
  *
- * - **the resolution's copy** (back into {@link BranchResolution}): `assembly`, `instanceStart` and
- *   the owner's `ownerKind`, `ownerStart`, `ownerEnd` and `ownerPart`, the fields the laws read;
- *   and `target`, which the resolution's existence law holds to its own, so the text rides a key
- *   beside two uuids alone and keeps the one bound `keyText` states (`#pantry/qti/limits.ts`);
- * - **the target's:** `targetInstance` and `targetNode`, with that name's `targetKind`, `targetPart`,
- *   `targetReplaced`, `targetMixes`, `targetStart` and `targetEnd`, and its instance's
- *   `targetInstanceStart` and `targetInstanceEnd`; and `via`, the child of the target's instance on
- *   the way down to the rule's (the rule's own instance where they are one), with its `viaParent`,
- *   `viaStart`, `viaEnd` and `viaSiteStart`;
+ * - **the resolution's copy** (back into {@link BranchResolution}): the owner's `owner`, `ownerKind`,
+ *   `ownerEnd` and `ownerPart`, the fields the laws read; and `target`, which the resolution's
+ *   existence law holds to its own;
+ * - **the target's:** `targetInstance` and `targetStart`, the name's instance and element, with that
+ *   name's `targetKind`, `targetPart`, `targetReplaced`, `targetMixes` and `targetEnd`, and its
+ *   instance's `targetInstanceEnd`; and `via`, the child of the target's instance on the way down
+ *   to the rule's (the rule's own instance where they are one), with its `viaParent`, `viaEnd` and
+ *   `viaSite`;
  * - **drawn:** `shuffles`, its {@link BranchShuffle} rows, 1 where the section that orders the source
  *   and the target shuffles them and 0 where none does.
  */
 export const BranchTarget = relation(
   "BranchTarget",
   {
-    assembly: uuid,
-    instance: uuid,
-    instanceStart: natural,
+    assembly: EntryPath,
+    instance: natural,
+    owner: natural,
     ownerEnd: natural,
     ownerKind: closedId(NodeKind),
-    ownerPart: uuid,
-    ownerStart: natural,
-    rule: uuid,
+    ownerPart: natural,
+    package: ManifestIdentifier,
+    rule: natural,
     shuffles: drawn(natural),
     target: keyText,
     targetEnd: natural,
-    targetInstance: uuid,
+    targetInstance: natural,
     targetInstanceEnd: natural,
-    targetInstanceStart: natural,
     targetKind: closedId(NodeKind),
     targetMixes: pg.boolean,
-    targetNode: uuid,
-    targetPart: uuid,
+    targetPart: natural,
     targetReplaced: pg.boolean,
     targetStart: natural,
-    via: uuid,
+    via: natural,
     viaEnd: natural,
-    viaParent: uuid,
-    viaSiteStart: natural,
-    viaStart: natural,
+    viaParent: natural,
+    viaSite: natural,
   },
-  ["instance", "rule"],
+  ["package", "assembly", "instance", "rule"],
 );
 
 /**
  * The shuffle that orders a branch rule's source and target, keyed by the instance and the rule
- * (reading 87, information model §5.98): `common`, the nearest element of the target's document
- * holding the source's point and the target, whose children's order is drawn at delivery, and
- * `branch`, its child that holds the target and not the source, each with the fields the law
- * reads, beside its {@link BranchTarget}'s copy (`assembly`, `targetInstance`, `ownerStart`,
- * `targetStart`, `viaSiteStart`). A rule whose source and target no shuffle orders has no row.
+ * (reading 87, information model §5.98): `common`, the start of the nearest element of the target's
+ * document holding the source's point and the target, whose children's order is drawn at delivery,
+ * and `branch`, its child that holds the target and not the source, each with the fields the law
+ * reads, beside its {@link BranchTarget}'s copy (`targetInstance`, `owner`, `targetStart`,
+ * `viaSite`). A rule whose source and target no shuffle orders has no row.
  */
 export const BranchShuffle = relation(
   "BranchShuffle",
   {
-    assembly: uuid,
-    branch: uuid,
+    assembly: EntryPath,
+    branch: natural,
     branchEnd: natural,
-    branchParent: uuid,
-    branchPart: uuid,
-    branchStart: natural,
-    common: uuid,
+    branchParent: natural,
+    branchPart: natural,
+    common: natural,
     commonEnd: natural,
     commonKind: closedId(NodeKind),
     commonMixes: pg.boolean,
-    commonPart: uuid,
+    commonPart: natural,
     commonReplaced: pg.boolean,
-    commonStart: natural,
-    instance: uuid,
-    ownerStart: natural,
-    rule: uuid,
-    targetInstance: uuid,
+    instance: natural,
+    owner: natural,
+    package: ManifestIdentifier,
+    rule: natural,
+    targetInstance: natural,
     targetStart: natural,
-    viaSiteStart: natural,
+    viaSite: natural,
   },
-  ["instance", "rule"],
+  ["package", "assembly", "instance", "rule"],
 );
 
 /**
- * An item ref's variable mapping, keyed by its node (information model §7.48): its
+ * An item ref's variable mapping, keyed by its element (information model §7.48): its
  * {@link nodeRef} tuple, its item ref (`parent`), and its collapsed `source` and `target`, the
  * item's outcome and the name the test reads it by.
  */
 export const VariableMapping = relation(
   "VariableMapping",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     source: keyText,
     start: natural,
     target: keyText,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An item's stimulus ref that writes an identifier, keyed by its node (information model §7.6):
+ * An item's stimulus ref that writes an identifier, keyed by its element (information model §7.6):
  * its {@link nodeRef} tuple and its collapsed `identifier`. One that writes none has no row: AL3
  * refuses it alone (reading 147).
  */
 export const StimulusRef = relation(
   "StimulusRef",
   {
-    document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * The href of an item ref that writes one, keyed by the item ref's node: its href's `package` and
- * `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`). What it names is the query
- * `ItemRefTarget` (`#pantry/qti/queries.ts`): the type of a resource of the package whose href's
- * path that is, of the item type or else an LTI type, which "Item ref target" judges. An item ref
- * with no target (`UntargetedItemRef` there) must name a path a resource of an unread type names
- * (`UnreadTypeHref`, spec reading 67): the type of what it names is unread, so the law oracle names
- * it no target to judge (its `itemRefTargetOf`). An unread type is itself a refusal, AL1's value
- * domain, so this narrows the law set, never a verdict. An item ref that writes no href has none,
- * which AL3 alone refuses (spec reading 155).
+ * The href of an item ref that writes one, keyed by the item ref's element: `target`, the entry
+ * path its href resolves to in the ref's own package (its `ReferencePath`, `#pantry/qti/package.ts`
+ * `hrefPaths`). What it names is the query `ItemRefTarget` (`#pantry/qti/queries.ts`): the type of
+ * a resource of the package whose href's path that is, of the item type or else an LTI type, which
+ * "Item ref target" judges. An item ref with no target (`UntargetedItemRef` there) must name a path
+ * a resource of an unread type names (`UnreadTypeHref`, spec reading 67): the type of what it names
+ * is unread, so the law oracle names it no target to judge (its `itemRefTargetOf`). An unread type
+ * is itself a refusal, AL1's value domain, so this narrows the law set, never a verdict. An item
+ * ref that writes no href has none, which AL3 alone refuses (spec reading 155).
  */
-export const ItemRefHref = relation("ItemRefHref", { node: uuid, package: uuid, path: keyText }, [
-  "node",
-]);
+export const ItemRefHref = relation(
+  "ItemRefHref",
+  { package: ManifestIdentifier, path: EntryPath, start: natural, target: EntryPath },
+  ["package", "path", "start"],
+);
 
 /**
- * The item document an item ref names, keyed by the item ref's node: a row only where the package
- * holds a document at the path of an item ref's target of the item type (`ItemRefTarget`,
- * `#pantry/qti/queries.ts`), and none for an LTI link's, so an item resource whose file the package
- * lacks has none, which "Item ref target" refuses. Every law that reads what an item ref's item
- * declares reads it here.
+ * The item document an item ref names, keyed by the item ref's element: `target`, the item
+ * document's path, a row only where the package holds a document at the path of an item ref's
+ * target of the item type (`ItemRefTarget`, `#pantry/qti/queries.ts`), and none for an LTI link's,
+ * so an item resource whose file the package lacks has none, which "Item ref target" refuses. Every
+ * law that reads what an item ref's item declares reads it here.
  */
 export const ItemRefDocument = relation(
   "ItemRefDocument",
-  { document: uuid, node: uuid, package: uuid, path: keyText },
-  ["node"],
+  { package: ManifestIdentifier, path: EntryPath, start: natural, target: EntryPath },
+  ["package", "path", "start"],
 );
 
 /**
@@ -889,7 +910,7 @@ export const testRelations = {
  * Each document's sites that name a document, counted by `TestDocument.targets`. A site that names
  * none places nothing, and "Include target" alone refuses it (reading 115).
  */
-const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "targets"));
+const siteFamily = counted(on(SiteTarget, "package", "path"), fin(TestDocument, "targets"));
 
 /**
  * The sites that place their target (`SiteTarget.places`): each section ref, and each include that
@@ -907,14 +928,14 @@ const placingSites = select(SiteTarget, (s) => s.eq(s.places, true));
 const sitesFold = fold(
   siteFamily,
   Monoid.count,
-  on(placingSites, "document"),
-  on(TestDocument, "node", "sites"),
+  on(placingSites, "package", "path"),
+  on(TestDocument, "package", "path", "sites"),
 );
 
 /**
  * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
  */
-const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, "targetedBy"));
+const siteTargetFamily = counted(on(SiteTarget, "package", "target"), fin(Document, "targetedBy"));
 
 /**
  * A document's context: the union of the ancestries of the sites that name it, `Document.context`,
@@ -925,60 +946,76 @@ const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, "target
 const contextFold = fold(
   siteTargetFamily,
   Monoid.or,
-  on(SiteTarget, "target", "ancestry"),
-  on(Document, "node", "context"),
+  on(SiteTarget, "package", "target", "ancestry"),
+  on(Document, "package", "path", "context"),
 );
 
 /**
  * Each document's names, counted by `TestDocument.names`.
  */
-const nameFamily = counted(on(Named, "document"), fin(TestDocument, "names"));
+const nameFamily = counted(on(Named, "package", "path"), fin(TestDocument, "names"));
 
 /**
  * Each document's branch rules that name a target, counted by `TestDocument.rules`.
  */
-const ruleFamily = counted(on(BranchRule, "document"), fin(TestDocument, "rules"));
+const ruleFamily = counted(on(BranchRule, "package", "path"), fin(TestDocument, "rules"));
 
 /**
  * Each section's parts (C15), counted by `Section.members`: reading 79's count, each part once.
  */
-const sectionFamily = counted(on(SectionMember, "section"), fin(Section, "members"));
+const sectionFamily = counted(
+  on(SectionMember, "package", "path", "section"),
+  fin(Section, "members"),
+);
 
 /**
- * The placements of every assembly, each assembly's root its own document's instance.
+ * The placements of every assembly, each `(package, assembly)` one tree, its root its own
+ * document's instance, each row keyed by its pre-order `start` and its `parent` its parent's.
  */
 const instanceTree = tree(on(Instance, "parent", "at"), fin(Instance, "children"), {
-  root: "assembly",
+  root: ["package", "assembly"],
 });
 
 /**
  * Each assembled document's placements in every assembly, counted by `TestDocument.instances`.
  */
-const documentInstanceFamily = counted(on(Instance, "document"), fin(TestDocument, "instances"));
+const documentInstanceFamily = counted(
+  on(Instance, "package", "document"),
+  fin(TestDocument, "instances"),
+);
 
 /**
  * Each instance's names, counted by `Instance.names`.
  */
-const instanceNameFamily = counted(on(InstanceName, "instance"), fin(Instance, "names"));
+const instanceNameFamily = counted(
+  on(InstanceName, "package", "assembly", "instance"),
+  fin(Instance, "names"),
+);
 
 /**
  * Each written element's placements in a test's assembly, counted by `AssembledName.placements`.
  */
 const assembledNameFamily = counted(
-  on(InstanceName, "assembly", "node"),
+  on(InstanceName, "package", "assembly", "path", "start"),
   fin(AssembledName, "placements"),
 );
 
 /**
  * Each instance's resolved branch rules, counted by `Instance.rules`.
  */
-const resolutionFamily = counted(on(BranchResolution, "instance"), fin(Instance, "rules"));
+const resolutionFamily = counted(
+  on(BranchResolution, "package", "assembly", "instance"),
+  fin(Instance, "rules"),
+);
 
 /**
  * Each target's shuffle, counted by `BranchTarget.shuffles`: one where a shuffle orders its rule's
  * source and target, none where none does.
  */
-const shuffleFamily = counted(on(BranchShuffle, "instance", "rule"), fin(BranchTarget, "shuffles"));
+const shuffleFamily = counted(
+  on(BranchShuffle, "package", "assembly", "instance", "rule"),
+  fin(BranchTarget, "shuffles"),
+);
 
 /**
  * The includes the information model reads as Include (spec reading 114): each `xi:include` under
@@ -1038,7 +1075,7 @@ const externalSites = select(Site, (s) => s.eq(s.external, true));
 
 /**
  * The `href` references that resolve outside the package, one per element, a constant selection
- * keyed by its node: the side a site's external mark is proven by (readings 35 and 102).
+ * keyed by its element: the side a site's external mark is proven by (readings 35 and 102).
  */
 const externalHrefs = select(Reference, (r) =>
   r.and(r.eq(r.name, "href"), r.eq(r.scope, "external")),
@@ -1046,7 +1083,7 @@ const externalHrefs = select(Reference, (r) =>
 
 /**
  * The `href` references of the section refs that write an href that stays in the package, one per
- * element, keyed by its node: each such ref has its {@link SitePath}, or breaks "Document entry"
+ * element, keyed by its element: each such ref has its {@link SitePath}, or breaks "Document entry"
  * (information model §7.5). A section ref that writes no href has no `Reference` row, so AL3 alone
  * refuses it (reading 115, one cause per fault); one whose href resolves outside the package is
  * "Remote section ref"'s alone (reading 170).
@@ -1087,7 +1124,7 @@ const standsFor = (i: InclusionRow) =>
 
 /**
  * Select the nodes of one kind, a constant selection, whose containments share `Node`'s one
- * `UNIQUE (id, kind)`.
+ * `UNIQUE (package, path, start, kind)`.
  *
  * @param kind - The kind.
  * @returns The selection.
@@ -1096,15 +1133,15 @@ const nodesOf = (kind: Kind) => select(Node, (n) => n.eq(n.kind, kind));
 
 /**
  * Select the attributes of one name on elements of some kinds: the source of a copy (C18), keyed by
- * the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over
- * the selection's node serves the copy's reverse probe.
+ * `Attribute`'s key `(package, path, start, name)`, its name fixed, whose index over the element
+ * serves the copy's reverse probe.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
  * @returns The selection.
  */
 const attributesOf = (name: Name, kinds: readonly Kind[]) =>
-  select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
+  select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each test part, section, section ref and item ref ({@link namedKinds}) that
@@ -1139,8 +1176,8 @@ const flagsOf = (name: FlagName) => select(TestFlag, (f) => f.eq(f.name, name));
 
 /**
  * The copy of one attribute into {@link TestToken} (C18): the copy of its lexical form, and each
- * token's attribute, a containment into the selection that the closed attributes' key keys (
- * {@link attributesOf}).
+ * token's attribute, a containment into the selection that `Attribute`'s key keys
+ * ({@link attributesOf}).
  *
  * @param name - The attribute's name.
  * @param kinds - The kinds that carry it.
@@ -1151,8 +1188,14 @@ const tokenCopy = (name: (typeof tokenNames)[number], kinds: readonly Kind[]) =>
 
   return {
     copies: [
-      contained(on(source, "node", "name", "lexical"), on(TestToken, "node", "name", "lexical")),
-      contained(on(tokensOf(name), "node"), on(source, "node")),
+      contained(
+        on(source, "package", "path", "start", "name", "lexical"),
+        on(TestToken, "package", "path", "start", "name", "lexical"),
+      ),
+      contained(
+        on(tokensOf(name), "package", "path", "start"),
+        on(source, "package", "path", "start"),
+      ),
     ] as const,
   };
 };
@@ -1168,8 +1211,14 @@ const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
 
   return {
     copies: [
-      contained(on(source, "node", "name", "lexical"), on(TestFlag, "node", "name", "lexical")),
-      contained(on(flagsOf(name), "node"), on(source, "node")),
+      contained(
+        on(source, "package", "path", "start", "name", "lexical"),
+        on(TestFlag, "package", "path", "start", "name", "lexical"),
+      ),
+      contained(
+        on(flagsOf(name), "package", "path", "start"),
+        on(source, "package", "path", "start"),
+      ),
     ] as const,
   };
 };
@@ -1207,13 +1256,12 @@ const requiredMembers = select(SectionMember, (m) => m.eq(m.required, true));
 const requiredFold = fold(
   sectionFamily,
   Monoid.count,
-  on(requiredMembers, "section"),
-  on(Section, "node", "required"),
+  on(requiredMembers, "package", "path", "section"),
+  on(Section, "package", "path", "start", "required"),
 );
 
 /**
- * The section documents, whose `(package, path)` a site's href names: a key, since a document's
- * path is one per package.
+ * The section documents, whose `(package, path)` a site's href names, `TestDocument`'s key.
  */
 const sectionDocuments = select(TestDocument, (d) => d.eq(d.rootKind, sectionKind));
 
@@ -1240,9 +1288,10 @@ type InstanceRow = RowScalars<typeof Instance>;
 
 /**
  * State that an instance's scope is its site's and its parent's: its test part the site's where
- * the site's document has one, else its parent's; a replacement above it at its site or above its
- * parent; and its order drawn where the site's parent's is, or where the site's parent is loose to
- * its document's root and its parent's order is drawn. Its document's root is any kind its site
+ * the site's document has one (a part above 0, its document node's start), else its parent's; a
+ * replacement above it at its site or above its parent; and its order drawn where the site's
+ * parent's is, or where the site's parent is loose to its document's root and its parent's order
+ * is drawn. Its document's root is any kind its site
  * may stand for: a section ref's is a section ("Document entry"), and an include's the root its
  * parent admits ("Include root", spec reading 114), which an item's body, its processing or a
  * fragment includes as well as a section does.
@@ -1253,8 +1302,8 @@ type InstanceRow = RowScalars<typeof Instance>;
 const placedScope = (i: InstanceRow) =>
   i.and(
     i.or(
-      i.and(i.eq(i.sitePart, i.parentDocument), i.eq(i.part, i.parentPart)),
-      i.and(i.ne(i.sitePart, i.parentDocument), i.eq(i.part, i.sitePart)),
+      i.and(i.eq(i.sitePart, 0n), i.eq(i.part, i.parentPart)),
+      i.and(i.gt(i.sitePart, 0n), i.eq(i.part, i.sitePart)),
     ),
     i.or(
       i.and(i.eq(i.replaced, true), i.or(i.eq(i.siteReplaced, true), i.eq(i.parentReplaced, true))),
@@ -1325,7 +1374,7 @@ const targetAdmitted = (b: TargetRow) =>
 const forward = (b: TargetRow) =>
   b.or(
     b.and(sameInstance(b), b.ge(b.targetStart, b.ownerEnd)),
-    b.and(b.not(sameInstance(b)), b.gt(b.targetStart, b.viaSiteStart)),
+    b.and(b.not(sameInstance(b)), b.gt(b.targetStart, b.viaSite)),
   );
 
 /**
@@ -1337,12 +1386,8 @@ const forward = (b: TargetRow) =>
  */
 const targetHoldsSource = (b: TargetRow) =>
   b.or(
-    b.and(sameInstance(b), b.le(b.targetStart, b.ownerStart), b.lt(b.ownerStart, b.targetEnd)),
-    b.and(
-      b.not(sameInstance(b)),
-      b.le(b.targetStart, b.viaSiteStart),
-      b.lt(b.viaSiteStart, b.targetEnd),
-    ),
+    b.and(sameInstance(b), b.le(b.targetStart, b.owner), b.lt(b.owner, b.targetEnd)),
+    b.and(b.not(sameInstance(b)), b.le(b.targetStart, b.viaSite), b.lt(b.viaSite, b.targetEnd)),
   );
 
 /**
@@ -1354,12 +1399,8 @@ const targetHoldsSource = (b: TargetRow) =>
  */
 const commonHoldsSource = (b: ShuffleRow) =>
   b.or(
-    b.and(sameInstance(b), b.le(b.commonStart, b.ownerStart), b.lt(b.ownerStart, b.commonEnd)),
-    b.and(
-      b.not(sameInstance(b)),
-      b.le(b.commonStart, b.viaSiteStart),
-      b.lt(b.viaSiteStart, b.commonEnd),
-    ),
+    b.and(sameInstance(b), b.le(b.common, b.owner), b.lt(b.owner, b.commonEnd)),
+    b.and(b.not(sameInstance(b)), b.le(b.common, b.viaSite), b.lt(b.viaSite, b.commonEnd)),
   );
 
 /**
@@ -1371,12 +1412,8 @@ const commonHoldsSource = (b: ShuffleRow) =>
  */
 const branchHoldsSource = (b: ShuffleRow) =>
   b.or(
-    b.and(sameInstance(b), b.le(b.branchStart, b.ownerStart), b.lt(b.ownerStart, b.branchEnd)),
-    b.and(
-      b.not(sameInstance(b)),
-      b.le(b.branchStart, b.viaSiteStart),
-      b.lt(b.viaSiteStart, b.branchEnd),
-    ),
+    b.and(sameInstance(b), b.le(b.branch, b.owner), b.lt(b.owner, b.branchEnd)),
+    b.and(b.not(sameInstance(b)), b.le(b.branch, b.viaSite), b.lt(b.viaSite, b.branchEnd)),
   );
 
 /**
@@ -1389,7 +1426,7 @@ const branchHoldsSource = (b: ShuffleRow) =>
 const nested = (b: TargetRow) =>
   b.or(
     targetHoldsSource(b),
-    b.and(sameInstance(b), b.le(b.ownerStart, b.targetStart), b.lt(b.targetStart, b.ownerEnd)),
+    b.and(sameInstance(b), b.le(b.owner, b.targetStart), b.lt(b.targetStart, b.ownerEnd)),
   );
 
 /**
@@ -1404,7 +1441,7 @@ const shuffled = (b: ShuffleRow) =>
   b.and(
     commonHoldsSource(b),
     b.eq(b.branchParent, b.common),
-    b.le(b.branchStart, b.targetStart),
+    b.le(b.branch, b.targetStart),
     b.lt(b.targetStart, b.branchEnd),
     b.not(branchHoldsSource(b)),
     b.eq(b.commonMixes, true),
@@ -1412,8 +1449,8 @@ const shuffled = (b: ShuffleRow) =>
 
 /**
  * The documents whose root is an item, the documents an item ref's item may be: the documents whose
- * `rootKind`, a field beyond the target's terms, is fixed to an item, so `Document`'s key holds it
- * (grizzle's fixed target, at `3cc8fbd`) and it needs no key of its own.
+ * `rootKind`, a field beyond the target's terms, is fixed to an item, so `Document`'s key
+ * `(package, path)` holds it (grizzle's fixed target, at `3cc8fbd`) and it needs no key of its own.
  */
 const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 
@@ -1486,9 +1523,9 @@ const flagCopies = flagCarriers.map(flagCopy);
  * ({@link sitesFold}), one root per head and none for any other document, and two counts that make
  * a chain returning to a document on it unrepresentable.
  *
- * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
- *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site that places
- *   its target under it.
+ * - **A chain a head reaches:** the deferred foreign key `Instance(package, document, rootKind,
+ *   children) → TestDocument(package, path, rootKind, sites)`, since no finite tree has one child
+ *   per site that places its target under it.
  * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
  *   head places, and any fragment only they place: every `TestDocument` is a document some instance
  *   places, a rule over the query `InstanceDocument` (`#pantry/qti/queries.ts`), since none of them
@@ -1540,168 +1577,176 @@ export const testLawsByName = {
     contained(
       on(
         BranchShuffle,
+        "package",
+        "assembly",
         "instance",
         "rule",
-        "assembly",
-        "ownerStart",
+        "owner",
         "targetInstance",
         "targetStart",
-        "viaSiteStart",
+        "viaSite",
       ),
       on(
         BranchTarget,
+        "package",
+        "assembly",
         "instance",
         "rule",
-        "assembly",
-        "ownerStart",
+        "owner",
         "targetInstance",
         "targetStart",
-        "viaSiteStart",
+        "viaSite",
       ),
     ),
     contained(
-      on(BranchShuffle, "targetInstance", "branch", "branchEnd", "branchPart", "branchStart"),
-      on(InstanceName, "instance", "node", "end", "part", "start"),
+      on(
+        BranchShuffle,
+        "package",
+        "assembly",
+        "targetInstance",
+        "branch",
+        "branchEnd",
+        "branchParent",
+        "branchPart",
+      ),
+      on(InstanceName, "package", "assembly", "instance", "start", "end", "parent", "part"),
     ),
-    contained(on(BranchShuffle, "branch", "branchParent"), on(Named, "node", "parent")),
     contained(
       on(
         BranchShuffle,
+        "package",
+        "assembly",
         "targetInstance",
         "common",
-        "assembly",
         "commonEnd",
         "commonKind",
         "commonMixes",
         "commonPart",
         "commonReplaced",
-        "commonStart",
       ),
       on(
         InstanceName,
-        "instance",
-        "node",
+        "package",
         "assembly",
+        "instance",
+        "start",
         "end",
         "kind",
         "mixes",
         "part",
         "replaced",
-        "start",
       ),
     ),
     check("Branch_forward", BranchShuffle, shuffled),
   ],
   "Branch target": [
-    contained(on(testInstances, "document", "rules"), on(TestDocument, "node", "rules")),
+    contained(
+      on(testInstances, "package", "document", "rules"),
+      on(TestDocument, "package", "path", "rules"),
+    ),
     resolutionFamily,
     contained(
-      on(BranchResolution, "instance", "assembly", "document", "instanceStart"),
-      on(Instance, "id", "assembly", "document", "start"),
+      on(BranchResolution, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(BranchResolution, "document", "rule", "target"),
-      on(BranchRule, "document", "node", "target"),
+      on(BranchResolution, "package", "path", "rule", "owner", "ownerKind", "target"),
+      on(BranchRule, "package", "path", "start", "parent", "parentKind", "target"),
     ),
     contained(
-      on(BranchResolution, "rule", "owner", "ownerKind"),
-      on(BranchRule, "node", "parent", "parentKind"),
+      on(BranchResolution, "package", "assembly", "instance", "owner", "ownerEnd", "ownerPart"),
+      on(InstanceName, "package", "assembly", "instance", "start", "end", "part"),
     ),
     contained(
-      on(BranchResolution, "instance", "owner", "ownerEnd", "ownerPart", "ownerStart"),
-      on(InstanceName, "instance", "node", "end", "part", "start"),
-    ),
-    contained(
-      on(BranchResolution, "instance", "rule", "target"),
-      on(BranchTarget, "instance", "rule", "target"),
+      on(BranchResolution, "package", "assembly", "instance", "rule", "target"),
+      on(BranchTarget, "package", "assembly", "instance", "rule", "target"),
     ),
     contained(
       on(
         BranchTarget,
+        "package",
+        "assembly",
         "instance",
         "rule",
-        "assembly",
-        "instanceStart",
+        "owner",
         "ownerEnd",
         "ownerKind",
         "ownerPart",
-        "ownerStart",
       ),
       on(
         BranchResolution,
+        "package",
+        "assembly",
         "instance",
         "rule",
-        "assembly",
-        "instanceStart",
+        "owner",
         "ownerEnd",
         "ownerKind",
         "ownerPart",
-        "ownerStart",
       ),
     ),
     contained(
-      on(BranchTarget, "targetInstance", "targetNode", "target"),
-      on(InstanceName, "instance", "node", "identifier"),
+      on(BranchTarget, "package", "assembly", "targetInstance", "targetStart", "target"),
+      on(InstanceName, "package", "assembly", "instance", "start", "identifier"),
     ),
     contained(
       on(
         BranchTarget,
-        "targetInstance",
-        "targetNode",
+        "package",
         "assembly",
+        "targetInstance",
+        "targetStart",
         "targetEnd",
         "targetKind",
         "targetMixes",
         "targetPart",
         "targetReplaced",
-        "targetStart",
       ),
       on(
         InstanceName,
-        "instance",
-        "node",
+        "package",
         "assembly",
+        "instance",
+        "start",
         "end",
         "kind",
         "mixes",
         "part",
         "replaced",
-        "start",
       ),
     ),
     contained(
-      on(BranchTarget, "targetInstance", "targetInstanceEnd", "targetInstanceStart"),
-      on(Instance, "id", "end", "start"),
+      on(BranchTarget, "package", "assembly", "targetInstance", "targetInstanceEnd"),
+      on(Instance, "package", "assembly", "start", "end"),
     ),
     contained(
-      on(BranchTarget, "via", "viaEnd", "viaParent", "viaSiteStart", "viaStart"),
-      on(Instance, "id", "end", "parent", "siteStart", "start"),
+      on(BranchTarget, "package", "assembly", "via", "viaEnd", "viaParent", "viaSite"),
+      on(Instance, "package", "assembly", "start", "end", "parent", "site"),
     ),
     check("Branch_target", BranchTarget, (b) =>
       b.and(
         targetAdmitted(b),
-        b.le(b.targetInstanceStart, b.instanceStart),
-        b.lt(b.instanceStart, b.targetInstanceEnd),
+        b.le(b.targetInstance, b.instance),
+        b.lt(b.instance, b.targetInstanceEnd),
         b.or(
           b.and(sameInstance(b), b.eq(b.via, b.instance)),
           b.and(
             b.not(sameInstance(b)),
             b.eq(b.viaParent, b.targetInstance),
-            b.le(b.viaStart, b.instanceStart),
-            b.lt(b.instanceStart, b.viaEnd),
+            b.le(b.via, b.instance),
+            b.lt(b.instance, b.viaEnd),
           ),
         ),
       ),
     ),
   ],
   "Document entry": [
-    contained(on(sectionRefHrefs, "node"), on(SitePath, "node")),
-    key(on(sectionDocuments, "package", "path")),
     contained(
-      on(sectionRefTargets, "package", "path", "target"),
-      on(sectionDocuments, "package", "path", "node"),
+      on(sectionRefHrefs, "package", "path", "start"),
+      on(SitePath, "package", "path", "start"),
     ),
-    contained(on(sectionRefPaths, "package", "path"), on(sectionDocuments, "package", "path")),
+    contained(on(sectionRefTargets, "package", "target"), on(sectionDocuments, "package", "path")),
+    contained(on(sectionRefPaths, "package", "target"), on(sectionDocuments, "package", "path")),
   ],
   "E1 derived": [
     check("E1_derived", TestToken, (t) =>
@@ -1723,7 +1768,7 @@ export const testLawsByName = {
         n.or(
           n.eq(n.kind, sectionKind),
           n.and(n.ne(n.kind, partKind), n.eq(n.parentKind, sectionKind)),
-          n.and(n.eq(n.kind, partKind), n.eq(n.part, n.node), n.eq(n.replaced, false)),
+          n.and(n.eq(n.kind, partKind), n.eq(n.part, n.start), n.eq(n.replaced, false)),
           n.and(
             n.ne(n.kind, partKind),
             n.eq(n.parentKind, partKind),
@@ -1734,7 +1779,7 @@ export const testLawsByName = {
             n.ne(n.kind, partKind),
             n.ne(n.parentKind, partKind),
             n.ne(n.parentKind, sectionKind),
-            n.eq(n.part, n.document),
+            n.eq(n.part, 0n),
             n.eq(n.replaced, false),
           ),
         ),
@@ -1754,7 +1799,7 @@ export const testLawsByName = {
           s.and(
             s.ne(s.parentKind, partKind),
             s.ne(s.parentKind, sectionKind),
-            s.eq(s.part, s.document),
+            s.eq(s.part, 0n),
             s.eq(s.replaced, false),
             s.eq(s.parentMixes, false),
             s.eq(s.parentLooseChain, true),
@@ -1833,7 +1878,7 @@ export const testLawsByName = {
           ),
           s.and(
             s.not(s.in(s.parentKind, [sectionKind, partKind])),
-            s.eq(s.part, s.document),
+            s.eq(s.part, 0n),
             s.eq(s.replaced, false),
             s.eq(s.parentMixes, false),
             s.eq(s.parentLooseChain, false),
@@ -1848,14 +1893,14 @@ export const testLawsByName = {
         b.in(b.parentKind, [itemRefKind, sectionKind, partKind]),
       ),
     ),
-    contained(on(TestDocument, "node"), on(assembledDocuments, "node")),
+    contained(on(TestDocument, "package", "path"), on(assembledDocuments, "package", "path")),
     contained(
-      on(Instance, "document", "ids", "idrefTargets", "choices", "hottexts"),
-      on(Document, "node", "ids", "idrefTargets", "choices", "hottexts"),
+      on(Instance, "package", "document", "ids", "idrefTargets", "choices", "hottexts"),
+      on(Document, "package", "path", "ids", "idrefTargets", "choices", "hottexts"),
     ),
     contained(
-      on(itemInstances, "document", "bindings", "langs", "variables"),
-      on(Document, "node", "bindings", "langs", "variables"),
+      on(itemInstances, "package", "document", "bindings", "langs", "variables"),
+      on(Document, "package", "path", "bindings", "langs", "variables"),
     ),
     check("E1_derived", Instance, (i) =>
       i.and(
@@ -1867,14 +1912,14 @@ export const testLawsByName = {
         i.or(
           i.and(
             i.eq(i.start, 0n),
-            i.eq(i.document, i.id),
+            i.eq(i.document, i.assembly),
             i.eq(i.assemblyKind, i.rootKind),
-            i.eq(i.part, i.id),
+            i.eq(i.part, 0n),
             i.eq(i.replaced, false),
             i.eq(i.mixes, false),
-            i.eq(i.site, i.id),
-            i.eq(i.siteStart, 0n),
-            i.eq(i.sitePart, i.id),
+            i.eq(i.siteDocument, i.document),
+            i.eq(i.site, 0n),
+            i.eq(i.sitePart, 0n),
             i.eq(i.siteReplaced, false),
             i.eq(i.siteMixes, false),
             i.eq(i.siteLooseChain, false),
@@ -1886,8 +1931,8 @@ export const testLawsByName = {
     check("E1_derived", InstanceName, (n) =>
       n.and(
         n.or(
-          n.and(n.eq(n.namedPart, n.document), n.eq(n.part, n.instancePart)),
-          n.and(n.ne(n.namedPart, n.document), n.eq(n.part, n.namedPart)),
+          n.and(n.eq(n.namedPart, 0n), n.eq(n.part, n.instancePart)),
+          n.and(n.gt(n.namedPart, 0n), n.eq(n.part, n.namedPart)),
         ),
         n.or(
           n.and(
@@ -1919,31 +1964,49 @@ export const testLawsByName = {
   ],
   "File exists": [
     check("File_exists", SitePath, (s) => s.eq(s.entry, true)),
-    contained(on(entryPaths, "package", "path"), on(Entry, "package", "path")),
+    contained(on(entryPaths, "package", "target"), on(Entry, "package", "path")),
   ],
   "Fragment context": [
     check("Fragment_context", SiteTarget, (s) =>
       s.or(
         s.and(s.eq(s.nearestKind, "document"), s.eq(s.targetNearestKind, "document")),
-        s.and(s.eq(s.nearest, s.targetNearest), s.eq(s.nearestKind, s.targetNearestKind)),
+        s.and(
+          s.eq(s.path, s.targetNearestPath),
+          s.eq(s.nearest, s.targetNearest),
+          s.eq(s.nearestKind, s.targetNearestKind),
+        ),
       ),
     ),
   ],
   "Include root": [check("Include_root", Inclusion, standsFor)],
   "Include target": [
-    contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
-    contained(on(includePaths, "node"), on(SiteTarget, "node")),
+    contained(
+      on(includeSites, "package", "path", "start", "kind"),
+      on(SitePath, "package", "path", "start", "kind"),
+    ),
+    contained(
+      on(includePaths, "package", "path", "start"),
+      on(SiteTarget, "package", "path", "start"),
+    ),
     contained(
       on(
         SiteTarget,
         "package",
-        "path",
         "target",
         "targetRoot",
+        "targetNearestPath",
         "targetNearest",
         "targetNearestKind",
       ),
-      on(Document, "package", "path", "node", "rootKind", "contextNearest", "contextNearestKind"),
+      on(
+        Document,
+        "package",
+        "path",
+        "rootKind",
+        "contextPath",
+        "contextNearest",
+        "contextNearestKind",
+      ),
     ),
   ],
   "Inclusion cycle": [
@@ -1951,46 +2014,66 @@ export const testLawsByName = {
     contained(
       on(
         instanceMembers,
+        "package",
+        "assembly",
         "parent",
         "assemblyKind",
-        "parentDocument",
+        "siteDocument",
         "parentMixes",
         "parentPart",
         "parentReplaced",
       ),
-      on(Instance, "id", "assemblyKind", "document", "mixes", "part", "replaced"),
+      on(
+        Instance,
+        "package",
+        "assembly",
+        "start",
+        "assemblyKind",
+        "document",
+        "mixes",
+        "part",
+        "replaced",
+      ),
     ),
     contained(
       on(
         instanceMembers,
-        "parentDocument",
+        "package",
+        "siteDocument",
         "site",
         "siteLooseChain",
         "siteMixes",
         "sitePart",
         "siteReplaced",
-        "siteStart",
       ),
-      on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
+      on(Site, "package", "path", "start", "parentLooseChain", "parentMixes", "part", "replaced"),
     ),
-    contained(on(instanceMembers, "site", "document"), on(placingSites, "node", "target")),
-    key(on(instanceMembers, "parent", "site")),
     contained(
-      on(Instance, "document", "rootKind", "children"),
-      on(TestDocument, "node", "rootKind", "sites"),
+      on(instanceMembers, "package", "siteDocument", "site", "document"),
+      on(placingSites, "package", "path", "start", "target"),
     ),
-    key(on(instanceRoots, "document")),
+    key(on(instanceMembers, "package", "assembly", "parent", "site")),
+    contained(
+      on(Instance, "package", "document", "rootKind", "children"),
+      on(TestDocument, "package", "path", "rootKind", "sites"),
+    ),
+    key(on(instanceRoots, "package", "document")),
     documentInstanceFamily,
   ],
   "Item ref target": [
-    contained(on(ItemRefHref, "node"), on(nodesOf(itemRefKind), "id")),
-    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefHref, "node")),
-    contained(on(ItemRefHref, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
     contained(
-      on(ItemRefDocument, "document", "package", "path"),
-      on(Document, "node", "package", "path"),
+      on(ItemRefHref, "package", "path", "start"),
+      on(nodesOf(itemRefKind), "package", "path", "start"),
     ),
-    contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
+    contained(
+      on(attributesOf("href", [itemRefKind]), "package", "path", "start"),
+      on(ItemRefHref, "package", "path", "start"),
+    ),
+    contained(
+      on(ItemRefHref, "package", "path", "start", "target"),
+      on(hrefPaths, "package", "path", "start", "target"),
+    ),
+    contained(on(ItemRefDocument, "package", "target"), on(itemDocuments, "package", "path")),
   ],
   "Remote section ref": [
     check("Remote_section_ref", Site, (s) =>
@@ -2003,235 +2086,335 @@ export const testLawsByName = {
     ),
   ],
   "Selection required": [
-    contained(on(requiredMembers, "node"), on(requiredFlags, "node")),
-    contained(on(requiredParts, "node"), on(requiredMembers, "node")),
+    contained(
+      on(requiredMembers, "package", "path", "start"),
+      on(requiredFlags, "package", "path", "start"),
+    ),
+    contained(
+      on(requiredParts, "package", "path", "start"),
+      on(requiredMembers, "package", "path", "start"),
+    ),
     requiredFold,
     check("Selection_required", SectionSelection, (s) => s.le(Compute.base(s.required), s.select)),
   ],
-  "Stimulus ref key": [key(on(StimulusRef, "document", "identifier"))],
-  "Structure identifier": [key(on(Named, "document", "identifier"))],
+  "Stimulus ref key": [key(on(StimulusRef, "package", "path", "identifier"))],
+  "Structure identifier": [key(on(Named, "package", "path", "identifier"))],
   "Test name key": [
-    contained(on(testInstances, "document", "names"), on(TestDocument, "node", "names")),
+    contained(
+      on(testInstances, "package", "document", "names"),
+      on(TestDocument, "package", "path", "names"),
+    ),
     instanceNameFamily,
     contained(
       on(
         InstanceName,
-        "instance",
+        "package",
         "assembly",
-        "document",
+        "instance",
+        "path",
         "instanceMixes",
         "instancePart",
         "instanceReplaced",
       ),
-      on(Instance, "id", "assembly", "document", "mixes", "part", "replaced"),
+      on(Instance, "package", "assembly", "start", "document", "mixes", "part", "replaced"),
     ),
     contained(
-      on(InstanceName, "document", "node", "identifier"),
-      on(Named, "document", "node", "identifier"),
+      on(InstanceName, "package", "path", "start", "identifier"),
+      on(Named, "package", "path", "start", "identifier"),
     ),
     contained(
       on(
         InstanceName,
-        "node",
+        "package",
+        "path",
+        "start",
         "end",
         "kind",
         "namedLooseChain",
         "namedMixes",
         "namedPart",
         "namedReplaced",
-        "start",
+        "parent",
       ),
-      on(Named, "node", "end", "kind", "looseChain", "mixes", "part", "replaced", "start"),
+      on(
+        Named,
+        "package",
+        "path",
+        "start",
+        "end",
+        "kind",
+        "looseChain",
+        "mixes",
+        "part",
+        "replaced",
+        "parent",
+      ),
     ),
     assembledNameFamily,
     contained(
-      on(InstanceName, "assembly", "node", "identifier"),
-      on(AssembledName, "assembly", "node", "identifier"),
+      on(InstanceName, "package", "assembly", "path", "start", "identifier"),
+      on(AssembledName, "package", "assembly", "path", "start", "identifier"),
     ),
     check("Test_name_key", AssembledName, (a) => a.gt(a.placements, 0n)),
-    key(on(AssembledName, "assembly", "identifier")),
+    key(on(AssembledName, "package", "assembly", "identifier")),
   ],
   "Test overlay": [
     ...tokenCopies.flatMap((copy) => copy.copies),
     ...flagCopies.flatMap((copy) => copy.copies),
     contained(
-      on(TestDocument, "node", "package", "path", "rootKind"),
-      on(Document, "node", "package", "path", "rootKind"),
+      on(TestDocument, "package", "path", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
     ),
     contained(
       on(
         select(Document, (d) => d.in(d.rootKind, assembledRoots)),
-        "node",
+        "package",
+        "path",
       ),
-      on(TestDocument, "node"),
+      on(TestDocument, "package", "path"),
     ),
     siteFamily,
     sitesFold,
     nameFamily,
     ruleFamily,
     contained(
-      on(Named, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Named, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(Named, "node", "end"), on(Node, "id", "end")),
-    contained(on(Named, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(on(namingIdentifiers, "node"), on(Named, "node")),
-    contained(on(Named, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
+    contained(
+      on(Named, "package", "path", "start", "end"),
+      on(Node, "package", "path", "start", "end"),
+    ),
+    contained(
+      on(Named, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
+    contained(
+      on(namingIdentifiers, "package", "path", "start"),
+      on(Named, "package", "path", "start"),
+    ),
+    contained(
+      on(Named, "package", "path", "start", "identifier"),
+      on(tokensOf("identifier"), "package", "path", "start", "value"),
+    ),
     contained(
       on(
         select(Named, (n) => n.eq(n.kind, sectionKind)),
-        "node",
+        "package",
+        "path",
+        "start",
         "part",
         "replaced",
         "mixes",
         "looseChain",
       ),
-      on(Section, "node", "part", "replaced", "mixes", "looseChain"),
+      on(Section, "package", "path", "start", "part", "replaced", "mixes", "looseChain"),
     ),
     contained(
       on(
         select(Named, (n) => n.and(n.ne(n.kind, sectionKind), n.eq(n.parentKind, sectionKind))),
+        "package",
+        "path",
         "parent",
         "part",
         "replaced",
       ),
-      on(Section, "node", "part", "replacing"),
+      on(Section, "package", "path", "start", "part", "replacing"),
     ),
     contained(
-      on(Section, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Section, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(Section, "node"), on(nodesOf(sectionKind), "id")),
-    contained(on(Section, "parent", "parentKind"), on(Node, "id", "kind")),
+    mirrors(
+      on(Section, "package", "path", "start"),
+      on(nodesOf(sectionKind), "package", "path", "start"),
+    ),
+    contained(
+      on(Section, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
     contained(
       on(
         select(Section, (s) => s.eq(s.loose, true)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(invisibleFlags, "node"),
+      on(invisibleFlags, "package", "path", "start"),
     ),
     contained(
-      on(invisibleFlags, "node"),
+      on(invisibleFlags, "package", "path", "start"),
       on(
         select(Section, (s) => s.or(s.eq(s.loose, true), s.eq(s.keepTogether, true))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
-    contained(on(flagsOf("keep-together"), "node", "value"), on(Section, "node", "keepTogether")),
+    contained(
+      on(flagsOf("keep-together"), "package", "path", "start", "value"),
+      on(Section, "package", "path", "start", "keepTogether"),
+    ),
     contained(
       on(
         select(Section, (s) => s.eq(s.keepTogether, false)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(flagsOf("keep-together"), "node"),
+      on(flagsOf("keep-together"), "package", "path", "start"),
     ),
     contained(
       on(
         select(Section, (s) => s.eq(s.parentKind, sectionKind)),
+        "package",
+        "path",
         "parent",
         "part",
         "replaced",
         "parentMixes",
         "parentLooseChain",
       ),
-      on(Section, "node", "part", "replacing", "mixes", "looseChain"),
+      on(Section, "package", "path", "start", "part", "replacing", "mixes", "looseChain"),
     ),
     sectionFamily,
     contained(
-      on(SectionMember, "node", "document", "kind", "start", "nearest", "version", "section"),
+      on(SectionMember, "package", "path", "start", "kind", "nearest", "version", "section"),
       nodeRef,
     ),
     contained(
       on(
         select(Node, (n) => n.and(n.eq(n.parentKind, sectionKind), n.in(n.kind, sectionParts))),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(SectionMember, "node"),
+      on(SectionMember, "package", "path", "start"),
     ),
-    contained(on(TestFlag, "node", "kind", "parentKind"), on(Node, "id", "kind", "parentKind")),
     contained(
-      on(SectionSelection, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(TestFlag, "package", "path", "start", "kind", "parentKind"),
+      on(Node, "package", "path", "start", "kind", "parentKind"),
+    ),
+    contained(
+      on(SectionSelection, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(SectionSelection, "node"), on(nodesOf(selectionKind), "id")),
-    contained(
-      on(attributesOf("select", [selectionKind]), "node", "lexical"),
-      on(SectionSelection, "node", "selectLexical"),
+    mirrors(
+      on(SectionSelection, "package", "path", "start"),
+      on(nodesOf(selectionKind), "package", "path", "start"),
     ),
-    contained(on(SectionSelection, "node"), on(attributesOf("select", [selectionKind]), "node")),
     contained(
-      on(flagsOf("with-replacement"), "node", "value"),
-      on(SectionSelection, "node", "withReplacement"),
+      on(attributesOf("select", [selectionKind]), "package", "path", "start", "lexical"),
+      on(SectionSelection, "package", "path", "start", "selectLexical"),
+    ),
+    contained(
+      on(SectionSelection, "package", "path", "start"),
+      on(attributesOf("select", [selectionKind]), "package", "path", "start"),
+    ),
+    contained(
+      on(flagsOf("with-replacement"), "package", "path", "start", "value"),
+      on(SectionSelection, "package", "path", "start", "withReplacement"),
     ),
     contained(
       on(
         select(SectionSelection, (s) => s.eq(s.withReplacement, true)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(flagsOf("with-replacement"), "node"),
+      on(flagsOf("with-replacement"), "package", "path", "start"),
     ),
-    key(on(SectionSelection, "parent")),
+    key(on(SectionSelection, "package", "path", "parent")),
     contained(
-      on(SectionSelection, "parent", "members", "required", "withReplacement"),
-      on(Section, "node", "members", "required", "withReplacement"),
+      on(SectionSelection, "package", "path", "parent", "members", "required", "withReplacement"),
+      on(Section, "package", "path", "start", "members", "required", "withReplacement"),
     ),
     contained(
       on(
         select(Section, (s) => s.eq(s.withReplacement, true)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(SectionSelection, "parent"),
+      on(SectionSelection, "package", "path", "parent"),
     ),
     contained(
-      on(SectionOrdering, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(SectionOrdering, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(SectionOrdering, "node"), on(nodesOf(orderingKind), "id")),
-    contained(on(flagsOf("shuffle"), "node", "value"), on(SectionOrdering, "node", "shuffle")),
+    mirrors(
+      on(SectionOrdering, "package", "path", "start"),
+      on(nodesOf(orderingKind), "package", "path", "start"),
+    ),
+    contained(
+      on(flagsOf("shuffle"), "package", "path", "start", "value"),
+      on(SectionOrdering, "package", "path", "start", "shuffle"),
+    ),
     contained(
       on(
         select(SectionOrdering, (o) => o.eq(o.shuffle, true)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(flagsOf("shuffle"), "node"),
+      on(flagsOf("shuffle"), "package", "path", "start"),
     ),
-    key(on(SectionOrdering, "parent")),
-    contained(on(SectionOrdering, "parent", "shuffle"), on(Section, "node", "shuffle")),
+    key(on(SectionOrdering, "package", "path", "parent")),
+    contained(
+      on(SectionOrdering, "package", "path", "parent", "shuffle"),
+      on(Section, "package", "path", "start", "shuffle"),
+    ),
     contained(
       on(
         select(Section, (s) => s.eq(s.shuffle, true)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(SectionOrdering, "parent"),
+      on(SectionOrdering, "package", "path", "parent"),
     ),
     contained(
       on(
         Site,
-        "node",
-        "children",
+        "package",
+        "path",
         "start",
-        "document",
+        "children",
         "ancestry",
         "documentType",
         "governor",
         "kind",
         "nearest",
         "nearestKind",
+        "nearestPath",
         "parentKind",
         "version",
       ),
       nodeContext,
     ),
-    contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
-    contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
-    contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-    contained(on(externalSites, "node"), on(externalHrefs, "node")),
+    contained(
+      on(Site, "package", "path", "start", "parent"),
+      on(Node, "package", "path", "start", "parent"),
+    ),
+    contained(
+      on(SitePath, "package", "path", "start", "kind"),
+      on(Site, "package", "path", "start", "kind"),
+    ),
+    contained(
+      on(SitePath, "package", "path", "start", "target"),
+      on(hrefPaths, "package", "path", "start", "target"),
+    ),
+    contained(
+      on(externalSites, "package", "path", "start"),
+      on(externalHrefs, "package", "path", "start"),
+    ),
     contained(
       on(
         SiteTarget,
-        "node",
+        "package",
+        "path",
+        "start",
         "ancestry",
-        "document",
         "kind",
         "nearest",
         "nearestKind",
@@ -2240,9 +2423,10 @@ export const testLawsByName = {
       ),
       on(
         Site,
-        "node",
+        "package",
+        "path",
+        "start",
         "ancestry",
-        "document",
         "kind",
         "nearest",
         "nearestKind",
@@ -2250,62 +2434,113 @@ export const testLawsByName = {
         "version",
       ),
     ),
-    contained(on(SiteTarget, "node", "package", "path"), on(SitePath, "node", "package", "path")),
-    contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
-    contained(on(includes, "id"), on(Site, "node")),
     contained(
-      on(Inclusion, "node", "parentKind", "places", "root", "splices", "version"),
-      on(SiteTarget, "node", "parentKind", "places", "targetRoot", "splices", "version"),
+      on(SiteTarget, "package", "path", "start", "target"),
+      on(SitePath, "package", "path", "start", "target"),
     ),
-    contained(on(includeTargets, "node"), on(Inclusion, "node")),
+    contained(
+      on(nodesOf(sectionRefKind), "package", "path", "start"),
+      on(Site, "package", "path", "start"),
+    ),
+    contained(on(includes, "package", "path", "start"), on(Site, "package", "path", "start")),
+    contained(
+      on(
+        Inclusion,
+        "package",
+        "path",
+        "start",
+        "parentKind",
+        "places",
+        "root",
+        "splices",
+        "version",
+      ),
+      on(
+        SiteTarget,
+        "package",
+        "path",
+        "start",
+        "parentKind",
+        "places",
+        "targetRoot",
+        "splices",
+        "version",
+      ),
+    ),
+    contained(
+      on(includeTargets, "package", "path", "start"),
+      on(Inclusion, "package", "path", "start"),
+    ),
     contained(
       on(
         select(Site, (s) => s.eq(s.parentKind, sectionKind)),
+        "package",
+        "path",
         "parent",
         "part",
         "replaced",
         "parentMixes",
         "parentLooseChain",
       ),
-      on(Section, "node", "part", "replacing", "mixes", "looseChain"),
+      on(Section, "package", "path", "start", "part", "replacing", "mixes", "looseChain"),
     ),
     contained(
-      on(BranchRule, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(BranchRule, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(BranchRule, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(on(BranchRule, "node", "target"), on(tokensOf("target"), "node", "value")),
+    contained(
+      on(BranchRule, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
+    contained(
+      on(BranchRule, "package", "path", "start", "target"),
+      on(tokensOf("target"), "package", "path", "start", "value"),
+    ),
     contained(
       on(
         select(TestToken, (t) => t.and(t.eq(t.name, "target"), t.not(t.in(t.value, exits)))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(BranchRule, "node"),
+      on(BranchRule, "package", "path", "start"),
     ),
     contained(
-      on(VariableMapping, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(VariableMapping, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(VariableMapping, "node"), on(nodesOf(mappingKind), "id")),
-    contained(
-      on(VariableMapping, "node", "source"),
-      on(tokensOf("source-identifier"), "node", "value"),
+    mirrors(
+      on(VariableMapping, "package", "path", "start"),
+      on(nodesOf(mappingKind), "package", "path", "start"),
     ),
     contained(
-      on(VariableMapping, "node", "target"),
-      on(tokensOf("target-identifier"), "node", "value"),
+      on(VariableMapping, "package", "path", "start", "source"),
+      on(tokensOf("source-identifier"), "package", "path", "start", "value"),
     ),
     contained(
-      on(StimulusRef, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(VariableMapping, "package", "path", "start", "target"),
+      on(tokensOf("target-identifier"), "package", "path", "start", "value"),
+    ),
+    contained(
+      on(StimulusRef, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(StimulusRef, "node"), on(nodesOf(stimulusRefKind), "id")),
-    contained(on(attributesOf("identifier", [stimulusRefKind]), "node"), on(StimulusRef, "node")),
-    contained(on(StimulusRef, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
-    contained(on(assembledDocuments, "node"), on(TestDocument, "node")),
+    contained(
+      on(StimulusRef, "package", "path", "start"),
+      on(nodesOf(stimulusRefKind), "package", "path", "start"),
+    ),
+    contained(
+      on(attributesOf("identifier", [stimulusRefKind]), "package", "path", "start"),
+      on(StimulusRef, "package", "path", "start"),
+    ),
+    contained(
+      on(StimulusRef, "package", "path", "start", "identifier"),
+      on(tokensOf("identifier"), "package", "path", "start", "value"),
+    ),
+    contained(on(assembledDocuments, "package", "path"), on(TestDocument, "package", "path")),
   ],
   "Variable mapping target": [
-    key(on(VariableMapping, "parent", "target")),
+    key(on(VariableMapping, "package", "path", "parent", "target")),
     check("Variable_mapping_target", VariableMapping, (v) =>
       v.not(v.in(v.target, sessionVariables)),
     ),

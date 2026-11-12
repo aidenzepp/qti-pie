@@ -22,7 +22,6 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
 import {
   exactValuePattern,
@@ -381,15 +380,7 @@ const mappingBreachesOf = (text: string) =>
   Effect.gen(function* judgedMappings() {
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
-    const rows = yield* Effect.orDie(
-      Effect.fromResult(
-        fold(
-          tree,
-          (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-          foldGrammarOf(grammar),
-        ),
-      ),
-    );
+    const rows = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
 
     return documentBreaches("item.xml", rows, oracleLaws)
       .filter(({ law }) => law === "Map key" || law === "Typed attribute value")

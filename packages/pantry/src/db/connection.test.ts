@@ -7,10 +7,10 @@ import net from "node:net";
 import { fileURLToPath } from "node:url";
 import {
   login,
+  natural,
   relation,
   role as worldRole,
   schema,
-  uuid,
   wholeEntriesOf,
 } from "@bjornpagen/grizzle";
 import type { DbConnection } from "@bjornpagen/grizzle";
@@ -63,7 +63,11 @@ const work = fileURLToPath(new URL("../../work/", import.meta.url));
 /**
  * A scratch installation, as small as grizzle builds one: one relation, read by one role.
  */
-const ProbeRoot = schema("ConnectionProbe", { Probe: relation("Probe", { id: uuid }, ["id"]) }, []);
+const ProbeRoot = schema(
+  "ConnectionProbe",
+  { Probe: relation("Probe", { id: natural }, ["id"]) },
+  [],
+);
 
 /**
  * The scratch installation's login, whose connection the cases build.

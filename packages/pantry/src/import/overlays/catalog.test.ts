@@ -9,7 +9,7 @@
  * computed by the builder's own reading. The database tests judge the rows through PostgreSQL.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
@@ -21,14 +21,30 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { ownViewOf, viewOf } from "#pantry/import/fold.ts";
 
 /**
  * The QTI 3.0 assessment namespace.
  */
 const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * Find the first node of a kind in a document's rows.
+ *
+ * @param nodes - The document's nodes.
+ * @param kind - The kind.
+ * @returns The node.
+ * @throws {Error} When the document holds none: a defect of the test's markup.
+ */
+const nodeOf = <N extends { readonly kind: string }>(nodes: readonly N[], kind: string): N => {
+  const node = nodes.find((candidate) => candidate.kind === kind);
+  if (node === undefined) {
+    throw new Error(`The test's document holds no ${kind}; write one in its markup.`);
+  }
+
+  return node;
+};
 
 /**
  * The grammar shred reads each document by.
@@ -58,22 +74,38 @@ const itemOf = (catalogs: string, body = "") =>
  * `qti-card#1` and so on, the document node `#doc`.
  *
  * @param tree - The tree.
- * @returns Each node's name, by its id.
+ * @returns Each node's name, by its start.
  */
-const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<NodeId, string> => {
-  const rows = flatten(tree, idOf);
+const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<bigint, string> => {
+  const rows = flatten(tree);
   const seen = new Map<string, number>();
 
-  return new Map([
-    [rows.document.node, "#doc"],
-    ...rows.nodes.map(({ id, kind }): readonly [NodeId, string] => {
+  return new Map(
+    rows.nodes.map(({ kind, start }): readonly [bigint, string] => {
+      if (start === 0n) {
+        return [start, "#doc"];
+      }
+
       const at = seen.get(kind) ?? 0;
       seen.set(kind, at + 1);
 
-      return [id, `${kind}#${String(at)}`];
+      return [start, `${kind}#${String(at)}`];
     }),
-  ]);
+  );
 };
+
+/**
+ * The item's place in its package, as the builder reads it.
+ */
+const place = { package: "P", path: "item.xml" } as const;
+
+/**
+ * Where the item stands, in no assembly or in one.
+ *
+ * @param assembled - Whether it is in an assembly.
+ * @returns Its ids.
+ */
+const idsOf = (assembled: boolean) => ({ ...place, assembled });
 
 /**
  * Read a document's catalog rows back by the names of their nodes: each card as `name > catalog:
@@ -85,19 +117,19 @@ const namesOf = (tree: XdmDocument<Composed>): ReadonlyMap<NodeId, string> => {
  */
 const named = (tree: XdmDocument<Composed>, rows: CatalogRows) => {
   const names = namesOf(tree);
-  const nameOf = (node: NodeId): string => names.get(node) ?? node;
+  const nameOf = (start: bigint): string => names.get(start) ?? String(start);
 
   return {
     defaults: [...rows.DefaultEntry.values()]
       .map(
-        ({ card, lexical, node }) =>
-          `${nameOf(node)} > ${nameOf(card)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
+        ({ card, lexical, start }) =>
+          `${nameOf(start)} > ${nameOf(card)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
       )
       .toSorted(),
     supports: [...rows.CardSupport.values()]
       .map(
-        ({ catalog, lexical, node }) =>
-          `${nameOf(node)} > ${nameOf(catalog)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
+        ({ catalog, lexical, start }) =>
+          `${nameOf(start)} > ${nameOf(catalog)}: ${JSON.stringify(lexical)} = ${collapse(lexical)}`,
       )
       .toSorted(),
   };
@@ -111,7 +143,7 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
         const tree = yield* itemOf(
           `<qti-catalog id="A"><qti-card support="spoken"><qti-card-entry default="true"><qti-html-content/></qti-card-entry><qti-card-entry default=" 1 "/><qti-card-entry default="false"/><qti-card-entry default="0"/><qti-card-entry/></qti-card></qti-catalog><qti-catalog id="B"><qti-card support=" braille "><qti-html-content/></qti-card></qti-catalog>`,
         );
-        const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
+        const rows = rowsOf(ownViewOf(tree), idsOf(false));
 
         assert.deepStrictEqual(named(tree, rows), {
           defaults: [
@@ -128,7 +160,7 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
 
   it.effect("gives a document with no catalog no row", () =>
     Effect.gen(function* noCatalog() {
-      const rows = rowsOf(ownViewOf(yield* itemOf(""), idOf), { assembled: false });
+      const rows = rowsOf(ownViewOf(yield* itemOf("")), idsOf(false));
 
       assert.strictEqual(rows.CardSupport.size, 0);
       assert.strictEqual(rows.DefaultEntry.size, 0);
@@ -142,38 +174,37 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
         const tree = yield* itemOf(
           `<qti-catalog id="A"><qti-card support="spoken"><qti-card-entry default="true"/></qti-card></qti-catalog>`,
         );
-        const flat = flatten(tree, idOf);
-        const card = flat.nodes.find(({ kind }) => kind === "qti-card");
-        const entry = flat.nodes.find(({ kind }) => kind === "qti-card-entry");
+        const flat = flatten(tree);
+        const card = nodeOf(flat.nodes, "qti-card");
+        const entry = nodeOf(flat.nodes, "qti-card-entry");
         const context: DocumentContext = {
           ancestry: new Set(),
-          nearest: idOf(9999),
+          nearest: 9999n,
           nearestKind: "document",
+          nearestPath: Option.some("other.xml"),
         };
-        const own = rowsOf(ownViewOf(tree, idOf), { assembled: false });
-        const placed = rowsOf(viewOf(tree, flat, context), { assembled: false });
+        const own = rowsOf(ownViewOf(tree), idsOf(false));
+        const placed = rowsOf(viewOf(tree, flat, context), idsOf(false));
 
-        assert.deepStrictEqual(own.CardSupport.get(card?.id ?? ""), {
-          catalog: card?.parent,
-          document: flat.document.node,
+        assert.deepStrictEqual(own.CardSupport.get(String(card.start)), {
+          ...place,
+          catalog: card.parent,
           kind: "qti-card",
           lexical: "spoken",
-          nearest: flat.document.node,
-          node: card?.id,
-          start: card?.start,
+          nearest: 0n,
+          start: card.start,
           version: "3.0.1",
         });
-        assert.deepStrictEqual(own.DefaultEntry.get(entry?.id ?? ""), {
-          card: entry?.parent,
-          document: flat.document.node,
+        assert.deepStrictEqual(own.DefaultEntry.get(String(entry.start)), {
+          ...place,
+          card: entry.parent,
           kind: "qti-card-entry",
           lexical: "true",
-          nearest: flat.document.node,
-          node: entry?.id,
-          start: entry?.start,
+          nearest: 0n,
+          start: entry.start,
           version: "3.0.1",
         });
-        assert.strictEqual(placed.CardSupport.get(card?.id ?? "")?.nearest, idOf(9999));
+        assert.strictEqual(placed.CardSupport.get(String(card.start))?.nearest, 9999n);
       }),
   );
 });
@@ -187,22 +218,22 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
           `<qti-catalog id="A"><qti-card support="spoken"/></qti-catalog><qti-catalog id=" B "><qti-card support="spoken"/></qti-catalog>`,
           `<p data-catalog-idref="A">a</p><p data-catalog-idref=" B ">b</p><p id="p1">c</p>`,
         );
-        const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
+        const rows = rowsOf(ownViewOf(tree), idsOf(false));
         const names = namesOf(tree);
-        const nameOf = (node: NodeId): string => names.get(node) ?? node;
+        const nameOf = (start: bigint): string => names.get(start) ?? String(start);
 
         assert.deepStrictEqual(
           [...rows.CatalogRef.values()]
             .map(
-              ({ lexical, node, token }) =>
-                `${nameOf(node)}: ${JSON.stringify(lexical)} = ${token}`,
+              ({ lexical, start, token }) =>
+                `${nameOf(start)}: ${JSON.stringify(lexical)} = ${token}`,
             )
             .toSorted(),
           ['p#0: "A" = A', 'p#1: " B " = B'],
         );
         assert.deepStrictEqual(
           [...rows.CatalogId.values()]
-            .map(({ id, node, owner }) => `${nameOf(node)} = ${id} (${nameOf(owner)})`)
+            .map(({ id, owner, start }) => `${nameOf(start)} = ${id} (${nameOf(owner)})`)
             .toSorted(),
           ["qti-catalog#0 = A (qti-catalog#0)", "qti-catalog#1 = B (qti-catalog#1)"],
         );
@@ -219,9 +250,8 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
               `<qti-catalog><qti-card support="spoken"/></qti-catalog>`,
               `<p id="p1">c</p>`,
             ),
-            idOf,
           ),
-          { assembled: false },
+          idsOf(false),
         );
 
         assert.strictEqual(rows.CatalogRef.size, 0);
@@ -239,9 +269,8 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
               `<qti-catalog id="A"/>`,
               `<p data-catalog-idref="">a</p><p data-catalog-idref=" \t ">b</p><p data-catalog-idref="A">c</p>`,
             ),
-            idOf,
           ),
-          { assembled: false },
+          idsOf(false),
         );
 
         assert.deepStrictEqual(
@@ -254,22 +283,22 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
   it.effect("writes each reference under its document", () =>
     Effect.gen(function* tuple() {
       const tree = yield* itemOf(`<qti-catalog id="A"/>`, `<p data-catalog-idref="A">a</p>`);
-      const flat = flatten(tree, idOf);
-      const paragraph = flat.nodes.find(({ kind }) => kind === "p");
-      const catalog = flat.nodes.find(({ kind }) => kind === "qti-catalog");
-      const rows = rowsOf(ownViewOf(tree, idOf), { assembled: false });
+      const flat = flatten(tree);
+      const paragraph = nodeOf(flat.nodes, "p");
+      const catalog = nodeOf(flat.nodes, "qti-catalog");
+      const rows = rowsOf(ownViewOf(tree), idsOf(false));
 
-      assert.deepStrictEqual(rows.CatalogRef.get(paragraph?.id ?? ""), {
-        document: flat.document.node,
+      assert.deepStrictEqual(rows.CatalogRef.get(String(paragraph.start)), {
+        ...place,
         lexical: "A",
-        node: paragraph?.id,
+        start: paragraph.start,
         token: "A",
       });
-      assert.deepStrictEqual(rows.CatalogId.get(catalog?.id ?? ""), {
-        document: flat.document.node,
+      assert.deepStrictEqual(rows.CatalogId.get(String(catalog.start)), {
+        ...place,
         id: "A",
-        node: catalog?.id,
-        owner: catalog?.id,
+        owner: catalog.start,
+        start: catalog.start,
       });
     }),
   );
@@ -284,19 +313,18 @@ describe("import/overlays/catalog.ts, rowsOf, targets", () => {
           `<qti-catalog id="A"/><qti-catalog id="B"/>`,
           `<p data-catalog-idref="A">a</p><p data-catalog-idref=" A ">b</p><p data-catalog-idref="B">c</p><p data-catalog-idref=" ">d</p>`,
         );
-        const document = flatten(tree, idOf).document.node;
         const targets = (assembled: boolean) =>
-          [...rowsOf(ownViewOf(tree, idOf), { assembled }).CatalogTarget.values()].toSorted(
-            (a, b) => a.id.localeCompare(b.id),
+          [...rowsOf(ownViewOf(tree), idsOf(assembled)).CatalogTarget.values()].toSorted((a, b) =>
+            a.id.localeCompare(b.id),
           );
 
         assert.deepStrictEqual(targets(false), [
-          { assembled: false, document, id: "A" },
-          { assembled: false, document, id: "B" },
+          { ...place, assembled: false, id: "A" },
+          { ...place, assembled: false, id: "B" },
         ]);
         assert.deepStrictEqual(targets(true), [
-          { assembled: true, document, id: "A" },
-          { assembled: true, document, id: "B" },
+          { ...place, assembled: true, id: "A" },
+          { ...place, assembled: true, id: "B" },
         ]);
       }),
   );
@@ -304,8 +332,8 @@ describe("import/overlays/catalog.ts, rowsOf, targets", () => {
   it.effect("gives a document with no reference no CatalogTarget", () =>
     Effect.gen(function* noTargets() {
       const rows = rowsOf(
-        ownViewOf(yield* itemOf(`<qti-catalog id="A"/>`, `<p id="p1">c</p>`), idOf),
-        { assembled: false },
+        ownViewOf(yield* itemOf(`<qti-catalog id="A"/>`, `<p id="p1">c</p>`)),
+        idsOf(false),
       );
 
       assert.strictEqual(rows.CatalogTarget.size, 0);
@@ -321,58 +349,53 @@ describe("import/overlays/catalog.ts, rowsOf, targets", () => {
  * @param children - Its children.
  * @returns The member.
  */
-const memberOf = (
-  id: NodeId,
-  document: NodeId,
-  children: readonly InstanceMember[] = [],
-): InstanceMember => ({
+const memberOf = (document: string, children: readonly InstanceMember[] = []): InstanceMember => ({
   assemblyKind: "qti-assessment-item",
   children,
   document,
-  id,
   mixes: false,
-  part: document,
+  part: 0n,
   replaced: false,
   rootKind: "qti-assessment-item",
-  site: document,
+  site: 0n,
+  siteDocument: document,
   siteLooseChain: false,
   siteMixes: false,
-  sitePart: document,
+  sitePart: 0n,
   siteReplaced: false,
-  siteStart: 0n,
 });
 
 describe("import/overlays/catalog.ts, placedCatalogRowsOf", () => {
-  const assembly = idOf(100);
-  const item = idOf(101);
-  const fragment = idOf(102);
-  const catalogNode = idOf(103);
-  const otherNode = idOf(104);
-  const root: InstanceRoot = {
-    ...memberOf(idOf(110), item, [memberOf(idOf(111), item)]),
-    assembly,
-  };
-  const targets = [{ assembled: true, document: item, id: "C" }];
-  const catalogs = [{ document: item, id: "C", node: catalogNode, owner: catalogNode }];
+  const pkg = "P";
+  const assembly = "item.xml";
+  const item = "item.xml";
+  const fragment = "fragment.xml";
+  const catalogStart = 3n;
+  const otherStart = 4n;
+  const root: InstanceRoot = { ...memberOf(item, [memberOf(item)]), assembly, package: pkg };
+  const targets = [{ assembled: true, id: "C", package: pkg, path: item }];
+  const catalogs = [
+    { id: "C", owner: catalogStart, package: pkg, path: item, start: catalogStart },
+  ];
 
   it("places each token of an instance's document once under each instance", () => {
     const rows = placedCatalogRowsOf({
       assembledIds: [],
       catalogs,
       instances: [root],
-      targets: [...targets, { assembled: true, document: fragment, id: "Z" }],
+      targets: [...targets, { assembled: true, id: "Z", package: pkg, path: fragment }],
     });
 
     assert.deepStrictEqual(
-      [...rows.PlacedCatalogRef.values()].map(({ assembly: a, document, id, instance }) => [
+      [...rows.PlacedCatalogRef.values()].map(({ assembly: a, id, instance, path }) => [
         a,
-        document,
+        path,
         id,
         instance,
       ]),
       [
-        [assembly, item, "C", idOf(110)],
-        [assembly, item, "C", idOf(111)],
+        [assembly, item, "C", 0n],
+        [assembly, item, "C", 1n],
       ],
     );
   });
@@ -380,9 +403,9 @@ describe("import/overlays/catalog.ts, placedCatalogRowsOf", () => {
   it("writes one AssembledCatalog for an assembly's id a catalog owns, and none for another owner", () => {
     const rows = placedCatalogRowsOf({
       assembledIds: [
-        { assembly, copy: idOf(110), id: "C", owner: catalogNode },
-        { assembly, copy: idOf(111), id: "C", owner: catalogNode },
-        { assembly, copy: idOf(110), id: "other", owner: otherNode },
+        { assembly, copy: 0n, id: "C", owner: catalogStart, package: pkg, path: item },
+        { assembly, copy: 1n, id: "C", owner: catalogStart, package: pkg, path: item },
+        { assembly, copy: 0n, id: "other", owner: otherStart, package: pkg, path: item },
       ],
       catalogs,
       instances: [root],
@@ -391,7 +414,7 @@ describe("import/overlays/catalog.ts, placedCatalogRowsOf", () => {
 
     assert.deepStrictEqual(
       [...rows.AssembledCatalog.values()],
-      [{ assembly, id: "C", owner: catalogNode }],
+      [{ assembly, id: "C", owner: catalogStart, package: pkg, path: item }],
     );
   });
 
@@ -400,7 +423,7 @@ describe("import/overlays/catalog.ts, placedCatalogRowsOf", () => {
       assembledIds: [],
       catalogs,
       instances: [],
-      targets: [{ assembled: false, document: item, id: "C" }],
+      targets: [{ assembled: false, id: "C", package: pkg, path: item }],
     });
 
     assert.strictEqual(rows.PlacedCatalogRef.size, 0);

@@ -30,13 +30,15 @@
  * half, readings 124, 125 and 129).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
- * states it: from `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key
- * (`closedAttributes`, `#pantry/qti/attributes.ts`), but a `th`'s `id`: it lies inside the ID
- * values (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the ID-typed
- * attributes holds to one per element, and the copy back from its {@link TableHeader} meets them at
- * the `th` kind ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
- * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
+ * states it: from `select(Attribute, φ)` into the overlay, keyed by `Attribute`'s own key,
+ * `(package, path, start, name)` (`#pantry/qti/attributes.ts`), but a `th`'s `id`: it lies inside
+ * the ID values (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the
+ * ID-typed attributes holds to one per element, and the copy back from its {@link TableHeader}
+ * meets them at the `th` kind ({@link namingIdAttributesOf}). Every overlay is keyed by its
+ * element, `(package, path, start)`, and names another element of its document by its position.
+ * Every copied text that takes part in a cross-row equality is `keyText` (`#pantry/qti/limits.ts`).
+ * Every check is named by its oracle law (`#pantry/test/oracle.ts` `LawName`) with spaces written
+ * as underscores.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Source | QTI 3.0 information model, §5.135 Source}
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Track | QTI 3.0 information model, §5.163 Track}
@@ -62,7 +64,6 @@ import {
   ordered,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
@@ -71,15 +72,15 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   DocumentId,
   idValuePattern,
   namingIdAttributesOf,
   spacePattern,
 } from "#pantry/qti/identity.ts";
-import { keyText } from "#pantry/qti/limits.ts";
-import { nilUuid, Node, nodeRef } from "#pantry/qti/node.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
+import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
@@ -88,32 +89,38 @@ import { cellKinds } from "#pantry/vocab/terms/html.ts";
 const mediaKinds = ["audio", "video"] as const;
 
 /**
- * One element on the way from a table cell an overlay reads up to the table it takes part in,
- * keyed by its node: its {@link nodeRef} tuple and `table`, its nearest `table`, itself included,
- * or the document node for an element no `table` holds. A `table` is its own table, a document's
- * root the document's where it is no `table`, and every other element its parent's, so a cell's
- * table is read up the tree with no copy on `Node`, as `identity.ts`'s `SsmlScope` reads an SSML
- * fragment.
+ * The document node's position in its document, `Node.start` of the root: the table of an element
+ * no `table` holds, and the parent a document's root element names.
+ */
+const documentNode = 0n;
+
+/**
+ * One element on the way from a table cell an overlay reads up to the table it takes part in, keyed
+ * by the element: its {@link nodeRef} tuple and `table`, the position of its nearest `table`, itself
+ * included, or of the document node for an element no `table` holds. A `table` is its own table, a
+ * document's root the document's where it is no `table`, and every other element its parent's, so a
+ * cell's table is read up the tree with no copy on `Node`, as `identity.ts`'s `SsmlScope` reads an
+ * SSML fragment.
  */
 export const TableScope = relation(
   "TableScope",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
-    table: uuid,
+    table: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One table cell's `headers`, keyed by the cell's node.
+ * One table cell's `headers`, keyed by the cell.
  *
- * - **copied from the attribute:** `node` and `lexical`, the value as written;
+ * - **copied from the attribute:** `package`, `path`, `start` and `lexical`, the value as written;
  * - **the host's:** `table`, the cell's {@link TableScope};
  * - **drawn:** `tokens`, its {@link HeaderToken} count;
  * - **accumulated:** `tokenText`, the end of its tokens' concatenation.
@@ -122,12 +129,14 @@ export const CellHeaders = relation(
   "CellHeaders",
   {
     lexical: keyText,
-    node: uuid,
-    table: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    table: natural,
     tokenText: accumulated(keyText, ""),
     tokens: drawn(natural),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -135,10 +144,14 @@ export const CellHeaders = relation(
  * its `piece` is a stretch of the value and the pieces concatenate to it, as `identity.ts`'s
  * `TextIdref` splits an element's text.
  *
+ * The tokens are a set (reading 126: "an unordered set of unique space-separated tokens"), which
+ * the key over `(package, path, start, token)` holds; the order is the lexical form's, the order of
+ * its stretches, which the concatenation that proves the split against the value reads.
+ *
  * - **the host's:** `before`, `token` and `after`;
  * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
  *   domain refuses a piece past the bound;
- * - **the family's group:** `node`, the cell;
+ * - **the family's group:** `package`, `path` and `start`, the cell's;
  * - **drawn:** `at`;
  * - **accumulated:** `table`, its cell's, along the owner axis, which "Table headers" reads;
  *   `piecesWas` and `piecesAfter`, the concatenation before and after it.
@@ -149,23 +162,25 @@ export const HeaderToken = relation.generated(
     after: Space,
     at: drawn(natural),
     before: Space,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
-    table: accumulated(uuid, nilUuid),
+    start: natural,
+    table: accumulated(natural, documentNode),
     token: keyText,
   },
-  ["node", "at"],
+  ["package", "path", "start", "at"],
   (t) => ({
     piece: generated(keyText, Compute.concat(Compute.concat(t.before, t.token), t.after)),
   }),
 );
 
 /**
- * One `th` that carries an ID, an `id` whose value is an NCName, keyed by its node: its document,
- * its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner`
- * the node itself, an attribute ID's binding, so its copy shares the superkey `PlacedId` reads; and
- * `table`, its {@link TableScope}.
+ * One `th` that carries an ID, an `id` whose value is an NCName, keyed by the `th`: its `id`, the
+ * ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner` its own
+ * position, an attribute ID's binding, so its copy shares the superkey `PlacedId` reads; and
+ * `table`, the position of its {@link TableScope}.
  *
  * The import writes its rows where its form names something (`namedBy` of
  * `#pantry/import/names.ts`, which lists every such relation), until it is a query over
@@ -173,8 +188,15 @@ export const HeaderToken = relation.generated(
  */
 export const TableHeader = relation(
   "TableHeader",
-  { document: uuid, id: keyText, node: uuid, owner: uuid, table: uuid },
-  ["node"],
+  {
+    id: keyText,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    table: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -185,7 +207,10 @@ export const htmlRelations = { CellHeaders, HeaderToken, TableHeader, TableScope
 /**
  * Each cell's `headers` tokens in order, counted by `CellHeaders.tokens`.
  */
-const headerTokenFamily = ordered(on(HeaderToken, "node", "at"), fin(CellHeaders, "tokens"));
+const headerTokenFamily = ordered(
+  on(HeaderToken, "package", "path", "start", "at"),
+  fin(CellHeaders, "tokens"),
+);
 
 /**
  * A `Node` row as a row check reads it.
@@ -251,7 +276,7 @@ const subtitleKinds = select(Attribute, (a) =>
  * A `track`'s `srclang`, one per element.
  */
 const trackSrclangs = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "track"), a.eq(a.name, "srclang")),
+  a.and(a.eq(a.kind, "track"), a.eq(a.name, "srclang")),
 );
 
 /**
@@ -259,13 +284,16 @@ const trackSrclangs = select(Attribute, (a) =>
  * attribute must be present if the tag's kind attribute is in the subtitles state"): a `track`
  * whose `kind` is `subtitles` carries `srclang`.
  */
-export const subtitleTrackSrclang = contained(on(subtitleKinds, "node"), on(trackSrclangs, "node"));
+export const subtitleTrackSrclang = contained(
+  on(subtitleKinds, "package", "path", "start"),
+  on(trackSrclangs, "package", "path", "start"),
+);
 
 /**
  * A table cell's `headers`, the source of {@link CellHeaders}.
  */
 const headersAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.in(a.kind, cellKinds), a.eq(a.name, "headers")),
+  a.and(a.in(a.kind, cellKinds), a.eq(a.name, "headers")),
 );
 
 /**
@@ -282,13 +310,13 @@ const headerIds = select(Attribute, (a) =>
  * root.
  */
 const inheritedScopes = select(TableScope, (s) =>
-  s.and(s.ne(s.kind, "table"), s.ne(s.parent, s.document)),
+  s.and(s.ne(s.kind, "table"), s.ne(s.parent, documentNode)),
 );
 
 /**
  * The headers that take part in a table: those whose nearest `table` is one, not the document node.
  */
-const tabledHeaders = select(TableHeader, (h) => h.ne(h.table, h.document));
+const tabledHeaders = select(TableHeader, (h) => h.ne(h.table, documentNode));
 
 /**
  * Reading 126 (law "Table headers", rule `table-headers`; info §5.140.1): each token of a cell's
@@ -298,8 +326,8 @@ const tabledHeaders = select(TableHeader, (h) => h.ne(h.table, h.document));
  * {@link tabledHeaders} row holds, so every token it writes is refused.
  */
 export const tableHeaders = contained(
-  on(HeaderToken, "table", "token"),
-  on(tabledHeaders, "table", "id"),
+  on(HeaderToken, "package", "path", "table", "token"),
+  on(tabledHeaders, "package", "path", "table", "id"),
 );
 
 /**
@@ -307,8 +335,8 @@ export const tableHeaders = contained(
  *
  * - **Reading 124:** {@link pictureSourceSrcset} and {@link mediaSourceSrc};
  * - **Reading 125:** {@link defaultTrackSrclang}, and {@link subtitleTrackSrclang}, whose target, the
- *   `srclang` selection, is keyed by the closed attributes' key (`closedAttributes`,
- *   `#pantry/qti/attributes.ts`);
+ *   `srclang` selection, is keyed by `Attribute`'s own key at its fixed name
+ *   (`#pantry/qti/attributes.ts`);
  * - **TableScope:** each scope on its node's {@link nodeRef} tuple, a `table` its own table, a root
  *   that is no `table` the document's and every other element its parent's;
  * - **CellHeaders:** each cell's `headers` copied into its row, both ways, its table its scope's; its
@@ -322,30 +350,45 @@ export const tableHeaders = contained(
  * - **Reading 126:** a cell's tokens unique, and {@link tableHeaders}.
  */
 export const htmlLawsByName = {
-  "DocumentId key": [key(on(tabledHeaders, "table", "id"))],
+  "DocumentId key": [key(on(tabledHeaders, "package", "path", "table", "id"))],
   "E1 derived": [
     contained(
-      on(TableScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(TableScope, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     check("E1_derived", TableScope, (s) =>
       s.or(
-        s.and(s.eq(s.kind, "table"), s.eq(s.table, s.node)),
-        s.and(s.ne(s.kind, "table"), s.eq(s.parent, s.document), s.eq(s.table, s.document)),
-        s.and(s.ne(s.kind, "table"), s.ne(s.parent, s.document)),
+        s.and(s.eq(s.kind, "table"), s.eq(s.table, s.start)),
+        s.and(s.ne(s.kind, "table"), s.eq(s.parent, documentNode), s.eq(s.table, documentNode)),
+        s.and(s.ne(s.kind, "table"), s.ne(s.parent, documentNode)),
       ),
     ),
-    contained(on(inheritedScopes, "parent", "table"), on(TableScope, "node", "table")),
-    contained(on(headersAttributes, "node", "lexical"), on(CellHeaders, "node", "lexical")),
-    contained(on(CellHeaders, "node"), on(headersAttributes, "node")),
-    contained(on(CellHeaders, "node", "table"), on(TableScope, "node", "table")),
+    contained(
+      on(inheritedScopes, "package", "path", "parent", "table"),
+      on(TableScope, "package", "path", "start", "table"),
+    ),
+    contained(
+      on(headersAttributes, "package", "path", "start", "lexical"),
+      on(CellHeaders, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(CellHeaders, "package", "path", "start"),
+      on(headersAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(CellHeaders, "package", "path", "start", "table"),
+      on(TableScope, "package", "path", "start", "table"),
+    ),
     headerTokenFamily,
-    contained(on(HeaderToken, "node", "table"), on(CellHeaders, "node", "table")),
+    contained(
+      on(HeaderToken, "package", "path", "start", "table"),
+      on(CellHeaders, "package", "path", "start", "table"),
+    ),
     fold(
       headerTokenFamily,
       Monoid.concat,
-      on(HeaderToken, "node", "piece", "piecesWas", "piecesAfter"),
-      on(CellHeaders, "node", "tokenText"),
+      on(HeaderToken, "package", "path", "start", "piece", "piecesWas", "piecesAfter"),
+      on(CellHeaders, "package", "path", "start", "tokenText"),
     ),
     check("E1_derived", CellHeaders, (c) =>
       c.or(
@@ -356,18 +399,27 @@ export const htmlLawsByName = {
     check("E1_derived", HeaderToken, (t) =>
       t.and(Compute.matches(t.token, idValuePattern), t.or(t.eq(t.at, 0n), t.ne(t.before, ""))),
     ),
-    contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
-    contained(on(TableHeader, "node"), on(namingIdAttributesOf("th"), "node")),
     contained(
-      on(TableHeader, "node", "document", "id", "owner"),
-      on(DocumentId, "node", "document", "id", "owner"),
+      on(headerIds, "package", "path", "start"),
+      on(TableHeader, "package", "path", "start"),
     ),
-    check("E1_derived", TableHeader, (h) => h.eq(h.owner, h.node)),
-    contained(on(TableHeader, "node", "table"), on(TableScope, "node", "table")),
+    contained(
+      on(TableHeader, "package", "path", "start"),
+      on(namingIdAttributesOf("th"), "package", "path", "start"),
+    ),
+    contained(
+      on(TableHeader, "package", "path", "start", "id", "owner"),
+      on(DocumentId, "package", "path", "start", "id", "owner"),
+    ),
+    check("E1_derived", TableHeader, (h) => h.eq(h.owner, h.start)),
+    contained(
+      on(TableHeader, "package", "path", "start", "table"),
+      on(TableScope, "package", "path", "start", "table"),
+    ),
   ],
   "Media source src": [mediaSourceSrc],
   "Picture source srcset": [pictureSourceSrcset],
-  "Table headers": [key(on(HeaderToken, "node", "token")), tableHeaders],
+  "Table headers": [key(on(HeaderToken, "package", "path", "start", "token")), tableHeaders],
   "Track srclang": [defaultTrackSrclang, subtitleTrackSrclang],
 } as const;
 

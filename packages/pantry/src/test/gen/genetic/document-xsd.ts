@@ -30,7 +30,6 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { below, oneOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Edited } from "#pantry/test/gen/genetic/engine.ts";
 import {
@@ -629,7 +628,7 @@ export const rowsOf = Effect.fnUntraced(function* rowsOf(
 
   return Result.isFailure(read)
     ? Option.none()
-    : Result.getSuccess(fold(read.success, idOf, foldGrammarOf(grammar)));
+    : Result.getSuccess(fold(read.success, foldGrammarOf(grammar)));
 });
 
 /**
@@ -676,18 +675,18 @@ export const xsdFeaturesOf = (input: {
   }
 
   if (Option.isSome(input.rows)) {
-    const places = new Map<string, string>();
+    const places = new Map<bigint, string>();
     for (const node of input.rows.value.nodes) {
       const kind: string = node.kind;
       const parent: string = node.parentKind;
       found.add(`step:${parent} ${String(node.was)} ${kind}`);
       found.add(`step:${kind} ends ${String(node.childState)}`);
 
-      places.set(node.id, kind);
+      places.set(node.start, kind);
     }
 
     for (const attribute of input.rows.value.attributes) {
-      const kind = places.get(attribute.node) ?? "";
+      const kind = places.get(attribute.start) ?? "";
       found.add(
         `domain:${kind} ${attribute.name} ${outside.has(`${kind} ${attribute.name}`) ? "out" : "in"}`,
       );

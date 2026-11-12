@@ -11,10 +11,12 @@
  * - **byte-identical:** the bytes out are the entry's bytes;
  * - **canonical-equal:** the bytes out are the export bytes of the tree crust read, after what the
  *   XDM does not record (`src/model/unshred.ts`: a CDATA section is plain text, a stretch of
- *   character data is one run, and namespace declarations come before the attributes), and the
- *   canonical forms agree, crust's `canonicalize` and the `xmllint` oracle's. Canonical XML erases
- *   both crust's writer and those erasures, so these are the bytes that legitimately differ, and
- *   the byte check keeps what canonical XML hides, such as attribute order, from passing.
+ *   character data is one run, and an element's namespace declarations and attributes, sets, are
+ *   written in Canonical XML's order, the declarations by prefix and then the attributes by
+ *   namespace name and local name), and the canonical forms agree, crust's `canonicalize` and the
+ *   `xmllint` oracle's. Canonical XML erases both crust's writer and those erasures, so these are
+ *   the bytes that legitimately differ, and the export-bytes check keeps what canonical XML hides
+ *   from passing unless it is one of them.
  *
  * Anything else fails with its causes. An entry crust does not read, or that shred refuses at the
  * codec (`not-qti3`, `unmodeled-vocabulary`), is not shredded and is only counted. The run is gated
@@ -22,11 +24,12 @@
  * vitest shows for a passing run under `--disableConsoleIntercept`; a failing run's assertion lists
  * every failed entry with its causes.
  */
+import { Buffer } from "node:buffer";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Option, Result } from "effect";
+import { Effect, FileSystem, Formatter, Option, Result } from "effect";
 import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { composed } from "#pantry/grammar/compose.ts";
@@ -40,7 +43,7 @@ import type { NotQti3, ShredGrammar } from "#pantry/model/shred.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import type { XdmNames } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
+import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
@@ -131,13 +134,31 @@ const declaredVersion = Effect.fnUntraced(function* declaredVersion(
 });
 
 /**
- * Give the node numbered `index` a uuid that spells its number.
+ * A document's rows as sets: each list's rows, each written as text, in sorted order. Two trees
+ * are one document exactly when their rows are one set, whatever order each lists an element's
+ * attributes and namespace declarations in.
  *
- * @param index - The node's number in document order.
- * @returns A uuid whose last group is the number in hexadecimal.
+ * @param document - The tree.
+ * @returns Each list of `flatten`'s rows as sorted text, and the document row.
  */
-const idOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+const rowSetOf = (document: XdmDocument<Composed>) =>
+  Object.fromEntries(
+    Object.entries(flatten(document)).map(([list, rows]) => [
+      list,
+      Array.isArray(rows) ? rows.map((row) => Formatter.format(row)).toSorted() : rows,
+    ]),
+  );
+
+/**
+ * Order texts by their UTF-8 bytes, which is code point order, Canonical XML 1.0's lexicographic
+ * order (§2.2): an oracle beside `unshred`'s own.
+ *
+ * @param left - One text.
+ * @param right - The other.
+ * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
+ */
+const byUtf8 = (left: string, right: string): number =>
+  Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8"));
 
 /**
  * Whether an attribute is a namespace declaration.
@@ -171,18 +192,39 @@ const joinedRuns = (children: readonly Child[]): readonly Child[] => {
 };
 
 /**
+ * An element's attributes in Canonical XML 1.0's order (§2.2): its namespace declarations by the
+ * prefix each declares, the default's empty one least, then its other attributes by namespace name
+ * and then local name.
+ *
+ * @param attributes - The element's attributes as crust read them, declarations included.
+ * @returns The same attributes in that order.
+ */
+const canonicalOrder = (attributes: readonly Attribute[]): readonly Attribute[] => [
+  ...attributes
+    .filter(isDeclaration)
+    .toSorted((left, right) =>
+      byUtf8(
+        left.prefix === "xmlns" ? left.local : "",
+        right.prefix === "xmlns" ? right.local : "",
+      ),
+    ),
+  ...attributes
+    .filter((attribute) => !isDeclaration(attribute))
+    .toSorted(
+      (left, right) => byUtf8(left.namespace, right.namespace) || byUtf8(left.local, right.local),
+    ),
+];
+
+/**
  * Erase from an element and its subtree what the XDM does not record.
  *
  * @param element - The element as crust read it.
- * @returns The element with its namespace declarations before its other attributes, each group in
- *   source order, and its character data as {@link joinedRuns} keeps it, all the way down.
+ * @returns The element with its attributes in {@link canonicalOrder}, and its character data as
+ *   {@link joinedRuns} keeps it, all the way down.
  */
 const erasedElement = (element: Element): Element => ({
   ...element,
-  attributes: [
-    ...element.attributes.filter(isDeclaration),
-    ...element.attributes.filter((attribute) => !isDeclaration(attribute)),
-  ],
+  attributes: canonicalOrder(element.attributes),
   children: joinedRuns(element.children).map((child) =>
     child.kind === "element" ? erasedElement(child) : child,
   ),
@@ -191,11 +233,11 @@ const erasedElement = (element: Element): Element => ({
 /**
  * The XDM's erasures a document's bytes can differ by, in report order.
  *
- * `cdata` is a CDATA section, written back as escaped text; `namespace order` is a namespace
- * declaration after another attribute, written back before the attributes; `runs` is two adjacent
- * runs of character data or an empty one, written back as one run.
+ * `cdata` is a CDATA section, written back as escaped text; `attribute order` is an element whose
+ * namespace declarations and attributes are not in {@link canonicalOrder}, which they are written
+ * back in; `runs` is two adjacent runs of character data or an empty one, written back as one run.
  */
-const erasures = ["cdata", "namespace order", "runs"] as const;
+const erasures = ["cdata", "attribute order", "runs"] as const;
 
 /**
  * One of {@link erasures}.
@@ -233,9 +275,9 @@ const erasuresIn = (root: Element): ReadonlySet<Erasure> => {
   const found = new Set<Erasure>();
   const stack = [root];
   for (let element = stack.pop(); element !== undefined; element = stack.pop()) {
-    const firstOther = element.attributes.findIndex((attribute) => !isDeclaration(attribute));
-    if (firstOther !== -1 && element.attributes.slice(firstOther).some(isDeclaration)) {
-      found.add("namespace order");
+    const { attributes } = element;
+    if (canonicalOrder(attributes).some((attribute, at) => attribute !== attributes[at])) {
+      found.add("attribute order");
     }
 
     for (const [at, child] of element.children.entries()) {
@@ -477,7 +519,7 @@ const roundTrip = Effect.fn("roundtrip.corpus.roundTrip")(function* roundTrip(
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
 > {
   const { bytes, doc, tree } = entry;
-  const assembled = assemble(flatten(tree, idOf));
+  const assembled = assemble(flatten(tree));
   if (Result.isFailure(assembled)) {
     return {
       _tag: "failed",
@@ -485,7 +527,7 @@ const roundTrip = Effect.fn("roundtrip.corpus.roundTrip")(function* roundTrip(
     };
   }
 
-  const causes: string[] = isDeepStrictEqual(assembled.success, tree)
+  const causes: string[] = isDeepStrictEqual(rowSetOf(assembled.success), rowSetOf(tree))
     ? []
     : ["assemble does not give back the tree flatten wrote"];
   const unshredded = yield* Effect.result(unshred(assembled.success, names));
@@ -536,9 +578,9 @@ const roundTrip = Effect.fn("roundtrip.corpus.roundTrip")(function* roundTrip(
   const asRead = yield* Effect.option(exportBytes(doc));
   const erased = erasuresIn(doc.root);
   const holds: Readonly<Record<Reason, boolean>> = {
+    "attribute order": erased.has("attribute order"),
     cdata: erased.has("cdata"),
     charset: exportCharset(doc.charset, doc) !== doc.charset,
-    "namespace order": erased.has("namespace order"),
     runs: erased.has("runs"),
     writer: !Option.exists(asRead, (written) => Option.isNone(firstDifference(bytes, written))),
   };

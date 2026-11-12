@@ -35,14 +35,14 @@ const itemWithCatalogs = (catalogs: string, body = ""): string =>
  *
  * @param law - The law.
  * @param catalogs - The catalog info's `qti-catalog` children.
- * @returns The law's breaches' `node` keys, sorted.
+ * @returns The law's breaches' keys, each as JSON.
  */
 const breachesOfLaw = (law: "Card default entry" | "Card support", catalogs: string) =>
   Effect.gen(function* judgedCatalog() {
     const breaches = breachesOf(yield* judged({ ...base, "item.xml": itemWithCatalogs(catalogs) }));
 
     return {
-      keys: breaches.filter((breach) => breach.law === law).map(({ keys }) => keys["node"] ?? ""),
+      keys: breaches.filter((breach) => breach.law === law).map(({ keys }) => JSON.stringify(keys)),
       shown: shown(breaches),
     };
   });
@@ -55,8 +55,8 @@ const breachesOfLaw = (law: "Card default entry" | "Card support", catalogs: str
  * @param catalogs - The catalog info's `qti-catalog` children.
  * @param placed - The body markup that writes the token, a paragraph that carries it where none is
  *   given.
- * @returns The `node` keys of the breaches of "Catalog reference" and of "Idref target", each
- *   sorted.
+ * @returns The keys of the breaches of "Catalog reference" and of "Idref target", each as
+ * JSON.
  */
 const referenceBreaches = (
   token: string,
@@ -68,7 +68,7 @@ const referenceBreaches = (
       yield* judged({ ...base, "item.xml": itemWithCatalogs(catalogs, placed(token)) }),
     );
     const keysOf = (law: "Catalog reference" | "Idref target") =>
-      breaches.filter((breach) => breach.law === law).map(({ keys }) => keys["node"] ?? "");
+      breaches.filter((breach) => breach.law === law).map(({ keys }) => JSON.stringify(keys));
 
     return {
       catalog: keysOf("Catalog reference"),

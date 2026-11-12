@@ -75,7 +75,7 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
     "This is a defect in qti. Report it with the command you ran and everything it printed.",
   io: "Check that the path exists, is readable or writable, and that the disk has room, then run the command again.",
   "not-found":
-    "Use the id that `qti import` printed when it stored the package, in the same database, or import the package again.",
+    "Use the manifest identifier that `qti import` printed for the package, in the same database, or import the package first.",
   "roundtrip-differs": "Compare the package with its export by hand to see which entries differ.",
   "target-not-empty": "Choose an empty or new target, or pass --yes to replace what is there.",
   timeout: "Run the command again with a larger --timeout.",
@@ -366,11 +366,12 @@ const uncompiledHelp =
 
 /**
  * What to do next after an import whose commit got no answer and whose read-back failed
- * (`CommitUnresolved` of `#pantry/import/package.ts`): the package may be stored, so importing it
- * again before looking could store it twice.
+ * (`CommitUnresolved` of `#pantry/import/package.ts`): the package may be stored. Importing it
+ * again is safe, since a package is keyed by its manifest identifier: the same package again is
+ * unchanged, and a different one under a stored identifier is refused.
  */
 const commitUnresolvedHelp =
-  "The package may have been stored. Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then look for the package by the id the message names (`qti export --dry-run <dir> <package-id>`). Import the package again only if the export answers that no package has that id: importing a stored package again stores a second copy.";
+  "The package may have been stored. Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then look for the package by the manifest identifier the message names (`qti export --dry-run <dir> <identifier>`), or import it again: the same package again is unchanged, never a second copy.";
 
 /**
  * Name the kind of a failure by what it is: its own kind, a CLI usage error, one of grizzle's
@@ -407,7 +408,7 @@ const kindOf = (failure: unknown): Kind => {
  * What to do next: the failure's own `help` when this program defined it and it has one; for a
  * named failure (`namedFailureOf`) the help of its own; for a program grizzle refused to compile
  * (`isUncompiled`), that a defect of qti left the database as it was; for an import's unsettled
- * commit, to look for the package before importing it again; for a refusal the database gave, the
+ * commit, to look for the package or import it again; for a refusal the database gave, the
  * help of a law's refusal by the kind of its witness; else the help of its kind.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.

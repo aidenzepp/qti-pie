@@ -27,18 +27,9 @@
  *
  * @see {@link https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html#JSOND | IMS Data-SSML 1.0, 3.4 Description of the JSON Schema}
  */
-import {
-  check,
-  Compute,
-  contained,
-  natural,
-  on,
-  relation,
-  select,
-  uuid,
-} from "@bjornpagen/grizzle";
-import { Attribute, closedName } from "#pantry/qti/attributes.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { check, Compute, contained, natural, on, relation, select } from "@bjornpagen/grizzle";
+import { Attribute } from "#pantry/qti/attributes.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { dataSsmlMembers } from "#pantry/vocab/data-ssml.ts";
 
 /**
@@ -48,23 +39,27 @@ const normalizedValue = Compute.pattern("^[^\\t\\n\\r]*$");
 
 /**
  * An element whose closed `data-ssml` is one JSON object of objects of strings, keyed by the
- * element's node.
+ * element, `(package, path, start)`.
  */
-export const DataSsml = relation("DataSsml", { node: uuid }, ["node"]);
-
-/**
- * One member of a `data-ssml` object as written, keyed by its element's node and its place in the
- * object, from 0: its decoded name.
- */
-export const DataSsmlMember = relation(
-  "DataSsmlMember",
-  { at: natural, member: keyText, node: uuid },
-  ["node", "at"],
+export const DataSsml = relation(
+  "DataSsml",
+  { package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
 );
 
 /**
- * One property of a member as written, keyed by its element's node, its member's place and its own
- * place in the member, from 0: its member's name (`memberName`, its {@link DataSsmlMember}'s), its
+ * One member of a `data-ssml` object as written, keyed by its element and its place in the object,
+ * from 0: its decoded name.
+ */
+export const DataSsmlMember = relation(
+  "DataSsmlMember",
+  { at: natural, member: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start", "at"],
+);
+
+/**
+ * One property of a member as written, keyed by its element, its member's place and its own place
+ * in the member, from 0: its member's name (`memberName`, its {@link DataSsmlMember}'s), its
  * decoded name and its decoded value.
  */
 export const DataSsmlProperty = relation(
@@ -74,10 +69,12 @@ export const DataSsmlProperty = relation(
     member: natural,
     memberName: keyText,
     name: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     value: keyText,
   },
-  ["node", "member", "at"],
+  ["package", "path", "start", "member", "at"],
 );
 
 /**
@@ -86,11 +83,9 @@ export const DataSsmlProperty = relation(
 export const dataSsmlRelations = { DataSsml, DataSsmlMember, DataSsmlProperty };
 
 /**
- * Every closed `data-ssml` attribute, by its element's node: an element holds one.
+ * Every closed `data-ssml` attribute, by its element: an element holds one.
  */
-const dataSsmlAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.name, "data-ssml")),
-);
+const dataSsmlAttributes = select(Attribute, (a) => a.eq(a.name, "data-ssml"));
 
 /**
  * The (member, property) pairs of one kind of property domain, from the schema's table.
@@ -130,7 +125,10 @@ const enumeratedProperties = [...dataSsmlMembers].flatMap(([member, properties])
  */
 export const dataSsmlLawsByName = {
   "Data SSML": [
-    contained(on(dataSsmlAttributes, "node"), on(DataSsml, "node")),
+    contained(
+      on(dataSsmlAttributes, "package", "path", "start"),
+      on(DataSsml, "package", "path", "start"),
+    ),
     check("Data_SSML", DataSsmlMember, (m) => m.in(m.member, memberNames)),
     check("Data_SSML", DataSsmlProperty, (p) =>
       p.and(
@@ -153,11 +151,17 @@ export const dataSsmlLawsByName = {
     ),
   ],
   "E1 derived": [
-    contained(on(DataSsml, "node"), on(dataSsmlAttributes, "node")),
-    contained(on(DataSsmlMember, "node"), on(DataSsml, "node")),
     contained(
-      on(DataSsmlProperty, "node", "member", "memberName"),
-      on(DataSsmlMember, "node", "at", "member"),
+      on(DataSsml, "package", "path", "start"),
+      on(dataSsmlAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(DataSsmlMember, "package", "path", "start"),
+      on(DataSsml, "package", "path", "start"),
+    ),
+    contained(
+      on(DataSsmlProperty, "package", "path", "start", "member", "memberName"),
+      on(DataSsmlMember, "package", "path", "start", "at", "member"),
     ),
   ],
 } as const;

@@ -6,8 +6,9 @@
  *
  * - `ancestry`, its parent's with the flags its kind enters (`E1_derived`), the document node's its
  *   context's;
- * - `nearest` and `nearestKind`, its parent where the parent is an interaction, else its parent's
- *   (N8), the document node's its context's (spec reading 117);
+ * - `nearest`, `nearestPath` and `nearestKind`, its parent where the parent is an interaction, else
+ *   its parent's (N8), the document node's its context's (spec reading 117): a position in the
+ *   folded document, or in the document at `nearestPath` where the context gives it;
  * - `state`, its content-automaton state (C5, N5), the document node's 0;
  * - `elements`, the elements among its parent's children up to it, itself included where it is one,
  *   the document node's 0, and `elementChildren`, the elements among its own children, which an
@@ -34,7 +35,7 @@ import type { Flag } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 
 /**
  * An ancestry flag's handle.
@@ -42,14 +43,19 @@ import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.t
 type FlagHandle = (typeof Flag.handles)[number];
 
 /**
- * What one node folds to.
+ * What one node folds to. `nearest` is its nearest interaction's position, in the folded document
+ * where `nearestPath` is none: an ancestor there, or its document node where it has no interaction
+ * among its ancestors and no site places the document in one. Where its chain of nearest reaches
+ * its document node and a site places the document in an interaction, that interaction is in the
+ * document at `nearestPath`, the context's (`Document.contextPath`).
  */
 export interface Folded {
   readonly ancestry: ReadonlySet<FlagHandle>;
   readonly elementChildren: bigint;
   readonly elements: bigint;
-  readonly nearest: NodeId;
+  readonly nearest: bigint;
   readonly nearestKind: Kind;
+  readonly nearestPath: Option.Option<string>;
   readonly state: number;
 }
 
@@ -231,17 +237,20 @@ const stateOf = (
   });
 
 /**
+ * The position of a document's document node, `flatten`'s node 0, which is its own parent.
+ */
+const documentStart = 0n;
+
+/**
  * The context of a document no site names, its fold's seed: no ancestry, and its own document node
  * as its nearest, of kind `document`.
- *
- * @param self - The document node's id.
- * @returns The context.
  */
-export const ownContext = (self: NodeId): DocumentContext => ({
+export const ownContext: DocumentContext = {
   ancestry: new Set(),
-  nearest: self,
+  nearest: documentStart,
   nearestKind: "document",
-});
+  nearestPath: Option.none(),
+};
 
 /**
  * The key a document's folds are held under in {@link Folds}: this module's alone, so no reader but
@@ -254,23 +263,23 @@ const byNode: unique symbol = Symbol("folds");
  * one reader, which is total.
  */
 export interface Folds {
-  readonly [byNode]: ReadonlyMap<NodeId, Folded>;
+  readonly [byNode]: ReadonlyMap<bigint, Folded>;
 }
 
 /**
  * Read one node's fold: total, since {@link foldOf} folds every node it is given or throws.
  *
  * @param folds - A document's folds, as {@link foldOf} gives them.
- * @param node - The id of a node of that document.
+ * @param start - The position of a node of that document.
  * @returns The node's fold.
- * @throws {Error} When the node is no node of the folded document: a defect of the caller, which
- *   read a node of one document in another's folds.
+ * @throws {Error} When the document holds no node there: a defect of the caller, which read a node
+ *   of one document in another's folds.
  */
-export const foldAt = (folds: Folds, node: NodeId): Folded => {
-  const folded = folds[byNode].get(node);
+export const foldAt = (folds: Folds, start: bigint): Folded => {
+  const folded = folds[byNode].get(start);
   if (folded === undefined) {
     throw new Error(
-      `Node ${node} is no node of the folded document, and foldOf folds every node it is given. Read each node in the folds of its own document.`,
+      `The folded document holds no node at ${String(start)}, and foldOf folds every node it is given. Read each node in the folds of its own document.`,
     );
   }
 
@@ -294,18 +303,19 @@ export const foldAt = (folds: Folds, node: NodeId): Folded => {
 // GRIZZLE-PENDING: Q11, Q13: folds stepped by a closed relation, and a generated term over an
 // accumulated field, let the database draw state, ancestry and nearest, and this host fold goes.
 export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): Folds => {
-  const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
+  const folded = new Map<bigint, { readonly held: Held; readonly under: Under }>();
 
   for (const node of nodes) {
-    const { id, kind, version } = node;
-    if (node.parent === id) {
-      folded.set(id, {
+    const { kind, start, version } = node;
+    if (node.parent === start) {
+      folded.set(start, {
         held: {
           ancestry: context.ancestry,
           elements: 0n,
           kind,
           nearest: context.nearest,
           nearestKind: context.nearestKind,
+          nearestPath: context.nearestPath,
           state: startState,
         },
         under: { elements: 0n, state: startState },
@@ -316,7 +326,7 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
     const parentFold = folded.get(node.parent);
     if (parentFold === undefined) {
       throw new Error(
-        `Node ${id} comes before its parent ${node.parent}, but a document's nodes are folded in document order. Fold flatten's rows as it writes them.`,
+        `The node at ${String(start)} comes before its parent at ${String(node.parent)}, but a document's nodes are folded in document order. Fold flatten's rows as it writes them.`,
       );
     }
 
@@ -324,13 +334,14 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
     const fromInteraction = interactions.has(parent.kind);
     under.state = stateOf({ child: kind, parent: parent.kind, version }, under.state);
     under.elements += nonElements.has(kind) ? 0n : 1n;
-    folded.set(id, {
+    folded.set(start, {
       held: {
         ancestry: new Set([...parent.ancestry, ...flagsEnteredBy(kind)]),
         elements: under.elements,
         kind,
         nearest: fromInteraction ? node.parent : parent.nearest,
         nearestKind: fromInteraction ? parent.kind : parent.nearestKind,
+        nearestPath: fromInteraction ? Option.none() : parent.nearestPath,
         state: under.state,
       },
       under: { elements: 0n, state: startState },
@@ -339,8 +350,8 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
 
   return {
     [byNode]: new Map(
-      [...folded].map(([id, { held, under }]) => [
-        id,
+      [...folded].map(([at, { held, under }]) => [
+        at,
         { ...held, elementChildren: under.elements },
       ]),
     ),
@@ -348,11 +359,11 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
 };
 
 /**
- * One document as every row builder reads it: its tree, its rows as `flatten` writes them under the
- * ids it is written under, and their folds under the context it is judged in. An import builds one
+ * One document as every row builder reads it: its tree, its rows as `flatten` writes them, each
+ * node at its position, and their folds under the context it is judged in. An import builds one
  * view per document ({@link viewOf}) and hands that one value to the tree's writer and to every
  * overlay builder, so each document is flattened and folded once and every row names each node by
- * the same id.
+ * the same position.
  */
 export interface DocumentView {
   readonly context: DocumentContext;
@@ -365,7 +376,7 @@ export interface DocumentView {
  * Fold a flattened document under the context it is judged in.
  *
  * @param tree - The document's tree, as shred gives it.
- * @param rows - Its rows, `flatten` of the tree under the ids they are written under.
+ * @param rows - Its rows, `flatten` of the tree.
  * @param context - The context it is judged in (spec reading 117).
  * @returns Its view.
  */
@@ -376,19 +387,11 @@ export const viewOf = (
 ): DocumentView => ({ context, folds: foldOf(rows.nodes, context), rows, tree });
 
 /**
- * View a document no site names: flattened under `idOf` and judged in its own context
- * ({@link ownContext}), as the read judges the manifest and every document it reads before the
- * package's ids are minted.
+ * View a document no site names: flattened and judged in its own context ({@link ownContext}), as
+ * the read judges the manifest and every document it reads before their contexts are known.
  *
  * @param tree - The document's tree, as shred gives it.
- * @param idOf - Draws the id of the node or attribute `flatten` numbers by its argument.
  * @returns Its view.
  */
-export const ownViewOf = (
-  tree: XdmDocument<Composed>,
-  idOf: (index: number) => NodeId,
-): DocumentView => {
-  const rows = flatten(tree, idOf);
-
-  return viewOf(tree, rows, ownContext(rows.document.node));
-};
+export const ownViewOf = (tree: XdmDocument<Composed>): DocumentView =>
+  viewOf(tree, flatten(tree), ownContext);

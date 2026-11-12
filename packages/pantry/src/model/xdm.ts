@@ -20,7 +20,8 @@
  * foreign elements otherwise (XML Schema 1.0 Part 1, §3.4.7 and §3.10.4; spec readings 30 and 57).
  *
  * A tree is written in a vocabulary's closed handles ({@link XdmVocabulary}) and holds no ids, so
- * two reads of one document are equal trees; {@link flatten} draws the ids when it writes the rows.
+ * two reads of one document are equal trees, and {@link flatten} names each node by its position in
+ * document order, so two reads of one document are equal rows too.
  * A name no handle stands for, an open attribute's or a foreign element's, is kept exactly beside
  * the handle of its class, and every element and attribute keeps the prefix its name is written
  * with, so the document is written back under the names it was read under (spec reading 47). Order
@@ -481,31 +482,21 @@ export const documentFamily = <V extends XdmVocabulary>(
 ];
 
 /**
- * A node id: the language of a uuid's hyphenated spelling, which is the type of
- * `crypto.randomUUID()` and of grizzle's `Uuid`, so an id of either kind is a node id.
- */
-export type NodeId = `${string}-${string}-${string}-${string}-${string}`;
-
-/**
- * An attribute id, a uuid as a node's is. An attribute is a row of its own, and the rows that
- * belong to it, its open name and its entity references, name it by its id: its slot among its
- * element's attributes is its place, never its identity.
- */
-export type AttributeId = NodeId;
-
-/**
- * One node's `Node` row: its id, its parent and its slot among the parent's children, its pre-order
- * interval, its kind, the prefix its name was written with, and its document's version.
+ * One node's `Node` row: its position in document order, its parent's and its slot among the
+ * parent's children, its pre-order interval, its kind, the prefix its name was written with, and
+ * its document's version. Its document's package and path are the writer's, beside every row of
+ * the document, so a document's rows are the same whichever package holds it.
  *
  * The document node is its own parent at slot 0, so `parent` is total. It alone is of kind
  * `document` and its own parent, and the children family selects it out. A node that is not an
  * element has the empty prefix.
  *
  * `[start, end)` is the node's pre-order interval within its document (trees.md, T1 to T6):
- * `start` is its index in document order, the document node's 0, and `end − start` is the number
- * of nodes its subtree holds, itself included. So the document node's interval is `[0, N)` for a
- * document of N nodes, a leaf's holds only itself, a node is below another exactly when the other's
- * interval holds its `start`, and a node's children tile `[start + 1, end)` in slot order.
+ * `start` is its index in document order, the document node's 0, its identity in its document, and
+ * `end − start` is the number of nodes its subtree holds, itself included. So the document node's
+ * interval is `[0, N)` for a document of N nodes, a leaf's holds only itself, a node is below
+ * another exactly when the other's interval holds its `start`, and a node's children tile
+ * `[start + 1, end)` in slot order. `parent` is the parent's `start`.
  */
 export interface NodeRow<V extends XdmVocabulary> {
   readonly at: bigint;
@@ -515,154 +506,162 @@ export interface NodeRow<V extends XdmVocabulary> {
    * none for a node that is no element, which no named type governs.
    */
   readonly governs: Option.Option<string>;
-  readonly id: NodeId;
   readonly kind: XdmKind<V>;
-  readonly parent: NodeId;
+  readonly parent: bigint;
   readonly prefix: string;
   readonly start: bigint;
   readonly version: V["version"];
 }
 
 /**
- * The document node's `Document` row, keyed by the node: the charsets. Its XML declaration is rows
- * of their own ({@link XmlDeclRow}, {@link EncodingDeclRow}, {@link SdDeclRow}), since each part
- * of it is optional (XML 1.0 §2.8) and a row's fields are total.
+ * The document's `Document` row: the charsets. Its XML declaration is rows of their own
+ * ({@link XmlDeclRow}, {@link EncodingDeclRow}, {@link SdDeclRow}), since each part of it is
+ * optional (XML 1.0 §2.8) and a row's fields are total.
  */
 export interface DocumentRow {
   readonly charset: string;
   readonly exportCharset: string;
-  readonly node: NodeId;
 }
 
 /**
- * The document node's `XmlDecl` row, keyed by the node, where the document writes a declaration:
- * the version it declares.
+ * The document's `XmlDecl` row, where the document writes a declaration: the version it declares.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-XMLDecl | XML 1.0, XMLDecl}
  */
 export interface XmlDeclRow {
-  readonly node: NodeId;
   readonly version: XmlVersion;
 }
 
 /**
- * The document node's `EncodingDecl` row, keyed by the node, where its declaration writes an
- * `encoding`: the encoding name as written.
+ * The document's `EncodingDecl` row, where its declaration writes an `encoding`: the encoding name
+ * as written.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-EncodingDecl | XML 1.0, EncodingDecl}
  */
 export interface EncodingDeclRow {
   readonly encoding: string;
-  readonly node: NodeId;
 }
 
 /**
- * The document node's `SdDecl` row, keyed by the node, where its declaration writes a
- * `standalone`: the value as written.
+ * The document's `SdDecl` row, where its declaration writes a `standalone`: the value as written.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-SDDecl | XML 1.0, SDDecl}
  */
 export interface SdDeclRow {
-  readonly node: NodeId;
   readonly standalone: Standalone;
 }
 
 /**
  * The row of a character-data node whose content is one text: a `Text`, `Whitespace`, `Comment` or
- * `Doctype` row, keyed by the node.
+ * `Doctype` row, keyed by the node's position.
  */
 export interface CharacterRow {
-  readonly node: NodeId;
+  readonly start: bigint;
   readonly value: string;
 }
 
 /**
- * A processing instruction's `Pi` row, keyed by its node.
+ * A processing instruction's `Pi` row, keyed by its node's position.
  */
 export interface PiRow {
   readonly data: string;
-  readonly node: NodeId;
+  readonly start: bigint;
   readonly target: string;
 }
 
 /**
- * An entity reference's `EntityRef` row, keyed by its node.
+ * An entity reference's `EntityRef` row, keyed by its node's position.
  */
 export interface EntityRefRow {
   readonly name: string;
-  readonly node: NodeId;
+  readonly start: bigint;
 }
 
 /**
- * A namespace declaration's `Namespace` row, at its slot among its element's declarations.
+ * A namespace declaration's `Namespace` row, keyed by its element's position and its prefix: an
+ * element's declarations are a set (Infoset [namespace attributes]).
  */
 export interface NamespaceRow {
-  readonly at: bigint;
-  readonly node: NodeId;
   readonly prefix: string;
+  readonly start: bigint;
   readonly uri: string;
 }
 
 /**
- * An attribute's `Attribute` row, its id at its slot among its element's attributes: its name
- * handle, an open class's included, the prefix its name is written with, and its lexical form, the
- * record (U1). Its value domain is the grammar's to apply, so the row stores none.
- *
- * The prefix is every attribute's, closed or open, so it is stored once, here, and an open name's
- * row keeps only what its class leaves of the rest of its name.
+ * A closed attribute's `Attribute` row, keyed by its element's position and its name handle: the
+ * prefix its name is written with, and its lexical form, the record (U1). Its value domain is the
+ * grammar's to apply, so the row stores none. An element's attributes are a set (Infoset
+ * [attributes]).
  */
 export interface AttributeRow<V extends XdmVocabulary> {
-  readonly at: bigint;
-  readonly id: AttributeId;
   readonly lexical: string;
-  readonly name: ClosedName<V> | OpenClass;
-  readonly node: NodeId;
+  readonly name: ClosedName<V>;
   readonly prefix: string;
+  readonly start: bigint;
 }
 
 /**
- * The exact name of an attribute under an open class, keyed by its attribute's id: what its class
- * leaves of its name beside the prefix its attribute row keeps. A name in no namespace has the
- * empty namespace name; an `own-namespace` or `foreign` name keeps its namespace as written
- * whatever its class, which the foreign attribute class law reads against its element's.
+ * An open-class attribute's `OpenAttribute` row, keyed by its element's position and its written
+ * expanded name: its class, the prefix its name is written with, and its lexical form. A name in no
+ * namespace has the empty namespace name; an `own-namespace` or `foreign` name keeps its namespace
+ * as written whatever its class, which the foreign attribute class law reads against its
+ * element's.
  */
-export interface OpenNameRow {
-  readonly attribute: AttributeId;
+export interface OpenAttributeRow {
+  readonly class: OpenClass;
+  readonly lexical: string;
   readonly local: string;
+  readonly prefix: string;
+  readonly start: bigint;
   readonly uri: string;
 }
 
 /**
- * A foreign element's expanded name, keyed by its node: the `OpenElementName` row beside a node of
- * one of the foreign kinds, whose class its namespace agrees with. The prefix is the node row's
- * own.
+ * A foreign element's expanded name, keyed by its node's position: the `OpenElementName` row
+ * beside a node of one of the foreign kinds, whose class its namespace agrees with. The prefix is
+ * the node row's own.
  */
 export interface OpenElementNameRow {
   readonly local: string;
   readonly namespace: string;
-  readonly node: NodeId;
+  readonly start: bigint;
 }
 
 /**
- * An unexpanded entity reference inside an attribute's lexical form, keyed by its attribute's id
- * and its offset.
+ * An unexpanded entity reference inside a closed attribute's lexical form, keyed by its attribute,
+ * `(start, name)`, and its offset: the entity's name, `entity`.
  */
-export interface AttributeEntityRow {
-  readonly attribute: AttributeId;
-  readonly name: string;
+export interface AttributeEntityRow<V extends XdmVocabulary> {
+  readonly entity: string;
+  readonly name: ClosedName<V>;
   readonly offset: bigint;
+  readonly start: bigint;
+}
+
+/**
+ * An unexpanded entity reference inside an open attribute's lexical form, keyed by its attribute,
+ * `(start, uri, local)`, and its offset.
+ */
+export interface OpenAttributeEntityRow {
+  readonly entity: string;
+  readonly local: string;
+  readonly offset: bigint;
+  readonly start: bigint;
+  readonly uri: string;
 }
 
 /**
  * The rows one document is stored as, by relation: the record fields of the document layer and each
- * node's pre-order interval, every other field the database or the host folds derive left out.
+ * node's pre-order interval, every other field the database or the host folds derive left out, and
+ * the document's own package and path, which every row of it holds alike, left to the writer.
  *
  * They are what an export's scans of one document return and what a tree is rebuilt from, the node
  * rows in `start` order (trees.md §3), with no recursive read. Any row that carries at least these
- * fields is one of these rows, so the schema's own inferred rows stand in for them as they are.
+ * fields is one of these rows, so the schema's own inferred rows stand in for them as they are. The
+ * attribute, namespace and entity lists are sets: their order is no part of the document.
  */
 export interface FlatRows<V extends XdmVocabulary> {
-  readonly attributeEntities: readonly AttributeEntityRow[];
+  readonly attributeEntities: readonly AttributeEntityRow<V>[];
   readonly attributes: readonly AttributeRow<V>[];
   readonly comments: readonly CharacterRow[];
   readonly doctypes: readonly CharacterRow[];
@@ -671,8 +670,9 @@ export interface FlatRows<V extends XdmVocabulary> {
   readonly entityRefs: readonly EntityRefRow[];
   readonly namespaces: readonly NamespaceRow[];
   readonly nodes: readonly NodeRow<V>[];
+  readonly openAttributeEntities: readonly OpenAttributeEntityRow[];
+  readonly openAttributes: readonly OpenAttributeRow[];
   readonly openElementNames: readonly OpenElementNameRow[];
-  readonly openNames: readonly OpenNameRow[];
   readonly pis: readonly PiRow[];
   readonly sdDecls: readonly SdDeclRow[];
   readonly texts: readonly CharacterRow[];
@@ -681,15 +681,15 @@ export interface FlatRows<V extends XdmVocabulary> {
 }
 
 /**
- * A step of `flatten`'s walk: a node below the document node to write, with its parent's id and
- * its slot; or an element whose subtree the walk has written, whose interval it closes.
+ * A step of `flatten`'s walk: a node below the document node to write, with its parent's position
+ * and its slot; or an element whose subtree the walk has written, whose interval it closes.
  */
 type Step<V extends XdmVocabulary> =
   | {
       readonly _tag: "open";
       readonly at: number;
       readonly node: XdmChild<V> | XdmDocumentChild<V>;
-      readonly parent: NodeId;
+      readonly parent: bigint;
     }
   | { readonly _tag: "close"; readonly row: Types.Mutable<NodeRow<V>> };
 
@@ -698,12 +698,12 @@ type Step<V extends XdmVocabulary> =
  *
  * @param stack - The walk's stack of steps still to take.
  * @param children - The parent's children, in document order.
- * @param parent - The parent's id.
+ * @param parent - The parent's position.
  */
 const pushChildren = <V extends XdmVocabulary>(
   stack: Step<V>[],
   children: readonly (XdmChild<V> | XdmDocumentChild<V>)[],
-  parent: NodeId,
+  parent: bigint,
 ): void => {
   for (const [at, node] of children.entries().toArray().toReversed()) {
     stack.push({ _tag: "open", at, node, parent });
@@ -711,60 +711,47 @@ const pushChildren = <V extends XdmVocabulary>(
 };
 
 /**
- * An attribute the walk has met, waiting for its id, which is numbered after every node's: its
- * element's id and its slot there.
- */
-interface MetAttribute<V extends XdmVocabulary> {
-  readonly at: bigint;
-  readonly attribute: XdmAttribute<V>;
-  readonly node: NodeId;
-}
-
-/**
  * Write a document's XML declaration as its rows: an `XmlDecl` row where the document writes one,
  * and an `EncodingDecl` and an `SdDecl` row where the declaration writes each part.
  *
  * @param declaration - The declaration, none when the document writes none.
- * @param node - The document node's id.
  * @returns The rows, each list empty where the document writes no such part.
  */
 const declarationRowsOf = (
   declaration: Option.Option<XdmDeclaration>,
-  node: NodeId,
 ): Pick<FlatRows<XdmVocabulary>, "encodingDecls" | "sdDecls" | "xmlDecls"> => ({
   encodingDecls: declaration.pipe(
     Option.flatMap(({ encoding }) => encoding),
-    Option.map((encoding) => ({ encoding, node })),
+    Option.map((encoding) => ({ encoding })),
     Option.toArray,
   ),
   sdDecls: declaration.pipe(
     Option.flatMap(({ standalone }) => standalone),
-    Option.map((standalone) => ({ node, standalone })),
+    Option.map((standalone) => ({ standalone })),
     Option.toArray,
   ),
   xmlDecls: declaration.pipe(
-    Option.map(({ version }) => ({ node, version })),
+    Option.map(({ version }) => ({ version })),
     Option.toArray,
   ),
 });
 
 /**
- * Write an open name as its `OpenAttributeName` row: what its class leaves of the name beside its
- * prefix, the namespace name empty for a class in no namespace.
+ * Write an open name as what its class leaves of the name beside its prefix: its local name, and
+ * the namespace name its class keeps, empty for a class in no namespace.
  *
  * @param name - The open name.
- * @param attribute - Its attribute's id.
- * @returns The row: the local name, and the namespace name its class keeps.
+ * @returns The class, the local name and the namespace name.
  */
-const openNameRowOf = (name: OpenName, attribute: AttributeId): OpenNameRow => {
+const openNameOf = (name: OpenName): Pick<OpenAttributeRow, "class" | "local" | "uri"> => {
   switch (name._tag) {
     case "data-*":
     case "no-namespace": {
-      return { attribute, local: name.local, uri: "" };
+      return { class: name._tag, local: name.local, uri: "" };
     }
     case "own-namespace":
     case "foreign": {
-      return { attribute, local: name.local, uri: name.uri };
+      return { class: name._tag, local: name.local, uri: name.uri };
     }
     default: {
       return name satisfies never;
@@ -776,45 +763,41 @@ const openNameRowOf = (name: OpenName, attribute: AttributeId): OpenNameRow => {
  * Write a document as its rows.
  *
  * Nodes are numbered in document order, the document node 0, and `nodes` lists them in that order,
- * so `nodes[i]` is the node numbered `i`, its `start` is `i` and its id is `idOf(i)`. Each node
- * opens with the interval of itself alone, `[start, start + 1)`, and an element's grows to the
+ * so `nodes[i]` is the node numbered `i` and its `start` is `i`: its identity in its document,
+ * which every row of it, its attributes', declarations' and arms' alike, holds as its key. Each
+ * node opens with the interval of itself alone, `[start, start + 1)`, and an element's grows to the
  * count of nodes written when the walk closes its subtree, so `end` is `start` plus the subtree's
- * size. The attributes are numbered after the nodes, in document order of their elements, then
- * slot order: attribute `j` of `attributes` has the id `idOf(N + j)` for a document of N nodes.
- * Every other list is in document order of its rows' nodes, then slot order. The walk keeps its
- * own stack, so a tree of any depth is written without recursion.
+ * size. Every other list is in document order of its rows' nodes, and an element's attributes and
+ * declarations in source order, an order no reader relies on. The walk keeps its own stack, so a
+ * tree of any depth is written without recursion, and two reads of one document are equal rows.
  *
  * @param document - The tree to write.
- * @param idOf - Draws the id of the row numbered by its argument: called once per node, in
- *   document order, then once per attribute, in order.
  * @returns The document's rows: the document node at slot 0 as its own parent, over `[0, N)`, each
  *   other node at its slot under its parent over its pre-order interval with its document's
- *   version, and one row of each attribute with its lexical form, open name, entity reference,
- *   namespace declaration, character-data node and foreign element's name.
+ *   version, and one row of each attribute, open or closed, with its lexical form, entity
+ *   reference, namespace declaration, character-data node and foreign element's name.
  */
-export const flatten = <V extends XdmVocabulary>(
-  document: XdmDocument<V>,
-  idOf: (index: number) => NodeId,
-): FlatRows<V> => {
+export const flatten = <V extends XdmVocabulary>(document: XdmDocument<V>): FlatRows<V> => {
   const { version } = document;
-  const self = idOf(0);
   const sentinel: Types.Mutable<NodeRow<V>> = {
     at: 0n,
     end: 1n,
     governs: Option.none(),
-    id: self,
     kind: document._tag,
-    parent: self,
+    parent: 0n,
     prefix: "",
     start: 0n,
     version,
   };
   const nodes: NodeRow<V>[] = [sentinel];
-  const met: MetAttribute<V>[] = [];
+  const attributeEntities: AttributeEntityRow<V>[] = [];
+  const attributes: AttributeRow<V>[] = [];
   const comments: CharacterRow[] = [];
   const doctypes: CharacterRow[] = [];
   const entityRefs: EntityRefRow[] = [];
   const namespaces: NamespaceRow[] = [];
+  const openAttributeEntities: OpenAttributeEntityRow[] = [];
+  const openAttributes: OpenAttributeRow[] = [];
   const openElementNames: OpenElementNameRow[] = [];
   const pis: PiRow[] = [];
   const texts: CharacterRow[] = [];
@@ -822,20 +805,44 @@ export const flatten = <V extends XdmVocabulary>(
   const valued = { comment: comments, doctype: doctypes, text: texts, ws: whitespace };
   const stack: Step<V>[] = [{ _tag: "close", row: sentinel }];
   const element = (node: XdmElement<V>, row: Types.Mutable<NodeRow<V>>): void => {
-    for (const [slot, { prefix, uri }] of node.namespaces.entries()) {
-      namespaces.push({ at: BigInt(slot), node: row.id, prefix, uri });
+    const { start } = row;
+    for (const { prefix, uri } of node.namespaces) {
+      namespaces.push({ prefix, start, uri });
     }
 
-    for (const [slot, attribute] of node.attributes.entries()) {
-      met.push({ at: BigInt(slot), attribute, node: row.id });
+    for (const { lexical, name, references } of node.attributes) {
+      const prefix = attributePrefixOf(name);
+      if (name._tag === "closed") {
+        attributes.push({ lexical, name: name.handle, prefix, start });
+        for (const reference of references) {
+          attributeEntities.push({
+            entity: reference.name,
+            name: name.handle,
+            offset: BigInt(reference.offset),
+            start,
+          });
+        }
+      } else {
+        const open = openNameOf(name);
+        openAttributes.push({ ...open, lexical, prefix, start });
+        for (const reference of references) {
+          openAttributeEntities.push({
+            entity: reference.name,
+            local: open.local,
+            offset: BigInt(reference.offset),
+            start,
+            uri: open.uri,
+          });
+        }
+      }
     }
 
     nodes.push(row);
     stack.push({ _tag: "close", row });
-    pushChildren(stack, node.children, row.id);
+    pushChildren(stack, node.children, start);
   };
 
-  pushChildren(stack, documentFamily(document), self);
+  pushChildren(stack, documentFamily(document), 0n);
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     if (next._tag === "close") {
       next.row.end = BigInt(nodes.length);
@@ -843,15 +850,13 @@ export const flatten = <V extends XdmVocabulary>(
     }
 
     const { node, parent } = next;
-    const start = nodes.length;
-    const id = idOf(start);
+    const start = BigInt(nodes.length);
     const row = {
       at: BigInt(next.at),
-      end: BigInt(start + 1),
+      end: start + 1n,
       governs: Option.none<string>(),
-      id,
       parent,
-      start: BigInt(start),
+      start,
       version,
     };
     switch (node._tag) {
@@ -862,18 +867,18 @@ export const flatten = <V extends XdmVocabulary>(
       case "foreign-element":
       case "no-namespace-element":
       case "own-namespace-element": {
-        openElementNames.push({ local: node.name.local, namespace: node.name.namespace, node: id });
+        openElementNames.push({ local: node.name.local, namespace: node.name.namespace, start });
         element(node, { ...row, governs: node.governs, kind: node._tag, prefix: node.prefix });
         break;
       }
       case "pi": {
         nodes.push({ ...row, kind: node._tag, prefix: "" });
-        pis.push({ data: node.data, node: id, target: node.target });
+        pis.push({ data: node.data, start, target: node.target });
         break;
       }
       case "entityRef": {
         nodes.push({ ...row, kind: node._tag, prefix: "" });
-        entityRefs.push({ name: node.name, node: id });
+        entityRefs.push({ name: node.name, start });
         break;
       }
       case "comment":
@@ -881,7 +886,7 @@ export const flatten = <V extends XdmVocabulary>(
       case "text":
       case "ws": {
         nodes.push({ ...row, kind: node._tag, prefix: "" });
-        valued[node._tag].push({ node: id, value: node.value });
+        valued[node._tag].push({ start, value: node.value });
         break;
       }
       default: {
@@ -890,41 +895,19 @@ export const flatten = <V extends XdmVocabulary>(
     }
   }
 
-  const attributeEntities: AttributeEntityRow[] = [];
-  const attributes: AttributeRow<V>[] = [];
-  const openNames: OpenNameRow[] = [];
-  for (const [index, { at, attribute, node }] of met.entries()) {
-    const id = idOf(nodes.length + index);
-    const { lexical, name } = attribute;
-    const prefix = attributePrefixOf(name);
-    if (name._tag === "closed") {
-      attributes.push({ at, id, lexical, name: name.handle, node, prefix });
-    } else {
-      attributes.push({ at, id, lexical, name: name._tag, node, prefix });
-      openNames.push(openNameRowOf(name, id));
-    }
-
-    for (const reference of attribute.references) {
-      attributeEntities.push({
-        attribute: id,
-        name: reference.name,
-        offset: BigInt(reference.offset),
-      });
-    }
-  }
-
   return {
     attributeEntities,
     attributes,
     comments,
     doctypes,
-    document: { charset: document.charset, exportCharset: document.exportCharset, node: self },
-    ...declarationRowsOf(document.declaration, self),
+    document: { charset: document.charset, exportCharset: document.exportCharset },
+    ...declarationRowsOf(document.declaration),
     entityRefs,
     namespaces,
     nodes,
+    openAttributeEntities,
+    openAttributes,
     openElementNames,
-    openNames,
     pis,
     texts,
     whitespace,

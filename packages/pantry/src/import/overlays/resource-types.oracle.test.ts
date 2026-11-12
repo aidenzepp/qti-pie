@@ -13,14 +13,12 @@
  * (a document has one type, so one path under two document types is refused) and 162 (that type is
  * the one its root bears out), and the law oracle's verdict on each case.
  */
-import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { typedHrefsOf } from "#pantry/import/overlays/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { Edit } from "#pantry/test/fixtures.ts";
@@ -99,16 +97,10 @@ const judgedListedAgain = (type: string, before: boolean) =>
       name: `listed-again-${type.replaceAll(/[^\da-z]+/giu, "-")}-${before ? "before" : "after"}`,
     });
     const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
-    const minted = new Set<string>();
-    const { inputs } = yield* readProgram(dir, (): NodeId => {
-      const id: NodeId = randomUUID();
-      minted.add(id);
-
-      return id;
-    });
+    const { inputs } = yield* readProgram(dir);
 
     return {
-      host: [...hostVerdictOf(inputs, minted).broken.keys()].toSorted(),
+      host: [...hostVerdictOf(inputs).broken.keys()].toSorted(),
       oracle:
         judgment._tag === "Judged"
           ? [...new Set(judgment.breaches.map(({ law }) => law))].toSorted()
@@ -143,14 +135,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               name: `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
             });
             const judgment = yield* judge(yield* readEntries(dir), grammar, laws);
-            const minted = new Set<string>();
-            const { inputs } = yield* readProgram(dir, (): NodeId => {
-              const id: NodeId = randomUUID();
-              minted.add(id);
-
-              return id;
-            });
-            const host = hostVerdictOf(inputs, minted);
+            const { inputs } = yield* readProgram(dir);
+            const host = hostVerdictOf(inputs);
 
             assert.deepStrictEqual(verdictOf(judgment), verdict, Formatter.format(judgment));
             assert.sameMembers(

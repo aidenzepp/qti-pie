@@ -25,13 +25,15 @@ import {
 } from "#pantry/grammar/expression.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
-import { nonElements } from "#pantry/import/overlays/mathml-tree.ts";
+import { keyTextOf, nonElements } from "#pantry/import/overlays/mathml-tree.ts";
+import type { MathmlIds } from "#pantry/import/overlays/mathml-tree.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 
 /**
- * A document's apply rows, one keyed set per relation, each keyed by its node's id.
+ * A document's apply rows, one keyed set per relation, each keyed by its node's
+ * `(package, path, start)` ({@link keyTextOf}).
  */
 export interface MathmlApplyRows {
   readonly MathApply: ReadonlyMap<string, Addition<typeof MathApply>>;
@@ -50,15 +52,16 @@ const headQualifiers: ReadonlySet<string> = new Set(
  * The apply rows of one document.
  *
  * @param view - The document's view: its rows, and their folds under the context it is judged in.
+ * @param ids - Where the document stands in its package, the key every row holds.
  * @returns The rows of every relation the apply module declares.
  */
-export const rowsOf = (view: DocumentView): MathmlApplyRows => {
+export const rowsOf = (view: DocumentView, ids: MathmlIds): MathmlApplyRows => {
   const { folds } = view;
-  const { document, nodes } = view.rows;
+  const { nodes } = view.rows;
   // Each parent's element children in order; their count and each one's rank are the fold's.
-  const elementsOf = new Map<NodeId, NodeRow<Composed>[]>();
+  const elementsOf = new Map<bigint, NodeRow<Composed>[]>();
   for (const node of nodes) {
-    if (node.parent !== node.id && !nonElements.has(node.kind)) {
+    if (node.parent !== node.start && !nonElements.has(node.kind)) {
       const siblings = elementsOf.get(node.parent) ?? [];
       siblings.push(node);
       elementsOf.set(node.parent, siblings);
@@ -69,35 +72,35 @@ export const rowsOf = (view: DocumentView): MathmlApplyRows => {
   const arguments_ = new Map<string, Addition<typeof MathArgument>>();
   const qualifiers = new Map<string, Addition<typeof MathQualifier>>();
   const placed = (node: NodeRow<Composed>) => ({
-    document: document.node,
-    nearest: foldAt(folds, node.id).nearest,
-    node: node.id,
+    nearest: foldAt(folds, node.start).nearest,
+    package: ids.package,
     parent: node.parent,
+    path: ids.path,
     start: node.start,
     version: node.version,
   });
 
   for (const application of nodes) {
-    const children = elementsOf.get(application.id) ?? [];
+    const children = elementsOf.get(application.start) ?? [];
     const [first, ...rest] = children;
     if (application.kind !== "m:apply" || first === undefined) {
       continue;
     }
 
     const head = first.kind;
-    applications.set(application.id, {
+    applications.set(keyTextOf(ids, application.start), {
       ...placed(application),
-      elementChildren: foldAt(folds, application.id).elementChildren,
-      elements: foldAt(folds, application.id).elements,
+      elementChildren: foldAt(folds, application.start).elementChildren,
+      elements: foldAt(folds, application.start).elements,
       kind: application.kind,
       operator: head,
     });
 
     for (const node of rest) {
       if (!mathQualifiers.has(node.kind)) {
-        arguments_.set(node.id, { ...placed(node), kind: node.kind });
+        arguments_.set(keyTextOf(ids, node.start), { ...placed(node), kind: node.kind });
       } else if (headQualifiers.has(node.kind) && mathHeadOperators.has(head)) {
-        qualifiers.set(node.id, { ...placed(node), head, kind: node.kind });
+        qualifiers.set(keyTextOf(ids, node.start), { ...placed(node), head, kind: node.kind });
       }
     }
   }

@@ -51,7 +51,7 @@ const differing = Command.make(
         differing: 1,
         entries: [{ outcome: { at: "item.xml", kind: "differs" }, path: "item.xml" }],
         export_dir: "work/export/x",
-        package_id: "p",
+        package: "p",
       },
       dataSchema: RoundtripData,
       ok: false,
@@ -426,10 +426,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a failure qti names", 
           () =>
             import("#pantry/export/pages.ts").then(
               ({ DocumentRowCount }) =>
-                new DocumentRowCount({
-                  document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
-                  found: 2,
-                }),
+                new DocumentRowCount({ found: 2, package: "MANIFEST-1", path: "item.xml" }),
             ),
           false,
         );
@@ -440,7 +437,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a failure qti names", 
         assert.strictEqual(exitCodeOf(text.exit), 70);
         assert.isTrue(
           text.stderr.startsWith(
-            "error[internal]: The scan of document 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40 held 2 Document rows",
+            "error[internal]: The scan of document item.xml of package MANIFEST-1 held 2 Document rows",
           ),
           text.stderr,
         );

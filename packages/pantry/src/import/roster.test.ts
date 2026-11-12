@@ -63,7 +63,7 @@ const overlayNames = sortedNames(Object.keys(overlayRelations));
 const everyRelation = Effect.gen(function* everyRelation() {
   const dir = yield* scopedPackage(everyRelationPackage({ choices: 3, hotspots: 2, hottexts: 2 }));
   const program = yield* readProgram(dir);
-  const parts = overlayPartsOf(program.documents, () => crypto.randomUUID());
+  const parts = overlayPartsOf(program.documents);
   const layers = program.documents.map(documentRowsOf);
 
   return { layers, parts, program };

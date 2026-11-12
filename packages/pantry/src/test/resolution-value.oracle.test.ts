@@ -17,7 +17,6 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, typedReadingOf } from "#pantry/test/oracle.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -55,7 +54,7 @@ describe("documentBreaches over an item whose class attribute holds 64,000,000 c
       Effect.gen(function* judgesLargeClass() {
         const read = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
         const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammarOf(grammar)));
-        const rows = Result.getOrThrow(fold(tree, idOf, foldGrammarOf(grammar)));
+        const rows = Result.getOrThrow(fold(tree, foldGrammarOf(grammar)));
         assert.deepStrictEqual(
           documentBreaches("doc.xml", rows, laws).map(({ law }) => law),
           [],

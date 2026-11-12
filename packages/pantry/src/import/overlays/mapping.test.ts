@@ -1,7 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents carry the charset label crust's reader reports, `UTF-8`. */
 /**
  * The mapping overlays' rows against a second reading of the same tree: a direct walk of the XDM
- * document that numbers its nodes in document order as the tree's rows are numbered, collects one
+ * document that numbers its nodes in document order, each node's `start`, as the tree's rows are
+ * numbered, collects one
  * map key per `qti-map-entry` from its attributes, and splits each two-item key at its one
  * whitespace character. The walk shares no code with the builder, which reads the tree's flat
  * rows (`flatten`). Each typed key's value is a query's (`#pantry/qti/queries.ts`), read from the
@@ -14,20 +15,20 @@ import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
+import type { Place } from "#pantry/import/overlays/declarations.ts";
 import { rowsOf } from "#pantry/import/overlays/mapping.ts";
 import { itemsOf } from "#pantry/import/pieces.ts";
 import { twoItemPattern } from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
-import type {
-  ClosedName,
-  NodeId,
-  XdmChild,
-  XdmClosedElement,
-  XdmDocument,
-} from "#pantry/model/xdm.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import type { ClosedName, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
+
+/**
+ * Where the generated document stands: one item of one package, the place every row holds.
+ */
+const place: Place = { package: "MANIFEST", path: "item.xml" };
 
 /**
  * The deleted schema's `xs:integer` lexical space (`src/schema/patterns.ts` `xsInteger`): the
@@ -181,17 +182,17 @@ const treeOf = (input: MappingCase): XdmDocument<Composed> => {
 };
 
 /**
- * The map keys a mapping's tree implies, by a direct walk: the item is node 1, its declaration 2
- * and its mapping 3, and each entry follows the whitespace before it, so entry `i` is node
+ * The map keys a mapping's tree implies, by a direct walk: the item is at 1, its declaration at 2
+ * and its mapping at 3, and each entry follows the whitespace before it, so entry `i` is at
  * `5 + 2i`; one key per entry, its key as written.
  *
  * @param input - The mapping.
- * @returns Each entry's node, mapping and key, by its node.
+ * @returns Each entry's mapping and key, by its `start`.
  */
 const walkedKeys = (
   input: MappingCase,
-): ReadonlyMap<NodeId, { readonly key: string; readonly mapping: NodeId }> =>
-  new Map(input.entries.map(({ key }, at) => [idOf(5 + 2 * at), { key, mapping: idOf(3) }]));
+): ReadonlyMap<bigint, { readonly key: string; readonly mapping: bigint }> =>
+  new Map(input.entries.map(({ key }, at) => [BigInt(5 + 2 * at), { key, mapping: 3n }]));
 
 /**
  * A situation the box must reach: two identical entries, two entries of one key and two values,
@@ -221,7 +222,7 @@ const situationsOf = (input: MappingCase): readonly KeySituation[] => {
 
 describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type, an integer key and a float key none",
+    "writes one MapKey row per qti-map-entry, distinct by place, even where two entries are identical, and each typed key's row by its base type, an integer key and a float key none",
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
       // document order, against the builder's read of the flat rows; and no integer key and no
@@ -251,38 +252,59 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
             Effect.sync(() => {
               c.noteAll(situationsOf(input));
 
-              const rows = rowsOf(ownViewOf(treeOf(input), idOf));
+              const rows = rowsOf(ownViewOf(treeOf(input)), place);
               const walked = walkedKeys(input);
 
               assert.strictEqual(rows.MapKey.size, input.entries.length);
               assert.deepStrictEqual(
-                [...rows.MapKey].map(([node, row]) => [node, row.node, row.mapping, row.key]),
-                [...walked].map(([node, { key, mapping }]) => [node, node, mapping, key]),
+                [...rows.MapKey.values()].map((row) => [
+                  row.package,
+                  row.path,
+                  row.start,
+                  row.mapping,
+                  row.key,
+                ]),
+                [...walked].map(([start, { key, mapping }]) => [
+                  place.package,
+                  place.path,
+                  start,
+                  mapping,
+                  key,
+                ]),
               );
               for (const row of rows.MapKey.values()) {
                 assert.strictEqual(row.baseTypes, 1n);
               }
 
               assert.deepStrictEqual(
-                [...rows.MapKeyType].map(([node, row]) => [
-                  node,
+                [...rows.MapKeyType.values()].map((row) => [
+                  row.start,
                   row.mapping,
                   row.key,
                   row.baseType,
                 ]),
-                [...walked].map(([node, { key, mapping }]) => [node, mapping, key, input.baseType]),
+                [...walked].map(([start, { key, mapping }]) => [
+                  start,
+                  mapping,
+                  key,
+                  input.baseType,
+                ]),
               );
 
               assert.notProperty(rows, "MapKeyInteger");
               assert.notProperty(rows, "MapKeyFloat");
-              assert.deepStrictEqual([...rows.Mapping.keys()], [idOf(3)]);
-              assert.strictEqual(rows.Mapping.get(idOf(3))?.baseTypes, 1n);
-              assert.strictEqual(rows.Mapping.get(idOf(3))?.declaration, idOf(2));
-              assert.deepStrictEqual(rows.MappingBaseType.get(idOf(3)), {
-                baseType: input.baseType,
-                declaration: idOf(2),
-                node: idOf(3),
-              });
+              assert.deepStrictEqual(
+                [...rows.Mapping.values()].map((row) => [
+                  row.start,
+                  row.baseTypes,
+                  row.declaration,
+                ]),
+                [[3n, 1n, 2n]],
+              );
+              assert.deepStrictEqual(
+                [...rows.MappingBaseType.values()],
+                [{ ...place, baseType: input.baseType, declaration: 2n, start: 3n }],
+              );
             }),
         ),
       ),
@@ -308,8 +330,8 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
             { caseSensitive: "false", key: "Leeds", value: "1" },
           ],
         }),
-        idOf,
       ),
+      place,
     );
     const matches = [...rows.MapKey.values()].map((row) => [row.key, row.caseText, row.folded]);
 
@@ -322,7 +344,8 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
     ]);
 
     const identifiers = rowsOf(
-      ownViewOf(treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] }), idOf),
+      ownViewOf(treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] })),
+      place,
     );
     assert.deepStrictEqual(
       [...identifiers.MapKey.values()].map((row) => row.folded),
@@ -332,7 +355,8 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
 });
 
 /**
- * The identity of each entry of a string mapping's keys: its mapping and the key as written.
+ * The identity of each entry of a string mapping's keys: its place's package and path, its
+ * mapping and the key as written, `key(MapKey(package, path, mapping, key))`.
  *
  * @param entries - The mapping's entries.
  * @returns One identity text per entry.
@@ -345,17 +369,17 @@ const identityOf = (entries: readonly { caseSensitive?: string; key: string }[])
           baseType: "string",
           entries: entries.map((entry) => ({ ...entry, value: "1" })),
         }),
-        idOf,
       ),
+      place,
     ).MapKey.values(),
-  ].map((row) => JSON.stringify([row.mapping, row.key]));
+  ].map((row) => JSON.stringify([row.package, row.path, String(row.mapping), row.key]));
 
 describe("import/overlays/mapping.ts, which map keys are one key", () => {
   it("writes the key as written as a key's identity, so York and york are two keys and york written twice is one whatever its matching (readings 160 and 165)", () => {
     // Oracle: readings 160 and 165 (decisions 425 and 433): keys written apart are two keys
     // whatever their matching, and a key written twice is one whatever each entry's
-    // case-sensitive says; the schema's uniqueness is `key(MapKey(mapping, key))`, so the
-    // identity read here is that pair.
+    // case-sensitive says; the schema's uniqueness is `key(MapKey(package, path, mapping, key))`,
+    // so the identity read here is that tuple.
     // Bound: the one string mapping, its entries named.
     assert.strictEqual(new Set(identityOf([{ key: "York" }, { key: "york" }])).size, 2);
     assert.strictEqual(new Set(identityOf([{ key: "york" }, { key: "york" }])).size, 1);
@@ -421,10 +445,10 @@ const splitOf = (key: string): readonly string[] | undefined => {
 };
 
 /**
- * A two-item key's split as the test compares it: its entry's node, and its first run, the
+ * A two-item key's split as the test compares it: its entry's `start`, and its first run, the
  * whitespace and its second run.
  */
-type SplitRow = readonly [string, readonly string[]];
+type SplitRow = readonly [bigint, readonly string[]];
 
 /**
  * A situation the two-item box must reach: a key the split holds, one it does not (one item, or
@@ -522,9 +546,9 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
                 ...(split.some((items) => items === undefined) ? (["unsplit"] as const) : []),
               ]);
 
-              const rows = rowsOf(ownViewOf(treeOf(input), idOf));
-              const held = [...rows.MapKeyItems].map(([node, row]): SplitRow => [
-                node,
+              const rows = rowsOf(ownViewOf(treeOf(input)), place);
+              const held = [...rows.MapKeyItems.values()].map((row): SplitRow => [
+                row.start,
                 [row.first, row.gap, row.second],
               ]);
               const walked = [...walkedKeys(input)];
@@ -626,8 +650,8 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
   it.effect(
     "writes one LookupValue row per table default and entry target, as written, beside its table's base type",
     (ctx) =>
-      // Oracle: a second implementation, a direct walk numbering the declaration 2, the table 3
-      // and entry `i` `5 + 2i`, and reading each attribute as written.
+      // Oracle: a second implementation, a direct walk placing the declaration at 2, the table at
+      // 3 and entry `i` at `5 + 2i`, and reading each attribute as written.
       // Bound: every table of 2 kinds, with or without a default, with at most 2 entries over 2
       // targets, 28.
       searched(
@@ -646,16 +670,14 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
             Effect.sync(() => {
               c.note(input.defaultValue === undefined ? "no default" : "default");
 
-              const rows = rowsOf(ownViewOf(tableTreeOf(input), idOf));
-              const expected = [
-                ...(input.defaultValue === undefined
-                  ? []
-                  : [[idOf(3), idOf(2), input.defaultValue]]),
-                ...input.targets.map((target, at) => [idOf(5 + 2 * at), idOf(3), target]),
+              const rows = rowsOf(ownViewOf(tableTreeOf(input)), place);
+              const expected: (bigint | string)[][] = [
+                ...(input.defaultValue === undefined ? [] : [[3n, 2n, input.defaultValue]]),
+                ...input.targets.map((target, at) => [BigInt(5 + 2 * at), 3n, target]),
               ];
 
               assert.sameDeepMembers(
-                [...rows.LookupValue].map(([node, row]) => [node, row.parent, row.value]),
+                [...rows.LookupValue.values()].map((row) => [row.start, row.parent, row.value]),
                 expected,
               );
               for (const row of rows.LookupValue.values()) {
@@ -663,13 +685,17 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
               }
 
               assert.sameDeepMembers(
-                [...rows.LookupValueType].map(([node, row]) => [node, row.value, row.baseType]),
-                expected.map(([node, , value]) => [node, value, "integer"]),
+                [...rows.LookupValueType.values()].map((row) => [
+                  row.start,
+                  row.value,
+                  row.baseType,
+                ]),
+                expected.map(([start, , value]) => [start, value, "integer"]),
               );
 
               assert.deepStrictEqual(
-                [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),
-                [[idOf(3), input.kind]],
+                [...rows.LookupTable.values()].map(({ kind, start }) => [start, kind]),
+                [[3n, input.kind]],
               );
             }),
         ),

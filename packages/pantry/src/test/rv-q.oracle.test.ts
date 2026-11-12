@@ -11,7 +11,6 @@ import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, explain, judge, verdictOf } from "#pantry/test/oracle.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { laws } from "#pantry/test/installed-laws.ts";
@@ -104,7 +103,7 @@ describe("the oracle's E1 over a node's ends", () => {
         readXml(new TextEncoder().encode(itemOf(`<p>say 😀</p>`))),
       );
       const tree = yield* Effect.orDie(shred(document, "3.0.1", shredGrammarOf(grammar)));
-      const rows = yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
+      const rows = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
       const text = rows.nodes.findIndex(({ kind }) => kind === "text");
       const paragraph = rows.nodes.findIndex(({ kind }) => kind === "p");
 

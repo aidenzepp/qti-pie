@@ -19,7 +19,7 @@ import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   AssessmentObject,
   LomEntry,
@@ -49,7 +49,7 @@ import {
 
 /**
  * Where a document stands in its package, as this builder reads it: the part of the importer's
- * `NodeIds` (Q5.15) it needs beside the document's view.
+ * `DocumentPlace` (Q5.15) it needs beside the document's view.
  */
 export interface MetadataIds {
   /**
@@ -57,11 +57,19 @@ export interface MetadataIds {
    * package's records are read from a document of a type of `recordDocumentTypes` alone.
    */
   readonly documentType: (typeof DocumentType.handles)[number];
+  /**
+   * The package's manifest identifier, which every row holds as `package`.
+   */
+  readonly package: string;
+  /**
+   * The document's path in the package, which every row holds as `path`.
+   */
+  readonly path: string;
 }
 
 /**
  * A document's metadata rows, one keyed set per relation: each map from the text of a row's key,
- * its node's id, to the row as its writer writes it.
+ * its node's `(package, path, start)` ({@link keyTextOf}), to the row as its writer writes it.
  */
 export interface MetadataRows {
   readonly AssessmentObject: ReadonlyMap<string, Addition<typeof AssessmentObject>>;
@@ -119,17 +127,17 @@ const noCharacters = "";
  * node's string value reads it here (`#pantry/import/overlays/identity.ts` too).
  *
  * @param rows - The document's flat rows.
- * @returns Each node's string value, by its id: {@link noCharacters} for a node with no character
- *   child.
+ * @returns Each node's string value, by its `start`: {@link noCharacters} for a node with no
+ *   character child.
  */
-export const stringValuesOf = (rows: FlatRows<Composed>): ((node: NodeId) => string) => {
-  const chars = new Map<NodeId, string>([
-    ...rows.texts.map(({ node, value }) => [node, value] as const),
-    ...rows.whitespace.map(({ node, value }) => [node, value] as const),
-    ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
+export const stringValuesOf = (rows: FlatRows<Composed>): ((start: bigint) => string) => {
+  const chars = new Map<bigint, string>([
+    ...rows.texts.map(({ start, value }) => [start, value] as const),
+    ...rows.whitespace.map(({ start, value }) => [start, value] as const),
+    ...rows.entityRefs.map(({ name, start }) => [start, `&${name};`] as const),
   ]);
-  const held = rows.nodes.flatMap(({ id, parent }) => {
-    const value = chars.get(id);
+  const held = rows.nodes.flatMap(({ parent, start }) => {
+    const value = chars.get(start);
 
     return value === undefined ? [] : [{ parent, value }];
   });
@@ -140,28 +148,48 @@ export const stringValuesOf = (rows: FlatRows<Composed>): ((node: NodeId) => str
     ]),
   );
 
-  return (node) => values.get(node) ?? noCharacters;
+  return (start) => values.get(start) ?? noCharacters;
 };
 
 /**
- * A document's tree as the builders read it: its flat rows, each node by its id, each element's
- * attributes and string value, and each node's {@link nodeRef}-shaped tuple.
+ * The text of a row's key in its relation's keyed set: its node's `(package, path, start)` as a
+ * JSON array, so the rows of two documents never meet at one key.
+ *
+ * @param ids - The document's place.
+ * @param start - The node's `start`.
+ * @returns The key text.
+ */
+const keyTextOf = (ids: MetadataIds, start: bigint): string =>
+  JSON.stringify([ids.package, ids.path, String(start)]);
+
+/**
+ * A document's node as every row of it holds it first: its key, `(package, path, start)`.
+ */
+interface NodeKey {
+  readonly package: string;
+  readonly path: string;
+  readonly start: bigint;
+}
+
+/**
+ * A document's tree as the builders read it: its flat rows, each node by its `start`, each
+ * element's attributes and string value, and each node's {@link nodeRef}-shaped tuple.
  */
 interface Tree {
-  readonly document: NodeId;
+  /**
+   * Key a node's row: the node's key, and the text of that key in a keyed set.
+   */
+  readonly keyOf: (node: NodeRow<Composed>) => readonly [string, NodeKey];
   readonly nodes: readonly NodeRow<Composed>[];
   /**
    * Read a node's parent, which `flatten` writes before it; the document node is its own.
    */
   readonly parentOf: (node: NodeRow<Composed>) => NodeRow<Composed>;
-  readonly stringValueOf: (id: NodeId) => string;
-  readonly tupleOf: (node: NodeRow<Composed>) => {
-    readonly document: NodeId;
+  readonly stringValueOf: (start: bigint) => string;
+  readonly tupleOf: (node: NodeRow<Composed>) => NodeKey & {
     readonly kind: NodeRow<Composed>["kind"];
-    readonly nearest: NodeId;
-    readonly node: NodeId;
-    readonly parent: NodeId;
-    readonly start: bigint;
+    readonly nearest: bigint;
+    readonly parent: bigint;
     readonly version: NodeRow<Composed>["version"];
   };
   readonly valueOf: (node: NodeRow<Composed>, name: string) => string | undefined;
@@ -172,24 +200,28 @@ interface Tree {
  *
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), which its nodes' nearest interactions are folded under.
+ * @param ids - Where the document stands in its package, the key every row holds.
  * @returns The tree's rows and lookups.
  */
-const treeOf = (view: DocumentView): Tree => {
+const treeOf = (view: DocumentView, ids: MetadataIds): Tree => {
   const { folds, rows } = view;
   const lexicals = new Map<string, string>(
-    rows.attributes.map(({ lexical, name, node }) => [`${node} ${name}`, lexical]),
+    rows.attributes.map(({ lexical, name, start }) => [`${start} ${name}`, lexical]),
   );
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-  const document = rows.document.node;
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
+  const keyOf = (node: NodeRow<Composed>): readonly [string, NodeKey] => [
+    keyTextOf(ids, node.start),
+    { package: ids.package, path: ids.path, start: node.start },
+  ];
 
   return {
-    document,
+    keyOf,
     nodes: rows.nodes,
     parentOf: (node) => {
-      const parent = byId.get(node.parent);
+      const parent = byStart.get(node.parent);
       if (parent === undefined) {
         throw new Error(
-          `Node ${node.id} names parent ${node.parent}, which the document holds no row of, but flatten writes every node's parent before it. Read the rows flatten writes as it writes them.`,
+          `Node ${node.start} names parent ${node.parent}, which the document holds no row of, but flatten writes every node's parent before it. Read the rows flatten writes as it writes them.`,
         );
       }
 
@@ -197,24 +229,21 @@ const treeOf = (view: DocumentView): Tree => {
     },
     stringValueOf: stringValuesOf(rows),
     tupleOf: (node) => ({
-      document,
+      ...keyOf(node)[1],
       kind: node.kind,
-      nearest: foldAt(folds, node.id).nearest,
-      node: node.id,
+      nearest: foldAt(folds, node.start).nearest,
       parent: node.parent,
-      start: node.start,
       version: node.version,
     }),
-    valueOf: (node, name) => lexicals.get(`${node.id} ${name}`),
+    valueOf: (node, name) => lexicals.get(`${node.start} ${name}`),
   };
 };
 
 /**
- * Build a document's {@link LomRecord} rows: one per `lom:lom`, with its owner's kind, start and
- * parent.
+ * Build a document's {@link LomRecord} rows: one per `lom:lom`, with its owner's kind and parent.
  *
  * @param tree - The document's tree.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
 const recordRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomRecord>> =>
   new Map(
@@ -227,13 +256,8 @@ const recordRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomRecord
 
       return [
         [
-          node.id,
-          {
-            ...tree.tupleOf(node),
-            owner: owner.kind,
-            ownerParent: owner.parent,
-            ownerStart: owner.start,
-          },
+          tree.keyOf(node)[0],
+          { ...tree.tupleOf(node), owner: owner.kind, ownerParent: owner.parent },
         ] as const,
       ];
     }),
@@ -248,13 +272,13 @@ const recordRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomRecord
 const generalRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomGeneral>> =>
   new Map(
     tree.nodes.flatMap((node) =>
-      node.kind === "lom:general" ? [[node.id, tree.tupleOf(node)] as const] : [],
+      node.kind === "lom:general" ? [[tree.keyOf(node)[0], tree.tupleOf(node)] as const] : [],
     ),
   );
 
 /**
- * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's kind, start
- * and parent (the holder) and its string value in pieces.
+ * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's kind and
+ * parent (the holder) and its string value in pieces.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -267,17 +291,16 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
       }
 
       const identifier = tree.parentOf(node);
-      const text = tree.stringValueOf(node.id);
+      const text = tree.stringValueOf(node.start);
       const { lead, trail, value } = piecesOf(text);
 
       return [
         [
-          node.id,
+          tree.keyOf(node)[0],
           {
             ...tree.tupleOf(node),
             holder: identifier.parent,
             identifierKind: identifier.kind,
-            identifierStart: identifier.start,
             lead,
             text,
             token: value,
@@ -297,13 +320,13 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
 const titleRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomTitle>> =>
   new Map(
     tree.nodes.flatMap((node) =>
-      node.kind === "lom:title" ? [[node.id, tree.tupleOf(node)] as const] : [],
+      node.kind === "lom:title" ? [[tree.keyOf(node)[0], tree.tupleOf(node)] as const] : [],
     ),
   );
 
 /**
  * A document's string rows: each `lom:string`'s {@link LomString}, and its {@link LomStringLanguage}
- * where it writes a `language`, each by its node's id.
+ * where it writes a `language`, each by its node's key.
  */
 interface StringRows {
   readonly languages: ReadonlyMap<string, Addition<typeof LomStringLanguage>>;
@@ -338,14 +361,17 @@ const stringRowsOf = (tree: Tree): StringRows => {
     languages: new Map(
       strings.flatMap((node) => {
         const language = tree.valueOf(node, "language");
+        const [text, key] = tree.keyOf(node);
 
-        return language === undefined ? [] : [[node.id, { language, node: node.id }] as const];
+        return language === undefined ? [] : [[text, { ...key, language }] as const];
       }),
     ),
     strings: new Map(
-      strings.map(
-        (node) => [node.id, { languageTag: languageTagOf(tree, node), node: node.id }] as const,
-      ),
+      strings.map((node) => {
+        const [text, key] = tree.keyOf(node);
+
+        return [text, { ...key, languageTag: languageTagOf(tree, node) }] as const;
+      }),
     ),
   };
 };
@@ -355,22 +381,18 @@ const stringRowsOf = (tree: Tree): StringRows => {
  * value, and that value as `lom-title` compares it, its whitespace replaced.
  *
  * @param tree - The document's tree.
- * @param titles - The document's {@link LomTitle} rows.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
-const titleStringRowsOf = (
-  tree: Tree,
-  titles: ReadonlyMap<string, Addition<typeof LomTitle>>,
-): ReadonlyMap<string, Addition<typeof LomTitleString>> =>
+const titleStringRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomTitleString>> =>
   new Map(
     tree.nodes.flatMap((node) => {
-      if (node.kind !== "lom:string" || !titles.has(node.parent)) {
+      if (node.kind !== "lom:string" || tree.parentOf(node).kind !== "lom:title") {
         return [];
       }
 
-      const text = tree.stringValueOf(node.id);
+      const text = tree.stringValueOf(node.start);
 
-      return [[node.id, { ...tree.tupleOf(node), text }] as const];
+      return [[tree.keyOf(node)[0], { ...tree.tupleOf(node), text }] as const];
     }),
   );
 
@@ -390,22 +412,16 @@ type TermRow = Addition<typeof LomResourceType> & Addition<typeof LomResourceTyp
  * @param tree - The document's tree.
  * @param kind - The term's kind: `lom:value` for {@link LomResourceType}, `lom:source` for
  *   {@link LomResourceTypeSource}.
- * @returns The rows, by the type's node's id.
+ * @returns The rows, by the type's node's key.
  */
 const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<string, TermRow> => {
   const rows = new Map<string, TermRow>();
 
-  for (const node of tree.nodes) {
-    if (
-      node.kind === kind &&
-      tree.parentOf(node).kind === "lom:learningResourceType" &&
-      !rows.has(node.parent)
-    ) {
-      rows.set(node.parent, {
-        node: node.parent,
-        term: node.id,
-        text: tree.stringValueOf(node.id),
-      });
+  for (const node of tree.nodes.filter((term) => term.kind === kind)) {
+    const type = tree.parentOf(node);
+    const [text, key] = tree.keyOf(type);
+    if (type.kind === "lom:learningResourceType" && !rows.has(text)) {
+      rows.set(text, { ...key, term: node.start, text: tree.stringValueOf(node.start) });
     }
   }
 
@@ -413,7 +429,7 @@ const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<s
 };
 
 /**
- * A document's root rows, each by its node's id: an item's or test's {@link AssessmentObject}, and
+ * A document's root rows, each by its node's key: an item's or test's {@link AssessmentObject}, and
  * its {@link ObjectIdentifier}, {@link ObjectTitle} and {@link ObjectLang} where it writes the
  * attribute.
  */
@@ -431,14 +447,15 @@ type RootRows = Pick<
  * `title` has no row of it, which AL3 refuses.
  *
  * @param tree - The document's tree.
- * @param document - The document's node.
- * @returns The rows, each by its node's id.
+ * @returns The rows, each by its node's key.
  */
-const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
+const objectRowsOf = (tree: Tree): RootRows => {
   const roots = tree.nodes.filter(({ kind }) => objects.has(kind));
 
   return {
-    AssessmentObject: new Map(roots.map((node) => [node.id, tree.tupleOf(node)] as const)),
+    AssessmentObject: new Map(
+      roots.map((node) => [tree.keyOf(node)[0], tree.tupleOf(node)] as const),
+    ),
     ObjectIdentifier: new Map(
       roots.flatMap((node) => {
         const lexical = tree.valueOf(node, "identifier");
@@ -447,22 +464,25 @@ const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
         }
 
         const { lead, trail, value } = piecesOf(lexical);
+        const [text, key] = tree.keyOf(node);
 
-        return [[node.id, { document, identifier: value, lead, lexical, node: node.id, trail }]];
+        return [[text, { ...key, identifier: value, lead, lexical, trail }] as const];
       }),
     ),
     ObjectLang: new Map(
       roots.flatMap((node) => {
         const lang = tree.valueOf(node, "xml:lang");
+        const [text, key] = tree.keyOf(node);
 
-        return lang === undefined ? [] : [[node.id, { lang, node: node.id }] as const];
+        return lang === undefined ? [] : [[text, { ...key, lang }] as const];
       }),
     ),
     ObjectTitle: new Map(
       roots.flatMap((node) => {
         const title = tree.valueOf(node, "title");
+        const [text, key] = tree.keyOf(node);
 
-        return title === undefined ? [] : [[node.id, { document, node: node.id, title }]];
+        return title === undefined ? [] : [[text, { ...key, title }] as const];
       }),
     ),
   };
@@ -473,7 +493,7 @@ const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
  * `lastUpdated`, split around its day.
  *
  * @param tree - The document's tree.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
 const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDate>> =>
   new Map(
@@ -484,8 +504,9 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
       }
 
       const { lead, trail, value } = piecesOf(lexical);
+      const [text, key] = tree.keyOf(node);
 
-      return [[node.id, { day: value, lead, lexical, node: node.id, trail }] as const];
+      return [[text, { ...key, day: value, lead, lexical, trail }] as const];
     }),
   );
 
@@ -494,14 +515,19 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
  * whether or not it writes a `fieldIdentifier`, its lexical form as written.
  *
  * @param tree - The document's tree.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
 const usageBaseTypeRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof UsageBaseType>> =>
   new Map(
     tree.nodes.flatMap((node) => {
       const lexical = node.kind === usageValueKind ? tree.valueOf(node, "baseType") : undefined;
+      if (lexical === undefined) {
+        return [];
+      }
 
-      return lexical === undefined ? [] : [[node.id, { lexical, node: node.id }] as const];
+      const [text, key] = tree.keyOf(node);
+
+      return [[text, { ...key, lexical }] as const];
     }),
   );
 
@@ -512,7 +538,7 @@ const usageBaseTypeRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Us
  * row.
  *
  * @param tree - The document's tree.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
 const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof UsageValue>> =>
   new Map(
@@ -522,11 +548,10 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
         return [];
       }
 
+      const [text, key] = tree.keyOf(node);
+
       return [
-        [
-          node.id,
-          { baseTypeLexical: lexical, node: node.id, text: tree.stringValueOf(node.id) },
-        ] as const,
+        [text, { ...key, baseTypeLexical: lexical, text: tree.stringValueOf(node.start) }] as const,
       ];
     }),
   );
@@ -538,7 +563,7 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
  * 427).
  *
  * @param values - The document's usage value rows.
- * @returns The rows, by their node's id.
+ * @returns The rows, by their node's key.
  */
 const usageValueBaseTypeRowsOf = (
   values: ReadonlyMap<string, Addition<typeof UsageValue>>,
@@ -600,14 +625,14 @@ const noRecordRows = {
  * attribute's row exists where it is written.
  *
  * @param view - The document's view.
- * @param ids - Where it stands in its package: its type.
+ * @param ids - Where it stands in its package: its package, its path and its type.
  * @returns Every per-document overlay's rows.
  */
 export const rowsOf = (view: DocumentView, ids: MetadataIds): MetadataRows => {
-  const tree = treeOf(view);
+  const tree = treeOf(view, ids);
   const usageValues = usageValueRowsOf(tree);
   const everyDocument = {
-    ...objectRowsOf(tree, tree.document),
+    ...objectRowsOf(tree),
     StatisticDate: dateRowsOf(tree),
     UsageBaseType: usageBaseTypeRowsOf(tree),
     UsageValue: usageValues,
@@ -617,7 +642,6 @@ export const rowsOf = (view: DocumentView, ids: MetadataIds): MetadataRows => {
     return { ...noRecordRows, ...everyDocument };
   }
 
-  const titles = titleRowsOf(tree);
   const strings = stringRowsOf(tree);
 
   return {
@@ -629,7 +653,7 @@ export const rowsOf = (view: DocumentView, ids: MetadataIds): MetadataRows => {
     LomResourceTypeSource: termRowsOf(tree, "lom:source"),
     LomString: strings.strings,
     LomStringLanguage: strings.languages,
-    LomTitle: titles,
-    LomTitleString: titleStringRowsOf(tree, titles),
+    LomTitle: titleRowsOf(tree),
+    LomTitleString: titleStringRowsOf(tree),
   };
 };

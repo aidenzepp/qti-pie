@@ -1,47 +1,43 @@
 /**
- * The record of a package as the importer writes it (plan §1.6, fin.md P7): the `Package` row with
- * its `Entry` rows nested in listing order, from what `readEntries` read.
+ * The record of a package as the importer writes it (plan §1.6, fin.md P7): the `Package` row,
+ * keyed by its manifest identifier, and one `Entry` row per entry, from what `readEntries` read.
  *
- * The record is every entry's bytes as read, so the model is rebuildable from it, and it is the
- * write's one sequence over a package: grizzle draws each entry's `at` from its place in the
- * nesting and the package's `entries` from their number, and writes the family in one statement,
- * its rows past one Bind message through a carrier, a temporary table of the write's own (README,
- * "Sizes"; grizzle `164aeb06`), so the importer never splits a package.
+ * The record is every entry's bytes as read, so the model is rebuildable from it. The entries are a
+ * set keyed by their paths, since IMS Content Packaging gives an entry's place in the zip no
+ * meaning: no row holds a listing order.
  */
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { recordOf } from "#pantry/package/record.ts";
-import type { EntryRow } from "#pantry/package/record.ts";
-import type { Package } from "#pantry/qti/package.ts";
+import type { Entry, Package } from "#pantry/qti/package.ts";
 
 /**
- * A package's insert as its writer writes it: the `Package` row's own fields, and its entries
- * nested at its count field `entries`, each without the `package` the nesting supplies and the `at`
- * the family draws.
+ * A package's record as its writer writes it: the `Package` row, and its entries, each keyed by the
+ * text of its key (`keyTextOf` of `#pantry/import/key-text.ts`).
  */
-export type PackageRecord = Addition<typeof Package> & { readonly entries: readonly EntryRow[] };
-
-/**
- * Name a package by the place it was read from: the last segment of its directory or zip file's
- * path, as given.
- *
- * @param source - The directory or `.zip` file `readEntries` read, `/`-separated.
- * @returns Its last non-empty segment, or the path itself when it has no `/`.
- */
-export const packageNameOf = (source: string): string =>
-  source.split("/").findLast((segment) => segment.length > 0) ?? source;
+export interface PackageRecord {
+  readonly entries: ReadonlyMap<string, Addition<typeof Entry>>;
+  readonly package: Addition<typeof Package>;
+}
 
 /**
  * Build a package's record from its entries, each its path and its bytes, as the read holds them.
  *
  * @param input - The package's identity and its entries.
- * @param input.id - The package's id, the one its overlays name it by.
- * @param input.name - Its name, {@link packageNameOf} of where it was read from.
- * @param input.files - Its entries with their bytes, in listing order.
- * @returns The `Package` insert, its entries in the listing's order, each content its bytes.
+ * @param input.identifier - Its manifest identifier, the key every row of it holds.
+ * @param input.files - Its entries with their bytes.
+ * @returns The `Package` row, and each entry's row by its key, its content its bytes.
  */
 export const packageRecordOf = (input: {
   readonly files: readonly Pick<PackageFile, "bytes" | "path">[];
-  readonly id: Uuid;
-  readonly name: string;
-}): PackageRecord => ({ entries: recordOf(input.files), id: input.id, name: input.name });
+  readonly identifier: Addition<typeof Package>["identifier"];
+}): PackageRecord => ({
+  entries: new Map(
+    recordOf(input.files).map(
+      ({ content, path }) =>
+        [keyTextOf(input.identifier, path), { content, package: input.identifier, path }] as const,
+    ),
+  ),
+  package: { identifier: input.identifier },
+});

@@ -57,11 +57,6 @@ const committedError = matchesCommitted("error");
 const errorObjectOf = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorObject));
 
 /**
- * Whether a string is a UUID, the shape of a package's id.
- */
-const isUuid = Schema.is(Schema.String.check(Schema.isUUID()));
-
-/**
  * The packages the importer refused, with the rules each was refused under, as the verdict file
  * writes them.
  */
@@ -103,7 +98,14 @@ const texts = (facts: readonly { readonly text: string }[]): readonly string[] =
  * where the importer does.
  *
  * The two runs are separate imports of one package, so they agree on the rule and on the laws the
- * database named, and the CLI's error object carries both, read from the refusal's fields.
+ * database named, and the CLI's error object carries both, read from the refusal's fields. A
+ * package is keyed by its manifest identifier and an import mints nothing, so the CLI's import, the
+ * second, finds the importer's package stored and answers no-change under the same identifier.
+ *
+ * Three pairs of accepted corpus zips share a manifest identifier (CONTRACT section 5), so a case
+ * meets the package of an earlier case under its own identifier. The import replaces it (grizzle's
+ * set-difference replace, GRIZZLE-PENDING(WHOLEDEL)); until that lands the later zip of each pair
+ * is refused on `Package`'s key, and its verdict differs from the committed file's.
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;
@@ -132,7 +134,7 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
 
   const report =
     direct._tag === "Success"
-      ? yield* exportPackage(direct.success, directTarget).pipe(
+      ? yield* exportPackage(direct.success.package, directTarget).pipe(
           Effect.andThen(comparePackage(entry.dir, directTarget)),
         )
       : [];
@@ -161,10 +163,14 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 
     const written = envelope.data;
-    const packageId = "package_id" in written ? written.package_id : "";
+    const identifier = "package" in written ? written.package : "";
     const entries = "entries" in written ? written.entries : [];
 
-    assert.isTrue(isUuid(packageId), `${entry.name}: the CLI's package_id is a UUID`);
+    assert.strictEqual(
+      identifier,
+      direct._tag === "Success" ? direct.success.package : "",
+      `${entry.name}: the CLI names the package by the importer's manifest identifier`,
+    );
     assert.deepStrictEqual(
       entries.map(({ outcome, path: at }) => ({ kind: outcome.kind, path: at })),
       report.map(({ outcome, path: at }) => ({ kind: outcome.kind, path: at })),

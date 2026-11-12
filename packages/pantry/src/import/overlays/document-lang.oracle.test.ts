@@ -45,8 +45,8 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Option, Predicate } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { statedLanguagePattern } from "#pantry/qti/identity.ts";
 import { objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
@@ -221,6 +221,25 @@ const textOf = (row: Row, field: string): string => {
 };
 
 /**
+ * Read the key text of a row's fields, each a text or a position, in order (`keyTextOf`): an
+ * element's `(package, path, start)`, a document's `(package, path)`.
+ *
+ * @param row - The row.
+ * @param fields - The fields, in order.
+ * @returns Their key text.
+ */
+const keyAt = (row: Row, ...fields: readonly string[]): string =>
+  keyTextOf(
+    ...fields.map((field) => {
+      const value = row[field];
+
+      return Predicate.isString(value) || Predicate.isBigInt(value)
+        ? value
+        : assert.fail(`the row holds no text or position in ${field}`);
+    }),
+  );
+
+/**
  * The resource types whose records name their document, as a set.
  */
 const namingTypes: ReadonlySet<string> = new Set(objectTypes);
@@ -232,51 +251,41 @@ const namingTypes: ReadonlySet<string> = new Set(objectTypes);
  * the path its href is compared by.
  *
  * @param rowsOf - The rows of a relation.
- * @returns Each category's document, by the category.
+ * @returns Each category's document, `(package, path)`, by the category's element, as key texts.
  */
 const describingOf = (
   rowsOf: (relation: string) => readonly Row[],
 ): ReadonlyMap<string, string> => {
   const typed = new Set(
     rowsOf("ResourceTyped").flatMap((row) =>
-      namingTypes.has(textOf(row, "type")) ? [textOf(row, "node")] : [],
+      namingTypes.has(textOf(row, "type")) ? [keyAt(row, "package", "path", "start")] : [],
     ),
   );
-  const listed = new Map(
-    rowsOf("ResourceDocument").map(
-      (row) =>
-        [
-          JSON.stringify([textOf(row, "package"), textOf(row, "path")]),
-          textOf(row, "node"),
-        ] as const,
-    ),
-  );
+  const listed = new Set(rowsOf("ResourceDocument").map((row) => keyAt(row, "package", "path")));
   const documents = new Map(
-    rowsOf("ResourceHref").flatMap((row) =>
-      typed.has(textOf(row, "node"))
-        ? Option.toArray(
-            Option.fromUndefinedOr(
-              listed.get(JSON.stringify([textOf(row, "package"), textOf(row, "path")])),
-            ),
-          ).map((document) => [textOf(row, "node"), document] as const)
-        : [],
-    ),
+    rowsOf("ResourceHref").flatMap((row) => {
+      const document = keyAt(row, "package", "target");
+
+      return typed.has(keyAt(row, "package", "path", "start")) && listed.has(document)
+        ? [[keyAt(row, "package", "path", "start"), document] as const]
+        : [];
+    }),
   );
   const named = new Map(
     rowsOf("LomRecord").flatMap((row) =>
       textOf(row, "owner") === resourceMetadata
-        ? Option.toArray(Option.fromUndefinedOr(documents.get(textOf(row, "ownerParent")))).map(
-            (document) => [textOf(row, "node"), document] as const,
-          )
+        ? Option.toArray(
+            Option.fromUndefinedOr(documents.get(keyAt(row, "package", "path", "ownerParent"))),
+          ).map((document) => [keyAt(row, "package", "path", "start"), document] as const)
         : [],
     ),
   );
 
   return new Map(
     rowsOf("LomGeneral").flatMap((row) =>
-      Option.toArray(Option.fromUndefinedOr(named.get(textOf(row, "parent")))).map(
-        (document) => [textOf(row, "node"), document] as const,
-      ),
+      Option.toArray(
+        Option.fromUndefinedOr(named.get(keyAt(row, "package", "path", "parent"))),
+      ).map((document) => [keyAt(row, "package", "path", "start"), document] as const),
     ),
   );
 };
@@ -310,7 +319,7 @@ const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): readonly str
   const describing = [...describingOf(rowsOf)];
   const listed = new Set(
     rowsOf("ResourceLomLanguageSet").map((row) =>
-      JSON.stringify([textOf(row, "general"), textOf(row, "lang")]),
+      JSON.stringify([keyAt(row, "package", "path", "general"), textOf(row, "lang")]),
     ),
   );
   const refusedOf = (relation: string, owner: string): readonly string[] =>
@@ -318,7 +327,7 @@ const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): readonly str
       stated.test(textOf(form, "lang")) &&
       describing.some(
         ([general, document]) =>
-          document === textOf(form, owner) &&
+          document === keyAt(form, "package", owner) &&
           !listed.has(JSON.stringify([general, comparedValueOf(relation, form)])),
       )
         ? [textOf(form, "lang")]
@@ -326,10 +335,7 @@ const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): readonly str
     );
 
   return [
-    ...new Set([
-      ...refusedOf("DocumentLang", "document"),
-      ...refusedOf("AssembledLang", "assembly"),
-    ]),
+    ...new Set([...refusedOf("DocumentLang", "path"), ...refusedOf("AssembledLang", "assembly")]),
   ];
 };
 
@@ -386,14 +392,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const dir = `${directory}/c${String(at)}`;
                   yield* writePackage(entries, dir);
 
-                  const minted = new Set<string>();
-                  const mint = (): NodeId => {
-                    const id: NodeId = `${(0x10_00_00_00 + minted.size + 1).toString(16)}-0000-4000-8000-000000000000`;
-                    minted.add(id);
-
-                    return id;
-                  };
-                  const { inputs } = yield* Effect.orDie(readProgram(dir, mint));
+                  const { inputs } = yield* Effect.orDie(readProgram(dir));
                   yield* fs.remove(dir, { recursive: true });
 
                   const refused = documentLangOf(viewOf(inputs));
@@ -423,12 +422,21 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     const planted = {
                       ...inputs,
                       ObjectLang: new Map(
-                        objects.map(({ node }) => [node, { lang: "en", langTag: "en", node }]),
+                        objects.map((object) => [
+                          keyTextOf(object.package, object.path, object.start),
+                          {
+                            lang: "en",
+                            langTag: "en",
+                            package: object.package,
+                            path: object.path,
+                            start: object.start,
+                          },
+                        ]),
                       ),
                     };
                     assert.isNotEmpty(objects, said);
                     assert.isTrue(
-                      hostVerdictOf(planted, minted).broken.has("E1 derived"),
+                      hostVerdictOf(planted).broken.has("E1 derived"),
                       `${said}: an ObjectLang row planted on a root that writes no xml:lang`,
                     );
                   }

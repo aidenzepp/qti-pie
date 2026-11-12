@@ -13,18 +13,20 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { namedBy } from "#pantry/import/names.ts";
 import { tokensOf } from "#pantry/import/pieces.ts";
+import type { Place } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
 import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
- * One token of a cell's `headers` as its cell's family nests it: without the `node` the nesting
- * supplies, nor the `at` the family draws.
+ * One token of a cell's `headers` as its cell's family nests it: without the cell's `package`,
+ * `path` and `start` the nesting supplies, nor the `at` the family draws.
  */
-type HeaderTokenInsert = Omit<Addition<typeof HeaderToken>, "node">;
+type HeaderTokenInsert = Omit<Addition<typeof HeaderToken>, "package" | "path" | "start">;
 
 /**
  * A cell's `headers`, with its tokens nested at its count field.
@@ -35,7 +37,7 @@ type CellHeadersRow = Addition<typeof CellHeaders> & {
 
 /**
  * A document's HTML rows, one keyed set per relation: each map from the text of a row's key, its
- * node's id, to the row as its writer writes it.
+ * element's `(package, path, start)` as a JSON array, to the row as its writer writes it.
  */
 export interface HtmlRows {
   readonly CellHeaders: ReadonlyMap<string, CellHeadersRow>;
@@ -49,11 +51,17 @@ export interface HtmlRows {
 const cells: ReadonlySet<string> = new Set(cellKinds);
 
 /**
- * The walk from a cell up to the table it takes part in, the cell first, and the table it ends at:
- * a `table`, or the document node where no `table` holds the cell.
+ * The document node's position in its document: the table of an element no `table` holds, and the
+ * parent a document's root element names.
+ */
+const documentNode = 0n;
+
+/**
+ * The walk from a cell up to the table it takes part in, the cell first, and the position of the
+ * table it ends at: a `table`'s, or the document node's where no `table` holds the cell.
  */
 interface TableWalk {
-  readonly table: NodeId;
+  readonly table: bigint;
   readonly walk: readonly NodeRow<Composed>[];
 }
 
@@ -61,8 +69,7 @@ interface TableWalk {
  * Walk from an element up to its nearest `table`: the element, then each parent, ending at the
  * first `table` or at the document's root.
  *
- * @param byId - The document's nodes by id.
- * @param document - The document node.
+ * @param byStart - The document's nodes by position.
  * @param element - The element.
  * @returns The walk, the element first, and its table.
  * @throws {Error} When an element on the walk has a parent that is neither the document node nor
@@ -70,25 +77,24 @@ interface TableWalk {
  *   document.
  */
 const tableWalkOf = (
-  byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
-  document: NodeId,
+  byStart: ReadonlyMap<bigint, NodeRow<Composed>>,
   element: NodeRow<Composed>,
 ): TableWalk => {
   const walk: NodeRow<Composed>[] = [];
   for (let at = element; ;) {
     walk.push(at);
     if (at.kind === "table") {
-      return { table: at.id, walk };
+      return { table: at.start, walk };
     }
 
-    if (at.parent === document) {
-      return { table: document, walk };
+    if (at.parent === documentNode) {
+      return { table: documentNode, walk };
     }
 
-    const parent = byId.get(at.parent);
+    const parent = byStart.get(at.parent);
     if (parent === undefined) {
       throw new Error(
-        `Node ${at.id}'s parent ${at.parent} is not among its document's nodes, but flatten writes every parent. Walk the rows of the document the node is flattened in.`,
+        `The node at ${String(at.start)} names a parent at ${String(at.parent)}, which is not among its document's nodes, but flatten writes every parent. Walk the rows of the document the node is flattened in.`,
       );
     }
 
@@ -117,14 +123,15 @@ const tableWalkOf = (
  *
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), whose interaction an included fragment's nodes take as their nearest.
+ * @param ids - Where it stands in its package: its `package` and `path`, every row's.
  * @returns Every HTML relation's rows.
  */
-export const rowsOf = (view: DocumentView): HtmlRows => {
+export const rowsOf = (view: DocumentView, ids: Place): HtmlRows => {
   const { folds, rows } = view;
-  const document = rows.document.node;
-  const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
+  const place = { package: ids.package, path: ids.path };
+  const lexicals = new Map(rows.attributes.map((row) => [`${row.start} ${row.name}`, row.lexical]));
   const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
-    lexicals.get(`${node.id} ${name}`);
+    lexicals.get(`${node.start} ${name}`);
   const scopes = new Map<string, Addition<typeof TableScope>>();
   const headers = new Map<string, CellHeadersRow>();
   const headerIds = new Map<string, Addition<typeof TableHeader>>();
@@ -133,15 +140,14 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
     return { CellHeaders: headers, TableHeader: headerIds, TableScope: scopes };
   }
 
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-  const tableOf = (cell: NodeRow<Composed>): NodeId => {
-    const { table, walk } = tableWalkOf(byId, document, cell);
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node] as const));
+  const tableOf = (cell: NodeRow<Composed>): bigint => {
+    const { table, walk } = tableWalkOf(byStart, cell);
     for (const node of walk) {
-      scopes.set(node.id, {
-        document,
+      scopes.set(keyTextOf(place.package, place.path, node.start), {
+        ...place,
         kind: node.kind,
-        nearest: foldAt(folds, node.id).nearest,
-        node: node.id,
+        nearest: foldAt(folds, node.start).nearest,
         parent: node.parent,
         start: node.start,
         table,
@@ -155,9 +161,10 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
   for (const cell of cellNodes) {
     const lexical = valueOf(cell, "headers");
     if (lexical !== undefined) {
-      headers.set(cell.id, {
+      headers.set(keyTextOf(place.package, place.path, cell.start), {
+        ...place,
         lexical,
-        node: cell.id,
+        start: cell.start,
         table: tableOf(cell),
         tokens: tokensOf(lexical),
       });
@@ -165,11 +172,11 @@ export const rowsOf = (view: DocumentView): HtmlRows => {
 
     const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
     for (const value of id === undefined ? [] : Option.toArray(namedBy(id))) {
-      headerIds.set(cell.id, {
-        document,
+      headerIds.set(keyTextOf(place.package, place.path, cell.start), {
+        ...place,
         id: value,
-        node: cell.id,
-        owner: cell.id,
+        owner: cell.start,
+        start: cell.start,
         table: tableOf(cell),
       });
     }

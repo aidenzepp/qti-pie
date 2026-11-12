@@ -33,9 +33,6 @@
  * This is a fast pre-filter, never the judge (the owner's Q4 ruling): a disagreement it reports
  * becomes a known entry (`#pantry/test/gen/genetic/known.ts`) only once it reproduces on
  * PostgreSQL.
- *
- * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
- * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
 // GRIZZLE-PENDING: Q10. A ChangeSet's host preview replaces this host restatement of the laws.
 import { Array as Arr, Formatter, Option, Predicate, Schema } from "effect";
@@ -478,10 +475,9 @@ const relations: ReadonlyMap<string, typeof StoredRelation.Type> = new Map(
  */
 const unflattened: ReadonlySet<string> = new Set([
   "AttributeEntity",
-  "Entry",
   "HeaderToken",
   "Idref",
-  "OpenAttributeName",
+  "OpenAttributeEntity",
   "ReferenceSegment",
   "TextIdref",
   "ToleranceToken",
@@ -619,17 +615,6 @@ const generatedVerdictOf = (
     ? { kind: "held" }
     : { kind: "unknown" };
 };
-
-/**
- * Each stored relation's uuid fields, by relation: the fields the rows are held to the program's
- * mint by.
- */
-export const uuidFields: ReadonlyMap<string, readonly string[]> = new Map(
-  [...relations].map(([name, { fields }]) => [
-    name,
-    Object.entries(fields).flatMap(([field, { sql }]) => (sql === "uuid" ? [field] : [])),
-  ]),
-);
 
 /**
  * Whether a field is a nested family of rows.
@@ -831,53 +816,94 @@ const familyOf = (row: Stored, name: string): readonly Stored[] => {
  * attribute family's owner copy), which the database fills from the owner's row and the program
  * leaves to it.
  */
-const ownerFields = ["document", "documentType", "governor", "kind", "version"] as const;
+const ownerFields = ["documentType", "governor", "kind", "version"] as const;
 
 /**
- * Read the fields an attribute copies from its owner's row.
+ * Read the fields a member of one of an element's attribute families copies from its owner's
+ * row: those of {@link ownerFields} its relation holds.
  *
  * @param owner - The owner node's row.
+ * @param relation - The member's relation, `Attribute` or `OpenAttribute`.
  * @returns The copied fields it holds.
  */
-const ownerCopies = (owner: Row): Row =>
-  Object.fromEntries(
+const ownerCopies = (owner: Row, relation: string): Row => {
+  const fields = relations.get(relation)?.fields ?? {};
+
+  return Object.fromEntries(
     ownerFields.flatMap((field) => {
       const value = owner[field];
 
-      return value === undefined ? [] : [[field, value] as const];
+      return value === undefined || !(field in fields) ? [] : [[field, value] as const];
     }),
   );
+};
 
 /**
- * Flatten a document's tree into the rows of `Node`, `Attribute` and `Namespace`, each node with
- * the `document` of its tree and the `parent` and `node` its nesting supplies, and each attribute
- * with its owner's copied fields where the program leaves them to the database.
+ * Flatten one tree into its rows, as grizzle draws a tree from its nesting: the root's own fields
+ * name the tree, every member copies them, and each row's `start` is its pre-order position, the
+ * root's 0, with `parent` its parent's `start`, the root's its own. Each row is visited in that
+ * order, with its members' `start`s still to draw.
+ *
+ * @param root - The root's row, its members nested at `children`.
+ * @param rootFields - The fields that name the tree, which the root holds and every member copies.
+ * @param visit - Takes each row with its own fields, the tree's and its drawn ones.
+ */
+const walkTree = (
+  root: Stored,
+  rootFields: readonly string[],
+  visit: (node: Stored, own: Row) => void,
+): void => {
+  const named: Row = Object.fromEntries(
+    rootFields.flatMap((field) => {
+      const value = root[field];
+
+      return value === undefined || isFamily(value) ? [] : [[field, value] as const];
+    }),
+  );
+  const stack: { readonly node: Stored; readonly parent: bigint }[] = [{ node: root, parent: 0n }];
+  let next = 0n;
+  for (let at = stack.pop(); at !== undefined; at = stack.pop()) {
+    const start = next;
+    next += 1n;
+    visit(at.node, { ...ownFields(at.node), ...named, parent: at.parent, start });
+    for (const child of familyOf(at.node, "children").toReversed()) {
+      stack.push({ node: child, parent: start });
+    }
+  }
+};
+
+/**
+ * Flatten a document's tree into the rows of `Node`, `Attribute`, `OpenAttribute` and `Namespace`:
+ * each node with the `package` and `path` of its tree and the `start` and `parent` its nesting
+ * draws ({@link walkTree}), and each member of its attribute and namespace families with its
+ * node's key, each attribute with its owner's copied fields where the program leaves them to the
+ * database.
  *
  * @param root - The document node's row.
  * @param add - Adds a row to a relation.
  */
 const flattenTree = (root: Stored, add: (relation: string, row: Row) => void): void => {
-  const document = textOf(root["document"]) ?? "";
-  const stack: { readonly node: Stored; readonly parent: string | undefined }[] = [
-    { node: root, parent: undefined },
-  ];
-  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    const { node, parent } = next;
-    const id = textOf(node["id"]) ?? "";
-    const own = { ...ownFields(node), document };
-    add("Node", parent === undefined ? own : { ...own, parent });
-    for (const attribute of familyOf(node, "attributes")) {
-      add("Attribute", { ...ownerCopies(own), ...ownFields(attribute), node: id });
+  walkTree(root, ["package", "path"], (node, own) => {
+    add("Node", own);
+
+    const key = {
+      package: own["package"] ?? "",
+      path: own["path"] ?? "",
+      start: own["start"] ?? 0n,
+    };
+    for (const [family, relation] of [
+      ["attributes", "Attribute"],
+      ["openAttributes", "OpenAttribute"],
+    ] as const) {
+      for (const attribute of familyOf(node, family)) {
+        add(relation, { ...ownerCopies(own, relation), ...ownFields(attribute), ...key });
+      }
     }
 
     for (const namespace of familyOf(node, "namespaces")) {
-      add("Namespace", { ...ownFields(namespace), node: id });
+      add("Namespace", { ...ownFields(namespace), ...key });
     }
-
-    for (const child of familyOf(node, "children")) {
-      stack.push({ node: child, parent: id });
-    }
-  }
+  });
 };
 
 /**
@@ -904,8 +930,8 @@ const restored = (relation: string, row: Row): Row =>
 
 /**
  * Read a program's inputs as rows by relation: each flat keyed set as its rows, and each tree as
- * the rows of its nodes, attributes and namespace declarations, with the `document`, `parent` and
- * `node` its nesting supplies, each row with its generated fields ({@link restored}). A relation
+ * the rows of its nodes, attributes and namespace declarations, with the key and `parent` its
+ * nesting supplies, each row with its generated fields ({@link restored}). A relation
  * the program nests deeper than that, or whose rows hold a value of no {@link Value} type, is left
  * out, so a statement over it is unknown.
  *
@@ -925,15 +951,16 @@ export const viewOf = (inputs: PackageInputs): View => {
       view.set(relation, view.get(relation) ?? []);
       if (relation === "Node") {
         view.set("Attribute", view.get("Attribute") ?? []);
+        view.set("OpenAttribute", view.get("OpenAttribute") ?? []);
         view.set("Namespace", view.get("Namespace") ?? []);
         for (const root of read) {
           flattenTree(root, add);
         }
       } else if (relation === "Instance") {
-        const stack = [...read];
-        for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-          add("Instance", ownFields(next));
-          stack.push(...familyOf(next, "children"));
+        for (const root of read) {
+          walkTree(root, ["package", "assembly"], (_, own) => {
+            add("Instance", own);
+          });
         }
       } else {
         for (const row of read) {
@@ -947,16 +974,17 @@ export const viewOf = (inputs: PackageInputs): View => {
   // field of them: each is the number of its `DeclarationBaseType` or `DeclarationCardinality`
   // rows, as the database draws it, so a containment over `declarationRef` reads the tuple
   // PostgreSQL holds (lane NIL's audit, B12; spec reading 158).
-  const typedNodes = (relation: string) =>
-    new Set<Value | undefined>((view.get(relation) ?? []).map(({ node }) => node));
+  const placeOf = (row: Row): string =>
+    [row["package"], row["path"], row["start"]].map(textOf).join("\u001F");
+  const typedNodes = (relation: string) => new Set((view.get(relation) ?? []).map(placeOf));
   const baseTyped = typedNodes("DeclarationBaseType");
   const cardinal = typedNodes("DeclarationCardinality");
   view.set(
     "Declaration",
     (view.get("Declaration") ?? []).map((row) => ({
       ...row,
-      baseTypes: baseTyped.has(row["node"]) ? 1n : 0n,
-      cardinalities: cardinal.has(row["node"]) ? 1n : 0n,
+      baseTypes: baseTyped.has(placeOf(row)) ? 1n : 0n,
+      cardinalities: cardinal.has(placeOf(row)) ? 1n : 0n,
     })),
   );
 
@@ -970,15 +998,6 @@ export const viewOf = (inputs: PackageInputs): View => {
 export interface Broken {
   readonly law: Law;
   readonly witness: string;
-}
-
-/**
- * A uuid the rows name that the program did not mint: the field that holds it, and the uuid.
- */
-export interface Dangling {
-  readonly field: string;
-  readonly relation: string;
-  readonly value: string;
 }
 
 /**
@@ -999,7 +1018,6 @@ export const judgedLaws: readonly Law[] = [
  *   verdict is known;
  * - `overLong`, each `keyText` field the import writes, as `Relation.field`, that holds a text past
  *   the bound, with its pattern law;
- * - `dangling`, each uuid a row names that the program did not mint;
  * - `written`, each relation the program writes as rows, none of them perhaps.
  */
 export interface HostVerdict {
@@ -1009,7 +1027,6 @@ export interface HostVerdict {
    * text past its bound as its field type's pattern law, which the refusal names it by.
    */
   readonly brokenLaws: readonly Law[];
-  readonly dangling: readonly Dangling[];
   readonly held: ReadonlySet<LawName>;
   readonly overLong: ReadonlyMap<string, PatternLaw>;
   readonly written: ReadonlySet<string>;
@@ -1019,10 +1036,9 @@ export interface HostVerdict {
  * Judge a program's rows on the host.
  *
  * @param inputs - The program's inputs.
- * @param minted - Every id the program drew.
  * @returns The verdict.
  */
-export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>): HostVerdict => {
+export const hostVerdictOf = (inputs: PackageInputs): HostVerdict => {
   const view = viewOf(inputs);
   const patterns = new Map<Law, Verdict>(
     [...patternFields].map(([law, fields]) => [law, patternVerdictOf(view, law, fields)] as const),
@@ -1058,21 +1074,12 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
     ),
   );
   const overLong = new Map<string, PatternLaw>();
-  const dangling = new Map<string, Dangling>();
   for (const [relation, rows] of view) {
-    const uuids = uuidFields.get(relation) ?? [];
     for (const row of rows) {
       for (const [field, value] of Object.entries(row)) {
         const bound = boundFields.get(`${relation}.${field}`);
         if (bound !== undefined && Predicate.isString(value) && utf8Length(value) > keyTextBytes) {
           overLong.set(`${relation}.${field}`, bound);
-        }
-      }
-
-      for (const field of uuids) {
-        const value = row[field];
-        if (Predicate.isString(value) && !minted.has(value)) {
-          dangling.set(`${relation}.${field} = ${value}`, { field, relation, value });
         }
       }
     }
@@ -1088,7 +1095,6 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
   return {
     broken,
     brokenLaws,
-    dangling: [...dangling.values()],
     held,
     overLong,
     written: new Set(view.keys()),

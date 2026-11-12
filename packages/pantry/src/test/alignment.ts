@@ -821,7 +821,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     137,
     {
       owner:
-        "the record: `Attribute.at` and `Namespace.at` keep each family's order (shred, `rootInsertOf`), assembly places by `at`, and `unshred` writes declarations then attributes; no law reads either order, shred's `refusalOrder` names a codec refusal by Canonical XML's keys, and the oracle lists an element's breaches law by law (`attribute-order.oracle.test.ts`, `attribute-order.export.test.ts`, `attribute-order.db.test.ts`)",
+        "the record: an element's attributes and declarations are sets (`counted` families `Node.attributes`, `Node.openAttributes` and `Node.namespaces`), and `unshred` writes declarations by prefix, then attributes by namespace name and local name, Canonical XML's order; no law reads either order, and shred's `refusalOrder` names a codec refusal by Canonical XML's keys (`attribute-order.export.test.ts`)",
       status: "G",
     },
   ],

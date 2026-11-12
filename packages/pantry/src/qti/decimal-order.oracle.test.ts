@@ -41,7 +41,7 @@ import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { AriaRange } from "#pantry/qti/interactions.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { breaks, checksOf, closedOf } from "#pantry/test/predicates.ts";
@@ -651,7 +651,7 @@ const judged = (drawnCase: RangeCase, note: (situation: Situation) => void) =>
   Effect.gen(function* judgedCase() {
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(itemOf(drawnCase))));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
-    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
+    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
     const read = formsRead(drawnCase.forms);
     const rows = new Map([[AriaRange.name, [{ max: read[1], min: read[0] }]]]);
     const expected = above(...read);

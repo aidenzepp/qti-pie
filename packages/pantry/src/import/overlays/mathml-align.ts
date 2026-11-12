@@ -43,10 +43,11 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
-import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
+import { keyTextOf, nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
+import type { MathmlIds } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type {
   CellLeaf,
   MathAction,
@@ -58,10 +59,10 @@ import type {
 import { integerForm } from "#pantry/qti/limits.ts";
 
 /**
- * One complete element of a cell as its cell's family nests it: without the `cell` the nesting
- * supplies, nor the `at` the family draws.
+ * One complete element of a cell as its cell's family nests it: without the group the nesting
+ * supplies (`package`, `path` and `cell`, its cell's key), nor the `at` the family draws.
  */
-type CellLeafInsert = Omit<Addition<typeof CellLeaf>, "cell">;
+type CellLeafInsert = Omit<Addition<typeof CellLeaf>, "cell" | "package" | "path">;
 
 /**
  * A cell's row, with its leaves nested at its count field, in document order.
@@ -71,7 +72,8 @@ type MathCellRow = Omit<Addition<typeof MathCell>, "leaves"> & {
 };
 
 /**
- * A document's align rows, one keyed set per relation, each keyed by its node's id.
+ * A document's align rows, one keyed set per relation, each keyed by its node's
+ * `(package, path, start)` ({@link keyTextOf}).
  */
 export interface MathmlAlignRows {
   readonly MathAction: ReadonlyMap<string, Addition<typeof MathAction>>;
@@ -96,9 +98,9 @@ type State = "closed" | "open" | "unjudged";
  */
 interface Scope {
   /**
-   * The nearest `m:mtd`.
+   * The nearest `m:mtd`'s `start`.
    */
-  readonly cell: NodeId;
+  readonly cell: bigint;
   /**
    * The direction the row writes or else inherited.
    */
@@ -129,6 +131,11 @@ const letKinds: ReadonlySet<string> = new Set([
  * The kinds that let an alignment group through where they change no direction.
  */
 const directedKinds: ReadonlySet<string> = new Set(["m:mrow", "m:mstyle"]);
+
+/**
+ * The document node's `start`, its pre-order position 0, above every element of the document.
+ */
+const documentStart = 0n;
 
 /**
  * The lexical space a `selection` is read as an integer in, `xs:integer`'s within the signed 64-bit
@@ -222,30 +229,30 @@ const passesOf = (state: State, kind: string, changesDirection: boolean): State 
  */
 interface Reading {
   /**
-   * What each node's element writes of `dir` and `selection`.
+   * What each node's element writes of `dir` and `selection`, by the node's `start`.
    */
-  readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
+  readonly attributes: ReadonlyMap<bigint, ReadonlyMap<string, string>>;
   /**
-   * The document node, which every row copies as its document.
+   * The kind of each node, by its `start`.
    */
-  readonly document: NodeId;
-  /**
-   * The kind of each node.
-   */
-  readonly kinds: ReadonlyMap<NodeId, NodeRow<Composed>["kind"]>;
+  readonly kinds: ReadonlyMap<bigint, NodeRow<Composed>["kind"]>;
   /**
    * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction (N8), its element rank
    * among its parent's element children, from 1, and its element children's count.
    */
   readonly folds: Folds;
   /**
+   * Where the document stands in its package, the key every row holds.
+   */
+  readonly ids: MathmlIds;
+  /**
    * The direction each element holds, the document node's `ltr` above them.
    */
-  readonly owns: Map<NodeId, Direction>;
+  readonly owns: Map<bigint, Direction>;
   /**
-   * What each row built so far passes on, by its node.
+   * What each row built so far passes on, by its node's `start`.
    */
-  readonly standing: Map<NodeId, Scope>;
+  readonly standing: Map<bigint, Scope>;
 }
 
 /**
@@ -263,13 +270,13 @@ const selectionHeld = (kind: string, values: ReadonlyMap<string, string> | undef
  *
  * @param reading - The document.
  * @param node - The node.
- * @returns Its `document`, `nearest`, `node`, `parent`, `start` and `version`.
+ * @returns Its `package`, `path`, `start`, `nearest`, `parent` and `version`.
  */
 const placed = (reading: Reading, node: NodeRow<Composed>) => ({
-  document: reading.document,
-  nearest: foldAt(reading.folds, node.id).nearest,
-  node: node.id,
+  nearest: foldAt(reading.folds, node.start).nearest,
+  package: reading.ids.package,
   parent: node.parent,
+  path: reading.ids.path,
   start: node.start,
   version: node.version,
 });
@@ -282,14 +289,16 @@ const placed = (reading: Reading, node: NodeRow<Composed>) => ({
  * @returns Its row.
  */
 const actionOf = (reading: Reading, node: NodeRow<Composed>): Addition<typeof MathAction> => {
-  const lexical = reading.attributes.get(node.id)?.get("selection");
+  const lexical = reading.attributes.get(node.start)?.get("selection");
 
   return {
-    elementChildren: foldAt(reading.folds, node.id).elementChildren,
-    elements: foldAt(reading.folds, node.id).elements,
-    node: node.id,
+    elementChildren: foldAt(reading.folds, node.start).elementChildren,
+    elements: foldAt(reading.folds, node.start).elements,
+    package: reading.ids.package,
+    path: reading.ids.path,
     selectionLexical: lexical ?? "",
     selectionWritten: lexical !== undefined,
+    start: node.start,
   };
 };
 
@@ -311,17 +320,17 @@ const scopeOf = (
     return undefined;
   }
 
-  const values = reading.attributes.get(node.id);
+  const values = reading.attributes.get(node.start);
   const inherited = reading.owns.get(node.parent) ?? "ltr";
-  const own = reading.owns.get(node.id) ?? inherited;
+  const own = reading.owns.get(node.start) ?? inherited;
   const parentKind = reading.kinds.get(node.parent) ?? node.kind;
   const underAction = parentKind === "m:maction";
-  const { elements } = foldAt(reading.folds, node.id);
+  const { elements } = foldAt(reading.folds, node.start);
   const chosen = underAction ? (above?.selection ?? 0n) : 0n;
   const received: State = above?.passes ?? "open";
   const state = isCell ? "open" : stateOf(received, underAction, elements, chosen);
   const passes = passesOf(state, node.kind, own !== inherited);
-  const cell = isCell ? node.id : (above?.cell ?? node.id);
+  const cell = isCell ? node.start : (above?.cell ?? node.start);
 
   return {
     row: {
@@ -329,7 +338,7 @@ const scopeOf = (
       cell,
       chosen,
       dirLexical: dirLexicalOf(values?.get("dir")),
-      elementChildren: foldAt(reading.folds, node.id).elementChildren,
+      elementChildren: foldAt(reading.folds, node.start).elementChildren,
       elements,
       inherited,
       kind: node.kind,
@@ -351,17 +360,20 @@ const scopeOf = (
 /**
  * The {@link MathDir} rows: one for every element that writes a `dir`, its lexical form as written.
  *
- * @param attributes - Each element's written `dir` and `selection`, by its id.
- * @returns The rows, keyed by the element's id.
+ * @param reading - The document's reading.
+ * @returns The rows, keyed by the element's key.
  */
-const dirRowsOf = (
-  attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>,
-): ReadonlyMap<string, Addition<typeof MathDir>> => {
+const dirRowsOf = (reading: Reading): ReadonlyMap<string, Addition<typeof MathDir>> => {
   const dirs = new Map<string, Addition<typeof MathDir>>();
-  for (const [node, values] of attributes) {
+  for (const [start, values] of reading.attributes) {
     const lexical = values.get("dir");
     if (lexical !== undefined) {
-      dirs.set(node, { lexical, node });
+      dirs.set(keyTextOf(reading.ids, start), {
+        lexical,
+        package: reading.ids.package,
+        path: reading.ids.path,
+        start,
+      });
     }
   }
 
@@ -373,24 +385,28 @@ const dirRowsOf = (
  *
  * @param reading - The document's reading.
  * @param leafNodes - The complete elements, in document order.
- * @param scopes - Each element's scope row, by node id.
- * @param groupsOf - Each cell's count of open groups.
- * @returns Each cell's leaves, by the cell's node id.
+ * @param scopes - Each element's scope row, by its node's `start`.
+ * @param groupsOf - Each cell's count of open groups, by the cell's `start`.
+ * @returns Each cell's leaves, by the cell's `start`.
  */
 const leavesByCell = (
   reading: Reading,
   leafNodes: readonly NodeRow<Composed>[],
-  scopes: ReadonlyMap<string, Addition<typeof MathAlignScope>>,
-  groupsOf: ReadonlyMap<NodeId, bigint>,
-): ReadonlyMap<string, readonly CellLeafInsert[]> => {
-  const nested = new Map<string, CellLeafInsert[]>();
+  scopes: ReadonlyMap<bigint, Addition<typeof MathAlignScope>>,
+  groupsOf: ReadonlyMap<bigint, bigint>,
+): ReadonlyMap<bigint, readonly CellLeafInsert[]> => {
+  const nested = new Map<bigint, CellLeafInsert[]>();
   for (const node of leafNodes) {
-    const cell = scopes.get(node.id)?.cell ?? node.id;
+    const cell = scopes.get(node.start)?.cell ?? node.start;
     const own = nested.get(cell) ?? [];
+    const { nearest, parent, start, version } = placed(reading, node);
     own.push({
-      ...placed(reading, node),
       groups: groupsOf.get(cell) ?? 0n,
       kind: node.kind,
+      nearest,
+      parent,
+      start,
+      version,
     });
     nested.set(cell, own);
   }
@@ -402,37 +418,38 @@ const leavesByCell = (
  * The align rows of one document.
  *
  * @param view - The document's view: its rows, and their folds under the context it is judged in.
+ * @param ids - Where the document stands in its package, the key every row holds.
  * @returns The rows of every relation the align module declares.
  */
-export const rowsOf = (view: DocumentView): MathmlAlignRows => {
+export const rowsOf = (view: DocumentView, ids: MathmlIds): MathmlAlignRows => {
   const flat = view.rows;
   const reading: Reading = {
     attributes: writtenOf(flat.attributes, readAttributes),
-    document: flat.document.node,
     folds: view.folds,
-    kinds: new Map(flat.nodes.map((node) => [node.id, node.kind] as const)),
-    owns: new Map<NodeId, Direction>([[flat.document.node, "ltr"]]),
-    standing: new Map<NodeId, Scope>(),
+    ids,
+    kinds: new Map(flat.nodes.map((node) => [node.start, node.kind] as const)),
+    owns: new Map<bigint, Direction>([[documentStart, "ltr"]]),
+    standing: new Map<bigint, Scope>(),
   };
   const actions = new Map<string, Addition<typeof MathAction>>();
-  const cells = new Map<string, MathCellRow>();
-  const scopes = new Map<string, Addition<typeof MathAlignScope>>();
+  const cells = new Map<bigint, Omit<MathCellRow, "leaves">>();
+  const scopes = new Map<bigint, Addition<typeof MathAlignScope>>();
   const groups = new Map<string, Addition<typeof MathAlignGroup>>();
-  const groupsOf = new Map<NodeId, bigint>();
+  const groupsOf = new Map<bigint, bigint>();
   const leafNodes: NodeRow<Composed>[] = [];
   for (const node of flat.nodes) {
-    if (node.parent === node.id || nonElements.has(node.kind)) {
+    if (node.parent === node.start || nonElements.has(node.kind)) {
       continue;
     }
 
     reading.owns.set(
-      node.id,
-      directionOf(reading.attributes.get(node.id)?.get("dir")) ??
+      node.start,
+      directionOf(reading.attributes.get(node.start)?.get("dir")) ??
         (node.kind === "m:math" ? "ltr" : reading.owns.get(node.parent)) ??
         "ltr",
     );
     if (node.kind === "m:maction") {
-      actions.set(node.id, actionOf(reading, node));
+      actions.set(keyTextOf(ids, node.start), actionOf(reading, node));
     }
 
     const built = scopeOf(reading, node);
@@ -441,13 +458,18 @@ export const rowsOf = (view: DocumentView): MathmlAlignRows => {
     }
 
     const { row, scope } = built;
-    reading.standing.set(node.id, scope);
-    scopes.set(node.id, row);
+    reading.standing.set(node.start, scope);
+    scopes.set(node.start, row);
     if (node.kind === "m:mtd") {
-      cells.set(node.id, { leaves: [], node: node.id });
+      cells.set(node.start, { package: ids.package, path: ids.path, start: node.start });
     } else {
       if (node.kind === "m:maligngroup" && row.state === "open") {
-        groups.set(node.id, { cell: row.cell, node: node.id });
+        groups.set(keyTextOf(ids, node.start), {
+          cell: row.cell,
+          package: ids.package,
+          path: ids.path,
+          start: node.start,
+        });
         groupsOf.set(row.cell, (groupsOf.get(row.cell) ?? 0n) + 1n);
       }
 
@@ -458,15 +480,19 @@ export const rowsOf = (view: DocumentView): MathmlAlignRows => {
   }
 
   const nested = leavesByCell(reading, leafNodes, scopes, groupsOf);
-  for (const [node, cell] of cells) {
-    cells.set(node, { ...cell, leaves: nested.get(node) ?? [] });
-  }
 
   return {
     MathAction: actions,
     MathAlignGroup: groups,
-    MathAlignScope: scopes,
-    MathCell: cells,
-    MathDir: dirRowsOf(reading.attributes),
+    MathAlignScope: new Map(
+      [...scopes].map(([start, row]) => [keyTextOf(ids, start), row] as const),
+    ),
+    MathCell: new Map(
+      [...cells].map(
+        ([start, cell]) =>
+          [keyTextOf(ids, start), { ...cell, leaves: nested.get(start) ?? [] }] as const,
+      ),
+    ),
+    MathDir: dirRowsOf(reading),
   };
 };

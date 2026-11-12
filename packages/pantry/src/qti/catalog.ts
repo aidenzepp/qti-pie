@@ -6,22 +6,22 @@
  *   support in a catalog"): no two cards of one catalog carry one `support`. A `support` is
  *   compared by its value, its lexical form collapsed (XML Schema 1.0 Part 2 §4.3.6, whiteSpace
  *   `collapse`), so `" spoken "` and `spoken` name one support. {@link CardSupport} is one row per
- *   card, keyed by its node, and the key on its `(catalog, support)` is the law, so a second card
- *   of one support in one catalog has no row to be written.
+ *   card, keyed by its element, and the key on its `(catalog, support)` is the law, so a second
+ *   card of one support in one catalog has no row to be written.
  * - **Card default entry** (rule `card-default`; info §5.27.2: "Only one of the CardEntry instances
  *   can have a default designation"): a card holds at most one entry whose `default` designates it.
  *   An entry's `default` is an `xs:boolean`, whose value space is `true`, `false`, `1` and `0`
  *   under whiteSpace `collapse`, so an entry designates where its collapsed value is `true` or `1`.
- *   {@link DefaultEntry} is one row per such entry, keyed by its node, and the key on its `card` is
- *   the law. An entry that writes no `default`, or one whose value is `false` or `0`, has no row;
- *   the XSD's default of `false` designates nothing.
+ *   {@link DefaultEntry} is one row per such entry, keyed by its element, and the key on its `card`
+ *   is the law. An entry that writes no `default`, or one whose value is `false` or `0`, has no
+ *   row; the XSD's default of `false` designates nothing.
  * - **Catalog reference** (rule `idref-target`; info §5.28.1, §5.15.9; spec reading 117): a
  *   `data-catalog-idref` names a `qti-catalog` of its document, not any ID of it. The attribute is
  *   typed `xs:IDREF`, so "Idref target" (`#pantry/qti/identity.ts`) alone refuses a token that
  *   names no ID, and accepts one that names an HTML `id` or a declaration. {@link CatalogRef} is
  *   one row per such attribute that holds a token, as "Idref target" reads only an attribute the
  *   schema checks as IDREF and only its tokens (an unchecked one, or an empty or blank one, names
- *   nothing), keyed by its node, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace
+ *   nothing), keyed by its element, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace
  *   `collapse`); {@link CatalogId} is one row per `qti-catalog` whose `id` is an NCName, copied
  *   from the attribute as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. A
  *   document in no assembly resolves each reference among its own catalogs: the containment of
@@ -34,10 +34,10 @@
  *   instance's assembly.
  *
  * The card overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the
- * node's parent, are the parent the tree holds, and both copy their attribute as `identity.ts`
- * states a copy (C18): from `select(Attribute, φ)` into the overlay, keyed by the closed
- * attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`), whose index over the
- * selection's node serves the copy's reverse probe. Every copied text that takes part in a
+ * start of the node's parent, are the parent the tree holds, and both copy their attribute as
+ * `identity.ts` states a copy (C18): from `select(Attribute, φ)` into the overlay, keyed by
+ * `Attribute`'s key `(package, path, start, name)`, its name fixed, whose index over the element
+ * serves the copy's reverse probe. Every copied text that takes part in a
  * cross-row equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores; the overlays' agreement
  * with what the tree holds is "E1 derived" (rule `derived`).
@@ -60,7 +60,6 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
@@ -71,57 +70,57 @@ import {
   SchemaVersion,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, closedName, namingPattern } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";
 
 /**
- * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
- * parent, the `support` as written (`lexical`, C18's copy) and that form collapsed (`support`),
+ * A `qti-card`'s `support`, keyed by the card's element: its {@link nodeRef} tuple, with `catalog`
+ * its parent, the `support` as written (`lexical`, C18's copy) and that form collapsed (`support`),
  * which the database derives.
  */
 export const CardSupport = relation.generated(
   "CardSupport",
   {
-    catalog: uuid,
-    document: uuid,
+    catalog: natural,
     kind: closedId(NodeKind),
     lexical: keyText,
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
   (c) => ({ support: generated(keyText, Compute.cast(Compute.collapse(c.lexical), keyText)) }),
 );
 
 /**
- * A `qti-card-entry` that designates itself the default of its card, keyed by the entry's node: its
- * {@link nodeRef} tuple, with `card` its parent, the `default` as written (`lexical`, C18's copy)
- * and that form collapsed (`value`), which the database derives, `true` or `1`.
+ * A `qti-card-entry` that designates itself the default of its card, keyed by the entry's element:
+ * its {@link nodeRef} tuple, with `card` its parent, the `default` as written (`lexical`, C18's
+ * copy) and that form collapsed (`value`), which the database derives, `true` or `1`.
  */
 export const DefaultEntry = relation.generated(
   "DefaultEntry",
   {
-    card: uuid,
-    document: uuid,
+    card: natural,
     kind: closedId(NodeKind),
     lexical: keyText,
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
   (e) => ({ value: generated(keyText, Compute.cast(Compute.collapse(e.lexical), keyText)) }),
 );
 
 /**
- * One `data-catalog-idref`, keyed by its element's node: its document, the attribute as written
+ * One `data-catalog-idref`, keyed by its element: the attribute as written
  * (`lexical`, C18's copy) and that form collapsed (`token`), the id of the catalog it names. The
  * importer writes `token`, which "E1 derived" proves, since a family's group is fields its member's
  * writer writes (grizzle refuses a generated one), and {@link catalogTargetFamily} groups by it.
@@ -129,19 +128,20 @@ export const DefaultEntry = relation.generated(
 export const CatalogRef = relation(
   "CatalogRef",
   {
-    document: uuid,
     lexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `token` is generated as collapse(lexical), and tsc names its writer.
     token: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One `qti-catalog` that carries an ID, an `id` whose value is an NCName, keyed by its node: its
- * document, its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed),
- * with `owner` the node itself, an attribute ID's binding, so its copy shares the superkey
+ * One `qti-catalog` that carries an ID, an `id` whose value is an NCName, keyed by its element:
+ * its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner`
+ * the element's own start, an attribute ID's binding, so its copy shares the superkey
  * `DocumentId` reads.
  *
  * The import writes its rows where its form names something (`namedBy` of
@@ -150,48 +150,69 @@ export const CatalogRef = relation(
  */
 export const CatalogId = relation(
   "CatalogId",
-  { document: uuid, id: keyText, node: uuid, owner: uuid },
-  ["node"],
+  {
+    id: keyText,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * A token a document's `data-catalog-idref`s name, a projection keyed by its heading: one row per
- * distinct token of a document's {@link CatalogRef}s, with the document's `assembled`. A document in
- * no assembly resolves each in its own catalogs; one in an assembly, in its assembly's, once per
- * instance ({@link PlacedCatalogRef}). `carriers` counts the document's references of the token,
- * and `placements` its {@link PlacedCatalogRef}s.
+ * A token a document's `data-catalog-idref`s name, a projection keyed by its document's `(package,
+ * path)` and the token: one row per distinct token of a document's {@link CatalogRef}s, with the
+ * document's `assembled`. A document in no assembly resolves each in its own catalogs; one in an
+ * assembly, in its assembly's, once per instance ({@link PlacedCatalogRef}). `carriers` counts the
+ * document's references of the token, and `placements` its {@link PlacedCatalogRef}s.
  */
 export const CatalogTarget = relation(
   "CatalogTarget",
   {
     assembled: pg.boolean,
     carriers: drawn(natural),
-    document: uuid,
     id: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
     placements: drawn(natural),
   },
-  ["document", "id"],
+  ["package", "path", "id"],
 );
 
 /**
  * One token of an instance's document's catalog references (spec reading 117), keyed by the
- * instance and the token: a {@link CatalogTarget} of the instance's document, which resolves among
+ * instance (its assembly and start) and the token: a {@link CatalogTarget} of the instance's
+ * document, `path`, which resolves among
  * its assembly's catalogs ("Catalog reference").
  */
 export const PlacedCatalogRef = relation(
   "PlacedCatalogRef",
-  { assembly: uuid, document: uuid, id: keyText, instance: uuid },
-  ["instance", "id"],
+  {
+    assembly: EntryPath,
+    id: keyText,
+    instance: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "assembly", "instance", "id"],
 );
 
 /**
  * One binding of an assembly's ID table whose owner is a `qti-catalog`, keyed by the assembly and
- * the id: an {@link AssembledId} of the assembly, the owner a {@link CatalogId}'s node.
+ * the id: an {@link AssembledId} of the assembly, its owner, `(path, owner)`, a {@link CatalogId}'s
+ * element.
  */
 export const AssembledCatalog = relation(
   "AssembledCatalog",
-  { assembly: uuid, id: keyText, owner: uuid },
-  ["assembly", "id"],
+  {
+    assembly: EntryPath,
+    id: keyText,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "assembly", "id"],
 );
 
 /**
@@ -211,7 +232,7 @@ export const catalogRelations = {
  * Each document's catalog tokens, counted by `CatalogTarget.carriers`.
  */
 const catalogTargetFamily = counted(
-  on(CatalogRef, "document", "token"),
+  on(CatalogRef, "package", "path", "token"),
   fin(CatalogTarget, "carriers"),
 );
 
@@ -220,7 +241,7 @@ const catalogTargetFamily = counted(
  * `CatalogTarget.placements`.
  */
 const placedCatalogFamily = counted(
-  on(PlacedCatalogRef, "document", "id"),
+  on(PlacedCatalogRef, "package", "path", "id"),
   fin(CatalogTarget, "placements"),
 );
 
@@ -228,7 +249,7 @@ const placedCatalogFamily = counted(
  * Every card's `support`, the source of {@link CardSupport}.
  */
 const supportAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "qti-card"), a.eq(a.name, "support")),
+  a.and(a.eq(a.kind, "qti-card"), a.eq(a.name, "support")),
 );
 
 /**
@@ -237,7 +258,6 @@ const supportAttributes = select(Attribute, (a) =>
  */
 const designatingDefaults = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.kind, "qti-card-entry"),
     a.eq(a.name, "default"),
     a.or(
@@ -273,7 +293,6 @@ const identityOf = (a: AttributeRow) => {
  */
 const referenceAttributes = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.name, "data-catalog-idref"),
     a.in(identityOf(a), ["IDREF", "IDREFS"]),
     a.ne(Compute.collapse(a.lexical), ""),
@@ -286,12 +305,7 @@ const referenceAttributes = select(Attribute, (a) =>
  * as it has no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const catalogIdAttributes = select(Attribute, (a) =>
-  a.and(
-    closedName(a),
-    a.eq(a.kind, "qti-catalog"),
-    a.eq(a.name, "id"),
-    Compute.matches(a.lexical, namingPattern),
-  ),
+  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
 );
 
 /**
@@ -315,10 +329,9 @@ const assembledTargets = select(CatalogTarget, (t) => t.eq(t.assembled, true));
  *   reference being a `data-catalog-idref` that holds an IDREF token, as "Idref target" reads one:
  *   a document in no assembly has it among its own catalogs, one in an assembly under each
  *   instance, among its assembly's catalogs;
- * - **DocumentId key:** {@link CatalogId}'s `(document, id)`, which an ID held twice in a document
- *   already breaks and which the containment of "Catalog reference" needs of its target; the
- *   attribute selections the copies read are keyed by the closed attributes' key
- *   (`closedAttributes`, `#pantry/qti/attributes.ts`);
+ * - **DocumentId key:** {@link CatalogId}'s `(package, path, id)`, which an ID held twice in a
+ *   document already breaks and which the containment of "Catalog reference" needs of its target;
+ *   the attribute selections the copies read are keyed by `Attribute`'s key, their name fixed;
  * - **E1 derived:** each card overlay's node tuple, each overlay's attribute copied into its row both
  *   ways, a collapsed value the lexical form collapsed (a designating one `true` or `1`), and a
  *   catalog's `id` its {@link DocumentId}'s, owned by the catalog itself; and the tokens'
@@ -328,59 +341,92 @@ const assembledTargets = select(CatalogTarget, (t) => t.eq(t.assembled, true));
  *   {@link AssembledId} owned by a catalog.
  */
 export const catalogLawsByName = {
-  "Card default entry": [key(on(DefaultEntry, "card"))],
-  "Card support": [key(on(CardSupport, "catalog", "support"))],
+  "Card default entry": [key(on(DefaultEntry, "package", "path", "card"))],
+  "Card support": [key(on(CardSupport, "package", "path", "catalog", "support"))],
   "Catalog reference": [
-    contained(on(unassembledTargets, "document", "id"), on(CatalogId, "document", "id")),
-    contained(on(PlacedCatalogRef, "assembly", "id"), on(AssembledCatalog, "assembly", "id")),
+    contained(
+      on(unassembledTargets, "package", "path", "id"),
+      on(CatalogId, "package", "path", "id"),
+    ),
+    contained(
+      on(PlacedCatalogRef, "package", "assembly", "id"),
+      on(AssembledCatalog, "package", "assembly", "id"),
+    ),
   ],
-  "DocumentId key": [key(on(CatalogId, "document", "id"))],
+  "DocumentId key": [key(on(CatalogId, "package", "path", "id"))],
   "E1 derived": [
     contained(
-      on(CardSupport, "node", "document", "kind", "start", "nearest", "version", "catalog"),
+      on(CardSupport, "package", "path", "start", "kind", "nearest", "version", "catalog"),
       nodeRef,
     ),
     contained(
-      on(DefaultEntry, "node", "document", "kind", "start", "nearest", "version", "card"),
+      on(DefaultEntry, "package", "path", "start", "kind", "nearest", "version", "card"),
       nodeRef,
     ),
-    contained(on(supportAttributes, "node", "lexical"), on(CardSupport, "node", "lexical")),
-    contained(on(CardSupport, "node"), on(supportAttributes, "node")),
-    contained(on(designatingDefaults, "node", "lexical"), on(DefaultEntry, "node", "lexical")),
-    contained(on(DefaultEntry, "node"), on(designatingDefaults, "node")),
+    contained(
+      on(supportAttributes, "package", "path", "start", "lexical"),
+      on(CardSupport, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(CardSupport, "package", "path", "start"),
+      on(supportAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(designatingDefaults, "package", "path", "start", "lexical"),
+      on(DefaultEntry, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(DefaultEntry, "package", "path", "start"),
+      on(designatingDefaults, "package", "path", "start"),
+    ),
     check("E1_derived", DefaultEntry, (e) =>
       e.or(e.eq(e.value, booleanTrue[0]), e.eq(e.value, booleanTrue[1])),
     ),
     contained(
-      on(referenceAttributes, "node", "document", "lexical"),
-      on(CatalogRef, "node", "document", "lexical"),
+      on(referenceAttributes, "package", "path", "start", "lexical"),
+      on(CatalogRef, "package", "path", "start", "lexical"),
     ),
-    contained(on(CatalogRef, "node"), on(referenceAttributes, "node")),
-    check("E1_derived", CatalogRef, (r) => r.eq(r.token, Compute.collapse(r.lexical))),
-    contained(on(catalogIdAttributes, "node", "document"), on(CatalogId, "node", "document")),
-    contained(on(CatalogId, "node"), on(catalogIdAttributes, "node")),
     contained(
-      on(CatalogId, "node", "document", "id", "owner"),
-      on(DocumentId, "node", "document", "id", "owner"),
+      on(CatalogRef, "package", "path", "start"),
+      on(referenceAttributes, "package", "path", "start"),
     ),
-    check("E1_derived", CatalogId, (c) => c.eq(c.owner, c.node)),
+    check("E1_derived", CatalogRef, (r) => r.eq(r.token, Compute.collapse(r.lexical))),
+    contained(
+      on(catalogIdAttributes, "package", "path", "start"),
+      on(CatalogId, "package", "path", "start"),
+    ),
+    contained(
+      on(CatalogId, "package", "path", "start"),
+      on(catalogIdAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(CatalogId, "package", "path", "start", "id", "owner"),
+      on(DocumentId, "package", "path", "start", "id", "owner"),
+    ),
+    check("E1_derived", CatalogId, (c) => c.eq(c.owner, c.start)),
     catalogTargetFamily,
     check("E1_derived", CatalogTarget, (t) => t.gt(t.carriers, 0n)),
-    contained(on(CatalogTarget, "document", "assembled"), on(Document, "node", "assembled")),
     contained(
-      on(PlacedCatalogRef, "instance", "id", "document", "assembly"),
-      on(PlacedIdref, "instance", "id", "document", "assembly"),
+      on(CatalogTarget, "package", "path", "assembled"),
+      on(Document, "package", "path", "assembled"),
+    ),
+    contained(
+      on(PlacedCatalogRef, "package", "assembly", "instance", "id", "path"),
+      on(PlacedIdref, "package", "assembly", "instance", "id", "path"),
     ),
     placedCatalogFamily,
     contained(
-      on(assembledTargets, "document", "placements"),
-      on(TestDocument, "node", "instances"),
+      on(assembledTargets, "package", "path", "placements"),
+      on(TestDocument, "package", "path", "instances"),
     ),
     contained(
-      on(AssembledCatalog, "assembly", "id", "owner"),
-      on(AssembledId, "assembly", "id", "owner"),
+      on(AssembledCatalog, "package", "assembly", "id", "path", "owner"),
+      on(AssembledId, "package", "assembly", "id", "path", "owner"),
     ),
-    contained(on(AssembledCatalog, "owner"), on(CatalogId, "node")),
+    contained(
+      on(AssembledCatalog, "package", "path", "owner"),
+      on(CatalogId, "package", "path", "start"),
+    ),
   ],
 } as const;
 

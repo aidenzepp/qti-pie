@@ -30,7 +30,6 @@ import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { documentBreaches, explain, ruleOf } from "#pantry/test/oracle.ts";
 import type { Laws } from "#pantry/test/oracle.ts";
 import { classOfLaw, classOfMessage, driverFor, schemaSetOf } from "#pantry/test/xsd-catalog.ts";
@@ -1862,15 +1861,6 @@ export const generatedRecorded: readonly Recorded[] = [
 ];
 
 /**
- * Give the node numbered `index` a uuid that spells its number, as the oracle's own ids do.
- *
- * @param index - The node's number in document order.
- * @returns The uuid.
- */
-const nodeIdOf = (index: number): NodeId =>
-  `00000000-0000-4000-8fff-${index.toString(16).padStart(12, "0")}`;
-
-/**
  * What a document's rows say of the elements XML Schema assesses laxly or not at all, each name as
  * `{namespace}local`: every foreign element (`lax`); every element within a nested root that
  * reading 6 keeps foreign (`nested`, {@link nestedRoot}), and each such node's place as the law
@@ -1971,36 +1961,44 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     rootNamespace === namespaceOf("lom:lom")
       ? yield* schemaSetOf(version, namespaceOf("cp:manifest")).pipe(Effect.orDie)
       : new Set<string>();
-  const rows = flatten(tree.success, nodeIdOf);
-  const opened = new Map(rows.openElementNames.map((row) => [row.node, writtenName(row)]));
-  const roots = rows.nodes.filter((node) => rootNames.has(opened.get(node.id) ?? ""));
+  const rows = flatten(tree.success);
+  const opened = new Map(rows.openElementNames.map((row) => [row.start, writtenName(row)]));
+  const roots = rows.nodes.filter((node) => rootNames.has(opened.get(node.start) ?? ""));
   const within = rows.nodes.filter((node) =>
     roots.some((root) => root.start <= node.start && node.end <= root.end),
   );
 
-  const byId = new Map(rows.nodes.map((node) => [node.id, node]));
+  const byStart = new Map(rows.nodes.map((node) => [node.start, node]));
   const placeOf = (node: (typeof rows.nodes)[number]): string => {
     const steps: string[] = [];
-    for (let at = byId.get(node.id); at !== undefined && at.start > 0n; at = byId.get(at.parent)) {
+    for (
+      let at = byStart.get(node.start);
+      at !== undefined && at.start > 0n;
+      at = byStart.get(at.parent)
+    ) {
       steps.push(`${at.kind}[${String(at.at)}]`);
     }
 
     return `/${steps.toReversed().join("/")}`;
   };
   const padded = new Set(
-    rows.attributes.flatMap(({ lexical, name, node }) =>
-      name === "xsi:type" && lexical.trim() !== lexical ? [node] : [],
+    rows.attributes.flatMap(({ lexical, name, start }) =>
+      name === "xsi:type" && lexical.trim() !== lexical ? [start] : [],
     ),
   );
-  const typed = rows.nodes.filter((node) => padded.has(node.id));
+  const typed = rows.nodes.filter((node) => padded.has(node.start));
   // libxml2 skips an element whose xsi:type its schema set resolves to no type (cvc-type clause 1):
   // a foreign element the codec left ungoverned, or any element whose QName's prefix binds no
   // namespace, or one neither XML Schema's nor the set's. It skips the content of an element a
   // simple type governs that holds an element child (clause 3.1.2).
-  const declared = Map.groupBy(rows.namespaces, ({ node }) => node);
+  const declared = Map.groupBy(rows.namespaces, ({ start }) => start);
   const boundBy = (node: (typeof rows.nodes)[number], prefix: string): string | undefined => {
-    for (let at = byId.get(node.id); at !== undefined && at.start > 0n; at = byId.get(at.parent)) {
-      const bound = declared.get(at.id)?.find((row) => row.prefix === prefix);
+    for (
+      let at = byStart.get(node.start);
+      at !== undefined && at.start > 0n;
+      at = byStart.get(at.parent)
+    ) {
+      const bound = declared.get(at.start)?.find((row) => row.prefix === prefix);
       if (bound !== undefined) {
         return bound.uri;
       }
@@ -2009,12 +2007,12 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     return prefix === "" ? "" : undefined;
   };
   const xsiTypes = new Map(
-    rows.attributes.flatMap(({ lexical, name, node }) =>
-      name === "xsi:type" ? [[node, lexical] as const] : [],
+    rows.attributes.flatMap(({ lexical, name, start }) =>
+      name === "xsi:type" ? [[start, lexical] as const] : [],
     ),
   );
   const typeAbsent = rows.nodes.filter((node) => {
-    const lexical = xsiTypes.get(node.id);
+    const lexical = xsiTypes.get(node.start);
     if (lexical === undefined) {
       return false;
     }
@@ -2030,7 +2028,7 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
   });
   const parents = new Set(rows.nodes.map(({ parent }) => parent));
   const simpleHeld = rows.nodes.filter(
-    (node) => Option.isSome(governorOf(grammar.attributes, node)) && parents.has(node.id),
+    (node) => Option.isSome(governorOf(grammar.attributes, node)) && parents.has(node.start),
   );
   const below = (anchors: readonly (typeof rows.nodes)[number][]) =>
     rows.nodes.filter((node) => anchors.some((at) => at.start < node.start && node.end <= at.end));
@@ -2041,11 +2039,11 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
       isForeignKind(node.kind) &&
       Option.isSome(node.governs) &&
       Option.isNone(governorOf(grammar.attributes, node)) &&
-      isForeignKind(byId.get(node.parent)?.kind ?? ""),
+      isForeignKind(byStart.get(node.parent)?.kind ?? ""),
   );
   const nameOf = (node: (typeof rows.nodes)[number]) =>
     Option.toArray(
-      Option.orElse(Option.fromNullishOr(opened.get(node.id)), () =>
+      Option.orElse(Option.fromNullishOr(opened.get(node.start)), () =>
         Option.map(kindNameOf(node.kind), writtenName),
       ),
     );
@@ -2072,8 +2070,8 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     skippedPaths: new Set([...typeAbsent, ...below([...typeAbsent, ...simpleHeld])].map(placeOf)),
     skippedValues: new Set(simpleHeld.map(placeOf)),
     xmlIds: new Map(
-      rows.attributes.flatMap(({ lexical, name, node }) => {
-        const holder = byId.get(node);
+      rows.attributes.flatMap(({ lexical, name, start }) => {
+        const holder = byStart.get(start);
 
         return name === "xml:id" && holder !== undefined
           ? [[placeOf(holder), lexical] as const]
@@ -2188,7 +2186,7 @@ export const judgeDocument = Effect.fn("test.judgeDocument")(function* judgeDocu
     );
   }
 
-  const rows = fold(tree.success, nodeIdOf, foldGrammarOf(input.grammar));
+  const rows = fold(tree.success, foldGrammarOf(input.grammar));
   if (Result.isFailure(rows)) {
     return rows.failure._tag === "ChildUnadmitted"
       ? stop("N5 admitted", "admission", rows.failure.message, "content")

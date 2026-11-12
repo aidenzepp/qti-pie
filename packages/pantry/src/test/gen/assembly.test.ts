@@ -26,7 +26,6 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
-import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
@@ -44,6 +43,7 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly, RuleFault, TargetClass } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { rowsByRelation } from "#pantry/test/family-owners.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
@@ -106,35 +106,43 @@ const situationsOf = (assembly: Assembly, accepted: boolean): readonly Situation
 };
 
 /**
- * One instance as the tree draws it: its document, its start, and whether its assembly is a test's.
+ * One instance as the tree draws it: its assembly, its start, its document, and whether its
+ * assembly is a test's.
  */
 interface InstanceStart {
+  readonly assembly: string;
   readonly document: string;
   readonly start: bigint;
   readonly test: boolean;
 }
 
 /**
- * Each instance of a package's assemblies, by id, with its start in its tree's pre-order: a root
- * starts at 0, and each child at its previous sibling's end, the first at its parent's start plus
- * one, in the order its tree nests them.
+ * Write an instance's key within its package, `(assembly, start)`, as one text.
+ *
+ * @param assembly - Its assembly's path.
+ * @param start - Its position in its assembly's instance tree.
+ * @returns The text.
+ */
+const instanceKey = (assembly: string, start: bigint): string =>
+  JSON.stringify([assembly, String(start)]);
+
+/**
+ * Each instance of a package's assemblies, by its key ({@link instanceKey}), its start its place
+ * in its tree's pre-order, as grizzle draws it: a root starts at 0, and each child at its previous
+ * sibling's end, the first at its parent's start plus one, in the order its tree nests them.
  *
  * @param inputs - The package's inputs.
- * @returns Each instance's document, its start, and whether its assembly is a test's, by id.
+ * @returns Each instance's assembly, start and document, and whether its assembly is a test's.
  */
 const instanceStarts = (inputs: PackageInputs): ReadonlyMap<string, InstanceStart> => {
   const starts = new Map<string, InstanceStart>();
-  const walk = (instance: InstanceMember | InstanceRoot, start: bigint, test: boolean): bigint => {
-    starts.set(instance.id, { document: instance.document, start, test });
-    let next = start + 1n;
-    for (const child of instance.children) {
-      next = walk(child, next, test);
+  let test = false;
+  for (const { assembly, assemblyKind, document, start } of rowsByRelation(inputs).Instance) {
+    if (start === 0n) {
+      test = assemblyKind === "qti-assessment-test";
     }
 
-    return next;
-  };
-  for (const root of inputs.Instance.values()) {
-    walk(root, 0n, root.assemblyKind === "qti-assessment-test");
+    starts.set(instanceKey(assembly, start), { assembly, document, start, test });
   }
 
   return starts;
@@ -171,13 +179,11 @@ const admitted = (b: Addition<typeof BranchTarget>): boolean =>
  * @returns Whether the law accepts it.
  */
 const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
-  const above = b.targetInstanceStart <= b.instanceStart && b.instanceStart < b.targetInstanceEnd;
+  const above = b.targetInstance <= b.instance && b.instance < b.targetInstanceEnd;
   const same = b.targetInstance === b.instance;
   const through = same
     ? b.via === b.instance
-    : b.viaParent === b.targetInstance &&
-      b.viaStart <= b.instanceStart &&
-      b.instanceStart < b.viaEnd;
+    : b.viaParent === b.targetInstance && b.via <= b.instance && b.instance < b.viaEnd;
 
   return admitted(b) && above && through;
 };
@@ -192,7 +198,7 @@ const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
  */
 const forwardAccepts = (b: Addition<typeof BranchTarget>): boolean =>
   !admitted(b) ||
-  (b.targetInstance === b.instance ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSiteStart);
+  (b.targetInstance === b.instance ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSite);
 
 /**
  * The rule PostgreSQL refuses a resolution under, by the schema's laws restated on the host: a
@@ -238,8 +244,8 @@ const ruleOfFault = (fault: RuleFault): "branch-forward" | "branch-target" =>
  * Judge a package's import rows by the schema's laws on its branch rules, restated on the host,
  * placement by placement against reading 87's model: each instance of a test's assembly holds one
  * resolution per branch rule of its document that names no exit; a resolution has a target exactly
- * where the model resolves one, every target naming an `InstanceName` and an `Instance` of the
- * import, so no stand-in; and each resolution is refused under exactly the rule of its
+ * where the model resolves one, every target naming an `InstanceName` of the import and its `via`
+ * an `Instance`, so no stand-in; and each resolution is refused under exactly the rule of its
  * placement's fault, or accepted where the model finds none.
  *
  * @param inputs - The package's import inputs.
@@ -256,14 +262,22 @@ const rowsRules = (
   const placed = placementsOf(assembly);
   const rules = [...inputs.BranchRule.values()];
   const resolutions = [...inputs.BranchResolution.values()];
-  const named = new Map([...inputs.Named.values()].map((row) => [row.node, row.identifier]));
+  const named = new Map(
+    [...inputs.Named.values()].map((row) => [
+      JSON.stringify([row.path, String(row.start)]),
+      row.identifier,
+    ]),
+  );
   const names = new Set(
-    [...inputs.InstanceName.values()].map(({ identifier, instance, node }) =>
-      JSON.stringify([instance, node, identifier]),
+    [...inputs.InstanceName.values()].map((name) =>
+      JSON.stringify([name.assembly, String(name.instance), String(name.start), name.identifier]),
     ),
   );
   const targetOf = new Map(
-    [...inputs.BranchTarget.values()].map((row) => [JSON.stringify([row.instance, row.rule]), row]),
+    [...inputs.BranchTarget.values()].map((row) => [
+      JSON.stringify([row.assembly, String(row.instance), String(row.rule)]),
+      row,
+    ]),
   );
   assert.strictEqual(inputs.BranchShuffle.size, 0, `${literal}: no generated package shuffles`);
   assert.strictEqual(
@@ -274,33 +288,43 @@ const rowsRules = (
 
   for (const target of targetOf.values()) {
     assert.isTrue(
-      names.has(JSON.stringify([target.targetInstance, target.targetNode, target.target])),
+      names.has(
+        JSON.stringify([
+          target.assembly,
+          String(target.targetInstance),
+          String(target.targetStart),
+          target.target,
+        ]),
+      ),
       `${literal}: a target names no InstanceName of its identifier`,
     );
-    assert.strictEqual(
-      target.targetInstanceStart,
-      starts.get(target.targetInstance)?.start,
-      `${literal}: the host's start of instance ${target.targetInstance} is not its pre-order start`,
+    assert.isTrue(
+      starts.has(instanceKey(target.assembly, target.via)),
+      `${literal}: a target's via is no instance`,
     );
-    assert.strictEqual(target.instanceStart, starts.get(target.instance)?.start);
-    assert.isTrue(starts.has(target.via), `${literal}: a target's via is no instance`);
   }
 
-  const counted = [...starts].every(
-    ([id, { document, test }]) =>
-      !test ||
-      resolutions.filter(({ instance }) => instance === id).length ===
-        rules.filter((rule) => rule.document === document).length,
+  const counted = [...starts.values()].every(
+    (instance) =>
+      !instance.test ||
+      resolutions.filter(
+        (held) => held.assembly === instance.assembly && held.instance === instance.start,
+      ).length === rules.filter((rule) => rule.path === instance.document).length,
   );
   assert.isTrue(counted, `${literal}: an instance holds a resolution per branch rule`);
 
   const refused = new Set<string>();
   for (const resolution of resolutions) {
-    const at = JSON.stringify([resolution.instance, resolution.rule]);
+    const at = JSON.stringify([
+      resolution.assembly,
+      String(resolution.instance),
+      String(resolution.rule),
+    ]);
     const target = targetOf.get(at);
-    const start = starts.get(resolution.instance)?.start;
+    const start = resolution.instance;
+    const name = named.get(JSON.stringify([resolution.path, String(resolution.owner)]));
     const owner = placed.placements.find(
-      ({ id, instance }) => id === named.get(resolution.owner) && BigInt(instance) === start,
+      ({ id, instance }) => id === name && BigInt(instance) === start,
     );
     assert.isDefined(owner, `${literal}: a resolution's owner is no placement of the model`);
     if (owner === undefined) {

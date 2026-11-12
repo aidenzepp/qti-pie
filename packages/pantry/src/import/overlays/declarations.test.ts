@@ -1,7 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents carry the charset label crust's reader reports, `UTF-8`. */
 /**
  * The O2 overlay rows against a second reading of the same tree: a direct walk of the XDM
- * document, numbering its nodes in document order as the tree's rows are numbered and collecting
+ * document, numbering its nodes in document order, each node's `start`, as the tree's rows are
+ * numbered, and collecting
  * each overlay's row from its element, its attributes and its children. The walk shares no code
  * with the builder, which reads the tree's flat rows (`flatten`).
  *
@@ -32,14 +33,13 @@ import {
 import { declaredVersionOf } from "#pantry/import/read.ts";
 import { rowsOf } from "#pantry/import/overlays/declarations.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
-import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
+import type { DeclarationRows, Place } from "#pantry/import/overlays/declarations.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { closedName, documentFamily } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
-  NodeId,
   XdmChild,
   XdmClosedElement,
   XdmDocument,
@@ -48,7 +48,6 @@ import type {
 import { readEntries } from "#pantry/package/read.ts";
 import { declarationKinds, valueSetKinds } from "#pantry/qti/declarations.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { withGenerated } from "#pantry/test/generated-fields.ts";
 import { settings } from "#pantry/test/settings.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
@@ -61,9 +60,15 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 );
 
 /**
- * One overlay's expected rows: its relation and its rows by node id.
+ * One overlay's expected rows: its relation and its rows by their element's `start`, every row of
+ * one document.
  */
-type Expected = { readonly [Relation in keyof DeclarationRows]: Map<string, object> };
+type Expected = { readonly [Relation in keyof DeclarationRows]: Map<bigint, object> };
+
+/**
+ * Where a generated document stands: one item of one package, the place every row holds.
+ */
+const generatedPlace: Place = { package: "MANIFEST", path: "item.xml" };
 
 /**
  * The overlay relations the builder writes rows of.
@@ -136,54 +141,55 @@ const collapse = (lexical: string): string => {
 };
 
 /**
- * What the walk carries down from an element to its children: its id, kind and nearest
- * interaction, and the declaration or value set it is, if either.
+ * What the walk carries down from an element to its children: its `start`, kind and nearest
+ * interaction's `start`, and the declaration or value set it is, if either.
  */
 interface Parent {
   readonly declaration: Option.Option<WalkedDeclaration>;
-  readonly id: NodeId;
   readonly kind: string;
-  readonly nearest: NodeId;
+  readonly nearest: bigint;
   readonly set: Option.Option<WalkedSet>;
+  readonly start: bigint;
 }
 
 /**
- * The fields of a declaration its value sets copy: its kind and node, and its base type and its
+ * The fields of a declaration its value sets copy: its kind and `start`, and its base type and its
  * cardinality, each none where it writes none or one that spells no code.
  */
 interface WalkedDeclaration {
   readonly baseType: Option.Option<string>;
   readonly cardinality: Option.Option<string>;
   readonly declarationKind: string;
-  readonly node: NodeId;
+  readonly start: bigint;
 }
 
 /**
  * The fields of a value set its values read: its declaration's base type and cardinality, each
- * none where it has none, their counts, and its declaration's node.
+ * none where it has none, their counts, and its declaration's `start`.
  */
 interface WalkedSet {
   readonly baseType: Option.Option<string>;
   readonly baseTypes: bigint;
   readonly cardinalities: bigint;
   readonly cardinality: Option.Option<string>;
-  readonly declaration: NodeId;
+  readonly declaration: bigint;
 }
 
 /**
- * An element as the walk meets it: its node's tuple, its attributes, its children and its element
- * rank among its siblings.
+ * An element as the walk meets it: its place, its node's tuple, its attributes, its children and
+ * its element rank among its siblings.
  */
 interface Met {
   readonly child: XdmElement<Composed>;
   readonly parentKind: string;
+  readonly place: { readonly package: string; readonly path: string; readonly start: bigint };
   readonly rank: bigint;
   readonly tuple: {
-    readonly document: NodeId;
     readonly kind: string;
-    readonly nearest: NodeId;
-    readonly node: NodeId;
-    readonly parent: NodeId;
+    readonly nearest: bigint;
+    readonly package: string;
+    readonly parent: bigint;
+    readonly path: string;
     readonly start: bigint;
     readonly version: string;
   };
@@ -231,7 +237,7 @@ const minimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]
  */
 const walkDeclaration = (
   expected: Expected,
-  { parentKind, tuple, valueOf }: Met,
+  { parentKind, place, tuple, valueOf }: Met,
 ): WalkedDeclaration => {
   const identifierLexical = valueOf("identifier");
   const baseTypeLexical = valueOf("base-type");
@@ -243,45 +249,44 @@ const walkDeclaration = (
     baseTypes: Option.isSome(spelled) ? 1n : 0n,
     cardinalities: Option.isSome(cardinality) ? 1n : 0n,
   };
-  expected.Declaration.set(tuple.node, { ...tuple, declarationKind: tuple.kind, parentKind });
+  const { start } = place;
+  expected.Declaration.set(start, { ...tuple, declarationKind: tuple.kind, parentKind });
   for (const code of Option.toArray(cardinality)) {
-    expected.DeclarationCardinality.set(tuple.node, {
+    expected.DeclarationCardinality.set(start, {
+      ...place,
       cardinality: code,
       cardinalityLexical,
-      node: tuple.node,
     });
   }
 
   if (identifierLexical !== undefined && name !== "") {
-    expected.DeclarationIdentifier.set(tuple.node, {
+    expected.DeclarationIdentifier.set(start, {
+      ...place,
       ...counts,
       declarationKind: tuple.kind,
-      document: tuple.document,
       identifier: name,
       identifierLead: lead,
       identifierLexical,
       identifierTrail: trail,
-      node: tuple.node,
       parentKind,
     });
     for (const code of Option.toArray(cardinality)) {
-      expected.DeclarationName.set(tuple.node, {
+      expected.DeclarationName.set(start, {
+        ...place,
         baseTypes: counts.baseTypes,
         cardinality: code,
         declarationKind: tuple.kind,
-        document: tuple.document,
         identifier: name,
-        node: tuple.node,
         parentKind,
       });
     }
   }
 
   for (const code of Option.toArray(spelled)) {
-    expected.DeclarationBaseType.set(tuple.node, {
+    expected.DeclarationBaseType.set(start, {
+      ...place,
       baseType: code,
       baseTypeLexical,
-      node: tuple.node,
       valueBase: code,
     });
   }
@@ -291,36 +296,40 @@ const walkDeclaration = (
   const minimum = writtenMinimum ?? minimumByDefault.get(tuple.version);
   const maximum = valueOf("normal-maximum");
   if (tuple.kind === "qti-outcome-declaration") {
-    const { node, version } = tuple;
+    const { version } = tuple;
     const scale = [
       [expected.MasteryValue, mastery],
       [expected.NormalMaximum, maximum],
     ] as const;
     for (const [rows, lexical] of scale) {
       if (lexical !== undefined) {
-        rows.set(node, { lexical, node });
+        rows.set(start, { ...place, lexical });
       }
     }
 
     if (minimum !== undefined) {
-      expected.NormalMinimum.set(node, {
+      expected.NormalMinimum.set(start, {
+        ...place,
         lexical: minimum,
-        node,
         version,
         written: writtenMinimum !== undefined,
       });
     }
 
     if (minimum !== undefined && mastery !== undefined) {
-      expected.MasteryFloor.set(node, { masteryValue: mastery, node, normalMinimum: minimum });
+      expected.MasteryFloor.set(start, { ...place, masteryValue: mastery, normalMinimum: minimum });
     }
 
     if (mastery !== undefined && maximum !== undefined) {
-      expected.MasteryCeiling.set(node, { masteryValue: mastery, node, normalMaximum: maximum });
+      expected.MasteryCeiling.set(start, {
+        ...place,
+        masteryValue: mastery,
+        normalMaximum: maximum,
+      });
     }
   }
 
-  return { baseType: spelled, cardinality, declarationKind: tuple.kind, node: tuple.node };
+  return { baseType: spelled, cardinality, declarationKind: tuple.kind, start };
 };
 
 /**
@@ -348,13 +357,13 @@ const writes = (child: XdmChild<Composed>, name: string): boolean =>
  */
 const walkSet = (
   expected: Expected,
-  { child, rank, tuple }: Met,
+  { child, place, rank, tuple }: Met,
   owner: WalkedDeclaration,
 ): WalkedSet => {
   const baseTypes = Option.isSome(owner.baseType) ? 1n : 0n;
   const cardinalities = Option.isSome(owner.cardinality) ? 1n : 0n;
   const elementChildren = BigInt(child.children.filter(({ _tag }) => _tag === "element").length);
-  expected.ValueSet.set(tuple.node, {
+  expected.ValueSet.set(place.start, {
     ...tuple,
     baseTypes,
     cardinalities,
@@ -363,16 +372,16 @@ const walkSet = (
     elements: rank,
   });
   for (const cardinality of Option.toArray(owner.cardinality)) {
-    expected.ValueSetCardinality.set(tuple.node, {
+    expected.ValueSetCardinality.set(place.start, {
+      ...place,
       cardinality,
-      declaration: owner.node,
+      declaration: owner.start,
       elementChildren,
       fields: BigInt(
         child.children.filter(
           (value) => writes(value, "field-identifier") && writes(value, "base-type"),
         ).length,
       ),
-      node: tuple.node,
     });
   }
 
@@ -381,7 +390,7 @@ const walkSet = (
     baseTypes,
     cardinalities,
     cardinality: owner.cardinality,
-    declaration: owner.node,
+    declaration: owner.start,
   };
 };
 
@@ -415,11 +424,16 @@ const textOf = (child: Met["child"]): string =>
  * @param met - The value's element.
  * @param owner - Its set.
  */
-const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: WalkedSet): void => {
+const walkValue = (
+  expected: Expected,
+  { child, place, tuple, valueOf }: Met,
+  owner: WalkedSet,
+): void => {
   const fieldIdentifier = valueOf("field-identifier");
   const fieldBaseType = valueOf("base-type");
   const text = textOf(child);
-  expected.Value.set(tuple.node, {
+  const { start } = place;
+  expected.Value.set(start, {
     ...tuple,
     baseTypes: owner.baseTypes,
     cardinalities: owner.cardinalities,
@@ -429,36 +443,36 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
   for (const [baseType, cardinality] of Option.toArray(
     Option.all([owner.baseType, owner.cardinality]),
   )) {
-    expected.TypedValue.set(tuple.node, {
+    expected.TypedValue.set(start, {
+      ...place,
       baseType,
       cardinality,
       declaration: owner.declaration,
-      node: tuple.node,
       text,
     });
   }
 
   const ownBaseType = fieldBaseType === undefined ? undefined : spelledBaseTypes.get(fieldBaseType);
   if (fieldBaseType !== undefined && ownBaseType !== undefined) {
-    expected.ValueBaseType.set(tuple.node, {
+    expected.ValueBaseType.set(start, {
+      ...place,
       baseType: ownBaseType,
       baseTypeLexical: fieldBaseType,
       cardinalities: owner.cardinalities,
-      node: tuple.node,
     });
     for (const cardinality of Option.toArray(owner.cardinality)) {
-      expected.FieldValue.set(tuple.node, {
+      expected.FieldValue.set(start, {
+        ...place,
         baseType: ownBaseType,
         cardinality,
         declaration: owner.declaration,
-        node: tuple.node,
         text,
       });
     }
   }
 
   if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
-    expected.RecordField.set(tuple.node, {
+    expected.RecordField.set(start, {
       ...tuple,
       baseTypeLexical: fieldBaseType,
       identifierLexical: fieldIdentifier,
@@ -466,12 +480,12 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
 
     const { lead, name, trail } = walkedPieces(fieldIdentifier);
     if (name !== "") {
-      expected.RecordFieldName.set(tuple.node, {
+      expected.RecordFieldName.set(start, {
+        ...place,
         identifier: name,
         identifierLead: lead,
         identifierLexical: fieldIdentifier,
         identifierTrail: trail,
-        node: tuple.node,
         parent: tuple.parent,
       });
     }
@@ -484,9 +498,10 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
  * a value set with its text, each record field, and each outcome's scale.
  *
  * @param doc - The document's tree.
+ * @param where - Where the document stands in its package, the place every row holds.
  * @returns Every overlay's expected rows.
  */
-const walk = (doc: XdmDocument<Composed>): Expected => {
+const walk = (doc: XdmDocument<Composed>, where: Place): Expected => {
   const expected: Expected = {
     Declaration: new Map(),
     DeclarationBaseType: new Map(),
@@ -507,7 +522,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     ValueSet: new Map(),
     ValueSetCardinality: new Map(),
   };
-  const document = idOf(0);
+  const documentNode = 0n;
   const interactions = new Set<string>(interactionKinds);
   let next = 1;
   const visit = (
@@ -515,7 +530,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     parent: Parent,
     rank: bigint,
   ): void => {
-    const id = idOf(next);
     const start = BigInt(next);
     next += 1;
     if (child._tag !== "element" && !("attributes" in child)) {
@@ -523,12 +537,14 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     const kind = child._tag === "element" ? child.kind : child._tag;
-    const nearest = interactions.has(parent.kind) ? parent.id : parent.nearest;
+    const nearest = interactions.has(parent.kind) ? parent.start : parent.nearest;
+    const place = { package: where.package, path: where.path, start };
     const met: Met = {
       child,
       parentKind: parent.kind,
+      place,
       rank,
-      tuple: { document, kind, nearest, node: id, parent: parent.id, start, version: doc.version },
+      tuple: { ...place, kind, nearest, parent: parent.start, version: doc.version },
       valueOf: (name) =>
         child.attributes.find(
           (attribute) => attribute.name._tag === "closed" && attribute.name.handle === name,
@@ -548,7 +564,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     let elementRank = 0n;
     for (const grandchild of child.children) {
       elementRank += grandchild._tag === "element" ? 1n : 0n;
-      visit(grandchild, { declaration, id, kind, nearest, set }, elementRank);
+      visit(grandchild, { declaration, kind, nearest, set, start }, elementRank);
     }
   };
 
@@ -560,10 +576,10 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         child,
         {
           declaration: Option.none(),
-          id: document,
           kind: "document",
-          nearest: document,
+          nearest: documentNode,
           set: Option.none(),
+          start: documentNode,
         },
         rank,
       );
@@ -576,18 +592,19 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
 };
 
 /**
- * List a keyed set's entries in key order, so two sets compare as sets.
+ * List one document's rows of a relation by their element's `start`, so two sets compare as sets.
  *
- * @param map - The keyed set.
- * @returns Its entries, sorted by key.
+ * @param map - The rows, by `start`.
+ * @returns Its entries, sorted by `start`.
  */
-const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [string, object])[] =>
-  [...map].toSorted(([left], [right]) => left.localeCompare(right));
+const sortedEntries = (map: ReadonlyMap<bigint, object>): readonly (readonly [bigint, object])[] =>
+  [...map].toSorted(([left], [right]) => Number(left - right));
 
 /**
- * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, each of
- * the builder's rows with the fields the database generates from it restored
- * ({@link withGenerated}).
+ * Compare the builder's keyed sets with the walk's: every relation's rows alike, read by their
+ * fields, each by its `start` and with the fields the database generates from it restored
+ * ({@link withGenerated}). The builder's key texts are its own, so none is compared, but each set
+ * holds as many rows as keys.
  *
  * @param rows - The builder's rows.
  * @param expected - The walk's.
@@ -596,8 +613,9 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
 const assertRows = (rows: DeclarationRows, expected: Expected, label: string): void => {
   for (const relation of relationNames) {
     const held = new Map(
-      [...rows[relation]].map(([node, row]) => [node, withGenerated(relation, row)] as const),
+      [...rows[relation].values()].map((row) => [row.start, withGenerated(relation, row)] as const),
     );
+    assert.strictEqual(held.size, rows[relation].size, `${label} ${relation}: one row per start`);
     assert.deepStrictEqual(
       sortedEntries(held),
       sortedEntries(expected[relation]),
@@ -921,7 +939,11 @@ describe("import/overlays/declarations.ts", () => {
             c.noteAll(situationsOf(input));
 
             const doc = treeOf(input);
-            assertRows(rowsOf(ownViewOf(doc, idOf)), walk(doc), "generated");
+            assertRows(
+              rowsOf(ownViewOf(doc), generatedPlace),
+              walk(doc, generatedPlace),
+              "generated",
+            );
           }),
       ),
     ),
@@ -1019,8 +1041,9 @@ const documentsOf = (dir: string) =>
  * @returns The number of declarations it holds.
  */
 const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
-  const rows = rowsOf(ownViewOf(tree, idOf));
-  assertRows(rows, walk(tree), path);
+  const place: Place = { package: "MANIFEST", path };
+  const rows = rowsOf(ownViewOf(tree), place);
+  assertRows(rows, walk(tree, place), path);
 
   return rows.Declaration.size;
 };

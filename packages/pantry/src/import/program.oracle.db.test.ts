@@ -28,11 +28,17 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { WrapApply } from "#pantry/import/package.ts";
 import { importDir } from "#pantry/test/import-dir.ts";
 
-import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
+import type { NodeMember, NodeRoot, PackageInputs, Place } from "#pantry/import/write.ts";
 import { readEntries } from "#pantry/package/read.ts";
 
-import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
-import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
+import {
+  materialize,
+  materializeSpec,
+  ownIdentifierOf,
+  specOf,
+  variantOf,
+} from "#pantry/test/fixtures.ts";
+import type { FixtureName, FixtureSpec, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
@@ -51,33 +57,43 @@ import {
 const fixtures = inject("fixtures");
 
 /**
- * The tarball member `simple` is extracted from.
+ * 1EdTech's `svg`, unedited.
  */
-const simpleMember = "qtiv3-examples/packaging/simple/simple.zip";
+const svgSpec: FixtureSpec = {
+  edits: [],
+  member: "qtiv3-examples/packaging/svg/svg.zip",
+  name: "svg",
+};
 
 /**
- * `simple`'s manifest identifier, which a resource may not share (P4).
- */
-const manifestIdentifier = "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390";
-
-/**
- * The accepted corpus packages (`verdicts/qti-examples-0a92fbb.tsv`), by name.
+ * The accepted corpus packages (`verdicts/qti-examples-0a92fbb.tsv`), by name. 1EdTech's `svg`
+ * holds `simple`'s manifest identifier, so it is imported beside `simple` as a variant under its
+ * own ({@link variantOf}): one database holds one package of an identifier.
  */
 const acceptedPackages = Effect.all({
   sharedMedia: materialize("sharedMedia"),
   simple: Effect.succeed(fixtures.simple),
-  svg: materializeSpec({ edits: [], member: "qtiv3-examples/packaging/svg/svg.zip", name: "svg" }),
+  svg: materializeSpec(variantOf(svgSpec, "q5.15-svg", [])),
 });
 
 /**
- * `simple` with edits of its text, materialized once under its own name.
+ * The name of a variant of `simple` this file imports.
+ *
+ * @param name - The case's name.
+ * @returns The variant's name.
+ */
+const simpleVariant = (name: string): string => `q5.15-${name}`;
+
+/**
+ * `simple` with edits of its text, materialized once under its own name and manifest identifier
+ * ({@link variantOf}), so each case's package is one of its own on the lease.
  *
  * @param name - The fixture's name.
  * @param edits - The edits, each a replacement of one occurrence in one file.
  * @returns The package's directory.
  */
 const editedSimple = (name: string, edits: readonly TextEdit[]) =>
-  materializeSpec({ edits, member: simpleMember, name: `q5.15-${name}` });
+  materializeSpec(variantOf(specOf("simple"), simpleVariant(name), edits));
 
 /**
  * Insert declarations into `simple`'s item after its response declaration, which content order
@@ -212,10 +228,10 @@ const replaceFirst = (
 const editNode =
   (picks: (node: NodeMember) => boolean, replace: (node: NodeMember) => NodeMember) =>
   (inputs: PackageInputs): PackageInputs => {
-    for (const [id, root] of inputs.Node) {
+    for (const [key, root] of inputs.Node) {
       const edited = replaceFirst(root, picks, replace);
       if (edited.done) {
-        return { ...inputs, Node: new Map([...inputs.Node, [id, edited.root]]) };
+        return { ...inputs, Node: new Map([...inputs.Node, [key, edited.root]]) };
       }
     }
 
@@ -229,20 +245,92 @@ const editNode =
 const correctChoice = "ChoiceA";
 
 /**
- * Find the node of a package's value of a text, by its inputs' `Value` rows.
+ * Find the element of a package's value of a text, by its inputs' `Value` rows.
  *
  * @param inputs - The package's inputs.
  * @param text - The value's text.
- * @returns The value's node; a test failure when no value has the text.
+ * @returns The value's element, its document's path and its start; a test failure when no value
+ *   has the text.
  */
-const valueNodeOf = (inputs: PackageInputs, text: string): string => {
+const valueNodeOf = (inputs: PackageInputs, text: string): Pick<Place, "path"> & At => {
   for (const row of inputs.Value.values()) {
     if (row.text === text) {
-      return row.node;
+      return { path: row.path, start: row.start };
     }
   }
 
   return assert.fail(`no value of the package has the text ${text}`);
+};
+
+/**
+ * An element's place in its package: its document's path and its start.
+ */
+interface At {
+  readonly start: bigint;
+}
+
+/**
+ * Whether a row is of the element at a place.
+ *
+ * @param row - The row, of an element.
+ * @param at - The place.
+ * @returns Whether its path and start are the place's.
+ */
+const isAt = (row: Pick<Place, "path"> & At, at: Pick<Place, "path"> & At): boolean =>
+  row.path === at.path && row.start === at.start;
+
+/**
+ * Find the first element any document's tree holds that a predicate picks, by its place: its
+ * document's path and its start, its pre-order position in its tree, which grizzle draws from the
+ * nesting as `flatten` numbers it.
+ *
+ * @param inputs - The package's inputs.
+ * @param picks - Picks the element.
+ * @returns Its place; a test failure when no tree holds such an element.
+ */
+const placeOf = (
+  inputs: PackageInputs,
+  picks: (node: NodeMember) => boolean,
+): Pick<Place, "path"> & At => {
+  for (const root of inputs.Node.values()) {
+    let start = 0n;
+    const stack: NodeMember[] = [root];
+    for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+      if (picks(node)) {
+        return { path: root.path, start };
+      }
+
+      start += 1n;
+      stack.push(...node.children.toReversed());
+    }
+  }
+
+  return assert.fail("no tree of the package holds the element the case edits");
+};
+
+/**
+ * Edit the first open-class attribute of a class a package's inputs hold.
+ *
+ * @param inputs - The package's inputs.
+ * @param name - The attribute's open class.
+ * @param edit - The edit of its inputs, given its key in its keyed set and its row.
+ * @returns The edited inputs; a test failure when no open attribute is of the class.
+ */
+const editOpen = (
+  inputs: PackageInputs,
+  name: string,
+  edit: (
+    key: string,
+    row: PackageInputs["OpenAttribute"] extends ReadonlyMap<string, infer Row> ? Row : never,
+  ) => PackageInputs,
+): PackageInputs => {
+  for (const [key, row] of inputs.OpenAttribute) {
+    if (row.class === name) {
+      return edit(key, row);
+    }
+  }
+
+  return assert.fail(`no open attribute of the package is of the class ${name}`);
 };
 
 /**
@@ -289,36 +377,39 @@ describe.skipIf(!hasLease)(
           // back by its id.
           Effect.gen(function* acceptsCorpus() {
             for (const [name, dir] of Object.entries(yield* acceptedPackages)) {
-              const { outcome, packageId } = yield* applyEdited(dir);
+              const { outcome, package: identifier } = yield* applyEdited(dir);
 
-              assert.strictEqual(outcome.kind, "accepted", name);
-              assert.isTrue(yield* packageStored(packageId), name);
+              assert.include(["accepted", "no-change"], outcome.kind, name);
+              assert.isTrue(yield* packageStored(identifier), name);
             }
           }),
       );
 
-      it.effect("imports one package twice as two packages, every id fresh, both accepted", () =>
-        // Oracle: the specification as a checker, the brief's "the same package imported twice is
-        // two packages, with fresh ids each time": both imports are accepted under two ids, and
-        // each is read back by its own.
-        Effect.gen(function* twice() {
-          const first = yield* importDir(fixtures.simple);
-          const second = yield* importDir(fixtures.simple);
+      it.effect(
+        "imports one package twice as one package under its manifest identifier, the second no-change",
+        () =>
+          // Oracle: the contract's identity: a package is keyed by its manifest identifier and an
+          // import mints nothing, so the same bytes imported again name the same package and
+          // change nothing, whatever the first import found stored.
+          Effect.gen(function* twice() {
+            const first = yield* importDir(fixtures.simple);
+            const second = yield* importDir(fixtures.simple);
 
-          assert.notStrictEqual(first, second);
-          assert.isTrue(yield* packageStored(first), first);
-          assert.isTrue(yield* packageStored(second), second);
-        }),
+            assert.strictEqual(second.package, first.package);
+            assert.strictEqual(second.outcome, "no-change");
+            assert.isTrue(yield* packageStored(first.package), first.package);
+          }),
       );
 
       it.effect("leaves no row when a failure is injected in place of the apply", () =>
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the failure stands
-        // in for the apply, so nothing ran, and the import's read-back by the package's own id
-        // finds no package, so the import fails with the injected failure. A read-back that found
-        // one, or an apply run outside `WrapApply`, would answer the package's id instead.
+        // in for the apply, so nothing ran, and the import's read-back by the package's manifest
+        // identifier finds no package, so the import fails with the injected failure. A read-back
+        // that found one, or an apply run outside `WrapApply`, would answer the package instead.
+        // The package is a variant no other case imports, so no earlier case stored its identifier.
         Effect.gen(function* noRow() {
           const failed = yield* Effect.flip(
-            importDir(fixtures.simple).pipe(
+            importDir(yield* editedSimple("injected-failure", [])).pipe(
               Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
             ),
           );
@@ -468,7 +559,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyInteger", "mapping", "value")],
+          laws: [keyOn("MapKeyInteger", "package", "path", "mapping", "value")],
           name: "an integer mapping keyed 1 and 01 (map-key-unique, Q5.11)",
         },
         {
@@ -481,7 +572,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyFloat", "mapping", "value")],
+          laws: [keyOn("MapKeyFloat", "package", "path", "mapping", "value")],
           name: "a float mapping keyed 1 and 1.0 (map-key-unique, Q5.11)",
         },
         {
@@ -494,7 +585,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKey", "mapping", "key")],
+          laws: [keyOn("MapKey", "package", "path", "mapping", "key")],
           name: "two identical map entries (map-key-unique, Q5.11)",
         },
         {
@@ -597,7 +688,7 @@ describe.skipIf(!hasLease)(
                 {
                   _tag: "ReplaceText",
                   file: "imsmanifest.xml",
-                  replacement: `identifier="${manifestIdentifier}" type="imsqti_item_xmlv3p0"`,
+                  replacement: `identifier="${ownIdentifierOf(simpleVariant("shared-identifier"))}" type="imsqti_item_xmlv3p0"`,
                   search: `identifier="choice" type="imsqti_item_xmlv3p0"`,
                 },
               ]),
@@ -605,47 +696,58 @@ describe.skipIf(!hasLease)(
             ),
           laws: [
             keyOn("ManifestIdSpace", "package", "identifier"),
-            keyOn("IdBinding", "document", "id"),
+            keyOn("IdBinding", "package", "path", "id"),
           ],
           name: "a resource sharing its manifest's identifier (manifest-id-space, Q5.06)",
         },
         {
           apply: () =>
-            acceptedPackages.pipe(
-              Effect.flatMap(({ svg }) =>
-                applyEdited(svg, (inputs) => ({
+            Effect.flatMap(
+              materializeSpec(variantOf(svgSpec, "q5.15-comment-missing", [])),
+              (dir) =>
+                applyEdited(dir, (inputs) => ({
                   ...inputs,
                   Comment: new Map([...inputs.Comment].slice(1)),
                 })),
-              ),
             ),
           laws: [containedIn("Node", "Comment")],
           name: "a comment node with no Comment row (the comment arm, Q5.04)",
         },
         {
           apply: () =>
-            applyEdited(
-              fixtures.simple,
-              editNode(
-                (node) => node.namespaces.length > 0,
-                (node) => ({
-                  ...node,
-                  namespaces: [...node.namespaces, ...node.namespaces.slice(0, 1)],
-                }),
-              ),
+            Effect.flatMap(editedSimple("namespace-twice", []), (dir) =>
+              applyEdited(dir, (inputs) => {
+                const [declared] = inputs.Namespace.values();
+                if (declared === undefined) {
+                  return assert.fail("no element of the package declares a namespace");
+                }
+
+                // The same prefix on the same element again, bound to another name: a second row
+                // of the keyed set under a key text of its own, so the facts hold both.
+                return {
+                  ...inputs,
+                  Namespace: new Map([
+                    ...inputs.Namespace,
+                    ["twice", { ...declared, uri: `${declared.uri}/twice` }],
+                  ]),
+                };
+              }),
             ),
-          laws: [keyOn("Namespace", "node", "prefix")],
+          laws: [keyOn("Namespace", "package", "path", "start", "prefix")],
           name: "one prefix declared twice on an element (Namespace family, Q5.04)",
         },
         {
           apply: () =>
-            applyEdited(
-              fixtures.simple,
-              // The item body's first paragraph's text, which no text domain holds, so the text
-              // arm alone refuses it: the manifest's first text, cp:schema's, is TextDomain's first.
-              editNode(
-                (node) => node.kind === "text" && node.chars === "Look at the text in the picture.",
-                (node) => ({ ...node, chars: " ", first: " ", last: " " }),
+            Effect.flatMap(editedSimple("text-whitespace", []), (dir) =>
+              applyEdited(
+                dir,
+                // The item body's first paragraph's text, which no text domain holds, so the text
+                // arm alone refuses it: the manifest's first text, cp:schema's, is TextDomain's first.
+                editNode(
+                  (node) =>
+                    node.kind === "text" && node.chars === "Look at the text in the picture.",
+                  (node) => ({ ...node, chars: " ", first: " ", last: " " }),
+                ),
               ),
             ),
           laws: [checkNamed("Node", "text_arm")],
@@ -653,11 +755,13 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
-            applyEdited(
-              fixtures.simple,
-              editNode(
-                (node) => node.kind === "ws",
-                (node) => ({ ...node, chars: "x", first: "x", last: "x" }),
+            Effect.flatMap(editedSimple("ws-letter", []), (dir) =>
+              applyEdited(
+                dir,
+                editNode(
+                  (node) => node.kind === "ws",
+                  (node) => ({ ...node, chars: "x", first: "x", last: "x" }),
+                ),
               ),
             ),
           laws: [checkNamed("Node", "ws_arm")],
@@ -665,33 +769,39 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
-            applyEdited(
-              fixtures.simple,
-              editNode(
-                (node) => node.kind === "qti-assessment-item",
-                (node) => ({
-                  ...node,
-                  attributes: node.attributes.filter(({ name }) => name !== "identifier"),
-                }),
-              ),
+            Effect.flatMap(editedSimple("item-identifier-missing", []), (dir) =>
+              applyEdited(dir, (inputs) => {
+                const item = placeOf(inputs, (node) => node.kind === "qti-assessment-item");
+
+                return {
+                  ...inputs,
+                  Attribute: new Map(
+                    [...inputs.Attribute].filter(
+                      ([, row]) => !(isAt(row, item) && row.name === "identifier"),
+                    ),
+                  ),
+                };
+              }),
             ),
           laws: [checkNamed("Node", "AL3_required")],
           name: "an item without its required identifier (AL3, Q5.05)",
         },
         {
           apply: () =>
-            applyEdited(
-              fixtures.simple,
-              editNode(
-                (node) => node.kind === "cp:schemaversion",
-                (node) => ({
-                  ...node,
-                  children: node.children.map((child) =>
-                    child.kind === "text"
-                      ? { ...child, chars: "3.0.x", first: "3", last: "x" }
-                      : child,
-                  ),
-                }),
+            Effect.flatMap(editedSimple("schema-version", []), (dir) =>
+              applyEdited(
+                dir,
+                editNode(
+                  (node) => node.kind === "cp:schemaversion",
+                  (node) => ({
+                    ...node,
+                    children: node.children.map((child) =>
+                      child.kind === "text"
+                        ? { ...child, chars: "3.0.x", first: "3", last: "x" }
+                        : child,
+                    ),
+                  }),
+                ),
               ),
             ),
           laws: [checkNamed("Node", "TextDomain")],
@@ -707,7 +817,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyPair", "mapping", "value")],
+          laws: [keyOn("MapKeyPair", "package", "path", "mapping", "value")],
           name: "a pair mapping keyed A B and B A (map-key-unique, Q5.11)",
         },
         {
@@ -720,7 +830,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyPoint", "mapping", "x", "y")],
+          laws: [keyOn("MapKeyPoint", "package", "path", "mapping", "x", "y")],
           name: "a point mapping keyed 1 2 and 01 +2 (map-key-unique, Q5.11)",
         },
         {
@@ -763,49 +873,51 @@ describe.skipIf(!hasLease)(
             Effect.flatMap(
               editedSimple("open-name-missing", [inBody(`<p data-note="x">See.</p>`)]),
               (dir) =>
-                applyEdited(
-                  dir,
-                  editNode(
-                    (node) => node.attributes.some(({ name }) => name === "data-*"),
-                    (node) => ({
-                      ...node,
-                      attributes: node.attributes.map((attribute) =>
-                        attribute.name === "data-*" ? { ...attribute, openName: [] } : attribute,
-                      ),
-                    }),
-                  ),
+                applyEdited(dir, (inputs) =>
+                  editOpen(inputs, "data-*", (key, open) => ({
+                    ...inputs,
+                    // The open class written as a closed attribute's name, its open name gone.
+                    Attribute: new Map([
+                      ...inputs.Attribute,
+                      [
+                        key,
+                        {
+                          idrefs: [],
+                          lexical: open.lexical,
+                          name: open.class,
+                          package: open.package,
+                          path: open.path,
+                          prefix: open.prefix,
+                          slot: open.slot,
+                          start: open.start,
+                        },
+                      ],
+                    ]),
+                    OpenAttribute: new Map(
+                      [...inputs.OpenAttribute].filter(([held]) => held !== key),
+                    ),
+                  })),
                 ),
             ),
           laws: [checkNamed("Attribute", "AL4_open_names")],
-          name: "an open-class attribute without its open name (AL4, Q5.05)",
+          name: "an open-class attribute written as a closed name, without its open name (AL4, Q5.05)",
         },
         {
           apply: () =>
             Effect.flatMap(
               editedSimple("data-name-upper", [inBody(`<p data-note="x">See.</p>`)]),
               (dir) =>
-                applyEdited(
-                  dir,
-                  editNode(
-                    (node) => node.attributes.some(({ name }) => name === "data-*"),
-                    (node) => ({
-                      ...node,
-                      attributes: node.attributes.map((attribute) =>
-                        attribute.name === "data-*"
-                          ? {
-                              ...attribute,
-                              openName: attribute.openName.map((open) => ({
-                                ...open,
-                                local: "data-A",
-                              })),
-                            }
-                          : attribute,
-                      ),
-                    }),
-                  ),
+                applyEdited(dir, (inputs) =>
+                  editOpen(inputs, "data-*", (key, open) => ({
+                    ...inputs,
+                    OpenAttribute: new Map([
+                      ...inputs.OpenAttribute,
+                      [key, { ...open, local: "data-A" }],
+                    ]),
+                  })),
                 ),
             ),
-          laws: [checkNamed("OpenAttributeName", "AL4_data_name")],
+          laws: [checkNamed("OpenAttribute", "AL4_data_name")],
           name: "a data-* name with an upper-case local (AL4 data name)",
         },
         {
@@ -813,43 +925,37 @@ describe.skipIf(!hasLease)(
             Effect.flatMap(
               editedSimple("data-name-declared", [inBody(`<p data-note="x">See.</p>`)]),
               (dir) =>
-                applyEdited(
-                  dir,
-                  editNode(
-                    (node) => node.attributes.some(({ name }) => name === "data-*"),
-                    (node) => ({
-                      ...node,
-                      attributes: node.attributes.map((attribute) =>
-                        attribute.name === "data-*"
-                          ? {
-                              ...attribute,
-                              openName: attribute.openName.map((open) => ({
-                                ...open,
-                                local: "data-catalog-idref",
-                              })),
-                            }
-                          : attribute,
-                      ),
-                    }),
-                  ),
+                applyEdited(dir, (inputs) =>
+                  editOpen(inputs, "data-*", (key, open) => ({
+                    ...inputs,
+                    OpenAttribute: new Map([
+                      ...inputs.OpenAttribute,
+                      [key, { ...open, local: "data-catalog-idref" }],
+                    ]),
+                  })),
                 ),
             ),
-          laws: [checkNamed("OpenAttributeName", "AL4_declared_data_name")],
+          laws: [checkNamed("OpenAttribute", "AL4_declared_data_name")],
           name: "a data-* name the p element's governor declares (AL4 declared data name)",
         },
         {
           apply: () =>
-            Effect.flatMap(materialize("sharedMedia"), (dir) =>
-              applyEdited(
-                dir,
-                editNode(
-                  (node) => node.attributes.some(({ idrefs }) => idrefs.length > 0),
-                  (node) => ({
-                    ...node,
-                    attributes: node.attributes.map((attribute) => ({ ...attribute, idrefs: [] })),
-                  }),
-                ),
-              ),
+            Effect.flatMap(
+              materializeSpec(variantOf(specOf("sharedMedia"), "q5.15-idref-tokens", [])),
+              (dir) =>
+                applyEdited(dir, (inputs) => {
+                  const held = [...inputs.Attribute].find(([, row]) => row.idrefs.length > 0);
+                  if (held === undefined) {
+                    return assert.fail("no attribute of the package holds an IDREF token");
+                  }
+
+                  const [key, attribute] = held;
+
+                  return {
+                    ...inputs,
+                    Attribute: new Map([...inputs.Attribute, [key, { ...attribute, idrefs: [] }]]),
+                  };
+                }),
             ),
           laws: [checkNamed("Attribute", "E1_derived")],
           name: "an IDREF attribute without its tokens (E1 derived, Q5.05)",
@@ -894,40 +1000,46 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
-            applyEdited(fixtures.simple, (inputs) => {
-              const node = valueNodeOf(inputs, correctChoice);
+            Effect.flatMap(editedSimple("value-missing", []), (dir) =>
+              applyEdited(dir, (inputs) => {
+                const value = valueNodeOf(inputs, correctChoice);
 
-              return {
-                ...inputs,
-                TypedValue: new Map([...inputs.TypedValue].filter(([, row]) => row.node !== node)),
-                Value: new Map([...inputs.Value].filter(([, row]) => row.node !== node)),
-              };
-            }),
+                return {
+                  ...inputs,
+                  TypedValue: new Map(
+                    [...inputs.TypedValue].filter(([, row]) => !isAt(row, value)),
+                  ),
+                  Value: new Map([...inputs.Value].filter(([, row]) => !isAt(row, value))),
+                };
+              }),
+            ),
           laws: [containedIn("Node", "Value")],
           name: "a value with no Value row (Q5.08)",
         },
         {
           apply: () =>
-            applyEdited(fixtures.simple, (inputs) => {
-              const node = valueNodeOf(inputs, correctChoice);
-              const text = `${correctChoice}x`;
+            Effect.flatMap(editedSimple("value-text", []), (dir) =>
+              applyEdited(dir, (inputs) => {
+                const value = valueNodeOf(inputs, correctChoice);
+                const text = `${correctChoice}x`;
 
-              return {
-                ...inputs,
-                TypedValue: new Map(
-                  [...inputs.TypedValue].map(([key, row]) => [
-                    key,
-                    row.node === node ? { ...row, text } : row,
-                  ]),
-                ),
-                Value: new Map(
-                  [...inputs.Value].map(([key, row]) => [
-                    key,
-                    row.node === node ? { ...row, text } : row,
-                  ]),
-                ),
-              };
-            }),
+                return {
+                  ...inputs,
+                  TypedValue: new Map(
+                    [...inputs.TypedValue].map(([key, row]) => [
+                      key,
+                      isAt(row, value) ? { ...row, text } : row,
+                    ]),
+                  ),
+                  Value: new Map(
+                    [...inputs.Value].map(([key, row]) => [
+                      key,
+                      isAt(row, value) ? { ...row, text } : row,
+                    ]),
+                  ),
+                };
+              }),
+            ),
           laws: [containedIn("Value", "Node")],
           name: "a value whose text is not its node's string value (Q5.08)",
         },
@@ -937,10 +1049,10 @@ describe.skipIf(!hasLease)(
         it.effect(`refuses ${name}`, () =>
           // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `refused.laws`.
           Effect.gen(function* refused() {
-            const { outcome, packageId } = yield* apply();
+            const { outcome, package: identifier } = yield* apply();
 
             assert.isTrue(rejectedBy(outcome, laws), `${name}: ${Formatter.format(outcome)}`);
-            assert.isFalse(yield* packageStored(packageId), name);
+            assert.isFalse(yield* packageStored(identifier), name);
           }),
         );
       }
@@ -1027,12 +1139,13 @@ describe.skipIf(!hasLease)(
           // spells nothing is refused by AL1's value domain alone.
           // Bound: {one type, two types, a type that spells nothing} × {one path, two paths}.
           Effect.gen(function* resourceTypeVerdict() {
-            const simple = specOf("simple");
-            const dir = yield* materializeSpec({
-              ...simple,
-              edits: [...simple.edits, ...edits],
-              name: `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
-            });
+            const dir = yield* materializeSpec(
+              variantOf(
+                specOf("simple"),
+                `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
+                edits,
+              ),
+            );
 
             yield* holdsVerdict(label, dir, verdict);
           }),
@@ -1055,15 +1168,16 @@ describe.skipIf(!hasLease)(
 
       it.effect("reads the package back when the commit's outcome is unknown", () =>
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
-        // committed, so the package is read back and the import answers its id.
+        // committed, so the package is read back by its manifest identifier and the import answers
+        // it.
         Effect.gen(function* readsBack() {
-          const id = yield* importDir(fixtures.simple).pipe(
+          const imported = yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, (apply) =>
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
 
-          assert.isTrue(yield* packageStored(id), id);
+          assert.isTrue(yield* packageStored(imported.package), imported.package);
         }),
       );
     });

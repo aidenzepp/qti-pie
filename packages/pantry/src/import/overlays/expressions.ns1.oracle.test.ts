@@ -1,15 +1,14 @@
 /**
  * The declaration a variable reference names, a row of its own (lane NIL's NS1): over a small box
  * of references, in an item and in a response rule fragment the item splices, the import writes a
- * reference's declaration row exactly where its name resolves to a declaration, never a nil uuid
- * where it names a built-in variable or nothing, and the import and the law oracle give one
- * verdict.
+ * reference's declaration row exactly where its name resolves to a declaration, and none where it
+ * names a built-in variable or nothing, and the import and the law oracle give one verdict.
  *
  * A reference resolves among its item's declarations, else to one of the item's built-in variables
  * ("declared implicitly", information model §2.2.2), else to nothing, which "Variable declared"
  * refuses in an item. Each reference is judged two ways by the genetic differential's judge
- * (`judgeOne` of `#pantry/test/gen/genetic/judge.ts`), which reports a uuid the import never minted
- * as `dangling-uuid`, and its host rows are held to the resolution directly.
+ * (`judgeOne` of `#pantry/test/gen/genetic/judge.ts`), and its host rows are held to the
+ * resolution directly.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -158,7 +157,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "import/overlays/expressions.ts, the declaration a variable reference names",
   (it) => {
     it.effect(
-      "writes a reference's declaration row exactly where its name is declared, never the nil uuid, and the import and the oracle agree",
+      "writes a reference's declaration row exactly where its name is declared, and none elsewhere, and the import and the oracle agree",
       (ctx) =>
         // Oracle: a second implementation, the law oracle, against readProgram's refusal and the
         // laws its rows break on the host, as the genetic differential judges them, and the

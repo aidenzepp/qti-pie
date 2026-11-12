@@ -14,7 +14,7 @@
               "maximum": 9007199254740991
             },
             "export_dir": { "type": "string" },
-            "package_id": { "type": "string" },
+            "package": { "type": "string" },
             "entries": {
               "type": "array",
               "items": {
@@ -52,7 +52,7 @@
               }
             }
           },
-          "required": ["differing", "export_dir", "package_id", "entries"],
+          "required": ["differing", "export_dir", "package", "entries"],
           "additionalProperties": true
         },
         {

@@ -22,12 +22,13 @@ export type MathmlRows = MathmlAlignRows & MathmlApplyRows & MathmlCnRows & Math
  * The MathML rows of one document, from the four families' builders.
  *
  * @param view - The document's view.
- * @param ids - Where it stands in its package, as the share builder reads it.
+ * @param ids - Where it stands in its package: the key every row holds, and what the share builder
+ *   reads of it.
  * @returns The rows of every MathML relation.
  */
 export const mathmlRowsOf = (view: DocumentView, ids: IdentityIds): MathmlRows => ({
-  ...applyRowsOf(view),
-  ...cnRowsOf(view),
-  ...alignRowsOf(view),
+  ...applyRowsOf(view, ids),
+  ...cnRowsOf(view, ids),
+  ...alignRowsOf(view, ids),
   ...shareRowsOf(view, ids),
 });

@@ -244,16 +244,16 @@ describe("the oracle's key-text list", () => {
   it("leaves out only the copies whose source is no document row, each bounded where it is written", () => {
     // Oracle: the law table's copies into a keyText field from a relation the oracle has no rows
     // of, each bounded by its own type where its row is written: an entry's path is `EntryPath`,
-    // which the oracle bounds as `Document.path`. A float map key's typed value is the query
+    // which the oracle bounds as `Document.path`, and a file's href is its `target`. A float map
+    // key's typed value is the query
     // `MapKeyFloat` over `MapKeyType`, and a resource's document's path meets a typed href in a
     // rule over the query `TypedHref`, so neither copies a text. Three sources are queries, whose
     // text is no row's the import writes, each held where grizzle types it: R26's
     // `DescribedLang.value` and `DescribedAssembledLang.value` are `DocumentLang`'s and
     // `AssembledLang`'s generated `value`, which grizzle casts into `keyText` where it computes
     // it (`Compute.cast`, identity.ts), and `RequiredSsmlProperty.name` is a constant of its query,
-    // one of `ph`, `interpret-as` and `alias`, the values grizzle's heading types it by.
-    // A fourth, `ItemRefTarget.path`, is the derived target's (queries.ts): the path of the
-    // `ItemRefHref` row it matches, bounded as that row's `keyText` field is where it is written.
+    // one of `ph`, `interpret-as` and `alias`, the values grizzle's heading types it by. An item
+    // ref's item is an `EntryPath`, no `keyText`, so no copy into it is listed.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -266,8 +266,7 @@ describe("the oracle's key-text list", () => {
       [
         "DescribedAssembledLang.value → ResourceLomLanguageSet.lang",
         "DescribedLang.value → ResourceLomLanguageSet.lang",
-        "Entry.path → FileHref.path",
-        "ItemRefTarget.path → ItemRefDocument.path",
+        "Entry.path → FileHref.target",
         "RequiredSsmlProperty.name → DataSsmlProperty.name",
       ],
     );
@@ -747,7 +746,7 @@ const refusedFields = (inputs: PackageInputs): ReadonlySet<string> => {
       const member = memberOf.get(`${relation}.${field}`);
       const nested = Schema.decodeUnknownOption(WrittenRows)(value);
       if (member !== undefined && Option.isSome(nested)) {
-        // A tree whose rows hold no kind, an assembly's `Instance`, accumulates only uuids and
+        // A tree whose rows hold no kind, an assembly's `Instance`, accumulates only positions and
         // flags along its owner axis, no copy a key text or a fold's selection reads.
         const held =
           member === relation && Predicate.isString(row["kind"]) ? treeCopies(row, copies) : {};
@@ -989,9 +988,10 @@ const segmentOf = (n: number): string => `K${"x".repeat(n - 1)}`;
 const declared = '<?xml version="1.0" encoding="UTF-8"?>';
 
 /**
- * A manifest's namespace and metadata, as each reference case writes them.
+ * A manifest's namespace, its identifier, the key its package is stored under, and its metadata, as
+ * each reference case writes them.
  */
-const manifestOpen = `${declared}<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata>`;
+const manifestOpen = `${declared}<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata>`;
 
 /**
  * A package whose item includes a file through an href of `n` bytes, which resolves through the

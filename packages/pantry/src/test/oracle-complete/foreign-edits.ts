@@ -88,7 +88,7 @@ const nameEdited =
   (rows: Rows, change: (name: OpenElementName, node: Node) => Gen<OpenElementName>): Gen<Rows> =>
   (source) => {
     const name = source.draw(oneOf(rows.openElementNames, "foreign element"));
-    const node = rows.nodes.find(({ id }) => id === name.node);
+    const node = rows.nodes.find(({ start }) => start === name.start);
     if (node === undefined) {
       throw new Error("the base's foreign element name has no node");
     }
@@ -193,7 +193,7 @@ export const foreignEdits = {
       ...rows,
       openElementNames: [
         ...rows.openElementNames,
-        { local: "widget", namespace: widgetNamespace, node: closed.id },
+        { local: "widget", namespace: widgetNamespace, start: closed.start },
       ],
     };
   }),
@@ -224,7 +224,7 @@ export const foreignEdits = {
     return withNodes(
       rows,
       rows.nodes.map((node) =>
-        node.id === foreign.id
+        node.start === foreign.start
           ? {
               ...node,
               nearest: node.parentNearest,
@@ -261,7 +261,7 @@ export const foreignEdits = {
     return withNodes(
       rows,
       rows.nodes.map((node) =>
-        node.id === foreign.id ? { ...node, governs: Option.some(governs) } : node,
+        node.start === foreign.start ? { ...node, governs: Option.some(governs) } : node,
       ),
     );
   }),

@@ -2,18 +2,21 @@
  * The read half of export, without a database: the rows one document's scan delivers, paged
  * (fin.md §4.6, trees.md §3), folded into the rows `assemble` rebuilds the document from.
  *
- * `#pantry/export/scan.ts` states the scan: `Node` where `document = $document`, ordered by
- * `start`, each row with its own characters, its comment, instruction, doctype, `Document` row and
- * foreign element's name at most once each, the `Document` row with its XML declaration and the
- * declaration with its encoding and standalone at most once each, and its attributes, each with its
- * entity references and its open name, and its namespace declarations. A page is a run of those
- * rows; {@link scannedRows} follows a page's cursor to the next until none follows, so the stream it
- * gives is the scan's rows, whatever the cuts.
+ * `#pantry/export/scan.ts` states the scan: `Node` at one document's key, its package and path,
+ * ordered by `start`, each row with its own characters, its comment, instruction, doctype and
+ * foreign element's name at most once each, the document node with the document's `Document` row,
+ * its XML declaration and the declaration's encoding and standalone at most once each, and its
+ * attributes and open attributes, each with its entity references, and its namespace declarations.
+ * A page is a run of those rows; {@link scannedRows} follows a page's cursor to the next until none
+ * follows, so the stream it gives is the scan's rows, whatever the cuts.
  *
  * Every row is folded by its own key, never by where it arrives: a node by its `start`, an
- * attribute or a namespace declaration by its `at`, an entity reference by its offset, as the read
- * (`readDocument` of `#pantry/model/assemble.ts`) places them. So paging is invisible: the same
- * rows cut into any pages give the same document.
+ * attribute by its element's `start` and its name, an open attribute by its element's `start` and
+ * its expanded name, a namespace declaration by its element's `start` and its prefix, an entity
+ * reference by its attribute's key and its offset, as the read (`readDocument` of
+ * `#pantry/model/assemble.ts`) places them. Attributes and namespace declarations are sets, so no
+ * order of theirs is read either. So paging is invisible: the same rows cut into any pages give the
+ * same document.
  */
 import { Effect, Option, Result, Schema, Stream } from "effect";
 import type { Page, PageCursor, PageRequest } from "@bjornpagen/grizzle";
@@ -21,17 +24,18 @@ import { readDocument } from "#pantry/model/assemble.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
 import type {
   AttributeEntityRow,
-  AttributeId,
   AttributeRow,
   CharacterRow,
+  ClosedName,
   DocumentRow,
   EncodingDeclRow,
   EntityRefRow,
   NamespaceRow,
-  NodeId,
   NodeRow,
+  OpenAttributeEntityRow,
+  OpenAttributeRow,
+  OpenClass,
   OpenElementNameRow,
-  OpenNameRow,
   PiRow,
   SdDeclRow,
   XdmDocument,
@@ -40,37 +44,92 @@ import type {
 } from "#pantry/model/xdm.ts";
 
 /**
- * One attribute as the scan delivers it under its element: its id, its slot, name handle, the
- * prefix its name is written with and its lexical form, its entity references and its open name,
- * each list in `at` order.
- *
- * The open name is a family of at most one member (`openName` ≤ 1 on `Attribute`), so no key
- * proves it at most one and the scan delivers it as a list.
+ * A document's key, as `Document` holds it: its package's manifest identifier and its path in the
+ * package, which its scan is filtered by.
  */
-interface ScannedAttribute<V extends XdmVocabulary> {
-  readonly at: bigint;
-  readonly entities: readonly Pick<AttributeEntityRow, "name" | "offset">[];
-  readonly id: AttributeId;
-  readonly lexical: string;
-  readonly name: AttributeRow<V>["name"];
-  readonly openName: readonly Omit<OpenNameRow, "attribute">[];
-  readonly prefix: string;
+export interface DocumentKey {
+  readonly package: string;
+  readonly path: string;
 }
+
+/**
+ * An entity reference as the scan delivers it under its attribute: the entity's name and the offset
+ * of its `&` in the attribute's lexical form, its key within the attribute.
+ */
+type ScannedEntity = Pick<AttributeEntityRow<XdmVocabulary>, "entity" | "offset">;
+
+/**
+ * An attribute of a closed name as the scan delivers it under its element: its name handle, the
+ * prefix its name is written with and its lexical form, with its entity references. The handle is
+ * of `Attribute.name`'s type, the whole `AttributeName` roster, open classes included, which
+ * {@link closedNameOf} reads as the closed name it is.
+ */
+interface ScannedAttribute<V extends XdmVocabulary> extends Omit<
+  AttributeRow<V>,
+  "name" | "start"
+> {
+  readonly entities: readonly ScannedEntity[];
+  readonly name: V["name"];
+}
+
+/**
+ * An attribute of an open name as the scan delivers it under its element: its class, its expanded
+ * name, the prefix its name is written with and its lexical form, with its entity references. The
+ * class is of `OpenAttribute.class`'s type, the whole `AttributeName` roster, which
+ * {@link openClassOf} reads as the open class it is.
+ */
+interface ScannedOpenAttribute<V extends XdmVocabulary> extends Omit<
+  OpenAttributeRow,
+  "class" | "start"
+> {
+  readonly class: V["name"];
+  readonly entities: readonly ScannedEntity[];
+}
+
+/**
+ * Read a stored attribute's name handle as the closed name it is.
+ *
+ * SAFETY: the law "AL4 open names" (`#pantry/qti/attributes.ts`) holds every `Attribute` row's
+ * `name` to no open class, and the database refused every write that broke it, so a stored handle
+ * is a closed name. grizzle types the field as its roster, `AttributeName`, whose handles the open
+ * classes are too.
+ *
+ * @param name - The handle an `Attribute` row holds.
+ * @returns The handle, as a closed name.
+ */
+const closedNameOf = <V extends XdmVocabulary>(name: V["name"]): ClosedName<V> =>
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  name as ClosedName<V>;
+
+/**
+ * Read a stored open attribute's class as the open class it is.
+ *
+ * SAFETY: the law "AL4 open names" (`#pantry/qti/attributes.ts`) holds every `OpenAttribute` row's
+ * `class` to an open class, and the database refused every write that broke it. grizzle types the
+ * field as its roster, `AttributeName`, whose handles the closed names are too.
+ *
+ * @param name - The handle an `OpenAttribute` row holds as its class.
+ * @returns The handle, as an open class.
+ */
+const openClassOf = (name: XdmVocabulary["name"]): OpenClass =>
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  name as OpenClass;
 
 /**
  * A document's `XmlDecl` row as the scan delivers it under the `Document` row: its fields as
  * `assemble` reads them, its version the `VersionNum` grizzle types `XmlDecl.version` as (the text
  * type `XmlVersion` of `#pantry/qti/chardata.ts`, whose host type is `1.${number}`), with its
- * `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the node.
+ * `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the document.
  */
 interface ScannedDeclaration extends XmlDeclRow {
-  readonly encoding: Option.Option<Pick<EncodingDeclRow, "encoding">>;
-  readonly standalone: Option.Option<Pick<SdDeclRow, "standalone">>;
+  readonly encoding: Option.Option<EncodingDeclRow>;
+  readonly standalone: Option.Option<SdDeclRow>;
 }
 
 /**
- * A document node's `Document` row as the scan delivers it: its fields as `assemble` reads them,
- * with its `XmlDecl` row attached, none where the document writes no declaration.
+ * A document's `Document` row as the scan delivers it on the document node: its fields as
+ * `assemble` reads them, with its `XmlDecl` row attached, none where the document writes no
+ * declaration.
  */
 interface ScannedDocument extends DocumentRow {
   readonly declaration: Option.Option<ScannedDeclaration>;
@@ -82,10 +141,11 @@ interface ScannedDocument extends DocumentRow {
  * The node's own fields are those `assemble` reads but its governing type, and `chars`: a text or
  * whitespace node's characters and an entity reference's `&name;`, empty for every other kind
  * (`Node.chars`, whose row checks in `#pantry/qti/chardata.ts` hold each arm's characters to that
- * form). A comment, an instruction, the doctype, the `Document` row, a foreign element's expanded
- * name and an element's governing type are rows keyed by the node, so each is there at most once,
- * and exactly for the nodes of its kind by the mirror laws; the attributes and the namespace
- * declarations are the node's families.
+ * form). A comment, an instruction, the doctype, a foreign element's expanded name and an element's
+ * governing type are rows keyed by the node, so each is there at most once, and exactly for the
+ * nodes of its kind by the mirror laws; the `Document` row is the document's, there on the document
+ * node alone; the attributes, the open attributes and the namespace declarations are the node's
+ * families, sets.
  */
 export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "governs"> {
   readonly attributes: readonly ScannedAttribute<V>[];
@@ -93,8 +153,9 @@ export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "gove
   readonly comment: Option.Option<Pick<CharacterRow, "value">>;
   readonly doctype: Option.Option<Pick<CharacterRow, "value">>;
   /**
-   * The document node's `Document` row; none on every other node. Its declaration's version is the
-   * `VersionNum` the `XmlDecl` row holds, which {@link assembleScan} reads.
+   * The document's `Document` row on the document node; none on every other node. Its
+   * declaration's version is the `VersionNum` the `XmlDecl` row holds, which {@link assembleScan}
+   * reads.
    */
   readonly documentRow: Option.Option<ScannedDocument>;
   /**
@@ -102,14 +163,15 @@ export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "gove
    * an element no named type governs.
    */
   readonly elementType: Option.Option<{ readonly type: string }>;
-  readonly namespaces: readonly Omit<NamespaceRow, "node">[];
-  readonly openElementName: Option.Option<Omit<OpenElementNameRow, "node">>;
+  readonly namespaces: readonly Omit<NamespaceRow, "start">[];
+  readonly openAttributes: readonly ScannedOpenAttribute<V>[];
+  readonly openElementName: Option.Option<Omit<OpenElementNameRow, "start">>;
   /**
    * A foreign element's governing type (`OpenElementType`); none on every other node, and on a
    * foreign element no type governs.
    */
   readonly openElementType: Option.Option<{ readonly type: string }>;
-  readonly pi: Option.Option<Omit<PiRow, "node">>;
+  readonly pi: Option.Option<Omit<PiRow, "start">>;
 }
 
 /**
@@ -121,7 +183,7 @@ export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "gove
  * fold over a stream starts each run from a new {@link emptyScan}.
  */
 export interface Scan<V extends XdmVocabulary> {
-  readonly attributeEntities: AttributeEntityRow[];
+  readonly attributeEntities: AttributeEntityRow<V>[];
   readonly attributes: AttributeRow<V>[];
   readonly comments: CharacterRow[];
   readonly doctypes: CharacterRow[];
@@ -130,8 +192,9 @@ export interface Scan<V extends XdmVocabulary> {
   readonly entityRefs: EntityRefRow[];
   readonly namespaces: NamespaceRow[];
   readonly nodes: NodeRow<V>[];
+  readonly openAttributeEntities: OpenAttributeEntityRow[];
+  readonly openAttributes: OpenAttributeRow[];
   readonly openElementNames: OpenElementNameRow[];
-  readonly openNames: OpenNameRow[];
   readonly pis: PiRow[];
   readonly sdDecls: SdDeclRow[];
   readonly texts: CharacterRow[];
@@ -154,8 +217,9 @@ export const emptyScan = <V extends XdmVocabulary>(): Scan<V> => ({
   entityRefs: [],
   namespaces: [],
   nodes: [],
+  openAttributeEntities: [],
+  openAttributes: [],
   openElementNames: [],
-  openNames: [],
   pis: [],
   sdDecls: [],
   texts: [],
@@ -166,17 +230,17 @@ export const emptyScan = <V extends XdmVocabulary>(): Scan<V> => ({
 /**
  * Append a row keyed by its node, when the scan delivered one.
  *
- * @param node - The node the row is keyed by.
+ * @param start - The node's `start`, the row's key within the document.
  * @param fields - The row's other fields, none when the node has no such row.
  * @param into - The list the row belongs in, appended to in place.
  */
-const keyedBy = <Fields extends object>(
-  node: NodeId,
+const keyedAt = <Fields extends object>(
+  start: bigint,
   fields: Option.Option<Fields>,
-  into: (Fields & { readonly node: NodeId })[],
+  into: (Fields & { readonly start: bigint })[],
 ): void => {
   if (Option.isSome(fields)) {
-    into.push({ ...fields.value, node });
+    into.push({ ...fields.value, start });
   }
 };
 
@@ -185,31 +249,32 @@ const keyedBy = <Fields extends object>(
  *
  * The node's row goes in as it is, and a text, whitespace or entity reference node's characters
  * as the row of its kind, the reference's name inside its `&` and `;`. Each attached row goes in
- * keyed by the node, and an attribute's open name and entity references by the attribute's id.
- * Nothing is read from the order rows arrive in.
+ * keyed by the node's `start`, the `Document` row and its declaration's as the document's, and an
+ * attribute's entity references by the attribute's key. Nothing is read from the order rows arrive
+ * in.
  *
  * @param scan - The rows folded so far, appended to in place.
  * @param row - The scanned row.
  * @returns The same accumulator, now holding the row's rows.
  */
 export const addRow = <V extends XdmVocabulary>(scan: Scan<V>, row: ScanRow<V>): Scan<V> => {
-  const { at, end, id: node, kind, parent, prefix, start, version } = row;
+  const { at, end, kind, parent, prefix, start, version } = row;
   const governs = Option.map(
     Option.orElse(row.elementType, () => row.openElementType),
     ({ type }) => type,
   );
-  scan.nodes.push({ at, end, governs, id: node, kind, parent, prefix, start, version });
+  scan.nodes.push({ at, end, governs, kind, parent, prefix, start, version });
   switch (kind) {
     case "text": {
-      scan.texts.push({ node, value: row.chars });
+      scan.texts.push({ start, value: row.chars });
       break;
     }
     case "ws": {
-      scan.whitespace.push({ node, value: row.chars });
+      scan.whitespace.push({ start, value: row.chars });
       break;
     }
     case "entityRef": {
-      scan.entityRefs.push({ name: row.chars.slice(1, -1), node });
+      scan.entityRefs.push({ name: row.chars.slice(1, -1), start });
       break;
     }
     default: {
@@ -217,44 +282,50 @@ export const addRow = <V extends XdmVocabulary>(scan: Scan<V>, row: ScanRow<V>):
     }
   }
 
-  keyedBy(node, row.comment, scan.comments);
-  keyedBy(node, row.pi, scan.pis);
-  keyedBy(node, row.doctype, scan.doctypes);
-  keyedBy(node, row.openElementName, scan.openElementNames);
+  keyedAt(start, row.comment, scan.comments);
+  keyedAt(start, row.pi, scan.pis);
+  keyedAt(start, row.doctype, scan.doctypes);
+  keyedAt(start, row.openElementName, scan.openElementNames);
   for (const { charset, declaration, exportCharset } of Option.toArray(row.documentRow)) {
-    scan.documents.push({ charset, exportCharset, node });
+    scan.documents.push({ charset, exportCharset });
     for (const { encoding, standalone, version: declared } of Option.toArray(declaration)) {
-      scan.xmlDecls.push({ node, version: declared });
-      keyedBy(node, encoding, scan.encodingDecls);
-      keyedBy(node, standalone, scan.sdDecls);
+      scan.xmlDecls.push({ version: declared });
+      scan.encodingDecls.push(...Option.toArray(encoding));
+      scan.sdDecls.push(...Option.toArray(standalone));
     }
   }
 
-  for (const attribute of row.attributes) {
-    const { id } = attribute;
-    scan.attributes.push({
-      at: attribute.at,
-      id,
-      lexical: attribute.lexical,
-      name: attribute.name,
-      node,
-      prefix: attribute.prefix,
+  for (const { entities, lexical, name, prefix: written } of row.attributes) {
+    const closed = closedNameOf<V>(name);
+    scan.attributes.push({ lexical, name: closed, prefix: written, start });
+    for (const { entity, offset } of entities) {
+      scan.attributeEntities.push({ entity, name: closed, offset, start });
+    }
+  }
+
+  for (const {
+    class: open,
+    entities,
+    lexical,
+    local,
+    prefix: written,
+    uri,
+  } of row.openAttributes) {
+    scan.openAttributes.push({
+      class: openClassOf(open),
+      lexical,
+      local,
+      prefix: written,
+      start,
+      uri,
     });
-    for (const open of attribute.openName) {
-      scan.openNames.push({ ...open, attribute: id });
-    }
-
-    for (const reference of attribute.entities) {
-      scan.attributeEntities.push({
-        attribute: id,
-        name: reference.name,
-        offset: reference.offset,
-      });
+    for (const { entity, offset } of entities) {
+      scan.openAttributeEntities.push({ entity, local, offset, start, uri });
     }
   }
 
-  for (const declaration of row.namespaces) {
-    scan.namespaces.push({ ...declaration, node });
+  for (const { prefix: declared, uri } of row.namespaces) {
+    scan.namespaces.push({ prefix: declared, start, uri });
   }
 
   return scan;
@@ -262,17 +333,24 @@ export const addRow = <V extends XdmVocabulary>(scan: Scan<V>, row: ScanRow<V>):
 
 /**
  * A document's scan held no `Document` row, or more than one: the document node carries exactly
- * one, keyed by the node, and every other node none.
+ * one, the document's, and every other node none.
  */
 export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("DocumentRowCount", {
-  document: Schema.String,
   found: Schema.Number,
+  /**
+   * The manifest identifier of the document's package.
+   */
+  package: Schema.String,
+  /**
+   * The document's path in its package.
+   */
+  path: Schema.String,
 }) {
   /**
    * The document, how many rows its scan held, and the repair.
    */
   override get message(): string {
-    return `The scan of document ${this.document} held ${String(this.found)} Document rows, but a document's scan holds exactly one, on its document node, so the document cannot be assembled. Scan every page of the document, each once, as the scan's cursors give them.`;
+    return `The scan of document ${this.path} of package ${this.package} held ${String(this.found)} Document rows, but a document's scan holds exactly one, on its document node, so the document cannot be assembled. Scan every page of the document, each once, as the scan's cursors give them.`;
   }
 }
 
@@ -284,18 +362,24 @@ export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("Do
  * it, and an `XmlDecl` row's version is a `VersionNum` by its type, which its pattern law holds.
  * Only the scan's own paging is checked, its one `Document` row.
  *
- * @param document - The id of the document's node, which its scan was filtered by.
+ * @param document - The document's key, which its scan was filtered by.
  * @param scan - The rows the whole scan folded.
  * @returns The document the rows stand for; or `DocumentRowCount` when the scan did not hold
  *   exactly one `Document` row, or the read's refusal of rows it cannot build the tree from.
  */
 export const assembleScan = <V extends XdmVocabulary>(
-  document: NodeId,
+  document: DocumentKey,
   scan: Scan<V>,
 ): Result.Result<XdmDocument<V>, AssembleError | DocumentRowCount> => {
   const [only, ...rest] = scan.documents;
   if (only === undefined || rest.length > 0) {
-    return Result.fail(new DocumentRowCount({ document, found: scan.documents.length }));
+    return Result.fail(
+      new DocumentRowCount({
+        found: scan.documents.length,
+        package: document.package,
+        path: document.path,
+      }),
+    );
   }
 
   return readDocument<V>({
@@ -308,8 +392,9 @@ export const assembleScan = <V extends XdmVocabulary>(
     entityRefs: scan.entityRefs,
     namespaces: scan.namespaces,
     nodes: scan.nodes,
+    openAttributeEntities: scan.openAttributeEntities,
+    openAttributes: scan.openAttributes,
     openElementNames: scan.openElementNames,
-    openNames: scan.openNames,
     pis: scan.pis,
     sdDecls: scan.sdDecls,
     texts: scan.texts,

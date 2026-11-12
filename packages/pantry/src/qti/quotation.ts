@@ -17,10 +17,10 @@
  * immediately beside it. An entity reference crust keeps is one the document does not declare,
  * whose replacement text no row holds, so it is judged as written, `&` and `;`.
  *
- * {@link Quotation} is one row per `q`, keyed by its node: the node's tuple (C18), its slot and
- * child count and its parent's, and the four ends, each copied from the member at the slot it
- * names under its parent, `(parent, at)` over the tree's members ({@link members}), or empty where
- * that member does not exist.
+ * {@link Quotation} is one row per `q`, keyed by the `q`, `(package, path, start)`: the node's
+ * tuple (C18), its slot and child count and its parent's, and the four ends, each copied from the
+ * member at the slot it names under its parent, `(package, path, parent, at)` over the tree's
+ * members ({@link members}), or empty where that member does not exist.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q | QTI 3.0 ASI information model, §5.111 Q}
  */
@@ -36,9 +36,9 @@ import {
   pred,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
+import { EntryPath, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { EndCharacter, members, Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -53,10 +53,10 @@ import { EndCharacter, members, Node, nodeRef } from "#pantry/qti/node.ts";
 export const quotationMarks = ['"', "«", "»", "‘", "‚", "‛", "“", "”", "„", "‟", "‹", "›"] as const;
 
 /**
- * A `q`'s overlay, keyed by its node: its {@link nodeRef} tuple, its slot `at` among its parent's
+ * A `q`'s overlay, keyed by the `q`: its {@link nodeRef} tuple, its slot `at` among its parent's
  * `siblings` and its own count of `children`, its parent's slot `parentAt` (which only lets the
- * parent's count be read through the one `UNIQUE (id, at, children)` its own slot and count use),
- * and the four ends the law judges.
+ * parent's count be read through the one `UNIQUE (package, path, start, at, children)` its own slot
+ * and count use), and the four ends the law judges.
  *
  * - `before`: the last character of the sibling at `at − 1`, empty at slot 0;
  * - `after`: the first character of the sibling at `nextAt`, which is `at + 1`, empty when the `q` is
@@ -74,21 +74,21 @@ export const Quotation = relation(
     at: natural,
     before: EndCharacter,
     children: natural,
-    document: uuid,
     first: EndCharacter,
     firstAt: natural,
     kind: closedId(NodeKind),
     last: EndCharacter,
-    nearest: uuid,
+    nearest: natural,
     nextAt: natural,
-    node: uuid,
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
     parentAt: natural,
+    path: EntryPath,
     siblings: natural,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -97,8 +97,8 @@ export const Quotation = relation(
 export const quotationRelations = { Quotation };
 
 /**
- * The `q` nodes, a constant selection: a containment into it references the one `UNIQUE (id,
- * kind)` on `Node` the document layer's arms share.
+ * The `q` nodes, a constant selection: a containment into it references the one `UNIQUE (package,
+ * path, start, kind)` on `Node` the document layer's arms share.
  */
 const quotations = select(Node, (n) => n.eq(n.kind, "q"));
 
@@ -118,19 +118,26 @@ const filled = select(Quotation, (q) => q.gt(q.children, 0n));
  * - **the overlay:** its node's {@link nodeRef} tuple, one row for each `q` and no other node (both
  *   ways), and its node's and its parent's slot and count;
  * - **E1:** `nextAt` is `at + 1`, `firstAt` is 0, and each end whose member does not exist is empty;
- * - **the ends:** two keys over the tree's members, `(parent, at)` with its `first` and with its
- *   `last`, which hold since `(parent, at)` names one member, and the four copies into them;
+ * - **the ends:** two keys over the tree's members, `(package, path, parent, at)` with its `first`
+ *   and with its `last`, which hold since `(package, path, parent, at)` names one member, and the
+ *   four copies into them;
  * - **`Quotation_punctuation`:** none of the four ends is a quotation mark.
  */
 export const quotationLawsByName = {
   "E1 derived": [
     contained(
-      on(Quotation, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Quotation, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(Quotation, "node"), on(quotations, "id")),
-    contained(on(Quotation, "node", "at", "children"), on(Node, "id", "at", "children")),
-    contained(on(Quotation, "parent", "parentAt", "siblings"), on(Node, "id", "at", "children")),
+    mirrors(on(Quotation, "package", "path", "start"), on(quotations, "package", "path", "start")),
+    contained(
+      on(Quotation, "package", "path", "start", "at", "children"),
+      on(Node, "package", "path", "start", "at", "children"),
+    ),
+    contained(
+      on(Quotation, "package", "path", "parent", "parentAt", "siblings"),
+      on(Node, "package", "path", "start", "at", "children"),
+    ),
     check("E1_derived", Quotation, (q) =>
       q.and(
         q.eq(Compute.base(q.nextAt), Compute.add(Compute.base(q.at), 1n)),
@@ -140,12 +147,24 @@ export const quotationLawsByName = {
         q.or(q.gt(q.children, 0n), q.and(q.eq(q.first, ""), q.eq(q.last, ""))),
       ),
     ),
-    key(on(members, "parent", "at", "first")),
-    key(on(members, "parent", "at", "last")),
-    contained(on(Quotation, "parent", pred("at"), "before"), on(members, "parent", "at", "last")),
-    contained(on(followed, "parent", "nextAt", "after"), on(members, "parent", "at", "first")),
-    contained(on(filled, "node", "firstAt", "first"), on(members, "parent", "at", "first")),
-    contained(on(Quotation, "node", pred("children"), "last"), on(members, "parent", "at", "last")),
+    key(on(members, "package", "path", "parent", "at", "first")),
+    key(on(members, "package", "path", "parent", "at", "last")),
+    contained(
+      on(Quotation, "package", "path", "parent", pred("at"), "before"),
+      on(members, "package", "path", "parent", "at", "last"),
+    ),
+    contained(
+      on(followed, "package", "path", "parent", "nextAt", "after"),
+      on(members, "package", "path", "parent", "at", "first"),
+    ),
+    contained(
+      on(filled, "package", "path", "start", "firstAt", "first"),
+      on(members, "package", "path", "parent", "at", "first"),
+    ),
+    contained(
+      on(Quotation, "package", "path", "start", pred("children"), "last"),
+      on(members, "package", "path", "parent", "at", "last"),
+    ),
   ],
   "Quotation punctuation": [
     check("Quotation_punctuation", Quotation, (q) =>

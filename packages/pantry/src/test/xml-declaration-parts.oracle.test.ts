@@ -196,12 +196,29 @@ const expectedOf = (drawn: Case): Expected => {
 };
 
 /**
+ * Read the rows of a keyed set that the item's document holds.
+ *
+ * @param rows - The keyed set.
+ * @returns Its rows whose `path` is the item's.
+ */
+const owned = <Row extends { readonly path: string }>(rows: ReadonlyMap<string, Row>) =>
+  [...rows.values()].filter(({ path }) => path === itemPath);
+
+/**
+ * The document each of a part's expected rows is keyed by: the item's, once per row.
+ *
+ * @param count - The part's expected rows.
+ * @returns The item's path, once for each.
+ */
+const itemPathsOf = (count: readonly string[]) => count.map(() => itemPath);
+
+/**
  * Write the item back from the import's rows, as the export writes a scanned document: its tree's
- * own rows, under the ids the import wrote it under, with the `Document` row and the declaration's
- * rows the import wrote in place of the tree's, assembled and written by `unshred`.
+ * own rows, with the `Document` row and the declaration's rows the import wrote in place of the
+ * tree's, each keyed by the item's `(package, path)`, assembled and written by `unshred`.
  *
  * @param program - The import's program.
- * @param program.documents - Its documents under their ids.
+ * @param program.documents - Its documents.
  * @param program.inputs - Its rows.
  * @returns The item's bytes as the export writes them.
  */
@@ -213,24 +230,18 @@ const exportedItem = ({ documents, inputs }: ImportProgram) =>
     }
 
     const tree = placed.view.rows;
-    const self = tree.document.node;
-    const document = inputs.Document.get(self);
+    const [document] = owned(inputs.Document);
     if (document === undefined) {
       assert.fail("the import wrote no Document row of the item");
     }
 
-    const owned = <Row extends { readonly node: string }>(rows: ReadonlyMap<string, Row>) =>
-      [...rows.values()].filter(({ node }) => node === self);
     const assembled = yield* Effect.fromResult(
       assemble({
         ...tree,
-        document: { charset: document.charset, exportCharset: document.exportCharset, node: self },
-        encodingDecls: owned(inputs.EncodingDecl).map(({ encoding, node }) => ({
-          encoding,
-          node,
-        })),
-        sdDecls: owned(inputs.SdDecl).map(({ node, standalone }) => ({ node, standalone })),
-        xmlDecls: owned(inputs.XmlDecl).map(({ node, version }) => ({ node, version })),
+        document: { charset: document.charset, exportCharset: document.exportCharset },
+        encodingDecls: owned(inputs.EncodingDecl).map(({ encoding }) => ({ encoding })),
+        sdDecls: owned(inputs.SdDecl).map(({ standalone }) => ({ standalone })),
+        xmlDecls: owned(inputs.XmlDecl).map(({ version }) => ({ version })),
       }),
     );
 
@@ -239,7 +250,7 @@ const exportedItem = ({ documents, inputs }: ImportProgram) =>
 
 /**
  * Hold an accepted case's rows to what its declaration writes: each part's row exists exactly where
- * the part is written, holding it as written, on the item's document node.
+ * the part is written, holding it as written, keyed by the item's document.
  *
  * @param expected - The case's rows by hand.
  * @param inputs - The import's rows.
@@ -251,10 +262,7 @@ const assertRows = (
   label: string,
 ): void => {
   const item = [...inputs.Document.values()].filter(({ path }) => path === itemPath);
-  const nodes = item.map(({ node }) => node);
-  assert.lengthOf(nodes, 1, `${label}: the item's Document row`);
-
-  const at = (count: readonly string[]) => count.map(() => nodes[0]);
+  assert.lengthOf(item, 1, `${label}: the item's Document row`);
 
   assert.deepStrictEqual(
     [...inputs.XmlDecl.values()].map(({ version }) => version),
@@ -262,9 +270,9 @@ const assertRows = (
     `${label}: XmlDecl`,
   );
   assert.deepStrictEqual(
-    [...inputs.XmlDecl.values()].map(({ node }) => node),
-    at(expected.version),
-    `${label}: XmlDecl's node`,
+    [...inputs.XmlDecl.values()].map(({ path }) => path),
+    itemPathsOf(expected.version),
+    `${label}: XmlDecl's document`,
   );
   assert.deepStrictEqual(
     [...inputs.EncodingDecl.values()].map(({ encoding }) => encoding),
@@ -272,9 +280,9 @@ const assertRows = (
     `${label}: EncodingDecl`,
   );
   assert.deepStrictEqual(
-    [...inputs.EncodingDecl.values()].map(({ node }) => node),
-    at(expected.encoding),
-    `${label}: EncodingDecl's node`,
+    [...inputs.EncodingDecl.values()].map(({ path }) => path),
+    itemPathsOf(expected.encoding),
+    `${label}: EncodingDecl's document`,
   );
   assert.deepStrictEqual(
     [...inputs.SdDecl.values()].map(({ standalone }) => standalone),
@@ -282,9 +290,9 @@ const assertRows = (
     `${label}: SdDecl`,
   );
   assert.deepStrictEqual(
-    [...inputs.SdDecl.values()].map(({ node }) => node),
-    at(expected.standalone),
-    `${label}: SdDecl's node`,
+    [...inputs.SdDecl.values()].map(({ path }) => path),
+    itemPathsOf(expected.standalone),
+    `${label}: SdDecl's document`,
   );
 };
 

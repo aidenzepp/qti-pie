@@ -32,7 +32,6 @@ import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, judge, ruleOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName, OracleRule } from "#pantry/test/oracle.ts";
 import { grammar } from "#pantry/grammar/install.ts";
@@ -392,7 +391,7 @@ const breachesBelowReader = Effect.fnUntraced(function* breachesBelowReader(
   const xdm = yield* Effect.orDie(
     shred({ ...document, root: withNames(document.root, names) }, "3.0.1", shredGrammar),
   );
-  const rows = yield* Effect.orDie(Effect.fromResult(fold(xdm, idOf, foldGrammar)));
+  const rows = yield* Effect.orDie(Effect.fromResult(fold(xdm, foldGrammar)));
 
   return documentBreaches("item.xml", rows, laws);
 });

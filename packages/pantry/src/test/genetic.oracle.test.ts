@@ -18,9 +18,8 @@
  *   the fixed entry keeps guarding the cause it closed;
  * - Each known and fixed entry's signature is a class some package can show: a law the host judges
  *   (grizzle's `sameLaw` holds it one of them, its selections included, and an oracle-only law is
- *   one some judged law bears the name of), or a uuid field it holds to the mint, since a law no
- *   statement states, a law the host never judges, or a field a later commit removed, can never
- *   show, and a fixed entry keyed by it guards nothing;
+ *   one some judged law bears the name of), since a law no statement states or a law the host never
+ *   judges can never show, and a fixed entry keyed by it guards nothing;
  * - Each planted value-domain case (`#pantry/test/gen/genetic/planted.ts`) lies inside its domain's
  *   lexical space and outside its facets, which the oracle refuses and today's database does not,
  *   so the two disagree on it while it waits on its owner's fix, and must agree on it once the fix
@@ -52,7 +51,7 @@ import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
-import { judgedLaws, uuidFields } from "#pantry/test/gen/genetic/host-laws.ts";
+import { judgedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import {
   familyOf,
@@ -146,15 +145,6 @@ const disagreementOf = (signature: Signature): Disagreement => {
     case "oracle-died": {
       return { detail: signature.detail, kind: signature.kind, ...limited };
     }
-    case "dangling-uuid": {
-      return {
-        field: signature.field,
-        kind: signature.kind,
-        relation: signature.relation,
-        value: "",
-        ...limited,
-      };
-    }
     case "codec-rule": {
       return {
         importRule: signature.importRule,
@@ -224,7 +214,7 @@ const disagreementOf = (signature: Signature): Disagreement => {
  */
 const filledManifest = (child: string): string =>
   `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource>${child}</resource></resources></manifest>`;
+<manifest identifier="MANIFEST" xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource>${child}</resource></resources></manifest>`;
 
 /**
  * An NCName of `bytes` ASCII bytes.
@@ -272,8 +262,8 @@ const judgedNames: ReadonlySet<string> = new Set(
  * judges, which grizzle's `sameLaw` holds one of {@link judgedLaws}, its selections included; for
  * a law the oracle alone raises, a law some judged law bears the name of, since the disagreement
  * needs the host to hold every statement of the law, and the host never holds a law it does not
- * judge (a law stated only over queries, or a check over one, is never judged); for a dangling
- * uuid, a uuid field the host holds to the mint. A class that names a law by its name carries a
+ * judge (a law stated only over queries, or a check over one, is never judged). A class that
+ * names a law by its name carries a
  * name the type keeps to the law table; a rule, or a noise and the side it moved, is no law of the
  * host's to judge, so nothing bounds it, and a package a noise moves shows it.
  *
@@ -289,11 +279,6 @@ const canShow = (signature: Signature): boolean => {
     }
     case "oracle-only-law": {
       return judgedNames.has(signature.law);
-    }
-    case "dangling-uuid": {
-      return Option.exists(Option.fromUndefinedOr(uuidFields.get(signature.relation)), (fields) =>
-        fields.includes(signature.field),
-      );
     }
     case "codec-import-only":
     case "codec-oracle-only":
@@ -311,8 +296,8 @@ const canShow = (signature: Signature): boolean => {
 };
 
 /**
- * Signatures that no package can show, one of each shape {@link canShow} reads: four this file once
- * kept, each naming a relation or a field `Qti` no longer has, and the containment of a
+ * Signatures that no package can show, one of each shape {@link canShow} reads: three this file
+ * once kept, each naming a relation or a field `Qti` no longer has, and the containment of a
  * declaration's cardinality in its attribute with its selections dropped, which the text keys this
  * file once held wrote for two laws `Qti` states, its `base-type` and its `cardinality`
  * attribute's, and no law of `Qti` is; and two laws the oracle raises that the host never judges,
@@ -320,7 +305,6 @@ const canShow = (signature: Signature): boolean => {
  * once guarded: the guard below must refuse each.
  */
 const unshowable: readonly Signature[] = [
-  { field: "declaration", kind: "dangling-uuid", relation: "VariableRef" },
   {
     kind: "import-only-law",
     law: { kind: "check", name: "E1_derived", relation: "MappingSource" },
@@ -615,9 +599,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
 
     it.effect("keys every known and fixed entry by a class some package can show", () =>
-      // Oracle: grizzle's sameLaw against the laws the host judges, and the uuid fields it holds
-      // to the mint. Bound: every known and fixed entry's signature, and one unshowable signature
-      // of each shape.
+      // Oracle: grizzle's sameLaw against the laws the host judges. Bound: every known and fixed
+      // entry's signature, and one unshowable signature of each shape.
       Effect.sync(() => {
         assert.deepStrictEqual(
           unshowable.filter(canShow).map(shownSignature),
@@ -629,7 +612,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             canShow(entry.signature) ? [] : [shownSignature(entry.signature)],
           ),
           [],
-          "these signatures key a law the host does not judge, which no statement of Qti states, or a uuid field it does not hold, so they can never show and their entries guard nothing; plant the behaviour each entry's fix removed, judge its package, and rekey it to the signature that shows, or delete it where none can",
+          "these signatures key a law the host does not judge, which no statement of Qti states, so they can never show and their entries guard nothing; plant the behaviour each entry's fix removed, judge its package, and rekey it to the signature that shows, or delete it where none can",
         );
       }),
     );

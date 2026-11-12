@@ -2,15 +2,16 @@
  * The rows one package is written as (`#pantry/import/write.ts`) and the merge of the overlay
  * builders' rows (`#pantry/import/overlays/index.ts`), judged on the host.
  *
- * - The tree's nesting is exactly the XDM's: drawing each node's slot, start and end from the
- *   nesting, as grizzle does, and assembling the rows (`#pantry/model/assemble.ts`) gives back the
- *   document, for generated trees and the accepted corpus packages.
+ * - The tree's nesting is exactly the XDM's: drawing each node's slot, start, end and parent from the
+ *   nesting, as grizzle does, and assembling the rows (`#pantry/model/assemble.ts`) with the flat
+ *   rows that name each node by its position gives back the document, for generated trees and the
+ *   accepted corpus packages. So the positions the host writes are the ones grizzle draws.
  * - The host's fields are the host fold's (`#pantry/model/folds.ts`, a second implementation).
  * - No row carries a field grizzle draws or fills or PostgreSQL generates, by type and at run time.
  * - Every keyed set is a set: a repeat of one row is one row, two rows at one key a conflict.
- * - The flat inputs a per-row pattern judges are written in runs of their pattern's inputs.
+ * - Nothing is minted: a package placed twice is the same rows.
  */
-import type { Addition, Fact } from "@bjornpagen/grizzle";
+import type { Addition, Fact, InsertAllRowsOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -24,24 +25,21 @@ import { Duration, Effect, Formatter, Option, Predicate, Result } from "effect";
 import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { placementOf } from "#pantry/grammar/content.ts";
+import { openClasses } from "#pantry/grammar/kinds.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
+import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
 import { tokensOf } from "#pantry/import/pieces.ts";
-import { documentRowsOf, mintId, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
+import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
-  AttributeInsert,
   DocumentLayerRows,
-  EntityInsert,
-  IdrefInsert,
-  NamespaceInsert,
   NodeFields,
+  DocumentPlace,
   NodeMember,
   NodeRoot,
-  OpenNameInsert,
-  PackageInputs,
 } from "#pantry/import/write.ts";
 import type { EntryRow } from "#pantry/package/record.ts";
 import { assemble } from "#pantry/model/assemble.ts";
@@ -50,15 +48,12 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type {
-  AttributeEntityRow,
-  AttributeRow,
   CharacterRow,
+  ClosedName,
   EntityRefRow,
   FlatRows,
-  NamespaceRow,
-  NodeId,
   NodeRow,
-  OpenNameRow,
+  OpenClass,
   XdmChild,
   XdmClosedElement,
   XdmDocument,
@@ -67,23 +62,15 @@ import type {
   Attribute,
   AttributeEntity,
   Idref,
-  OpenAttributeName,
+  OpenAttribute,
+  OpenAttributeEntity,
 } from "#pantry/qti/attributes.ts";
 import type { Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
 import type { Entry } from "#pantry/qti/package.ts";
-import type { TextIdrefInsert } from "#pantry/import/overlays/identity.ts";
-import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
-import {
-  caseHang,
-  featuresOf,
-  idOf,
-  scrambledIdOf,
-  searchTimeout,
-  xdmDocument,
-} from "#pantry/test/gen/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 
 const fixtures = inject("fixtures");
@@ -94,26 +81,62 @@ const fixtures = inject("fixtures");
 const documents = xdmDocument(grammar);
 
 /**
- * A package id for the rows one generated document is written under.
+ * The manifest identifier the rows of one generated document are written under.
  */
-const packageId = idOf(0xff_ff_ff);
+const packageIdentifier: DocumentPlace["package"] = "MANIFEST-generated";
 
 /**
- * The flat rows of one document as a scan reads them back, drawn from a nested insert as grizzle
- * draws them: each node's slot is its place in its parent's `children`, its `start` its place in
- * pre-order, and its `end` its start plus its subtree's size; each attribute's and declaration's
- * slot its place in its element's family.
+ * The path the rows of one generated document are written under.
+ */
+const generatedPath = "item.xml";
+
+/**
+ * A relation's insert row as `insertAll` takes it over `Qti`, its sequences nested.
+ */
+type Inserted<Name extends keyof InsertAllRowsOf<typeof Qti>> = InsertAllRowsOf<
+  typeof Qti
+>[Name][number];
+
+/**
+ * A closed attribute's insert row, its IDREF tokens nested.
+ */
+type AttributeInsert = Inserted<"Attribute">;
+
+/**
+ * One IDREF token as its attribute nests it.
+ */
+type IdrefInsert = AttributeInsert["idrefs"][number];
+
+/**
+ * Test whether an `AttributeName` handle is an open class's, which an `OpenAttribute` row holds as
+ * its class and no `Attribute` row holds: a row of the wrong relation is dropped here, so the
+ * rebuilt tree misses it and the round trip fails.
+ *
+ * @param name - The handle.
+ * @returns Whether it is an open class.
+ */
+const isOpenClass = (name: ClosedName<Composed> | OpenClass): name is OpenClass =>
+  openClasses.some((open) => open === name);
+
+/**
+ * The flat rows of one document as a scan reads them back: the nodes drawn from a nested insert as
+ * grizzle draws them, each node's slot its place in its parent's `children`, its `start` its place
+ * in pre-order, its `end` its start plus its subtree's size and its `parent` its parent's `start`;
+ * and every other row read off the document layer by its fields, each naming its node by the
+ * position the host wrote. A position the host wrote that grizzle would not draw names another node
+ * here, and the assembly that follows refuses or misplaces it.
  *
  * @param root - The document's `Node` insert.
  * @param flat - Its document layer's flat rows, each element's named governing type among them.
  * @returns The rows `flatten` writes, which `assemble` reads.
  */
 const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed> => {
+  const governs = new Map(
+    [...flat.ElementType.values(), ...flat.OpenElementType.values()].map(
+      ({ start, type }) => [start, type] as const,
+    ),
+  );
   const nodes: NodeRow<Composed>[] = [];
-  const attributes: AttributeRow<Composed>[] = [];
-  const openNames: OpenNameRow[] = [];
-  const attributeEntities: AttributeEntityRow[] = [];
-  const namespaces: NamespaceRow[] = [];
   const texts: CharacterRow[] = [];
   const whitespace: CharacterRow[] = [];
   const entityRefs: EntityRefRow[] = [];
@@ -122,10 +145,10 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
         readonly _tag: "open";
         readonly at: number;
         readonly node: NodeMember;
-        readonly parent: NodeId;
+        readonly parent: bigint;
       }
     | { readonly _tag: "close"; readonly row: { end: bigint } };
-  const stack: Step[] = [{ _tag: "open", at: 0, node: root, parent: root.id }];
+  const stack: Step[] = [{ _tag: "open", at: 0, node: root, parent: 0n }];
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     if (next._tag === "close") {
       next.row.end = BigInt(nodes.length);
@@ -133,95 +156,102 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
     }
 
     const { at, node, parent } = next;
+    const start = BigInt(nodes.length);
     const row = {
       at: BigInt(at),
       end: 0n,
-      governs: Option.map(
-        Option.orElse(Option.fromNullishOr(flat.ElementType.get(node.id)), () =>
-          Option.fromNullishOr(flat.OpenElementType.get(node.id)),
-        ),
-        ({ type }) => type,
-      ),
-      id: node.id,
+      governs: Option.fromUndefinedOr(governs.get(start)),
       kind: node.kind,
       parent,
       prefix: node.prefix,
-      start: BigInt(nodes.length),
+      start,
       version: node.version,
     };
     nodes.push(row);
     if (node.kind === "text") {
-      texts.push({ node: node.id, value: node.chars });
+      texts.push({ start, value: node.chars });
     } else if (node.kind === "ws") {
-      whitespace.push({ node: node.id, value: node.chars });
+      whitespace.push({ start, value: node.chars });
     } else if (node.kind === "entityRef") {
-      entityRefs.push({ name: node.chars.slice(1, -1), node: node.id });
-    }
-
-    for (const [slot, attribute] of node.attributes.entries()) {
-      attributes.push({
-        at: BigInt(slot),
-        id: attribute.id,
-        lexical: attribute.lexical,
-        name: attribute.name,
-        node: node.id,
-        prefix: attribute.prefix,
-      });
-      for (const { local, uri } of attribute.openName) {
-        openNames.push({ attribute: attribute.id, local, uri });
-      }
-
-      for (const { name, offset } of attribute.entities) {
-        attributeEntities.push({ attribute: attribute.id, name, offset });
-      }
-    }
-
-    for (const [slot, { prefix, uri }] of node.namespaces.entries()) {
-      namespaces.push({ at: BigInt(slot), node: node.id, prefix, uri });
+      entityRefs.push({ name: node.chars.slice(1, -1), start });
     }
 
     stack.push({ _tag: "close", row });
     for (let child = node.children.length - 1; child >= 0; child -= 1) {
       const member = node.children[child];
       if (member !== undefined) {
-        stack.push({ _tag: "open", at: child, node: member, parent: node.id });
+        stack.push({ _tag: "open", at: child, node: member, parent: start });
       }
     }
   }
 
-  const document = flat.Document.get(root.id);
-  if (document === undefined) {
-    assert.fail(`the document layer holds no Document row of ${root.id}`);
+  const [document, ...others] = flat.Document.values();
+  if (document === undefined || others.length > 0) {
+    assert.fail(
+      `the document layer of ${root.path} holds ${String(others.length + 1)} Document rows`,
+    );
   }
 
   return {
-    attributeEntities,
-    attributes,
-    comments: [...flat.Comment.values()],
-    doctypes: [...flat.Doctype.values()],
-    document: {
-      charset: document.charset,
-      exportCharset: document.exportCharset,
-      node: document.node,
-    },
-    encodingDecls: [...flat.EncodingDecl.values()].map(({ encoding, node }) => ({
-      encoding,
-      node,
-    })),
+    attributeEntities: [...flat.AttributeEntity.values()].flatMap(
+      ({ entity, name, offset, start }) =>
+        isOpenClass(name) ? [] : [{ entity, name, offset, start }],
+    ),
+    attributes: [...flat.Attribute.values()].flatMap(({ lexical, name, prefix, start }) =>
+      isOpenClass(name) ? [] : [{ lexical, name, prefix, start }],
+    ),
+    comments: [...flat.Comment.values()].map(({ start, value }) => ({ start, value })),
+    doctypes: [...flat.Doctype.values()].map(({ start, value }) => ({ start, value })),
+    document: { charset: document.charset, exportCharset: document.exportCharset },
+    encodingDecls: [...flat.EncodingDecl.values()].map(({ encoding }) => ({ encoding })),
     entityRefs,
-    namespaces,
+    namespaces: [...flat.Namespace.values()].map(({ prefix, start, uri }) => ({
+      prefix,
+      start,
+      uri,
+    })),
     nodes,
-    openElementNames: [...flat.OpenElementName.values()].map(({ local, namespace, node }) => ({
+    openAttributeEntities: [...flat.OpenAttributeEntity.values()].map(
+      ({ entity, local, offset, start, uri }) => ({ entity, local, offset, start, uri }),
+    ),
+    openAttributes: [...flat.OpenAttribute.values()].flatMap(
+      ({ class: open, lexical, local, prefix, start, uri }) =>
+        isOpenClass(open) ? [{ class: open, lexical, local, prefix, start, uri }] : [],
+    ),
+    openElementNames: [...flat.OpenElementName.values()].map(({ local, namespace, start }) => ({
       local,
       namespace,
-      node,
+      start,
     })),
-    openNames,
-    pis: [...flat.Pi.values()].map(({ data, node, target }) => ({ data, node, target })),
-    sdDecls: [...flat.SdDecl.values()].map(({ node, standalone }) => ({ node, standalone })),
+    pis: [...flat.Pi.values()].map(({ data, start, target }) => ({ data, start, target })),
+    sdDecls: [...flat.SdDecl.values()].map(({ standalone }) => ({ standalone })),
     texts,
     whitespace,
-    xmlDecls: [...flat.XmlDecl.values()].map(({ node, version }) => ({ node, version })),
+    xmlDecls: [...flat.XmlDecl.values()].map(({ version }) => ({ version })),
+  };
+};
+
+/**
+ * Write one generated document's insert and document layer, under {@link packageIdentifier} at
+ * {@link generatedPath}.
+ *
+ * @param tree - The document.
+ * @returns Its `Node` root and its document layer's rows.
+ */
+const writtenOf = (tree: XdmDocument<Composed>) => {
+  const view = ownViewOf(tree);
+
+  return {
+    flat: documentRowsOf({
+      ids: { assembled: false, package: packageIdentifier },
+      listed: { documentType: "manifest", path: generatedPath },
+      view,
+    }),
+    root: rootInsertOf(view, {
+      documentType: "manifest",
+      package: packageIdentifier,
+      path: generatedPath,
+    }),
   };
 };
 
@@ -229,20 +259,13 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
  * Write one document's insert and document layer, and assemble them back.
  *
  * @param tree - The document.
- * @param ids - The ids its rows are written under.
  * @returns The tree assembled from the rows, or the refusal of the first row that does not fit.
  */
-const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
-  assemble(
-    flatRowsOf(
-      rootInsertOf(ownViewOf(tree, ids), { documentType: "manifest" }),
-      documentRowsOf({
-        ids: { assembled: false, package: packageId },
-        listed: { documentType: "manifest", path: "item.xml" },
-        view: ownViewOf(tree, ids),
-      }),
-    ),
-  );
+const roundTripOf = (tree: XdmDocument<Composed>) => {
+  const { flat, root } = writtenOf(tree);
+
+  return assemble(flatRowsOf(root, flat));
+};
 
 /**
  * What a node of a generated tree is to the nesting: an element of a kind, a foreign element of
@@ -466,8 +489,10 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
         const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
         const insertOf = (root: XdmClosedElement<Composed>) =>
           nodesOf(
-            rootInsertOf(ownViewOf({ ...tree, root }, idOf), {
+            rootInsertOf(ownViewOf({ ...tree, root }), {
               documentType: "imsqti_item_xmlv3p0",
+              package: packageIdentifier,
+              path: generatedPath,
             }),
           );
         const held = statesOf(insertOf(tree.root));
@@ -498,21 +523,21 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "nests every generated document's tree exactly as the XDM holds it, under ids in any order",
+    "nests every generated document's tree exactly as the XDM holds it, every flat row naming its node by the position the nesting draws",
     (ctx) =>
       // Oracle: a universal one, the round trip assemble ∘ draw ∘ (rootInsertOf, documentRowsOf)
-      // = id, where draw takes each slot, start and end from the nesting as grizzle's filler does.
-      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree, 300 cases. Its
-      // situations are the tree's features, its nesting situations (`nestingSituationsOf`) and the id order, which the
-      // nesting reads; the (parent, child) kind pairs it once noted are the grammar's coverage, not
-      // the round trip's, and kept its residual from saturating.
+      // = id, where draw takes each slot, start, end and parent from the nesting as grizzle's
+      // filler does, and every flat row names its node by the start the host wrote. Bound: the
+      // generator's drawn bounds, up to 200 nodes and depth 7 a tree, 300 cases. Its situations are
+      // the tree's features and its nesting situations (`nestingSituationsOf`), which the nesting
+      // reads.
       searched(
         ctx,
         explore(
           {
             caseHang,
             concurrency: 1,
-            coverage: required<XdmFeature | NestingSituation | "ids in order" | "ids scrambled">(
+            coverage: required<XdmFeature | NestingSituation>(
               [
                 "element",
                 "wildcard",
@@ -543,11 +568,7 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
               c.noteAll(featuresOf(generated.document));
               c.noteAll(nestingSituationsOf(generated.document));
 
-              const ids = c.draw(element([idOf, scrambledIdOf]));
-
-              c.note(ids === idOf ? "ids in order" : "ids scrambled");
-
-              const assembled = yield* Effect.fromResult(roundTripOf(generated.document, ids));
+              const assembled = yield* Effect.fromResult(roundTripOf(generated.document));
 
               assert.deepStrictEqual(assembled, generated.document);
             }),
@@ -556,11 +577,11 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "writes each node's state, ancestry, nearest interaction and characters' ends, and each closed attribute's slot, as the host fold derives them",
+    "writes each node's state, ancestry, nearest interaction and characters' ends, and its closed attributes' slots, as the host fold derives them",
     (ctx) =>
       // Oracle: a second implementation, the host fold of `#pantry/model/folds.ts` (Q4.01), which
       // derives each node's state through the same content grammar by its own walk, its ancestry,
-      // its nearest interaction and each attribute's position.
+      // its nearest interaction and the positions of its closed attributes' names.
       // Bound: the generator's drawn bounds, 200 cases.
       searched(
         ctx,
@@ -589,40 +610,33 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
               c.noteAll(featuresOf(generated.document));
 
               const folded = yield* Effect.orDie(
-                Effect.fromResult(fold(generated.document, idOf, foldGrammarOf(grammar))),
+                Effect.fromResult(fold(generated.document, foldGrammarOf(grammar))),
               );
-              const byId = new Map(folded.nodes.map((node) => [node.id, node] as const));
-              const attributes = new Map(folded.attributes.map((row) => [row.id, row] as const));
-              for (const node of nodesOf(
-                rootInsertOf(ownViewOf(generated.document, idOf), {
-                  documentType: "imsqti_item_xmlv3p0",
-                }),
-              )) {
-                const expected = byId.get(node.id);
+              const { flat, root } = writtenOf(generated.document);
+              const slots = new Map<bigint, string[]>();
+              for (const { slot, start } of flat.Attribute.values()) {
+                slots.set(start, [...(slots.get(start) ?? []), ...slot]);
+              }
+
+              for (const [at, node] of nodesOf(root).entries()) {
+                const start = BigInt(at);
+                const expected = folded.nodes[at];
                 if (expected === undefined) {
-                  assert.fail(`the fold holds no node ${node.id}`);
+                  assert.fail(`the fold holds no node at ${String(start)}`);
                 }
 
-                assert.strictEqual(node.state, String(expected.derived.state), node.id);
+                const label = `${node.kind} at ${String(start)}`;
+                assert.strictEqual(expected.start, start, label);
+                assert.strictEqual(node.state, String(expected.derived.state), label);
                 assert.deepStrictEqual(new Set(node.ancestry), new Set(expected.derived.ancestry));
-                assert.strictEqual(node.nearest, expected.nearest);
-                assert.strictEqual(node.nearestKind, expected.nearestKind);
+                assert.strictEqual(node.nearest, expected.nearest, label);
+                assert.strictEqual(node.nearestKind, expected.nearestKind, label);
                 assert.deepStrictEqual([node.first, node.last], [expected.first, expected.last]);
-                for (const attribute of node.attributes) {
-                  const row = attributes.get(attribute.id);
-                  if (row === undefined) {
-                    assert.fail(`the fold holds no attribute ${attribute.id}`);
-                  }
-
-                  const added = [...row.derived.attrs].filter((at) => !row.attrsWas.has(at));
-                  if (added.length > 0) {
-                    assert.deepStrictEqual(
-                      [...attribute.slot],
-                      added.map(String),
-                      `${node.kind} ${attribute.name}`,
-                    );
-                  }
-                }
+                assert.deepStrictEqual(
+                  (slots.get(start) ?? []).toSorted(),
+                  [...expected.attrs].map(String).toSorted(),
+                  label,
+                );
               }
             }),
         ),
@@ -648,42 +662,22 @@ const acceptedPackages = Effect.all({
  * relation of the members each holds.
  */
 const nestings: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
-  [
-    "Attribute",
-    new Map([
-      ["entities", "AttributeEntity"],
-      ["idrefs", "Idref"],
-      ["openName", "OpenAttributeName"],
-    ]),
-  ],
+  ["Attribute", new Map([["idrefs", "Idref"]])],
   ["AssembledReference", new Map([["segments", "ReferenceSegment"]])],
   ["IdentityText", new Map([["idrefs", "TextIdref"]])],
   ["Instance", new Map([["children", "Instance"]])],
-  [
-    "Node",
-    new Map([
-      ["attributes", "Attribute"],
-      ["children", "Node"],
-      ["namespaces", "Namespace"],
-    ]),
-  ],
-  ["Package", new Map([["entries", "Entry"]])],
+  ["Node", new Map([["children", "Node"]])],
 ]);
 
 /**
  * The fields a nested member never names: its sequence's group, and below a tree's root its root
- * field.
+ * fields.
  */
 const suppliedByNesting: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ["Attribute", new Set(["node"])],
-  ["AttributeEntity", new Set(["attribute", "node"])],
-  ["Entry", new Set(["package"])],
-  ["Idref", new Set(["attribute", "node"])],
-  ["Instance", new Set(["assembly", "parent"])],
-  ["Namespace", new Set(["node"])],
-  ["Node", new Set(["document", "parent"])],
-  ["OpenAttributeName", new Set(["attribute", "node"])],
-  ["TextIdref", new Set(["node"])],
+  ["Idref", new Set(["name", "package", "path", "start"])],
+  ["Instance", new Set(["assembly", "package"])],
+  ["Node", new Set(["package", "path"])],
+  ["TextIdref", new Set(["package", "path", "start"])],
 ]);
 
 /**
@@ -706,44 +700,26 @@ const writtenFieldsOf = (relation: string): ReadonlySet<string> => {
 };
 
 /**
- * A row of a package's inputs, flat or nested.
- */
-type WrittenRow =
-  | (PackageInputs[keyof PackageInputs] extends ReadonlyMap<string, infer Row> ? Row : never)
-  | AttributeInsert
-  | EntityInsert
-  | EntryRow
-  | IdrefInsert
-  | InstanceMember
-  | NamespaceInsert
-  | NodeMember
-  | OpenNameInsert
-  | TextIdrefInsert;
-
-/**
  * Find every field one row names that its caller does not write: every field but its written
  * ones, the count fields its sequences nest at, and the fields its nesting supplies.
  *
  * @param relation - The row's relation.
- * @param row - The row as the ChangeSet carries it.
- * @param place - Where the row stands: a flat row names every written field, a tree's root every
- *   one but the tree's parent, and a nested member neither its group nor the root field.
+ * @param fields - The fields the row names, as the ChangeSet carries it.
+ * @param place - Where the row stands: a flat row and a tree's root name every written field, and
+ *   a nested member neither its group nor the root fields.
  * @returns Each unwritten field, as `relation.field`.
  */
 const unwrittenOf = (
   relation: string,
-  row: WrittenRow,
-  place: "flat" | "member" | "root",
+  fields: readonly string[],
+  place: "flat" | "member",
 ): readonly string[] => {
   const written = writtenFieldsOf(relation);
   const nests = nestings.get(relation) ?? new Map<string, string>();
-  const supplied: ReadonlySet<string> = {
-    flat: new Set<string>(),
-    member: suppliedByNesting.get(relation) ?? new Set<string>(),
-    root: new Set(["parent"]),
-  }[place];
+  const supplied: ReadonlySet<string> =
+    place === "member" ? (suppliedByNesting.get(relation) ?? new Set<string>()) : new Set<string>();
 
-  return Object.keys(row).flatMap((field): readonly string[] =>
+  return fields.flatMap((field): readonly string[] =>
     nests.has(field) || (written.has(field) && !supplied.has(field))
       ? []
       : [`${relation}.${field}`],
@@ -752,46 +728,41 @@ const unwrittenOf = (
 
 /**
  * Find every unwritten field of a program's inputs, through every nesting: each flat row's, each
- * tree's every node, attribute and their families', and each record's entries.
+ * tree's every node and instance, and each closed attribute's and identity text's IDREF tokens.
  *
  * @param program - The program.
  * @returns Each unwritten field, as `relation.field`.
  */
 const unwrittenIn = (program: ImportProgram): readonly string[] => {
-  const { Instance: instances, Node: roots, Package: records, ...flat } = program.inputs;
+  const { Instance: instances, Node: roots, ...flat } = program.inputs;
   const nodes = [...roots.values()].flatMap((root) =>
     nodesOf(root).map((node) => ({ node, root: node === root })),
   );
-  const instanceStack: { readonly instance: InstanceMember; readonly nested: boolean }[] = [
-    ...instances.values(),
-  ].map((instance) => ({ instance, nested: false }));
+  const instanceStack: {
+    readonly instance: InstanceMember;
+    readonly nested: boolean;
+  }[] = [...instances.values()].map((instance) => ({ instance, nested: false }));
   const instanceFields: string[] = [];
   for (let next = instanceStack.pop(); next !== undefined; next = instanceStack.pop()) {
-    instanceFields.push(...unwrittenOf("Instance", next.instance, next.nested ? "member" : "root"));
+    instanceFields.push(
+      ...unwrittenOf("Instance", Object.keys(next.instance), next.nested ? "member" : "flat"),
+    );
     instanceStack.push(...next.instance.children.map((instance) => ({ instance, nested: true })));
   }
 
   return [
     ...Object.entries(flat).flatMap(([relation, rows]) =>
-      [...rows.values()].flatMap((row) => unwrittenOf(relation, row, "flat")),
+      [...rows.values()].flatMap((row) => unwrittenOf(relation, Object.keys(row), "flat")),
     ),
-    ...[...records.values()].flatMap((record) => [
-      ...unwrittenOf("Package", record, "flat"),
-      ...record.entries.flatMap((entry) => unwrittenOf("Entry", entry, "member")),
-    ]),
-    ...nodes.flatMap(({ node, root }) => [
-      ...unwrittenOf("Node", node, root ? "root" : "member"),
-      ...node.namespaces.flatMap((namespace) => unwrittenOf("Namespace", namespace, "member")),
-      ...node.attributes.flatMap((attribute) => [
-        ...unwrittenOf("Attribute", attribute, "member"),
-        ...attribute.openName.flatMap((name) => unwrittenOf("OpenAttributeName", name, "member")),
-        ...attribute.idrefs.flatMap((idref) => unwrittenOf("Idref", idref, "member")),
-        ...attribute.entities.flatMap((entity) => unwrittenOf("AttributeEntity", entity, "member")),
-      ]),
-    ]),
+    ...nodes.flatMap(({ node, root }) =>
+      unwrittenOf("Node", Object.keys(node), root ? "flat" : "member"),
+    ),
     ...instanceFields,
+    ...[...program.inputs.Attribute.values()].flatMap(({ idrefs }) =>
+      idrefs.flatMap((idref) => unwrittenOf("Idref", Object.keys(idref), "member")),
+    ),
     ...[...program.inputs.IdentityText.values()].flatMap(({ idrefs }) =>
-      idrefs.flatMap((idref) => unwrittenOf("TextIdref", idref, "member")),
+      idrefs.flatMap((idref) => unwrittenOf("TextIdref", Object.keys(idref), "member")),
     ),
   ];
 };
@@ -807,8 +778,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         for (const dir of Object.values(packages)) {
           const program = yield* readProgram(dir);
           for (const placed of program.documents) {
-            const { listed, view } = placed;
-            const root = program.inputs.Node.get(view.rows.document.node);
+            const { listed } = placed;
+            const root = [...program.inputs.Node.values()].find(({ path }) => path === listed.path);
             if (root === undefined) {
               assert.fail(`${dir}: no Node root for ${listed.path}`);
             }
@@ -829,7 +800,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // Oracle: the specification as a checker, `Written<R>` (README, "How a field is written"),
         // read off each field's descriptor: every row of every input names only fields its caller
         // writes, a sequence's members nested at its count fields, without their group, and only a
-        // tree's root naming its root field.
+        // tree's root naming its root fields.
         Effect.gen(function* noUnwritten() {
           const packages = yield* acceptedPackages;
           for (const dir of Object.values(packages)) {
@@ -844,52 +815,64 @@ describe("the written types", () => {
   it("name exactly the fields each caller writes, and no field grizzle draws or fills", () => {
     // Oracle: the specification as a checker, the W5 contract's written fields (§C and C13), held
     // by the compiler: each `satisfies` holds a type's keys to exactly this record, and
-    // `Unwritten` to none of Node's drawn, accumulated or generated fields but its four count
-    // fields, which nest its sequences.
+    // `Unwritten` to none of a relation's drawn, accumulated or generated fields but the count
+    // fields its sequences nest at.
     const node = {
       ancestry: true,
       chars: true,
       documentType: true,
       first: true,
       governor: true,
-      id: true,
       kind: true,
       last: true,
       nearest: true,
       nearestKind: true,
+      nearestPath: true,
       prefix: true,
       state: true,
       version: true,
     } as const satisfies Record<keyof NodeFields, true>;
-    const member = {
-      ...node,
-      attributes: true,
-      children: true,
-      namespaces: true,
-    } as const satisfies Record<keyof NodeMember, true>;
-    const root = { ...member, document: true } as const satisfies Record<keyof NodeRoot, true>;
+    const member = { ...node, children: true } as const satisfies Record<keyof NodeMember, true>;
+    const root = { ...member, package: true, path: true } as const satisfies Record<
+      keyof NodeRoot,
+      true
+    >;
+    const keyed = { package: true, path: true, start: true } as const;
     const attribute = {
-      entities: true,
-      id: true,
+      ...keyed,
       idrefs: true,
       lexical: true,
       name: true,
-      openName: true,
       prefix: true,
       slot: true,
     } as const satisfies Record<keyof AttributeInsert, true>;
-    const openName = {
+    const openAttribute = {
+      ...keyed,
+      class: true,
       elementNamespace: true,
+      lexical: true,
       local: true,
+      prefix: true,
+      slot: true,
       uri: true,
-    } as const satisfies Record<keyof OpenNameInsert, true>;
+    } as const satisfies Record<keyof Inserted<"OpenAttribute">, true>;
     const idref = { after: true, before: true, token: true } as const satisfies Record<
       keyof IdrefInsert,
       true
     >;
-    const entity = { name: true, offset: true } as const satisfies Record<keyof EntityInsert, true>;
-    const namespace = { prefix: true, uri: true } as const satisfies Record<
-      keyof NamespaceInsert,
+    const entity = { ...keyed, entity: true, name: true, offset: true } as const satisfies Record<
+      keyof Inserted<"AttributeEntity">,
+      true
+    >;
+    const openEntity = {
+      ...keyed,
+      entity: true,
+      local: true,
+      offset: true,
+      uri: true,
+    } as const satisfies Record<keyof Inserted<"OpenAttributeEntity">, true>;
+    const namespace = { ...keyed, prefix: true, uri: true } as const satisfies Record<
+      keyof Inserted<"Namespace">,
       true
     >;
     const entry = { content: true, path: true } as const satisfies Record<keyof EntryRow, true>;
@@ -902,33 +885,35 @@ describe("the written types", () => {
       idref: true,
       namespace: true,
       node: true,
-      openName: true,
+      openAttribute: true,
+      openEntity: true,
     } as const satisfies {
       readonly attribute: Absent<
-        Extract<
-          keyof AttributeInsert,
-          Exclude<Unwritten<typeof Attribute>, "entities" | "idrefs" | "openName">
-        >
+        Extract<keyof AttributeInsert, Exclude<Unwritten<typeof Attribute>, "idrefs">>
       >;
-      readonly entity: Absent<Extract<keyof EntityInsert, Unwritten<typeof AttributeEntity>>>;
+      readonly entity: Absent<
+        Extract<keyof Inserted<"AttributeEntity">, Unwritten<typeof AttributeEntity>>
+      >;
       readonly entry: Absent<Extract<keyof EntryRow, Unwritten<typeof Entry>>>;
       readonly idref: Absent<Extract<keyof IdrefInsert, Unwritten<typeof Idref>>>;
-      readonly namespace: Absent<Extract<keyof NamespaceInsert, Unwritten<typeof Namespace>>>;
-      readonly node: Absent<
-        Extract<
-          keyof NodeRoot,
-          Exclude<Unwritten<typeof Node>, "attributes" | "children" | "namespaces">
-        >
+      readonly namespace: Absent<Extract<keyof Inserted<"Namespace">, Unwritten<typeof Namespace>>>;
+      readonly node: Absent<Extract<keyof NodeRoot, Exclude<Unwritten<typeof Node>, "children">>>;
+      readonly openAttribute: Absent<
+        Extract<keyof Inserted<"OpenAttribute">, Unwritten<typeof OpenAttribute>>
       >;
-      readonly openName: Absent<Extract<keyof OpenNameInsert, Unwritten<typeof OpenAttributeName>>>;
+      readonly openEntity: Absent<
+        Extract<keyof Inserted<"OpenAttributeEntity">, Unwritten<typeof OpenAttributeEntity>>
+      >;
     };
 
     assert.isTrue(Object.values(noLeak).every(Boolean));
-    assert.lengthOf(Object.keys(root), 17);
+    assert.lengthOf(Object.keys(root), 15);
     assert.lengthOf(Object.keys(attribute), 8);
     assert.lengthOf(
-      [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),
-      12,
+      [openAttribute, idref, entity, openEntity, namespace, entry].flatMap((record) =>
+        Object.keys(record),
+      ),
+      37,
     );
   });
 });
@@ -1087,92 +1072,62 @@ describe("tokensOf, on an IDREFS form", () => {
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) => {
-  suite.effect("mints one fresh id per package and per node and attribute", () =>
-    // Oracle: the specification as a checker, the brief's "one fresh uuid per XDM node and per
-    // package": no two nodes or attributes of one minting share an id, nor do two mintings.
-    Effect.gen(function* freshIds() {
-      const program = yield* readProgram(fixtures.simple);
-      const listed = program.documents.map(({ listed: held }) => held);
-      const entries = [...program.inputs.Package.values()].flatMap((record) =>
-        record.entries.map(({ path }) => path),
-      );
-      const first = nodeIdsOf(listed, entries);
-      const second = nodeIdsOf(listed, entries);
-      const idsOf = (minted: typeof first) => [
-        minted.package,
-        ...minted.documents.flatMap(({ view: { rows } }) => [
-          ...rows.nodes.map(({ id }) => id),
-          ...rows.attributes.map(({ id }) => id),
-        ]),
-      ];
+  suite.effect(
+    "places a package twice as one: nothing is drawn, every row named by QTI's own identity",
+    () =>
+      // Oracle: the specification as a checker, the cutover's rule that an import mints nothing: the
+      // same documents placed twice give equal views, every document's lookups name paths, and every
+      // document holds the package's identifier. Bound: the simple package.
+      Effect.gen(function* placedTwice() {
+        const program = yield* readProgram(fixtures.simple);
+        const listed = program.documents.map(({ listed: held }) => held);
+        const entries = [...program.inputs.Entry.values()].map(({ path }) => path);
+        const first = nodeIdsOf(packageIdentifier, listed, entries);
+        const second = nodeIdsOf(packageIdentifier, listed, entries);
 
-      assert.strictEqual(new Set(idsOf(first)).size, idsOf(first).length);
-      assert.strictEqual(
-        new Set([...idsOf(first), ...idsOf(second)]).size,
-        2 * idsOf(first).length,
-      );
-      for (const { ids, view } of first.documents) {
-        assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(view.rows.document.node));
-        assert.strictEqual(ids.package, first.package);
-      }
-    }),
+        assert.deepStrictEqual(
+          first.map(({ listed: held, view }) => ({ listed: held, view })),
+          second.map(({ listed: held, view }) => ({ listed: held, view })),
+        );
+        for (const { ids } of first) {
+          assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(ids.path));
+          assert.strictEqual(ids.package, packageIdentifier);
+        }
+      }),
   );
 
   suite.effect(
-    "reads a path listed twice as the first document listed at it, and a site's target there as the first a resource names",
+    "reads a path listed twice as one document, and names a site's target there only where a resource lists it",
     () =>
       // Oracle: the specification as a checker, a path is one document (reading 93): the import
       // lists a resource's path once, and the manifest again where a resource names it
-      // (`#pantry/import/program.ts`), so `documentAt` names the first document listed at a path,
-      // the manifest's own, and `targetAt` the first listed under a resource type, never the
-      // manifest's own listing, which names none (reading 115). Bound: the simple package's
-      // listing with each of its documents listed again at its end under the item type, the
-      // manifest's the one an import writes.
+      // (`#pantry/import/program.ts`), so `documentAt` names the document at every listed path,
+      // and `targetAt` only a path some listing names under a resource type, never the manifest's
+      // own listing, which names none (reading 115). Bound: the simple package's listing with each
+      // of its documents listed again at its end under the item type.
       Effect.gen(function* relisted() {
         const program = yield* readProgram(fixtures.simple);
         const listed = program.documents.map(({ listed: held }) => held);
-        const entries = [...program.inputs.Package.values()].flatMap((record) =>
-          record.entries.map(({ path }) => path),
-        );
+        const entries = [...program.inputs.Entry.values()].map(({ path }) => path);
         for (const again of listed) {
-          const minted = nodeIdsOf(
+          const placed = nodeIdsOf(
+            packageIdentifier,
             [...listed, { ...again, documentType: "imsqti_item_xmlv3p0" }],
             entries,
           );
-          const firstAt = (path: string, named: boolean) =>
-            Option.fromUndefinedOr(
-              minted.documents.find(
-                ({ ids }) => ids.path === path && (!named || ids.documentType !== "manifest"),
-              )?.view.rows.document.node,
-            );
 
-          for (const { ids } of minted.documents) {
+          for (const { ids } of placed) {
             const label = `${again.path} again, read at ${ids.path}`;
-            assert.deepStrictEqual(ids.documentAt(ids.path), firstAt(ids.path, false), label);
-            assert.deepStrictEqual(
-              Option.map(ids.targetAt(ids.path), ({ node }) => node),
-              firstAt(ids.path, true),
+            assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(ids.path), label);
+            assert.strictEqual(
+              Option.isSome(ids.targetAt(ids.path)),
+              placed.some(
+                (other) => other.ids.path === ids.path && other.ids.documentType !== "manifest",
+              ),
               label,
             );
           }
         }
       }),
   );
-});
-
-describe("mintId", () => {
-  it("draws a version 7 uuid whose leading 48 bits are the millisecond it was drawn, so a later draw is greater", () => {
-    // Oracle: RFC 9562 §5.7, UUIDv7's layout: unix_ts_ms in the first 48 bits, the version 7 in
-    // the 13th hex digit and the variant 10 in the 17th. A later millisecond gives a greater id.
-    // Bound: one draw, read against the clock on both sides of it.
-    const before = Date.now();
-    const hex = mintId().replaceAll("-", "");
-    const after = Date.now();
-    const drawnAt = Number.parseInt(hex.slice(0, 12), 16);
-
-    assert.strictEqual(hex[12], "7");
-    assert.include(["8", "9", "a", "b"], hex[16]);
-    assert.isAtLeast(drawnAt, before);
-    assert.isAtMost(drawnAt, after);
-  });
 });

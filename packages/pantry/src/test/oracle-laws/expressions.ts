@@ -33,7 +33,6 @@ import {
   setKinds,
 } from "#pantry/grammar/expression.ts";
 import type { ExpressionTyping } from "#pantry/grammar/expression.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { itemRefDocument, testDocumentsOf } from "#pantry/test/oracle-laws/assembly.ts";
 import {
   breachAt,
@@ -244,7 +243,7 @@ const spelledName = (lexical: string, spelling: string, kind: string): Option.Op
 const attributeBaseOf = (rows: View, node: Row): string => {
   if (node.kind === "qti-math-operator") {
     return new RegExp(integerMathOperators, "u").test(
-      Option.getOrElse(valueOf(rows, node.id, "name"), () => ""),
+      Option.getOrElse(valueOf(rows, node.start, "name"), () => ""),
     )
       ? "integer"
       : "float";
@@ -252,13 +251,13 @@ const attributeBaseOf = (rows: View, node: Row): string => {
 
   if (
     node.kind === "qti-test-variables" &&
-    Option.isNone(valueOf(rows, node.id, "base-type")) &&
-    Option.isSome(valueOf(rows, node.id, "weight-identifier"))
+    Option.isNone(valueOf(rows, node.start, "base-type")) &&
+    Option.isSome(valueOf(rows, node.start, "weight-identifier"))
   ) {
     return "float";
   }
 
-  return Option.getOrElse(typedValueOf(rows, node.id, "base-type"), () => "unknown");
+  return Option.getOrElse(typedValueOf(rows, node.start, "base-type"), () => "unknown");
 };
 
 /**
@@ -381,7 +380,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
   const declared = new Map<string, Row>();
   for (const node of rows.members) {
     if (grammar.references.declarationKind.has(node.kind)) {
-      for (const identifier of Option.toArray(typedValueOf(rows, node.id, "identifier"))) {
+      for (const identifier of Option.toArray(typedValueOf(rows, node.start, "identifier"))) {
         if (!declared.has(identifier)) {
           declared.set(identifier, node);
         }
@@ -406,7 +405,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
           .filter(({ kind }) => kind === node.kind)
           .flatMap(({ attribute, spelling }) =>
             Option.toArray(
-              Option.flatMap(valueOf(rows, node.id, attribute), (lexical) =>
+              Option.flatMap(valueOf(rows, node.start, attribute), (lexical) =>
                 spelledName(lexical, spelling, node.kind),
               ),
             ).map((identifier): Reference => {
@@ -424,9 +423,9 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                   // one does: its declaration's value domain refuses it alone (the ruling of
                   // 2026-11-06; lane NIL's audit, B11).
                   type: {
-                    base: valueBaseOf(typedValueOf(rows, declaration.id, "base-type")),
+                    base: valueBaseOf(typedValueOf(rows, declaration.start, "base-type")),
                     cardinality: Option.getOrElse(
-                      typedValueOf(rows, declaration.id, "cardinality"),
+                      typedValueOf(rows, declaration.start, "cardinality"),
                       () => "unknown",
                     ),
                   },
@@ -462,24 +461,24 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
   const named = new Map(
     references
       .filter(({ attribute }) => attribute === "identifier")
-      .map((reference) => [reference.node.id, reference] as const),
+      .map((reference) => [reference.node.start, reference] as const),
   );
-  const languages = new Map<NodeId, string>();
+  const languages = new Map<bigint, string>();
   // A language is its root's, carried down through rules and expressions; the walk up stops at a
   // node it has met, so a cycle of parent links or a second root ends it.
   const languageOf = (node: Row): string => {
     const chain: Row[] = [];
-    const met = new Set<NodeId>();
+    const met = new Set<bigint>();
     let at: Row | undefined = node;
     let language = "none";
-    while (at !== undefined && !met.has(at.id)) {
-      const known = languages.get(at.id);
+    while (at !== undefined && !met.has(at.start)) {
+      const known = languages.get(at.start);
       if (known !== undefined) {
         language = known;
         break;
       }
 
-      met.add(at.id);
+      met.add(at.start);
       chain.push(at);
 
       const opened = rootLanguages.get(at.kind);
@@ -488,7 +487,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
         break;
       }
 
-      const parent = rows.byId.get(at.parent);
+      const parent = rows.byStart.get(at.parent);
       at =
         parent !== undefined &&
         parent.start > 0n &&
@@ -498,41 +497,41 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
     }
 
     for (const held of chain) {
-      languages.set(held.id, language);
+      languages.set(held.start, language);
     }
 
     return language;
   };
-  const types = new Map<NodeId, Type>();
+  const types = new Map<bigint, Type>();
   const operandsOf = (node: Row): readonly Row[] =>
-    elementsOf(rows, node.id).filter(({ kind }) => typings.has(kind));
+    elementsOf(rows, node.start).filter(({ kind }) => typings.has(kind));
   // An expression met again before its type is known stands on a cycle of parent links, which
   // the tree laws refuse; it is typed unknown, so the typing ends.
-  const typing = new Set<NodeId>();
+  const typing = new Set<bigint>();
   const typeOf = (node: Row): Type => {
-    const known = types.get(node.id);
+    const known = types.get(node.start);
     if (known !== undefined) {
       return known;
     }
 
-    if (typing.has(node.id)) {
+    if (typing.has(node.start)) {
       return unknownType;
     }
 
-    typing.add(node.id);
+    typing.add(node.start);
 
     const kindTyping = typings.get(node.kind);
     const type =
       kindTyping === undefined
         ? unknownType
         : typers[kindTyping.typing]({
-            declared: named.get(node.id)?.type ?? unknownType,
+            declared: named.get(node.start)?.type ?? unknownType,
             node,
             operands: operandsOf(node).map(typeOf),
             rows,
             typing: kindTyping,
           });
-    types.set(node.id, type);
+    types.set(node.start, type);
 
     return type;
   };
@@ -557,7 +556,7 @@ const expressionBreachesOf = (typed: Typed): readonly Breach[] =>
     }
 
     const { rows } = typed;
-    const operands = elementsOf(rows, node.id)
+    const operands = elementsOf(rows, node.start)
       .map((child, at) => ({ at, child }))
       .filter(({ child }) => typings.has(child.kind))
       .map(({ at, child }) => ({ lead: at === 0, type: typed.typeOf(child) }));
@@ -576,7 +575,7 @@ const expressionBreachesOf = (typed: Typed): readonly Breach[] =>
         .map(({ type }) => type.cardinality)
         .filter((cardinality) => cardinality !== "unknown"),
     );
-    const parent = rows.byId.get(node.parent);
+    const parent = rows.byStart.get(node.parent);
     const own = typed.typeOf(node);
     const condition =
       parent !== undefined &&
@@ -762,11 +761,11 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
 
   return typed.references.flatMap((reference): readonly Breach[] => {
     const { node } = reference;
-    const held = elementsOf(rows, node.id).find(({ kind }) => typings.has(kind));
+    const held = elementsOf(rows, node.start).find(({ kind }) => typings.has(kind));
     const tables = tableKinds.get(node.kind) ?? [];
     const table = reference.declaration.pipe(
       Option.flatMap((declaration) =>
-        Arr.findFirst(elementsOf(rows, declaration.id), ({ kind }) => tables.includes(kind)),
+        Arr.findFirst(elementsOf(rows, declaration.start), ({ kind }) => tables.includes(kind)),
       ),
       Option.map(({ kind }) => kind),
     );
@@ -816,7 +815,7 @@ const literalBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly Bre
   return rows.members.flatMap((node): readonly Breach[] => {
     if (
       node.kind === "qti-test-variables" &&
-      Option.isSome(valueOf(rows, node.id, "weight-identifier"))
+      Option.isSome(valueOf(rows, node.start, "weight-identifier"))
     ) {
       const { base } = typed.typeOf(node);
 
@@ -826,7 +825,7 @@ const literalBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly Bre
     }
 
     if (node.kind === "qti-base-value") {
-      return Option.toArray(typedOr(rows, node.id, "base-type", "")).flatMap((baseType) =>
+      return Option.toArray(typedOr(rows, node.start, "base-type", "")).flatMap((baseType) =>
         typedValueHolds(grammar, baseType, node.stringValue)
           ? []
           : [breachAt(rows, node, "Literal lexical", { baseType, text: node.stringValue })],
@@ -879,14 +878,14 @@ export const expressionPackageBreaches = (
         return [];
       }
 
-      const itemRef = rows.byId.get(node.parent);
-      const expression = elementsOf(rows, node.id).find(({ kind }) => typings.has(kind));
+      const itemRef = rows.byStart.get(node.parent);
+      const expression = elementsOf(rows, node.start).find(({ kind }) => typings.has(kind));
       if (itemRef === undefined || expression === undefined) {
         return [];
       }
 
       const template = Option.getOrElse(
-        typedValueOf(rows, node.id, "template-identifier"),
+        typedValueOf(rows, node.start, "template-identifier"),
         () => "",
       );
       const declared = Option.flatMap(itemRefDocument(input, document.listed, itemRef), (item) =>
@@ -894,7 +893,7 @@ export const expressionPackageBreaches = (
           item.rows.members.find(
             (held) =>
               grammar.references.declarationKind.has(held.kind) &&
-              Option.contains(typedValueOf(item.rows, held.id, "identifier"), template),
+              Option.contains(typedValueOf(item.rows, held.start, "identifier"), template),
           ),
         ).pipe(
           // Each half judges the declaration where what it reads spells something (spec readings
@@ -903,8 +902,8 @@ export const expressionPackageBreaches = (
           // that domain refuses it alone (the orchestrator's ruling of 2026-11-06; lane NIL's
           // audit, B11).
           Option.map((declaration) => ({
-            base: valueBaseOf(typedValueOf(item.rows, declaration.id, "base-type")),
-            cardinality: typedValueOf(item.rows, declaration.id, "cardinality"),
+            base: valueBaseOf(typedValueOf(item.rows, declaration.start, "base-type")),
+            cardinality: typedValueOf(item.rows, declaration.start, "cardinality"),
           })),
         ),
       );
@@ -930,7 +929,7 @@ export const expressionPackageBreaches = (
                 onSome: ({ base, cardinality }) => [base, ...Option.toArray(cardinality)].join(" "),
               }),
               held: `${held.base} ${held.cardinality}`,
-              itemRef: Option.getOrElse(typedValueOf(rows, itemRef.id, "identifier"), () => ""),
+              itemRef: Option.getOrElse(typedValueOf(rows, itemRef.start, "identifier"), () => ""),
               template,
             }),
           ];

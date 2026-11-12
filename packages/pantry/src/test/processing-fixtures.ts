@@ -5,7 +5,7 @@ import { Config, Console, Effect, FileSystem, Match, Schema } from "effect";
 import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { fragmentType } from "#pantry/grammar/include.ts";
-import { materialize, materializeCorpus } from "#pantry/test/fixtures.ts";
+import { materialize, materializeCorpus, ownIdentifier } from "#pantry/test/fixtures.ts";
 import type { ExamplesError } from "#pantry/test/fixtures.ts";
 
 /**
@@ -357,7 +357,7 @@ const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
  * @param name - One of {@link processingFixtureNames}.
  * @returns The package's spec.
  */
-const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
+const writtenSpecOf = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
   if (name === "processing-item") {
     return { base: "simple", edits: processingItemEdits, name };
   }
@@ -449,6 +449,21 @@ const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec =>
         : [handWritten(name), simpleItemName],
     name,
   };
+};
+
+/**
+ * Look up a derived package's spec: its written one ({@link writtenSpecOf}), its first edit giving
+ * it a manifest identifier of its own in place of `simple`'s (`ownIdentifier` of
+ * `#pantry/test/fixtures.ts`), so the lease imports each beside `simple` and every other fixture as
+ * a package of its own.
+ *
+ * @param name - One of {@link processingFixtureNames}.
+ * @returns The package's spec.
+ */
+const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
+  const spec = writtenSpecOf(name);
+
+  return { ...spec, edits: [{ ...ownIdentifier(name), _tag: "replaceText" }, ...spec.edits] };
 };
 
 /**

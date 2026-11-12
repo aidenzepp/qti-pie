@@ -2,10 +2,13 @@
  * Variable declarations and their values: the O2 overlays (plan §1.7; the W5 amendment's C17, C18
  * and D entry for Q5.08; the tier-1 addendum's G-match, G-parse and "Text in keys").
  *
- * Each overlay is a flat row keyed by its element's node. It copies its node's `nodeRef` tuple and
- * takes each attribute value it compares from `Attribute`, over a selection the closed attributes'
- * key (`closedAttributes`, `#pantry/qti/attributes.ts`) keys, which keeps its lexical form out of
- * every index (C18):
+ * Each overlay is a flat row keyed by its element's place, `(package, path, start)`: its package's
+ * manifest identifier, its document's path, and the element's pre-order position in that document,
+ * the key `Node` holds it by. A link to another element of the document, a declaration, a set or a
+ * mapping, is that element's `start` alone, in the row's own package and path. Each overlay copies
+ * its node's `nodeRef` tuple and takes each attribute value it compares from `Attribute`, over a
+ * selection `Attribute`'s key, `(package, path, start, name)`, keys once it fixes the name, which
+ * keeps its lexical form out of every index (C18):
  *
  * - {@link Declaration}, one per `qti-{response,outcome,template,context}-declaration`: its kind as a
  *   `DeclarationKind`, and its counts of the typed rows below. Every row that hangs from a
@@ -80,7 +83,6 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars, Term } from "@bjornpagen/grizzle";
 
@@ -96,14 +98,14 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute, closedName, namingPattern, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   BaseTypePattern,
   unjudgedBaseTypes,
   ValueBase,
   ValueBaseOf,
 } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 
@@ -232,17 +234,18 @@ export const contextVariable = {
 };
 
 /**
- * A variable a document declares, keyed by its declaration element's node: every declaration has
- * one, whatever its identifier, cardinality and base type spell. None of the three is a field of
- * it: each is a row of its own, {@link DeclarationIdentifier}, {@link DeclarationCardinality} and
- * {@link DeclarationBaseType}, written only where it names or spells something, so one that is
- * unwritten or spells nothing is refused by AL3 or its value domain alone, and the declaration's
- * values, mapping and tables are judged as any other's (spec readings 157 and 158).
+ * A variable a document declares, keyed by its declaration element's place, `(package, path,
+ * start)`: every declaration has one, whatever its identifier, cardinality and base type spell.
+ * None of the three is a field of it: each is a row of its own, {@link DeclarationIdentifier},
+ * {@link DeclarationCardinality} and {@link DeclarationBaseType}, written only where it names or
+ * spells something, so one that is unwritten or spells nothing is refused by AL3 or its value
+ * domain alone, and the declaration's values, mapping and tables are judged as any other's (spec
+ * readings 157 and 158).
  *
  * Its fields, every one written by the host but the counts:
  *
- * - The node's {@link nodeRef} tuple: `node`, `document`, `kind`, `start`, `nearest`, `version` and
- *   `parent`;
+ * - The node's {@link nodeRef} tuple: `package`, `path`, `start`, `kind`, `nearest`, `version` and
+ *   `parent`, its parent's `start`;
  * - `parentKind`, its parent's kind, copied from `Node`: `Reserved type` reads it, since a test's
  *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 163);
  * - `declarationKind`, its kind as a `DeclarationKind`, `Declares` of `kind`;
@@ -260,26 +263,26 @@ export const Declaration = relation(
     baseTypes: drawn(natural),
     cardinalities: drawn(natural),
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     kind: closedId(NodeKind),
     masteries: drawn(natural),
     maximums: drawn(natural),
     minimums: drawn(natural),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A declaration's `cardinality`, keyed by its node, where it spells a code, a counted member of its
- * {@link Declaration}: `cardinality`, the `Cardinality` its lexical form spells (C17), and
- * `cardinalityLexical`, that code's spelling, which the database derives (`CardinalityLexical`) and
- * the attribute as written is copied into (C18).
+ * A declaration's `cardinality`, keyed by its declaration's place, where it spells a code, a
+ * counted member of its {@link Declaration}: `cardinality`, the `Cardinality` its lexical form
+ * spells (C17), and `cardinalityLexical`, that code's spelling, which the database derives
+ * (`CardinalityLexical`) and the attribute as written is copied into (C18).
  *
  * It is the one row a declaration's cardinality is read from: every row that names a declaration
  * copies whether it has one (`cardinalities`), and one that reads the cardinality copies it from
@@ -291,22 +294,27 @@ export const Declaration = relation(
  */
 export const DeclarationCardinality = relation.generated(
   "DeclarationCardinality",
-  { cardinality: closedId(Cardinality), node: uuid },
-  ["node"],
+  {
+    cardinality: closedId(Cardinality),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
   (c) => ({
     cardinalityLexical: generated(keyText, CardinalityLexical.at("lexical", c.cardinality)),
   }),
 );
 
 /**
- * A declaration's `base-type`, keyed by its node, where it spells a code, a counted member of its
- * {@link Declaration}: `baseType`, the `BaseType` its lexical form spells (C17), and two fields the
- * database derives from it: `baseTypeLexical`, the code's spelling (`BaseTypeLexical`), which the
- * attribute as written is copied into (C18), and `valueBase`, the code as an expression's type
- * (`ValueBaseOf`). A record writes none ("Variables with record cardinality have no base-type",
- * QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), and has no row; nor has a
- * declaration whose `base-type` spells nothing, which its value domain refuses alone (spec reading
- * 158).
+ * A declaration's `base-type`, keyed by its declaration's place, where it spells a code, a counted
+ * member of its {@link Declaration}: `baseType`, the `BaseType` its lexical form spells (C17), and
+ * two fields the database derives from it: `baseTypeLexical`, the code's spelling
+ * (`BaseTypeLexical`), which the attribute as written is copied into (C18), and `valueBase`, the
+ * code as an expression's type (`ValueBaseOf`). A record writes none ("Variables with record
+ * cardinality have no base-type", QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and
+ * 5.151.3), and has no row; nor has a declaration whose `base-type` spells nothing, which its value
+ * domain refuses alone (spec reading 158).
  *
  * It is the one row a declaration's base type is read from: every row that names a declaration
  * copies whether it has one (`baseTypes`), and one that reads the type copies it from here, so
@@ -314,8 +322,8 @@ export const DeclarationCardinality = relation.generated(
  */
 export const DeclarationBaseType = relation.generated(
   "DeclarationBaseType",
-  { baseType: closedId(BaseType), node: uuid },
-  ["node"],
+  { baseType: closedId(BaseType), package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
   (b) => ({
     baseTypeLexical: generated(keyText, BaseTypeLexical.at("lexical", b.baseType)),
     valueBase: generated(closedId(ValueBase), ValueBaseOf.at("value", b.baseType)),
@@ -323,7 +331,8 @@ export const DeclarationBaseType = relation.generated(
 );
 
 /**
- * A declaration's `identifier`, keyed by its node, where it names something once collapsed, an
+ * A declaration's `identifier`, keyed by its declaration's place, where it names something once
+ * collapsed, an
  * NCName: `identifier`, the lexical form without its outer whitespace, and `identifierLead` and
  * `identifierTrail`, the whitespace written around it, which `E1_derived` proves concatenate to
  * `identifierLexical`, the lexical form as written (C18's copy), as {@link RecordFieldName} holds a
@@ -343,21 +352,22 @@ export const DeclarationIdentifier = relation(
     baseTypes: natural,
     cardinalities: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     identifier: keyText,
     identifierLead: Space,
     identifierLexical: keyText,
     identifierTrail: Space,
-    node: uuid,
+    package: ManifestIdentifier,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A declared name beside its cardinality, keyed by its declaration's node, where the declaration
- * has both a name and a cardinality: its {@link DeclarationIdentifier}'s `identifier`, document,
- * declaration kind and count of base types, and its {@link DeclarationCardinality}'s
+ * A declared name beside its cardinality, keyed by its declaration's place, where the declaration
+ * has both a name and a cardinality: its {@link DeclarationIdentifier}'s `identifier`, declaration
+ * kind and count of base types, and its {@link DeclarationCardinality}'s
  * `cardinality`, which `Reserved type` reads beside the name (a typed outcome name is no record,
  * and QTI_CONTEXT is one); and `parentKind`, its {@link Declaration}'s, which `Reserved type`
  * reads where it reads the cardinality (reading 163).
@@ -374,17 +384,18 @@ export const DeclarationName = relation(
     baseTypes: natural,
     cardinality: closedId(Cardinality),
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     identifier: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
     parentKind: closedId(NodeKind),
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * The one tuple of a declaration every row that hangs from it by node copies, as `nodeRef` is
- * Node's (C18; the orchestrator's ruling of 2026-11-06): its node, document, declaration kind,
+ * The one tuple of a declaration every row that hangs from it copies, as `nodeRef` is Node's (C18;
+ * the orchestrator's ruling of 2026-11-06): its place, `(package, path, start)`, declaration kind,
  * and counts of cardinalities and base types, so `Declaration` carries one superkey UNIQUE for them
  * all. Neither the cardinality nor the base type is a field of it: a declaration may have neither,
  * so a row that reads one reads {@link DeclarationCardinality} or {@link DeclarationBaseType},
@@ -393,8 +404,9 @@ export const DeclarationName = relation(
  */
 export const declarationRef = on(
   Declaration,
-  "node",
-  "document",
+  "package",
+  "path",
+  "start",
   "declarationKind",
   "cardinalities",
   "baseTypes",
@@ -402,13 +414,14 @@ export const declarationRef = on(
 
 /**
  * The one tuple of a named declaration every row that resolves a name to its declaration copies,
- * whatever the declaration's cardinality spells: its node, document, name, declaration kind, and
- * counts of cardinalities and base types, so `DeclarationIdentifier` carries one superkey UNIQUE
- * for them all ({@link DeclarationName} copies it too). Neither the cardinality nor the base type
- * is a field of it: a law over the named declaration's cardinality reads a row of the resolving
- * row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is 1, and one
- * over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A declaration whose
- * identifier names nothing has no row here, and nothing resolves to it (spec readings 157 and 159).
+ * whatever the declaration's cardinality spells: its place, `(package, path, start)`, name,
+ * declaration kind, and counts of cardinalities and base types, so `DeclarationIdentifier` carries
+ * one superkey UNIQUE for them all ({@link DeclarationName} copies it too). Neither the cardinality
+ * nor the base type is a field of it: a law over the named declaration's cardinality reads a row of
+ * the resolving row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is
+ * 1, and one over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A
+ * declaration whose identifier names nothing has no row here, and nothing resolves to it (spec
+ * readings 157 and 159).
  *
  * `cardinalities` is last, the order {@link DeclarationName}'s containment references the tuple in:
  * its target fixes `cardinalities` to 1 beyond its terms, and grizzle references a fixed field
@@ -417,8 +430,9 @@ export const declarationRef = on(
  */
 export const declarationIdentifierRef = on(
   DeclarationIdentifier,
-  "node",
-  "document",
+  "package",
+  "path",
+  "start",
   "identifier",
   "declarationKind",
   "baseTypes",
@@ -427,7 +441,7 @@ export const declarationIdentifierRef = on(
 
 /**
  * A declaration's default or correct values, keyed by its `qti-default-value` or
- * `qti-correct-response` node, whose `parent` is the declaration.
+ * `qti-correct-response` element's place, whose `parent` is the declaration's `start`.
  *
  * Its fields, every one written by the host but `fields`:
  *
@@ -445,49 +459,53 @@ export const ValueSet = relation(
     baseTypes: natural,
     cardinalities: natural,
     declarationKind: closedId(DeclarationKind),
-    document: uuid,
     elementChildren: natural,
     elements: natural,
     fields: drawn(natural),
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A value set beside its declaration's cardinality, keyed by its node, where the declaration has
- * one: `declaration`, the set's parent, `cardinality`, its {@link DeclarationCardinality}'s, and
- * `elementChildren` and `fields`, its {@link ValueSet}'s counts of values and of fields, which
- * `Value_cardinality` holds to the cardinality. A set of a declaration with no cardinality has no
- * row, and no law reads a cardinality it does not have (spec reading 158).
+ * A value set beside its declaration's cardinality, keyed by its set's place, where the declaration
+ * has one: `declaration`, the set's parent's `start`, `cardinality`, its
+ * {@link DeclarationCardinality}'s, and `elementChildren` and `fields`, its {@link ValueSet}'s
+ * counts of values and of fields, which `Value_cardinality` holds to the cardinality. A set of a
+ * declaration with no cardinality has no row, and no law reads a cardinality it does not have (spec
+ * reading 158).
  */
 export const ValueSetCardinality = relation(
   "ValueSetCardinality",
   {
     cardinality: closedId(Cardinality),
-    declaration: uuid,
+    declaration: natural,
     elementChildren: natural,
     fields: natural,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One value of a value set, keyed by its `qti-value` node, whose `parent` is the set.
+ * One value of a value set, keyed by its `qti-value` element's place, whose `parent` is the set's
+ * `start`.
  *
  * Its fields, every one written by the host:
  *
  * - The node's {@link nodeRef} tuple;
  * - `text`, its node's string value, the concatenation of its character data (Q5.03's fold over
  *   `copiedTextKinds`), copied from `Node`;
- * - `cardinalities` and `baseTypes`, its set's, and `declaration`, its set's parent: where its
- *   declaration has both a cardinality and a base type, its text is read beside them, its
+ * - `cardinalities` and `baseTypes`, its set's, and `declaration`, its set's parent's `start`: where
+ *   its declaration has both a cardinality and a base type, its text is read beside them, its
  *   {@link TypedValue}, in that base type unless the declaration is a record; a record's field's
  *   text is read in its own base type, its {@link FieldValue}'s (information model §7.46, Value:
  *   "The base-type is defined by the 'base-type' attribute of the declaration except in the case of
@@ -498,42 +516,45 @@ export const Value = relation(
   {
     baseTypes: natural,
     cardinalities: natural,
-    declaration: uuid,
-    document: uuid,
+    declaration: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     text: keyText,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A value's text beside its declaration's base type and cardinality, keyed by its `qti-value` node,
- * where its declaration has both: `text` and `declaration`, its {@link Value}'s, `baseType`, its
- * declaration's {@link DeclarationBaseType}'s, and `cardinality`, its
+ * A value's text beside its declaration's base type and cardinality, keyed by its `qti-value`
+ * element's place, where its declaration has both: `text` and `declaration`, its {@link Value}'s,
+ * `baseType`, its declaration's {@link DeclarationBaseType}'s, and `cardinality`, its
  * {@link DeclarationCardinality}'s. `Typed_value` reads the text in the base type unless the
- * cardinality is `record`, whose value is a field read in its own base type ({@link FieldValue}).
- * A declaration with no base type gives its values none to be read in, and one with no
- * cardinality none to tell a record's from another's.
+ * cardinality is `record`, whose value is a field read in its own base type ({@link FieldValue}). A
+ * declaration with no base type gives its values none to be read in, and one with no cardinality
+ * none to tell a record's from another's.
  */
 export const TypedValue = relation(
   "TypedValue",
   {
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    node: uuid,
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     text: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A value's own `base-type`, keyed by its `qti-value` node, where it writes one that spells a code:
+ * A value's own `base-type`, keyed by its `qti-value` element's place, where it writes one that
+ * spells a code:
  * `baseType`, the `BaseType` that form spells (C17), `baseTypeLexical`, that code's spelling, which
  * the database derives (`BaseTypeLexical`) and the attribute as written is copied into, and
  * `cardinalities`, its {@link Value}'s. A record's field's text is read in it
@@ -546,33 +567,42 @@ export const TypedValue = relation(
  */
 export const ValueBaseType = relation.generated(
   "ValueBaseType",
-  { baseType: closedId(BaseType), cardinalities: natural, node: uuid },
-  ["node"],
+  {
+    baseType: closedId(BaseType),
+    cardinalities: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
   (b) => ({ baseTypeLexical: generated(keyText, BaseTypeLexical.at("lexical", b.baseType)) }),
 );
 
 /**
  * A value's text beside its own base type and its declaration's cardinality, keyed by its
- * `qti-value` node, where it has a {@link ValueBaseType} and its declaration a cardinality: `text`
- * and `declaration`, its {@link Value}'s, `baseType`, its {@link ValueBaseType}'s, and
- * `cardinality`, its declaration's {@link DeclarationCardinality}'s. `Typed_value` reads a record's
- * field's text in its own base type; any other value's is read in its declaration's
- * ({@link TypedValue}).
+ * `qti-value` element's place, where it has a {@link ValueBaseType} and its declaration a
+ * cardinality: `text` and `declaration`, its {@link Value}'s, `baseType`, its
+ * {@link ValueBaseType}'s, and `cardinality`, its declaration's {@link DeclarationCardinality}'s.
+ * `Typed_value` reads a record's field's text in its own base type; any other value's is read in
+ * its declaration's ({@link TypedValue}).
  */
 export const FieldValue = relation(
   "FieldValue",
   {
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
-    declaration: uuid,
-    node: uuid,
+    declaration: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     text: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One field of a record's value, keyed by its `qti-value` node, whose `parent` is its set: "a set
+ * One field of a record's value, keyed by its `qti-value` element's place, whose `parent` is its
+ * set's `start`: "a set
  * of independent values each identified by its own identifier and having its own base-type"
  * (information model §8.16, CardinalityEnum, `record`). A value has one where it writes both a
  * `field-identifier` and a `base-type`, whatever its set; `Value_cardinality` holds a record's set
@@ -590,21 +620,21 @@ export const RecordField = relation(
   "RecordField",
   {
     baseTypeLexical: keyText,
-    document: uuid,
     identifierLexical: keyText,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * A record field's name, keyed by its `qti-value` node, where its `field-identifier` names
- * something once collapsed: `identifier`, the lexical form without its outer whitespace, and
+ * A record field's name, keyed by its `qti-value` element's place, where its `field-identifier`
+ * names something once collapsed: `identifier`, the lexical form without its outer whitespace, and
  * `identifierLead` and `identifierTrail`, the whitespace written around it, as
  * {@link DeclarationIdentifier}'s is written, with the {@link RecordField}'s `parent` and
  * `identifierLexical` it is copied from. `Record field key` compares fields by it.
@@ -622,70 +652,103 @@ export const RecordFieldName = relation(
     identifierLead: Space,
     identifierLexical: keyText,
     identifierTrail: Space,
-    node: uuid,
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * An outcome declaration's `mastery-value`, keyed by its node, where it writes one: its lexical
- * form, a counted member of its {@link Declaration}.
+ * An outcome declaration's `mastery-value`, keyed by its declaration's place, where it writes one:
+ * its lexical form, a counted member of its {@link Declaration}.
  */
-export const MasteryValue = relation("MasteryValue", { lexical: keyText, node: uuid }, ["node"]);
+export const MasteryValue = relation(
+  "MasteryValue",
+  { lexical: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
+);
 
 /**
- * An outcome declaration's normal minimum, keyed by its node, where it has one (spec reading 149):
+ * An outcome declaration's normal minimum, keyed by its declaration's place, where it has one
+ * (spec reading 149):
  * `lexical`, its `normal-minimum` as written where `written`, and else its version's default
  * ({@link normalMinimumDefaults}), which `E1_derived` proves; `version`, its declaration's. A
  * counted member of its {@link Declaration}.
  */
 export const NormalMinimum = relation(
   "NormalMinimum",
-  { lexical: keyText, node: uuid, version: closedId(SchemaVersion), written: pg.boolean },
-  ["node"],
+  {
+    lexical: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+    version: closedId(SchemaVersion),
+    written: pg.boolean,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * An outcome declaration's `normal-maximum`, keyed by its node, where it writes one, as
- * {@link MasteryValue} is its mastery value.
+ * An outcome declaration's `normal-maximum`, keyed by its declaration's place, where it writes one,
+ * as {@link MasteryValue} is its mastery value.
  */
-export const NormalMaximum = relation("NormalMaximum", { lexical: keyText, node: uuid }, ["node"]);
+export const NormalMaximum = relation(
+  "NormalMaximum",
+  { lexical: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
+);
 
 /**
  * An outcome declaration that has both a normal minimum, written or its version's default, and a
- * `mastery-value`, keyed by its node: the two lexical forms, copied from its {@link NormalMinimum}
- * and {@link MasteryValue}, which `Mastery_range` orders (spec readings 9 and 149: each pair judged
- * where both have a value).
+ * `mastery-value`, keyed by its declaration's place: the two lexical forms, copied from its
+ * {@link NormalMinimum} and {@link MasteryValue}, which `Mastery_range` orders (spec readings 9 and
+ * 149: each pair judged where both have a value).
  */
 export const MasteryFloor = relation(
   "MasteryFloor",
-  { masteryValue: keyText, node: uuid, normalMinimum: keyText },
-  ["node"],
+  {
+    masteryValue: keyText,
+    normalMinimum: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
  * An outcome declaration that writes both a `mastery-value` and a `normal-maximum`, keyed by its
- * node, as {@link MasteryFloor} holds the other pair.
+ * declaration's place, as {@link MasteryFloor} holds the other pair.
  */
 export const MasteryCeiling = relation(
   "MasteryCeiling",
-  { masteryValue: keyText, node: uuid, normalMaximum: keyText },
-  ["node"],
+  {
+    masteryValue: keyText,
+    normalMaximum: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
  * Each record value set's fields, counted by `ValueSet.fields`: a flat row whose group, its
  * `parent`, names its set.
  */
-const recordFieldFamily = counted(on(RecordField, "parent"), fin(ValueSet, "fields"));
+const recordFieldFamily = counted(
+  on(RecordField, "package", "path", "parent"),
+  fin(ValueSet, "fields"),
+);
 
 /**
  * Each declaration's cardinality, counted by `Declaration.cardinalities`: one row, or none where
  * its `cardinality` is unwritten or spells nothing.
  */
 const declarationCardinalityFamily = counted(
-  on(DeclarationCardinality, "node"),
+  on(DeclarationCardinality, "package", "path", "start"),
   fin(Declaration, "cardinalities"),
 );
 
@@ -694,31 +757,40 @@ const declarationCardinalityFamily = counted(
  * `base-type` is unwritten, a record's, or spells nothing.
  */
 const declarationBaseTypeFamily = counted(
-  on(DeclarationBaseType, "node"),
+  on(DeclarationBaseType, "package", "path", "start"),
   fin(Declaration, "baseTypes"),
 );
 
 /**
  * Each outcome declaration's mastery value, counted by `Declaration.masteries`: one row or none.
  */
-const masteryValueFamily = counted(on(MasteryValue, "node"), fin(Declaration, "masteries"));
+const masteryValueFamily = counted(
+  on(MasteryValue, "package", "path", "start"),
+  fin(Declaration, "masteries"),
+);
 
 /**
  * Each outcome declaration's normal minimum, written or its version's default, counted by
  * `Declaration.minimums`: one row or none.
  */
-const normalMinimumFamily = counted(on(NormalMinimum, "node"), fin(Declaration, "minimums"));
+const normalMinimumFamily = counted(
+  on(NormalMinimum, "package", "path", "start"),
+  fin(Declaration, "minimums"),
+);
 
 /**
  * Each outcome declaration's normal maximum, counted by `Declaration.maximums`: one row or none.
  */
-const normalMaximumFamily = counted(on(NormalMaximum, "node"), fin(Declaration, "maximums"));
+const normalMaximumFamily = counted(
+  on(NormalMaximum, "package", "path", "start"),
+  fin(Declaration, "maximums"),
+);
 
 /**
  * Select the attributes of one name on elements of some kinds: the source of an overlay's copy
- * (C18), keyed by the closed attributes' key (`closedAttributes`, `#pantry/qti/attributes.ts`),
- * whose index over the selection's node serves the copy's reverse probe, so no index holds
- * `Attribute.lexical` (the tier-1 addendum's "Text in keys").
+ * (C18), keyed at its element's place by `Attribute`'s key, `(package, path, start, name)`, since
+ * it fixes the name, whose index over the selection's place serves the copy's reverse probe, so no
+ * index holds `Attribute.lexical` (the tier-1 addendum's "Text in keys").
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -733,7 +805,7 @@ const attributesOf = (
     | "normal-maximum"
     | "normal-minimum",
   kinds: readonly (typeof NodeKind.handles)[number][],
-) => select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, name), a.in(a.kind, kinds)));
+) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
  * The `identifier` of each declaration that names something once collapsed ({@link namingPattern}):
@@ -743,7 +815,6 @@ const attributesOf = (
  */
 const identifiers = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.name, "identifier"),
     a.in(a.kind, declarationKinds),
     Compute.matches(a.lexical, namingPattern),
@@ -969,11 +1040,15 @@ const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
           ...(reserved.root === "any" ? [] : [d.ne(d.parentKind, testKind)]),
         ),
       ),
-      "node",
+      "package",
+      "path",
+      "start",
     ),
     on(
       select(DeclarationBaseType, (b) => b.eq(b.baseType, reserved.baseType)),
-      "node",
+      "package",
+      "path",
+      "start",
     ),
   ),
 );
@@ -1118,7 +1193,8 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   lexical form spells (`<Roster>Lexical`), and a base type's expression type its `ValueBaseOf`
  *   image; each name is its lexical form collapsed; a normal minimum not written is its version's
  *   default.
- * - **`Declaration key`** (spec reading 74): `key(document, identifier)` over the identifiers.
+ * - **`Declaration key`** (spec reading 74): `key(package, path, identifier)` over the identifiers, a
+ *   document being its package and path.
  * - **`Declaration not reserved`** (readings 72 and 168): no declaration names a built-in session
  *   variable of its parent: an item's declaration, none of the three, and a test's, `duration`
  *   alone, so a test's own `numAttempts` and `completionStatus` are ordinary names (information
@@ -1144,15 +1220,20 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
 export const declarationLawsByName = {
   "Declaration base type": [
     contained(
-      on(recordDeclarations, "node"),
+      on(recordDeclarations, "package", "path", "start"),
       on(
         select(Declaration, (d) => d.eq(d.baseTypes, 0n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
     ),
-    contained(on(nonRecordDeclarations, "node"), on(baseTypes, "node")),
+    contained(
+      on(nonRecordDeclarations, "package", "path", "start"),
+      on(baseTypes, "package", "path", "start"),
+    ),
   ],
-  "Declaration key": [key(on(DeclarationIdentifier, "document", "identifier"))],
+  "Declaration key": [key(on(DeclarationIdentifier, "package", "path", "identifier"))],
   "Declaration not reserved": [
     check("Declaration_not_reserved", DeclarationIdentifier, (d) =>
       d.not(
@@ -1165,39 +1246,54 @@ export const declarationLawsByName = {
   ],
   "Declaration overlay": [
     contained(
-      on(Declaration, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Declaration, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(on(Declaration, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(Declaration, "package", "path", "parent", "parentKind"),
+      on(Node, "package", "path", "start", "kind"),
+    ),
     contained(
       on(
         select(Node, (n) => n.in(n.kind, declarationKinds)),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(Declaration, "node"),
+      on(Declaration, "package", "path", "start"),
     ),
     contained(
-      on(spelledCardinalities, "node", "lexical"),
-      on(DeclarationCardinality, "node", "cardinalityLexical"),
+      on(spelledCardinalities, "package", "path", "start", "lexical"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinalityLexical"),
     ),
-    contained(on(DeclarationCardinality, "node"), on(cardinalities, "node")),
+    contained(
+      on(DeclarationCardinality, "package", "path", "start"),
+      on(cardinalities, "package", "path", "start"),
+    ),
     declarationCardinalityFamily,
     contained(
-      on(spelledBaseTypes, "node", "lexical"),
-      on(DeclarationBaseType, "node", "baseTypeLexical"),
+      on(spelledBaseTypes, "package", "path", "start", "lexical"),
+      on(DeclarationBaseType, "package", "path", "start", "baseTypeLexical"),
     ),
-    contained(on(DeclarationBaseType, "node"), on(baseTypes, "node")),
+    contained(
+      on(DeclarationBaseType, "package", "path", "start"),
+      on(baseTypes, "package", "path", "start"),
+    ),
     declarationBaseTypeFamily,
     contained(
-      on(identifiers, "node", "lexical"),
-      on(DeclarationIdentifier, "node", "identifierLexical"),
+      on(identifiers, "package", "path", "start", "lexical"),
+      on(DeclarationIdentifier, "package", "path", "start", "identifierLexical"),
     ),
-    contained(on(DeclarationIdentifier, "node"), on(identifiers, "node")),
+    contained(
+      on(DeclarationIdentifier, "package", "path", "start"),
+      on(identifiers, "package", "path", "start"),
+    ),
     contained(
       on(
         DeclarationIdentifier,
-        "node",
-        "document",
+        "package",
+        "path",
+        "start",
         "declarationKind",
         "cardinalities",
         "baseTypes",
@@ -1205,34 +1301,40 @@ export const declarationLawsByName = {
       declarationRef,
     ),
     contained(
-      on(DeclarationIdentifier, "node", "parentKind"),
-      on(Declaration, "node", "parentKind"),
+      on(DeclarationIdentifier, "package", "path", "start", "parentKind"),
+      on(Declaration, "package", "path", "start", "parentKind"),
     ),
     contained(
       on(
         select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(DeclarationName, "node"),
+      on(DeclarationName, "package", "path", "start"),
     ),
     contained(
-      on(DeclarationName, "node", "document", "identifier", "declarationKind", "baseTypes"),
+      on(DeclarationName, "package", "path", "start", "identifier", "declarationKind", "baseTypes"),
       on(
         select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
-        "node",
-        "document",
+        "package",
+        "path",
+        "start",
         "identifier",
         "declarationKind",
         "baseTypes",
       ),
     ),
     contained(
-      on(DeclarationName, "node", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(DeclarationName, "package", "path", "start", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
-    contained(on(DeclarationName, "node", "parentKind"), on(Declaration, "node", "parentKind")),
     contained(
-      on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(DeclarationName, "package", "path", "start", "parentKind"),
+      on(Declaration, "package", "path", "start", "parentKind"),
+    ),
+    contained(
+      on(ValueSet, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
@@ -1240,93 +1342,140 @@ export const declarationLawsByName = {
         select(Node, (n) =>
           n.and(n.in(n.kind, valueSetKinds), n.in(n.parentKind, declarationKinds)),
         ),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(ValueSet, "node"),
+      on(ValueSet, "package", "path", "start"),
     ),
     contained(
-      on(ValueSet, "parent", "document", "declarationKind", "cardinalities", "baseTypes"),
+      on(ValueSet, "package", "path", "parent", "declarationKind", "cardinalities", "baseTypes"),
       declarationRef,
     ),
     contained(
       on(
         select(ValueSet, (s) => s.eq(s.cardinalities, 1n)),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(ValueSetCardinality, "node"),
+      on(ValueSetCardinality, "package", "path", "start"),
     ),
     contained(
-      on(ValueSetCardinality, "node", "declaration", "elementChildren", "fields"),
-      on(ValueSet, "node", "parent", "elementChildren", "fields"),
+      on(
+        ValueSetCardinality,
+        "package",
+        "path",
+        "start",
+        "declaration",
+        "elementChildren",
+        "fields",
+      ),
+      on(ValueSet, "package", "path", "start", "parent", "elementChildren", "fields"),
     ),
     contained(
-      on(ValueSetCardinality, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(ValueSetCardinality, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
     ),
     contained(
-      on(Value, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(Value, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
       on(
         select(Node, (n) => n.and(n.eq(n.kind, "qti-value"), n.in(n.parentKind, valueSetKinds))),
-        "id",
+        "package",
+        "path",
+        "start",
       ),
-      on(Value, "node"),
-    ),
-    contained(on(Value, "node", "text"), on(Node, "id", "stringValue")),
-    contained(
-      on(Value, "parent", "cardinalities", "baseTypes", "declaration"),
-      on(ValueSet, "node", "cardinalities", "baseTypes", "parent"),
-    ),
-    contained(on(typedValues, "node"), on(TypedValue, "node")),
-    contained(
-      on(TypedValue, "node", "declaration", "text"),
-      on(Value, "node", "declaration", "text"),
+      on(Value, "package", "path", "start"),
     ),
     contained(
-      on(TypedValue, "declaration", "baseType"),
-      on(DeclarationBaseType, "node", "baseType"),
+      on(Value, "package", "path", "start", "text"),
+      on(Node, "package", "path", "start", "stringValue"),
     ),
     contained(
-      on(TypedValue, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(Value, "package", "path", "parent", "cardinalities", "baseTypes", "declaration"),
+      on(ValueSet, "package", "path", "start", "cardinalities", "baseTypes", "parent"),
     ),
     contained(
-      on(spelledFieldBaseTypes, "node", "lexical"),
-      on(ValueBaseType, "node", "baseTypeLexical"),
-    ),
-    contained(on(ValueBaseType, "node"), on(fieldBaseTypes, "node")),
-    contained(on(ValueBaseType, "node", "cardinalities"), on(Value, "node", "cardinalities")),
-    contained(on(fieldValues, "node"), on(FieldValue, "node")),
-    contained(
-      on(FieldValue, "node", "declaration", "text"),
-      on(Value, "node", "declaration", "text"),
-    ),
-    contained(on(FieldValue, "node", "baseType"), on(ValueBaseType, "node", "baseType")),
-    contained(
-      on(FieldValue, "declaration", "cardinality"),
-      on(DeclarationCardinality, "node", "cardinality"),
+      on(typedValues, "package", "path", "start"),
+      on(TypedValue, "package", "path", "start"),
     ),
     contained(
-      on(RecordField, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(TypedValue, "package", "path", "start", "declaration", "text"),
+      on(Value, "package", "path", "start", "declaration", "text"),
+    ),
+    contained(
+      on(TypedValue, "package", "path", "declaration", "baseType"),
+      on(DeclarationBaseType, "package", "path", "start", "baseType"),
+    ),
+    contained(
+      on(TypedValue, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
+    ),
+    contained(
+      on(spelledFieldBaseTypes, "package", "path", "start", "lexical"),
+      on(ValueBaseType, "package", "path", "start", "baseTypeLexical"),
+    ),
+    contained(
+      on(ValueBaseType, "package", "path", "start"),
+      on(fieldBaseTypes, "package", "path", "start"),
+    ),
+    contained(
+      on(ValueBaseType, "package", "path", "start", "cardinalities"),
+      on(Value, "package", "path", "start", "cardinalities"),
+    ),
+    contained(
+      on(fieldValues, "package", "path", "start"),
+      on(FieldValue, "package", "path", "start"),
+    ),
+    contained(
+      on(FieldValue, "package", "path", "start", "declaration", "text"),
+      on(Value, "package", "path", "start", "declaration", "text"),
+    ),
+    contained(
+      on(FieldValue, "package", "path", "start", "baseType"),
+      on(ValueBaseType, "package", "path", "start", "baseType"),
+    ),
+    contained(
+      on(FieldValue, "package", "path", "declaration", "cardinality"),
+      on(DeclarationCardinality, "package", "path", "start", "cardinality"),
+    ),
+    contained(
+      on(RecordField, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(
-      on(RecordFieldName, "node", "parent", "identifierLexical"),
-      on(RecordField, "node", "parent", "identifierLexical"),
+      on(RecordFieldName, "package", "path", "start", "parent", "identifierLexical"),
+      on(RecordField, "package", "path", "start", "parent", "identifierLexical"),
     ),
     contained(
-      on(namedFields, "node", "identifierLexical"),
-      on(RecordFieldName, "node", "identifierLexical"),
+      on(namedFields, "package", "path", "start", "identifierLexical"),
+      on(RecordFieldName, "package", "path", "start", "identifierLexical"),
     ),
     masteryValueFamily,
-    contained(on(masteryValues, "node", "lexical"), on(MasteryValue, "node", "lexical")),
-    contained(on(MasteryValue, "node"), on(masteryValues, "node")),
+    contained(
+      on(masteryValues, "package", "path", "start", "lexical"),
+      on(MasteryValue, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(MasteryValue, "package", "path", "start"),
+      on(masteryValues, "package", "path", "start"),
+    ),
     normalMinimumFamily,
-    contained(on(NormalMinimum, "node", "version"), on(Declaration, "node", "version")),
-    contained(on(normalMinimums, "node", "lexical"), on(writtenMinimums, "node", "lexical")),
-    contained(on(writtenMinimums, "node"), on(normalMinimums, "node")),
+    contained(
+      on(NormalMinimum, "package", "path", "start", "version"),
+      on(Declaration, "package", "path", "start", "version"),
+    ),
+    contained(
+      on(normalMinimums, "package", "path", "start", "lexical"),
+      on(writtenMinimums, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(writtenMinimums, "package", "path", "start"),
+      on(normalMinimums, "package", "path", "start"),
+    ),
     contained(
       on(
         select(Declaration, (d) =>
@@ -1335,31 +1484,55 @@ export const declarationLawsByName = {
             d.in(d.version, [...normalMinimumDefaults.keys()]),
           ),
         ),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(NormalMinimum, "node"),
+      on(NormalMinimum, "package", "path", "start"),
     ),
     normalMaximumFamily,
-    contained(on(normalMaximums, "node", "lexical"), on(NormalMaximum, "node", "lexical")),
-    contained(on(NormalMaximum, "node"), on(normalMaximums, "node")),
+    contained(
+      on(normalMaximums, "package", "path", "start", "lexical"),
+      on(NormalMaximum, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(NormalMaximum, "package", "path", "start"),
+      on(normalMaximums, "package", "path", "start"),
+    ),
     contained(
       on(
         select(Declaration, (d) => d.and(d.eq(d.minimums, 1n), d.eq(d.masteries, 1n))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(MasteryFloor, "node"),
+      on(MasteryFloor, "package", "path", "start"),
     ),
-    contained(on(MasteryFloor, "node", "normalMinimum"), on(NormalMinimum, "node", "lexical")),
-    contained(on(MasteryFloor, "node", "masteryValue"), on(MasteryValue, "node", "lexical")),
+    contained(
+      on(MasteryFloor, "package", "path", "start", "normalMinimum"),
+      on(NormalMinimum, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(MasteryFloor, "package", "path", "start", "masteryValue"),
+      on(MasteryValue, "package", "path", "start", "lexical"),
+    ),
     contained(
       on(
         select(Declaration, (d) => d.and(d.eq(d.masteries, 1n), d.eq(d.maximums, 1n))),
-        "node",
+        "package",
+        "path",
+        "start",
       ),
-      on(MasteryCeiling, "node"),
+      on(MasteryCeiling, "package", "path", "start"),
     ),
-    contained(on(MasteryCeiling, "node", "masteryValue"), on(MasteryValue, "node", "lexical")),
-    contained(on(MasteryCeiling, "node", "normalMaximum"), on(NormalMaximum, "node", "lexical")),
+    contained(
+      on(MasteryCeiling, "package", "path", "start", "masteryValue"),
+      on(MasteryValue, "package", "path", "start", "lexical"),
+    ),
+    contained(
+      on(MasteryCeiling, "package", "path", "start", "normalMaximum"),
+      on(NormalMaximum, "package", "path", "start", "lexical"),
+    ),
   ],
   "E1 derived": [
     contained(on(Declaration, "kind", "declarationKind"), on(Declares, "kind", "declaration")),
@@ -1378,7 +1551,7 @@ export const declarationLawsByName = {
     check("Mastery_range", MasteryFloor, floorCheck),
     check("Mastery_range", MasteryCeiling, ceilingCheck),
   ],
-  "Record field key": [key(on(RecordFieldName, "parent", "identifier"))],
+  "Record field key": [key(on(RecordFieldName, "package", "path", "parent", "identifier"))],
   "Reserved type": [
     ...reservedBaseTypeLaws,
     check("Reserved_type", DeclarationIdentifier, (d) =>
@@ -1406,7 +1579,7 @@ export const declarationLawsByName = {
     check("Typed_value", FieldValue, fieldValueCheck),
   ],
   "Value cardinality": [
-    contained(on(ValueSet, "node", "elements", "elementChildren"), nodeCounts),
+    contained(on(ValueSet, "package", "path", "start", "elements", "elementChildren"), nodeCounts),
     recordFieldFamily,
     check("Value_cardinality", ValueSetCardinality, (s) =>
       s.and(
@@ -1418,12 +1591,21 @@ export const declarationLawsByName = {
       ),
     ),
     contained(
-      on(fieldIdentifiers, "node", "lexical"),
-      on(RecordField, "node", "identifierLexical"),
+      on(fieldIdentifiers, "package", "path", "start", "lexical"),
+      on(RecordField, "package", "path", "start", "identifierLexical"),
     ),
-    contained(on(RecordField, "node"), on(fieldIdentifiers, "node")),
-    contained(on(fieldBaseTypes, "node", "lexical"), on(RecordField, "node", "baseTypeLexical")),
-    contained(on(RecordField, "node"), on(fieldBaseTypes, "node")),
+    contained(
+      on(RecordField, "package", "path", "start"),
+      on(fieldIdentifiers, "package", "path", "start"),
+    ),
+    contained(
+      on(fieldBaseTypes, "package", "path", "start", "lexical"),
+      on(RecordField, "package", "path", "start", "baseTypeLexical"),
+    ),
+    contained(
+      on(RecordField, "package", "path", "start"),
+      on(fieldBaseTypes, "package", "path", "start"),
+    ),
   ],
 } as const;
 

@@ -2,31 +2,31 @@
  * The package, its record and the manifest's overlays, as declarations and as the record the
  * importer writes: the declarations admit and name their checks by the oracle's laws, hold the
  * package's ID space to the manifest's and the resources' identifiers alone, a package's record is
- * the same keyed set from a directory and from its zip, and the record keeps the listing's order
- * and bytes.
+ * the same keyed set from a directory and from its zip, and the record keeps the listing's paths
+ * and bytes, one entry per path.
  */
-import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ChangeSet, schema } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, bytes, element, int, shuffled } from "@grizzle/testing/gen";
+import { array, bytes, element, shuffled } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Layer, Predicate, Result } from "effect";
-import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
+import { packageRecordOf } from "#pantry/import/record.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
   Entry,
-  entryFamily,
   externalHrefPattern,
   Package,
   packageLaws,
+  packageLawsByName,
   resolvedPathPattern,
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
@@ -55,12 +55,13 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
  * @returns Its entries by path; a repeated path fails the caller's assertion on its size.
  */
 const entriesByPath = (record: PackageRecord): ReadonlyMap<string, Uint8Array> =>
-  new Map(record.entries.map(({ content, path: at }) => [at, content]));
+  new Map([...record.entries.values()].map(({ content, path: at }) => [at, content]));
 
 /**
- * The id the records are built under: the property is over their entries, which no id changes.
+ * The manifest identifier the records are built under: the property is over their entries, which
+ * the identifier only stamps.
  */
-const packageId = "00000000-0000-4000-8000-000000000006";
+const identifier: Addition<typeof Package>["identifier"] = "MANIFEST-probe";
 
 /**
  * The paths a listing draws from: the manifest, files at the root and below, and names with a
@@ -104,18 +105,6 @@ const sizeOf = (files: readonly PackageFile[]): "empty" | "one" | "several" => {
   }
 
   return files.length === 1 ? "one" : "several";
-};
-
-/**
- * A source path a package is read from: one to three segments, and a trailing `/` or none.
- */
-const sources: Gen<string> = (source) => {
-  const segments = source.draw(
-    array(element(["pkg", "a.zip", "x y", "ü", "."] as const), { max: 3, min: 1 }),
-  );
-  const trailing = source.draw(int(0, 1)) === 1 ? "/" : "";
-
-  return `${segments.join("/")}${trailing}`;
 };
 
 /**
@@ -256,10 +245,12 @@ const verdictsBy = (
 ];
 
 /**
- * A scratch schema of the record alone: `Package`, `Entry` and their family, which the record's
- * insert is typed by.
+ * A scratch schema of the record alone: `Package`, `Entry` and the containment of each entry in its
+ * package, which the record's inserts are typed by.
  */
-const RecordProbe = schema("QtiRecordProbe", { Entry, Package }, [entryFamily]);
+const RecordProbe = schema("QtiRecordProbe", { Entry, Package }, [
+  ...packageLawsByName["Entry family"],
+]);
 
 describe("qti/package.ts", () => {
   it("names every check of the package's laws by an oracle law, and the laws compose with the schema's relations", () => {
@@ -352,91 +343,70 @@ describe("qti/package.ts", () => {
     testTimeoutMs,
   );
 
-  it.effect("keeps the listing's order and paths in the record, each content its bytes", (ctx) =>
-    // Oracle: the listing itself, since the nesting is the listing (grizzle draws each `at` from
-    // its place), and each entry's bytes, which `Entry.content` holds as they are.
-    // Bound: listings of up to 6 distinct paths in every order the generator draws, 300 runs.
-    searched(
-      ctx,
-      explore(
-        {
-          caseHang: Duration.seconds(10),
-          concurrency: 1,
-          coverage: required<"empty" | "one" | "several">(["empty", "one", "several"], {
-            cases: 200,
-            sense: notesOnly,
-          }),
-          draw: drawn(listings),
-          kept: [],
-          literal: Formatter.format,
-          oracle: {
-            kind: "second-implementation",
-            name: "the listing itself",
+  it.effect(
+    "keeps the listing's paths in the record, one entry each, its content its bytes",
+    (ctx) =>
+      // Oracle: the listing itself, a set of paths (IMS Content Packaging gives its order no
+      // meaning), and each entry's bytes, which `Entry.content` holds as they are, under the
+      // package's identifier.
+      // Bound: listings of up to 6 distinct paths in every order the generator draws, 300 runs.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.seconds(10),
+            concurrency: 1,
+            coverage: required<"empty" | "one" | "several">(["empty", "one", "several"], {
+              cases: 200,
+              sense: notesOnly,
+            }),
+            draw: drawn(listings),
+            kept: [],
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the listing itself",
+            },
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "pantry/qti/package-record",
           },
-          runs: 300,
-          shrink: completeShrink,
-          steerEvery: 16,
-          suite: "pantry/qti/package-record",
-        },
-        (files, c) =>
-          Effect.sync(() => {
-            const record = packageRecordOf({ files, id: packageId, name: "pkg" });
+          (files, c) =>
+            Effect.sync(() => {
+              const record = packageRecordOf({ files, identifier });
+              const byPath = entriesByPath(record);
 
-            c.note(sizeOf(files));
-            assert.deepStrictEqual(
-              record.entries.map(({ path: at }) => at),
-              files.map(({ path: at }) => at),
-            );
-            assert.strictEqual(entriesByPath(record).size, files.length);
-            assert.deepStrictEqual(
-              record.entries.map(({ content }) => Uint8Array.from(content)),
-              files.map(({ bytes: original }) => Uint8Array.from(original)),
-            );
-          }),
+              c.note(sizeOf(files));
+              assert.deepStrictEqual(record.package, { identifier });
+              assert.strictEqual(byPath.size, files.length);
+              for (const file of files) {
+                assert.deepStrictEqual(
+                  Uint8Array.from(byPath.get(file.path) ?? []),
+                  Uint8Array.from(file.bytes),
+                  file.path,
+                );
+              }
+
+              for (const entry of record.entries.values()) {
+                assert.strictEqual(entry.package, identifier, entry.path);
+              }
+            }),
+        ),
       ),
-    ),
   );
 
-  it.effect("names a package by the last segment of the path it was read from", (ctx) =>
-    // Oracle: a second implementation, Node's `path.posix.basename`.
-    // Bound: one to three of five segments, with and without a trailing "/", 200 runs.
-    searched(
-      ctx,
-      explore(
-        {
-          caseHang: Duration.seconds(10),
-          concurrency: 1,
-          coverage: required<"trailing" | "bare">(["trailing", "bare"], {
-            cases: 100,
-            sense: notesOnly,
-          }),
-          draw: drawn(sources),
-          kept: [],
-          literal: Formatter.format,
-          oracle: { kind: "second-implementation", name: "Node's path.posix.basename" },
-          runs: 200,
-          shrink: completeShrink,
-          steerEvery: 16,
-          suite: "pantry/qti/package-name",
-        },
-        (source, c) =>
-          Effect.sync(() => {
-            c.note(source.endsWith("/") ? "trailing" : "bare");
-            assert.strictEqual(packageNameOf(source), path.posix.basename(source));
-          }),
-      ),
-    ),
-  );
-
-  it("types the record as the insert of a package with its entries nested", () => {
-    // Oracle: grizzle's own insert type, `AdditionIn` of the record's schema: the record is a
-    // member fact of `Package` exactly, its entries nested at `entries`.
+  it("types the record as the inserts of a package and its entries", () => {
+    // Oracle: grizzle's own insert types, `AdditionIn` of the record's schema: the record's
+    // package is a fact of `Package` exactly, and each of its entries one of `Entry`.
     const record = packageRecordOf({
       files: [{ bytes: new Uint8Array([1, 2]), path: "imsmanifest.xml" }],
-      id: packageId,
-      name: "pkg",
+      identifier,
     });
-    const changes = ChangeSet.empty(RecordProbe).insert(Package, [record]);
+    const changes = ChangeSet.empty(RecordProbe).insertAll({
+      Entry: [...record.entries.values()],
+      Package: [record.package],
+    });
 
     assert.isDefined(changes);
   });
@@ -452,19 +422,14 @@ layer(TestLayer, { excludeTestServices: true })(
         for (const name of ["simple", "sharedMedia"] as const) {
           const fromDirectory = packageRecordOf({
             files: yield* readEntries(yield* materialize(name)),
-            id: packageId,
-            name,
+            identifier,
           });
           const fromZip = packageRecordOf({
             files: yield* readEntries(yield* materializeZip(name)),
-            id: packageId,
-            name,
+            identifier,
           });
           const directory = entriesByPath(fromDirectory);
           const zip = entriesByPath(fromZip);
-
-          assert.strictEqual(directory.size, fromDirectory.entries.length, name);
-          assert.strictEqual(zip.size, fromZip.entries.length, name);
           assert.isAbove(directory.size, 1, name);
           assert.deepStrictEqual(
             [...directory].toSorted(([left], [right]) => left.localeCompare(right)),

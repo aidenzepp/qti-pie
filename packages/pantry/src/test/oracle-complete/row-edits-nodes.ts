@@ -93,7 +93,9 @@ const isLooseCharacters = (node: Node): boolean =>
 const runThenElement = (rows: Rows): readonly { readonly last: Node; readonly parent: Node }[] =>
   rows.nodes.flatMap((parent) => {
     const childAt = (at: bigint) =>
-      rows.nodes.find((child) => child.parent === parent.id && child.start > 0n && child.at === at);
+      rows.nodes.find(
+        (child) => child.parent === parent.start && child.start > 0n && child.at === at,
+      );
     const last = childAt(parent.children - 1n);
     const before = childAt(parent.children - 2n);
 
@@ -110,15 +112,6 @@ const runThenElement = (rows: Rows): readonly { readonly last: Node; readonly pa
  * Each law's mutation, by law.
  */
 export const nodeEdits = {
-  // Document (§1.4): the Document row keyed by a node that is no document node.
-  Document: editingRows(item, (rows) => (source) => {
-    const member = rows.nodes[source.draw(int(1, rows.nodes.length - 1))];
-    if (member === undefined) {
-      throw new Error("the base's rows hold no node past the document node");
-    }
-
-    return { ...rows, document: { ...rows.document, node: member.id } };
-  }),
   // E1 derived (E1): a mixed element's string value other than its children's characters.
   "E1 derived": editingRows(item, (rows) => (source) => {
     const suffix = source.draw(element(["x", " ", "&amp;"]));
@@ -157,11 +150,11 @@ export const nodeEdits = {
     return withNodes(
       rows,
       rows.nodes.map((node) => {
-        if (node.id === site.parent.id) {
+        if (node.start === site.parent.start) {
           return { ...node, children: node.children - 1n };
         }
 
-        return node.id === site.last.id ? { ...node, at: node.at - 1n } : node;
+        return node.start === site.last.start ? { ...node, at: node.at - 1n } : node;
       }),
     );
   }),
@@ -232,8 +225,8 @@ export const nodeEdits = {
         source.draw(
           changeDrawn(
             rows.nodes,
-            (node) => isElementNode(grammar, node) && node.nearest !== node.id,
-            (node) => ({ ...node, nearest: node.id }),
+            (node) => isElementNode(grammar, node) && node.nearest !== node.start,
+            (node) => ({ ...node, nearest: node.start }),
           ),
         ),
       ),
@@ -249,7 +242,7 @@ export const nodeEdits = {
       throw new Error("the base's rows hold no text");
     }
 
-    return { ...rows, comments: [...rows.comments, { node: text.node, value: "c" }] };
+    return { ...rows, comments: [...rows.comments, { start: text.start, value: "c" }] };
   }),
   // doctype arm (§1.4): the stimulus's doctype node with no Doctype row, or a Doctype row for its
   // comment.
@@ -263,7 +256,7 @@ export const nodeEdits = {
       throw new Error("the base's rows hold no comment");
     }
 
-    return { ...rows, doctypes: [...rows.doctypes, { node: comment.node, value: "d" }] };
+    return { ...rows, doctypes: [...rows.doctypes, { start: comment.start, value: "d" }] };
   }),
   // entityRef arm (§1.4): an EntityRef row for a text, which no entity reference node is.
   "entityRef arm": editingRows(item, (rows) => (source) => {
@@ -274,7 +267,7 @@ export const nodeEdits = {
 
     const name = source.draw(element(["passage", "amp", "x"]));
 
-    return { ...rows, entityRefs: [...rows.entityRefs, { name, node: text.node }] };
+    return { ...rows, entityRefs: [...rows.entityRefs, { name, start: text.start }] };
   }),
   // pi arm (§1.4): the stimulus's processing instruction with no Pi row, or a Pi row for its
   // comment.
@@ -290,7 +283,7 @@ export const nodeEdits = {
 
     return {
       ...rows,
-      pis: [...rows.pis, { data: "", node: comment.node, target: "every-relation" }],
+      pis: [...rows.pis, { data: "", start: comment.start, target: "every-relation" }],
     };
   }),
   // text arm (§1.4): a text node with no Text row, drawn among the texts no m:cn holds. A cn's
@@ -298,9 +291,9 @@ export const nodeEdits = {
   // reading 2), a law the oracle raises ahead of text-copy, and that law is not weakened
   // (decision 355): the arm proves text-copy alone, so it leaves a cn's text to the cn form arm.
   "text arm": editingRows(item, (rows) => (source) => {
-    const kindOf = new Map(rows.nodes.map((node) => [node.id, node] as const));
+    const kindOf = new Map(rows.nodes.map((node) => [node.start, node] as const));
     const candidates = rows.texts.filter(
-      (text) => kindOf.get(kindOf.get(text.node)?.parent ?? text.node)?.kind !== "m:cn",
+      (text) => kindOf.get(kindOf.get(text.start)?.parent ?? text.start)?.kind !== "m:cn",
     );
     const dropped = source.draw(droppedDrawn(candidates));
 

@@ -1,10 +1,10 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents carry the charset label crust's reader reports, `UTF-8`. */
 /**
  * The O3 overlay rows against a second reading of the same tree: a direct walk of the XDM document,
- * numbering its nodes in document order as the tree's rows are numbered and taking each choice's
- * nearest interaction from its ancestors, the oracle's table of XSD defaults for the counts, and
- * reading 104's set of the names choices, hottexts and declarations use. The walk shares no code
- * with the builder, which reads the tree's flat rows (`flatten`).
+ * numbering its nodes in document order, each its `start`, as the tree's rows are numbered and
+ * taking each choice's nearest interaction from its ancestors, the oracle's table of XSD defaults
+ * for the counts, and reading 104's set of the names choices, hottexts and declarations use. The
+ * walk shares no code with the builder, which reads the tree's flat rows (`flatten`).
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -23,29 +23,47 @@ import {
   nonElementKinds,
 } from "#pantry/grammar/install.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import type { Place } from "#pantry/import/overlays/declarations.ts";
 import { rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import type { InteractionRows } from "#pantry/import/overlays/interactions.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName as closedNamed } from "#pantry/model/xdm.ts";
-import type {
-  ClosedName,
-  NodeId,
-  XdmChild,
-  XdmClosedElement,
-  XdmDocument,
-} from "#pantry/model/xdm.ts";
+import type { ClosedName, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
 import type {
   DeclarationBaseType,
   DeclarationCardinality,
   DeclarationIdentifier,
 } from "#pantry/qti/declarations.ts";
 import { hottextInteraction } from "#pantry/qti/interactions.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { integerOf } from "#pantry/test/oracle-view.ts";
 import { choiceKinds, hottextKind } from "#pantry/vocab/terms/interactions.ts";
 import { ownViewOf } from "#pantry/import/fold.ts";
+
+/**
+ * Where a generated document stands: one item of one package, the place every row holds.
+ */
+const place: Place = { package: "MANIFEST", path: "item.xml" };
+
+/**
+ * Build a generated document's rows, at {@link place}.
+ *
+ * @param doc - The document.
+ * @returns Every overlay's rows.
+ */
+const rowsAt = (doc: XdmDocument<Composed>): InteractionRows => rowsOf(ownViewOf(doc), place);
+
+/**
+ * Index a relation's rows by their element's `start`: one document's rows, so the start is the
+ * element's key there.
+ *
+ * @param rows - The relation's keyed set.
+ * @returns Its rows by start.
+ */
+const byStart = <Row extends { readonly start: bigint }>(
+  rows: ReadonlyMap<string, Row>,
+): ReadonlyMap<bigint, Row> => new Map([...rows.values()].map((row) => [row.start, row]));
 
 /**
  * The kinds the choice generator places: three interactions whose choices sit at different depths
@@ -210,16 +228,17 @@ const treeOf = (body: readonly Spec[]): XdmDocument<Composed> => {
 };
 
 /**
- * One element as the walk reads it: its id and its parent's, its kind, its name collapsed, and its
- * nearest interaction with that interaction's kind (the document node's where none is above it).
+ * One element as the walk reads it: its start and its parent's, its kind, its name collapsed, and
+ * its nearest interaction's start with that interaction's kind (the document node's, 0, where none
+ * is above it).
  */
 interface Walked {
-  readonly id: NodeId;
   readonly kind: string;
   readonly name: string | undefined;
-  readonly nearest: NodeId;
+  readonly nearest: bigint;
   readonly nearestKind: string;
-  readonly parent: NodeId;
+  readonly parent: bigint;
+  readonly start: bigint;
 }
 
 /**
@@ -230,36 +249,35 @@ interface Walked {
  * @returns Each element below the item body, in document order.
  */
 const walk = (doc: XdmDocument<Composed>): readonly Walked[] => {
-  const document = idOf(0);
-  let next = 1;
+  let next = 1n;
   const walked: Walked[] = [];
   const visit = (
     node: XdmChild<Composed>,
-    parent: NodeId,
-    nearest: { readonly id: NodeId; readonly kind: string },
+    parent: bigint,
+    nearest: { readonly kind: string; readonly start: bigint },
   ): void => {
-    const id = idOf(next);
-    next += 1;
+    const start = next;
+    next += 1n;
     if (node._tag !== "element") {
       return;
     }
 
     const name = node.attributes[0]?.lexical.trim();
     walked.push({
-      id,
       kind: node.kind,
       name,
-      nearest: nearest.id,
+      nearest: nearest.start,
       nearestKind: nearest.kind,
       parent,
+      start,
     });
 
-    const below = isInteraction(node.kind) ? { id, kind: node.kind } : nearest;
+    const below = isInteraction(node.kind) ? { kind: node.kind, start } : nearest;
     for (const child of node.children) {
-      visit(child, id, below);
+      visit(child, start, below);
     }
   };
-  visit(doc.root, document, { id: document, kind: "document" });
+  visit(doc.root, 0n, { kind: "document", start: 0n });
 
   return walked;
 };
@@ -303,7 +321,7 @@ const situationsOf = (walked: readonly Walked[], body: readonly Spec[]) => {
       walked.some(
         (node) =>
           isChoice(node.kind) &&
-          walked.some(({ id, name }) => id === node.nearest && name === undefined),
+          walked.some(({ name, start }) => start === node.nearest && name === undefined),
       ),
     ],
     [
@@ -366,81 +384,87 @@ describe("import/overlays/interactions.ts, choices", () => {
               const walked = walk(doc);
               c.noteAll(situationsOf(walked, body));
 
-              const rows = rowsOf(ownViewOf(doc, idOf));
+              const rows = rowsAt(doc);
+              const choiceRows = byStart(rows.Choice);
               const choices = walked.filter(({ kind }) => isChoice(kind));
               assert.sameMembers(
-                [...rows.Choice.keys()],
-                choices.map(({ id }) => id),
+                [...choiceRows.keys()],
+                choices.map(({ start }) => start),
               );
               for (const choice of choices) {
-                const row = rows.Choice.get(choice.id);
-                assert.strictEqual(row?.nearest, choice.nearest, choice.id);
-                assert.strictEqual(row?.identifier, choice.name, choice.id);
-                assert.strictEqual(row?.kind, choice.kind, choice.id);
+                const row = choiceRows.get(choice.start);
+                assert.strictEqual(row?.nearest, choice.nearest, String(choice.start));
+                assert.strictEqual(row?.identifier, choice.name, String(choice.start));
+                assert.strictEqual(row?.kind, choice.kind, String(choice.start));
               }
 
               // A choice's interaction is a row only where an interaction encloses it: no stand-in.
+              // A document no site names has no context, so every interaction is its own.
+              const ownedRows = byStart(rows.ChoiceInteraction);
               const owned = choices.filter(({ nearestKind }) => isInteraction(nearestKind));
               assert.sameMembers(
-                [...rows.ChoiceInteraction.keys()],
-                owned.map(({ id }) => id),
+                [...ownedRows.keys()],
+                owned.map(({ start }) => start),
               );
               for (const choice of owned) {
-                assert.strictEqual(
-                  rows.ChoiceInteraction.get(choice.id)?.interaction,
-                  choice.nearest,
-                  choice.id,
-                );
+                const row = ownedRows.get(choice.start);
+                assert.strictEqual(row?.interaction, choice.nearest, String(choice.start));
+                assert.strictEqual(row?.interactionPath, place.path, String(choice.start));
               }
 
               // A gap's interaction is its choice's copy, and no other choice has one (reading 169).
+              const gapRows = byStart(rows.GapInteraction);
               const gaps = owned.filter(({ kind }) => kind === "qti-gap");
               assert.sameMembers(
-                [...rows.GapInteraction.keys()],
-                gaps.map(({ id }) => id),
+                [...gapRows.keys()],
+                gaps.map(({ start }) => start),
               );
               for (const gap of gaps) {
                 assert.strictEqual(
-                  rows.GapInteraction.get(gap.id)?.interaction,
+                  gapRows.get(gap.start)?.interaction,
                   gap.nearest,
-                  gap.id,
+                  String(gap.start),
                 );
               }
 
+              const hottextRows = byStart(rows.Hottext);
               const hottexts = walked.filter(({ kind }) => kind === hottextKind);
               assert.sameMembers(
-                [...rows.Hottext.keys()],
-                hottexts.map(({ id }) => id),
+                [...hottextRows.keys()],
+                hottexts.map(({ start }) => start),
               );
               for (const hottext of hottexts) {
-                const row = rows.Hottext.get(hottext.id);
-                assert.strictEqual(row?.nearest, hottext.nearest, hottext.id);
-                assert.strictEqual(row?.nearestKind, hottext.nearestKind, hottext.id);
+                const row = hottextRows.get(hottext.start);
+                assert.strictEqual(row?.nearest, hottext.nearest, String(hottext.start));
+                assert.strictEqual(row?.nearestKind, hottext.nearestKind, String(hottext.start));
+                assert.strictEqual(row?.nearestPath, place.path, String(hottext.start));
               }
 
               // Every interaction owns its choices, its response identifier written or not (B6).
+              const interactionRows = byStart(rows.Interaction);
+              const boundRows = byStart(rows.CountBound);
               const interactions = walked.filter(({ kind }) => isInteraction(kind));
               assert.sameMembers(
-                [...rows.Interaction.keys()],
-                interactions.map(({ id }) => id),
+                [...interactionRows.keys()],
+                interactions.map(({ start }) => start),
               );
               assert.sameMembers(
-                [...rows.Binding.keys()],
-                interactions.filter(({ name }) => name !== undefined).map(({ id }) => id),
+                [...byStart(rows.Binding).keys()],
+                interactions.filter(({ name }) => name !== undefined).map(({ start }) => start),
               );
               for (const interaction of interactions) {
                 assert.strictEqual(
                   [...rows.BindingName.values()].find(
-                    ({ attribute, node }) =>
-                      node === interaction.id && attribute === "response-identifier",
+                    ({ attribute, start }) =>
+                      start === interaction.start && attribute === "response-identifier",
                   )?.identifier,
                   interaction.name,
                 );
-                assert.strictEqual(rows.Interaction.get(interaction.id)?.kind, interaction.kind);
+                assert.strictEqual(interactionRows.get(interaction.start)?.kind, interaction.kind);
                 assert.strictEqual(
-                  rows.CountBound.get(interaction.id)?.choices,
-                  BigInt(choices.filter(({ nearest }) => nearest === interaction.id).length),
-                  interaction.id,
+                  boundRows.get(interaction.start)?.choices,
+                  BigInt(choices.filter(({ nearest }) => nearest === interaction.start).length),
+                  String(interaction.start),
                 );
               }
             }),
@@ -648,7 +672,7 @@ describe("import/overlays/interactions.ts, counts", () => {
               const max = closedName(bound?.max ?? "");
               c.noteAll(countSituationsOf(input, max));
 
-              const rows = rowsOf(ownViewOf(countTreeOf(input, { max, min }), idOf));
+              const rows = rowsAt(countTreeOf(input, { max, min }));
               const least = oracleCountOf(input.min, defaultOf(input.kind, min));
               const most = oracleCountOf(input.max, defaultOf(input.kind, max));
               const [counted] = rows.CountBound.values();
@@ -685,23 +709,28 @@ describe("import/overlays/interactions.ts, counts", () => {
 });
 
 /**
- * The test document of the section box, the assembly every placement sits in.
+ * The package of the section box.
  */
-const testDocument = idOf(1000);
+const boxPackage = "MANIFEST";
 
 /**
- * The section documents of the section box, each with the references it makes.
+ * The test document of the section box, the assembly every placement sits in, named by its path.
+ */
+const testDocument = "test.xml";
+
+/**
+ * The section documents of the section box, by their paths, each with the references it makes.
  */
 const sectionDocuments = [
   {
-    document: idOf(2000),
+    document: "section-a.xml",
     names: [
       { attribute: "outcome-identifier", identifier: "SCORED", kind: "qti-feedback-block" },
       { attribute: "identifier", identifier: "UNDECLARED", kind: "qti-printed-variable" },
     ],
   },
   {
-    document: idOf(3000),
+    document: "section-b.xml",
     names: [
       {
         attribute: "outcome-identifier",
@@ -710,7 +739,7 @@ const sectionDocuments = [
       },
     ],
   },
-  { document: idOf(4000), names: [] },
+  { document: "section-c.xml", names: [] },
 ] as const;
 
 /**
@@ -740,48 +769,46 @@ const placements: Gen<readonly Placement[]> = array(
 
 /**
  * Write the section box's assembly: the test's root instance and its placements' instances, each
- * numbered by the walk.
+ * numbered in the tree's pre-order, the root's 0, as the instance tree draws `start`.
  *
  * @param tree - The placements.
- * @returns The root instance and each section instance with the document it places.
+ * @returns The root instance and each section instance's start with the document it places.
  */
 const assemblyOf = (tree: readonly Placement[]) => {
-  let next = 5000;
-  const placed: { readonly document: NodeId; readonly id: NodeId }[] = [];
+  let next = 0n;
+  const placed: { readonly document: string; readonly instance: bigint }[] = [];
   const fields = (
-    id: NodeId,
-    document: NodeId,
+    document: string,
     rootKind: "qti-assessment-section" | "qti-assessment-test",
   ) => ({
     assemblyKind: "qti-assessment-test" as const,
     document,
-    id,
     mixes: false,
-    part: testDocument,
+    part: 0n,
     replaced: false,
     rootKind,
-    site: id,
+    site: 0n,
+    siteDocument: testDocument,
     siteLooseChain: false,
     siteMixes: false,
-    sitePart: testDocument,
+    sitePart: 0n,
     siteReplaced: false,
-    siteStart: 0n,
   });
   const member = (placement: Placement): InstanceMember => {
-    next += 1;
-    const id = idOf(next);
+    next += 1n;
     const { document } = sectionDocuments[placement.section];
-    placed.push({ document, id });
+    placed.push({ document, instance: next });
 
     return {
-      ...fields(id, document, "qti-assessment-section"),
+      ...fields(document, "qti-assessment-section"),
       children: placement.children.map(member),
     };
   };
   const root: InstanceRoot = {
-    ...fields(testDocument, testDocument, "qti-assessment-test"),
+    ...fields(testDocument, "qti-assessment-test"),
     assembly: testDocument,
     children: tree.map(member),
+    package: boxPackage,
   };
 
   return { placed, root };
@@ -795,13 +822,14 @@ const scored: Addition<typeof DeclarationIdentifier> = {
   baseTypes: 1n,
   cardinalities: 1n,
   declarationKind: "qti-outcome-declaration",
-  document: testDocument,
   identifier: "SCORED",
   identifierLead: "",
   identifierLexical: "SCORED",
   identifierTrail: "",
-  node: idOf(1001),
+  package: boxPackage,
   parentKind: "qti-assessment-test",
+  path: testDocument,
+  start: 2n,
 };
 
 /**
@@ -809,7 +837,9 @@ const scored: Addition<typeof DeclarationIdentifier> = {
  */
 const scoredCardinality: Addition<typeof DeclarationCardinality> = {
   cardinality: "single",
-  node: scored.node,
+  package: scored.package,
+  path: scored.path,
+  start: scored.start,
 };
 
 /**
@@ -817,7 +847,9 @@ const scoredCardinality: Addition<typeof DeclarationCardinality> = {
  */
 const scoredBaseType: Addition<typeof DeclarationBaseType> = {
   baseType: "identifier",
-  node: scored.node,
+  package: scored.package,
+  path: scored.path,
+  start: scored.start,
 };
 
 describe("import/overlays/interactions.ts, section references", () => {
@@ -827,7 +859,7 @@ describe("import/overlays/interactions.ts, section references", () => {
       // Oracle: a second implementation, the box's own list of placements and of each section
       // document's references, resolved by hand: SCORED to the test's declaration, and
       // completionStatus, an item's built-in and no test's (spec reading 29), and UNDECLARED to
-      // none (port audit A45; lane NIL's NS2: no declaration row, never the nil uuid).
+      // none (port audit A45; lane NIL's NS2: no declaration row, never a sentinel).
       // Bound: every test of up to 2 placements of 3 section documents, each with up to 1
       // placement inside, 1 + 3·4 + (3·4)² = 157 trees.
       searched(
@@ -862,8 +894,9 @@ describe("import/overlays/interactions.ts, section references", () => {
               const named = sectionDocuments.flatMap(({ document, names }) =>
                 names.map((name, at) => ({
                   ...name,
-                  document,
-                  node: idOf(Number.parseInt(document.slice(-4), 16) + at + 1),
+                  package: boxPackage,
+                  path: document,
+                  start: BigInt(at + 2),
                 })),
               );
               const rows = sectionRowsOf({
@@ -882,17 +915,19 @@ describe("import/overlays/interactions.ts, section references", () => {
               ];
 
               assert.sameMembers(
-                [...rows.SectionScope.keys()],
-                placed.map(({ id }) => id),
+                [...rows.SectionScope.values()].map(
+                  ({ document, instance }) => `${String(instance)} ${document}`,
+                ),
+                placed.map(({ document, instance }) => `${String(instance)} ${document}`),
               );
 
-              const expected = placed.flatMap(({ document, id }) =>
+              const expected = placed.flatMap(({ document, instance }) =>
                 (
                   sectionDocuments.find((section) => section.document === document)?.names ?? []
-                ).map(({ identifier }) => `${id} ${identifier}`),
+                ).map(({ identifier }) => `${String(instance)} ${identifier}`),
               );
               assert.sameMembers(
-                resolved.map(({ identifier, instance }) => `${instance} ${identifier}`),
+                resolved.map(({ identifier, instance }) => `${String(instance)} ${identifier}`),
                 expected,
               );
               for (const row of rows.SectionPrintedRef.values()) {
@@ -900,6 +935,7 @@ describe("import/overlays/interactions.ts, section references", () => {
               }
 
               for (const row of resolved) {
+                assert.strictEqual(row.package, boxPackage);
                 assert.strictEqual(row.assembly, testDocument);
                 assert.strictEqual(row.assemblyKind, "qti-assessment-test");
               }
@@ -910,13 +946,13 @@ describe("import/overlays/interactions.ts, section references", () => {
                   ...rows.SectionPrintedRefDeclaration.values(),
                 ].map(
                   ({ declaration, declarationKind, identifier, instance }) =>
-                    `${instance} ${identifier} ${declaration} ${declarationKind}`,
+                    `${String(instance)} ${identifier} ${String(declaration)} ${declarationKind}`,
                 ),
                 resolved
                   .filter(({ identifier }) => identifier === "SCORED")
                   .map(
                     ({ identifier, instance }) =>
-                      `${instance} ${identifier} ${scored.node} qti-outcome-declaration`,
+                      `${String(instance)} ${identifier} ${String(scored.start)} qti-outcome-declaration`,
                   ),
               );
             }),
@@ -1043,7 +1079,7 @@ describe("import/overlays/interactions.ts, gaps", () => {
     // against the builder's read of the tree's flat rows (spec reading 169).
     for (const own of [0, 1, 2]) {
       for (const nested of [0, 1, 2]) {
-        const rows = rowsOf(ownViewOf(gapTreeOf({ nested, own }), idOf));
+        const rows = rowsAt(gapTreeOf({ nested, own }));
         const interaction = [...rows.Interaction.values()].find(
           ({ kind }) => kind === "qti-gap-match-interaction",
         );
@@ -1052,21 +1088,22 @@ describe("import/overlays/interactions.ts, gaps", () => {
 
         assert.strictEqual(gaps.length, own + nested, label);
         assert.sameMembers(
-          [...rows.GapInteraction.keys()],
-          gaps.map(({ node }) => node),
+          [...byStart(rows.GapInteraction).keys()],
+          gaps.map(({ start }) => start),
           label,
         );
         for (const row of rows.GapInteraction.values()) {
-          assert.strictEqual(row.interaction, interaction?.node, label);
+          assert.strictEqual(row.interaction, interaction?.start, label);
+          assert.strictEqual(row.interactionPath, place.path, label);
         }
 
         assert.deepStrictEqual(
-          [...rows.BindingCardinality.values()].map(({ cardinality, gaps: counted, node }) => ({
+          [...rows.BindingCardinality.values()].map(({ cardinality, gaps: counted, start }) => ({
             cardinality,
             gaps: counted,
-            node,
+            start,
           })),
-          [{ cardinality: "single", gaps: BigInt(own + nested), node: interaction?.node }],
+          [{ cardinality: "single", gaps: BigInt(own + nested), start: interaction?.start }],
           label,
         );
       }
@@ -1075,23 +1112,22 @@ describe("import/overlays/interactions.ts, gaps", () => {
 });
 
 describe("import/overlays/interactions.ts, PCI module forms", () => {
-  it("writes a PciModuleForm row for each form of its module a PCI writes, by the PCI's node", () => {
+  it("writes a PciModuleForm row for each form of its module a PCI writes, at the PCI's place", () => {
     // Oracle: the document numbered in document order from the document node's 0 (the item 1, its
     // body 2, the PCI 3), against the forms each case writes by construction.
-    const pci = idOf(3);
-    const form = (written: boolean) => JSON.stringify([pci, String(written)]);
-    for (const [forms, keys] of [
+    const pci = { ...place, start: 3n };
+    for (const [forms, written] of [
       [{ attribute: false, modules: false }, []],
-      [{ attribute: true, modules: false }, [form(false)]],
-      [{ attribute: false, modules: true }, [form(true)]],
-      [{ attribute: true, modules: true }, [form(false), form(true)]],
+      [{ attribute: true, modules: false }, [false]],
+      [{ attribute: false, modules: true }, [true]],
+      [{ attribute: true, modules: true }, [false, true]],
     ] as const) {
-      const rows = rowsOf(ownViewOf(pciTreeOf(forms), idOf)).PciModuleForm;
+      const rows = rowsAt(pciTreeOf(forms)).PciModuleForm;
 
-      assert.sameMembers([...rows.keys()], [...keys]);
-      for (const [, row] of rows) {
-        assert.strictEqual(row.node, pci);
-      }
+      assert.sameDeepMembers(
+        [...rows.values()],
+        written.map((module) => ({ ...pci, element: module })),
+      );
     }
   });
 });
@@ -1273,7 +1309,7 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
       // reference may name (§5.49.1, §5.145.1, §7.30.6) and the item's built-in variables
       // (§2.2.2), read off the box's own declarations. A reference that names no declaration it
       // may name has no declaration row, and its law refuses it (lane NIL's NS2: a missing value
-      // is a row of its own relation, never the nil uuid).
+      // is a row of its own relation, never a sentinel).
       // Bound: 8 subsets of 3 declarations by 3 references by 6 names, 144.
       searched(
         ctx,
@@ -1316,34 +1352,31 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
                 }),
               );
 
-              const rows = rowsOf(ownViewOf(doc, idOf));
-              const key = JSON.stringify([named?.id, input.reference.attribute]);
+              const rows = rowsAt(doc);
               const relation = referenceRelationOf(rows, input.reference.kind);
               const reference = {
                 assemblyKind: "qti-assessment-item",
                 attribute: input.reference.attribute,
-                document: idOf(0),
                 identifier: input.name,
                 kind: input.reference.kind,
-                node: named?.id,
+                package: place.package,
+                path: place.path,
+                start: named?.start,
               };
 
-              assert.deepStrictEqual([...relation.references], [[key, reference]]);
+              assert.deepStrictEqual([...relation.references.values()], [reference]);
               assert.deepStrictEqual(
-                [...relation.declarations],
+                [...relation.declarations.values()],
                 declaration === undefined
                   ? []
                   : [
-                      [
-                        key,
-                        {
-                          ...reference,
-                          baseTypes: 1n,
-                          cardinalities: 1n,
-                          declaration: declaration.id,
-                          declarationKind: declaration.kind,
-                        },
-                      ],
+                      {
+                        ...reference,
+                        baseTypes: 1n,
+                        cardinalities: 1n,
+                        declaration: declaration.start,
+                        declarationKind: declaration.kind,
+                      },
                     ],
                 Formatter.format(input),
               );

@@ -20,7 +20,7 @@ import {
   StaleSnapshot,
   TransientFailure,
 } from "@bjornpagen/grizzle";
-import type { ApplyError, ReadError, Uuid } from "@bjornpagen/grizzle";
+import type { ApplyError, ReadError } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
@@ -41,8 +41,6 @@ import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { ImportRefused } from "#pantry/import/rules.ts";
 import { AuthorLogin } from "#pantry/db/served.ts";
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 const fixtures = inject("fixtures");
 
@@ -191,9 +189,9 @@ describe("import/package.test.ts, the retry budget", () => {
 });
 
 /**
- * The id a settled `CommitUnknown` reads back, as the import gives it.
+ * The manifest identifier a settled `CommitUnknown` reads the package back by.
  */
-const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
+const readBackIdentifier = "MANIFEST-read-back";
 
 /**
  * A failure of each kind grizzle's README gives a read ("Errors": `ReadFailure`, `TransientFailure`
@@ -237,10 +235,14 @@ const readBacks: readonly ReadBack[] = [
  */
 const stubRead = (
   readBack: ReadBack,
-): Effect.Effect<Option.Option<{ readonly id: Uuid }>, ReadError> =>
+): Effect.Effect<Option.Option<{ readonly identifier: string }>, ReadError> =>
   readBack.kind === "fails"
     ? Effect.fail(readBack.failure)
-    : Effect.succeed(readBack.kind === "present" ? Option.some({ id: readBackId }) : Option.none());
+    : Effect.succeed(
+        readBack.kind === "present"
+          ? Option.some({ identifier: readBackIdentifier })
+          : Option.none(),
+      );
 
 /**
  * Name a {@link ReadBack}, for an assertion's message.
@@ -263,7 +265,7 @@ describe("import/package.test.ts, the read-back that settles a CommitUnknown", (
         const name = readBackName(readBack);
         const commit = new CommitUnknown();
         const answer = yield* Effect.result(
-          settleCommitUnknown(commit, readBackId, stubRead(readBack)),
+          settleCommitUnknown(commit, readBackIdentifier, stubRead(readBack)),
         );
 
         if (readBack.kind === "present") {
@@ -276,7 +278,7 @@ describe("import/package.test.ts, the read-back that settles a CommitUnknown", (
           assert.instanceOf(failure, CommitUnresolved, name);
           assert.strictEqual(failure.commit, commit, name);
           assert.strictEqual(failure.cause, readBack.failure, name);
-          assert.include(failure.message, readBackId, name);
+          assert.include(failure.message, readBackIdentifier, name);
           assert.include(failure.message, readBack.failure.message, name);
         }
       }
@@ -323,14 +325,20 @@ describe.skipIf(!hasLease)(
       excludeTestServices: true,
       timeout: "60 seconds",
     })("importPackage on the lease", (it) => {
-      it.effect("accepts simple and returns the package's id", () =>
-        // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
+      it.effect("stores simple under its manifest identifier, and again is no change", () =>
+        // Oracle: PostgreSQL, every law over `simple`, the package read back by its manifest
+        // identifier, and grizzle's `no-change` for the same rows a second time.
         Effect.gen(function* acceptsSimple() {
-          const id = yield* importDir(fixtures.simple);
+          const first = yield* importDir(fixtures.simple);
+          const again = yield* importDir(fixtures.simple);
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.match(id, uuidPattern);
-          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
+          assert.strictEqual(again.outcome, "no-change");
+          assert.strictEqual(again.package, first.package);
+          assert.isTrue(
+            Option.isSome(yield* db.workload.packageOf.get({ identifier: first.package })),
+            first.package,
+          );
         }),
       );
 
@@ -363,7 +371,7 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, the retry rule: a transient failure is retried.
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
-          const id: Uuid = yield* importDir(fixtures.simple).pipe(
+          yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, <A>(apply: Effect.Effect<A, ApplyError>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
@@ -373,7 +381,6 @@ describe.skipIf(!hasLease)(
             ),
           );
 
-          assert.match(id, uuidPattern);
           assert.isAtLeast(yield* Ref.get(attempts), 2);
         }),
       );
@@ -405,16 +412,21 @@ describe.skipIf(!hasLease)(
 
       it.effect("reads the package back when the commit's outcome is unknown", () =>
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
-        // committed, so the package is read back and the import answers its id.
+        // committed, so the package is read back by its manifest identifier and the import answers
+        // it accepted.
         Effect.gen(function* readsBack() {
-          const id = yield* importDir(fixtures.simple).pipe(
+          const imported = yield* importDir(fixtures.simple).pipe(
             Effect.provideService(WrapApply, (apply) =>
               Effect.andThen(apply, Effect.fail(new CommitUnknown())),
             ),
           );
           const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-          assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
+          assert.strictEqual(imported.outcome, "accepted");
+          assert.isTrue(
+            Option.isSome(yield* db.workload.packageOf.get({ identifier: imported.package })),
+            imported.package,
+          );
         }),
       );
 

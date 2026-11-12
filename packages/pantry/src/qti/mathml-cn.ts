@@ -8,21 +8,23 @@
  * parts) and {@link CnForm} (the form of each), and what a form allows, {@link CnPattern} (by form
  * and base). The importer refused none of it before: only the law oracle judged it.
  *
- * - **{@link MathCn}**, one row per judged `m:cn`, keyed by its node: the `type` and `base` it is
- *   judged under, each with the lexical form of the attribute that gave it (empty where the `cn`
- *   writes none, so `real` and `10`), and `parts`, the count of its {@link CnPartText} rows. A `cn`
- *   whose `type` {@link CnType} does not list, or whose `base` {@link CnBase} does not list, has no
- *   row, so it is not judged: its content is text, or its digits are application specific.
- * - **{@link CnPartText}**, one row per part of a judged `cn`, keyed by `(node, part)` (named apart
- *   from the roster {@link CnPart} of the places a part takes, which `install.ts` holds): the
+ * - **{@link MathCn}**, one row per judged `m:cn`, keyed by its node's `(package, path, start)`: the
+ *   `type` and `base` it is judged under, each with the lexical form of the attribute that gave it
+ *   (empty where the `cn` writes none, so `real` and `10`), and `parts`, the count of its
+ *   {@link CnPartText} rows. A `cn` whose `type` {@link CnType} does not list, or whose `base`
+ *   {@link CnBase} does not list, has no row, so it is not judged: its content is text, or its
+ *   digits are application specific.
+ * - **{@link CnPartText}**, one row per part of a judged `cn`, keyed by its node and `part` (named
+ *   apart from the roster {@link CnPart} of the places a part takes, which `install.ts` holds): the
  *   `type` and `base` of its `cn`, the part's collapsed `text` (MathML 3 §2.1.7) and its `form`. A
  *   part that holds an element or an entity reference is not judged, so a `cn` with one has no
  *   rows.
  * - **{@link CnCount}**, one row per `m:cn` whose `type` {@link CnType} lists, whatever its `base`
  *   and whatever its parts hold, keyed by its node: the `type` with its lexical form, and `parts`,
  *   the count of its {@link CnSlot} rows.
- * - **{@link CnSlot}**, one row per part of such a `cn`, judged or not, keyed by `(node, part)`: the
- *   `type` of its `cn` and the `form` of its place. The slots carry the count, never the digits.
+ * - **{@link CnSlot}**, one row per part of such a `cn`, judged or not, keyed by its node and `part`:
+ *   the `type` of its `cn` and the `form` of its place. The slots carry the count, never the
+ *   digits.
  *
  * `MathML_cn_form` is the law's check over {@link CnPartText}: the text lies in the lexical space
  * of its form in its base. Every other statement is a restatement of the tree, "E1 derived"; the
@@ -60,7 +62,6 @@ import {
   on,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import {
   AttributeName,
@@ -72,8 +73,8 @@ import {
   CnPattern,
   CnType,
 } from "#pantry/grammar/install.ts";
-import { keyText } from "#pantry/qti/limits.ts";
-import { Attribute, closedName } from "#pantry/qti/attributes.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { Node } from "#pantry/qti/node.ts";
 
 /**
@@ -136,11 +137,11 @@ export const baseSpellings = [
 ] as const;
 
 /**
- * One judged `m:cn`, keyed by its node.
+ * One judged `m:cn`, keyed by its node's `(package, path, start)`.
  *
- * - **the host's:** `node`, proved by containment to be an `m:cn`; `type` and `base`, the handles the
- *   `cn` is judged under, and `typeLexical` and `baseLexical`, the lexical forms of the attributes
- *   that gave them, each empty where the `cn` writes none; proved by containment and by
+ * - **the host's:** the node, proved by containment to be an `m:cn`; `type` and `base`, the handles
+ *   the `cn` is judged under, and `typeLexical` and `baseLexical`, the lexical forms of the
+ *   attributes that gave them, each empty where the `cn` writes none; proved by containment and by
  *   `E1_derived`;
  * - **drawn:** `parts`, the count of its {@link CnPartText} rows.
  *
@@ -152,12 +153,14 @@ export const MathCn = relation(
   {
     base: closedId(CnBase),
     baseLexical: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
     parts: drawn(natural),
+    path: EntryPath,
+    start: natural,
     type: closedId(CnType),
     typeLexical: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -170,12 +173,14 @@ export const CnPartText = relation(
   {
     base: closedId(CnBase),
     form: closedId(CnPartForm),
-    node: uuid,
+    package: ManifestIdentifier,
     part: closedId(CnPart),
+    path: EntryPath,
+    start: natural,
     text: keyText,
     type: closedId(CnType),
   },
-  ["node", "part"],
+  ["package", "path", "start", "part"],
 );
 
 /**
@@ -186,8 +191,15 @@ export const CnPartText = relation(
  */
 export const CnCount = relation(
   "CnCount",
-  { node: uuid, parts: drawn(natural), type: closedId(CnType), typeLexical: keyText },
-  ["node"],
+  {
+    package: ManifestIdentifier,
+    parts: drawn(natural),
+    path: EntryPath,
+    start: natural,
+    type: closedId(CnType),
+    typeLexical: keyText,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -197,8 +209,15 @@ export const CnCount = relation(
  */
 export const CnSlot = relation(
   "CnSlot",
-  { form: closedId(CnPartForm), node: uuid, part: closedId(CnPart), type: closedId(CnType) },
-  ["node", "part"],
+  {
+    form: closedId(CnPartForm),
+    package: ManifestIdentifier,
+    part: closedId(CnPart),
+    path: EntryPath,
+    start: natural,
+    type: closedId(CnType),
+  },
+  ["package", "path", "start", "part"],
 );
 
 /**
@@ -211,8 +230,14 @@ export const CnSlot = relation(
  */
 export const CnAttribute = relation(
   "CnAttribute",
-  { lexical: keyText, name: closedId(AttributeName), node: uuid },
-  ["node", "name"],
+  {
+    lexical: keyText,
+    name: closedId(AttributeName),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "path", "start", "name"],
 );
 
 /**
@@ -230,7 +255,7 @@ const cnNodes = select(Node, (n) => n.eq(n.kind, "m:cn"));
  * The `type` and `base` attributes of an `m:cn`.
  */
 const cnAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "m:cn"), a.in(a.name, ["type", "base"])),
+  a.and(a.eq(a.kind, "m:cn"), a.in(a.name, ["type", "base"])),
 );
 
 /**
@@ -251,12 +276,12 @@ const basedCns = select(MathCn, (c) => c.ne(c.baseLexical, ""));
 /**
  * The family of a `cn`'s parts, counted by `MathCn.parts`.
  */
-const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
+const partFamily = counted(on(CnPartText, "package", "path", "start"), fin(MathCn, "parts"));
 
 /**
  * The family of the parts of a `cn` the digits cannot judge too, counted by `CnCount.parts`.
  */
-const slotFamily = counted(on(CnSlot, "node"), fin(CnCount, "parts"));
+const slotFamily = counted(on(CnSlot, "package", "path", "start"), fin(CnCount, "parts"));
 
 /**
  * The containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
@@ -289,30 +314,37 @@ export const cnCountLaws = {
  * - **the count:** each {@link CnCount} row's node an `m:cn`, its lexical `type` that of the node's
  *   {@link CnAttribute} row and the handle the one it spells (`E1_derived`); the family of its
  *   {@link CnSlot} rows, counted by `CnCount.parts`, its `(type, parts)` in {@link CnParts} and
- *   each slot's `(type, part, form)` in {@link CnForm}; each {@link MathCn} row's `(node, type)` a
+ *   each slot's `(type, part, form)` in {@link CnForm}; each {@link MathCn} row's node and `type` a
  *   {@link CnCount} row's, so the two count one `cn` alike;
  * - **`MathML_cn_form`:** each part's text matches the pattern of its form in its base.
  */
 export const cnLaws = [
-  contained(on(MathCn, "node"), on(cnNodes, "id")),
+  contained(on(MathCn, "package", "path", "start"), on(cnNodes, "package", "path", "start")),
   contained(
-    on(cnAttributes, "node", "name", "lexical"),
-    on(CnAttribute, "node", "name", "lexical"),
+    on(cnAttributes, "package", "path", "start", "name", "lexical"),
+    on(CnAttribute, "package", "path", "start", "name", "lexical"),
   ),
-  contained(on(CnAttribute, "node", "name"), on(cnAttributes, "node", "name")),
   contained(
-    on(typedCns, "node", "typeLexical"),
+    on(CnAttribute, "package", "path", "start", "name"),
+    on(cnAttributes, "package", "path", "start", "name"),
+  ),
+  contained(
+    on(typedCns, "package", "path", "start", "typeLexical"),
     on(
       select(CnAttribute, (a) => a.eq(a.name, "type")),
-      "node",
+      "package",
+      "path",
+      "start",
       "lexical",
     ),
   ),
   contained(
-    on(basedCns, "node", "baseLexical"),
+    on(basedCns, "package", "path", "start", "baseLexical"),
     on(
       select(CnAttribute, (a) => a.eq(a.name, "base")),
-      "node",
+      "package",
+      "path",
+      "start",
       "lexical",
     ),
   ),
@@ -335,15 +367,20 @@ export const cnLaws = [
   ),
 
   partFamily,
-  contained(on(CnPartText, "node", "type", "base"), on(MathCn, "node", "type", "base")),
+  contained(
+    on(CnPartText, "package", "path", "start", "type", "base"),
+    on(MathCn, "package", "path", "start", "type", "base"),
+  ),
   cnCountLaws.judgedForm,
 
-  contained(on(CnCount, "node"), on(cnNodes, "id")),
+  contained(on(CnCount, "package", "path", "start"), on(cnNodes, "package", "path", "start")),
   contained(
-    on(typedCounts, "node", "typeLexical"),
+    on(typedCounts, "package", "path", "start", "typeLexical"),
     on(
       select(CnAttribute, (a) => a.eq(a.name, "type")),
-      "node",
+      "package",
+      "path",
+      "start",
       "lexical",
     ),
   ),
@@ -357,9 +394,15 @@ export const cnLaws = [
   ),
   slotFamily,
   cnCountLaws.typedParts,
-  contained(on(CnSlot, "node", "type"), on(CnCount, "node", "type")),
+  contained(
+    on(CnSlot, "package", "path", "start", "type"),
+    on(CnCount, "package", "path", "start", "type"),
+  ),
   cnCountLaws.typedForm,
-  contained(on(MathCn, "node", "type"), on(CnCount, "node", "type")),
+  contained(
+    on(MathCn, "package", "path", "start", "type"),
+    on(CnCount, "package", "path", "start", "type"),
+  ),
   check("MathML_cn_form", CnPartText, (p) =>
     Compute.matches(p.text, CnPattern.at("pattern", p.form, p.base)),
   ),

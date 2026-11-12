@@ -59,7 +59,6 @@ import {
 } from "#pantry/test/gen/genetic/codec-genome.ts";
 import type { CodecGenome, Declaration, Piece } from "#pantry/test/gen/genetic/codec-genome.ts";
 import type { Judgment } from "#pantry/test/gen/genetic/engine.ts";
-import { idOf } from "#pantry/test/gen/xdm.ts";
 import { xmllintRun } from "#pantry/xml/oracle.ts";
 
 /**
@@ -800,7 +799,7 @@ const codecRoundTrip = Effect.fnUntraced(function* codecRoundTrip(
     } satisfies Found;
   }
 
-  if (!isDeepStrictEqual(flatten(again.success, idOf), flatten(tree.success, idOf))) {
+  if (!isDeepStrictEqual(flatten(again.success), flatten(tree.success))) {
     const differences = treeDifferences(codecErased(read), codecErased(reread.success));
     const named = differences.map(({ what }) => what).join(", ");
 

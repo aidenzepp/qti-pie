@@ -1,7 +1,8 @@
 /**
- * The O2 overlay rows of a document (plan §1.7, §C's `rowsOf`): from a document's view (its rows
- * under the ids its nodes are written under, and their folds), the rows of every overlay
- * `#pantry/qti/declarations.ts` declares, each relation's rows a keyed set by its node's id.
+ * The O2 overlay rows of a document (plan §1.7, §C's `rowsOf`): from a document's view (its rows,
+ * each node at its `start`, and their folds) and its place in its package, the rows of every
+ * overlay `#pantry/qti/declarations.ts` declares, each relation's rows a keyed set by its element's
+ * place, `(package, path, start)`.
  *
  * The rows restate what the tree says and nothing else: each overlay copies its node's tuple as the
  * tree's own rows give it (`flatten` of `#pantry/model/xdm.ts`), each attribute's lexical form as
@@ -10,7 +11,7 @@
  * them (`declarationLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import { Option, Struct } from "effect";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView, Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
@@ -20,7 +21,7 @@ import { DeclarationKind } from "#pantry/grammar/install.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
 import type { Pieces } from "#pantry/import/pieces.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FlatRows, NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { FlatRows, NodeRow } from "#pantry/model/xdm.ts";
 import type {
   Declaration,
   DeclarationBaseType,
@@ -44,8 +45,8 @@ import type {
 import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
 
 /**
- * A document's O2 overlay rows, one keyed set per relation: each map from its row's node id to the
- * row as its writer writes it.
+ * A document's O2 overlay rows, one keyed set per relation: each map from the text of its row's
+ * key, its element's place ({@link keyTextOf}), to the row as its writer writes it.
  */
 export interface DeclarationRows {
   readonly Declaration: ReadonlyMap<string, Addition<typeof Declaration>>;
@@ -73,6 +74,35 @@ export interface DeclarationRows {
  */
 type RowOf<Relation extends keyof DeclarationRows> =
   DeclarationRows[Relation] extends ReadonlyMap<string, infer Row> ? Row : never;
+
+/**
+ * One relation's rows of a document, each at its element's `start`, as the relation's keyed set
+ * holds them, by the text of the row's key ({@link keyTextOf}): a type-level function of the rows,
+ * so `Struct.map` gives each relation of {@link DeclarationRows} its own row type.
+ */
+interface Keyed extends Struct.Lambda {
+  <Row>(rows: ReadonlyMap<bigint, Row>): ReadonlyMap<string, Row>;
+  readonly "~lambda.out": this["~lambda.in"] extends ReadonlyMap<bigint, infer Row>
+    ? ReadonlyMap<string, Row>
+    : never;
+}
+
+/**
+ * Where a document stands in its package, as its rows hold it: its package's manifest identifier
+ * and its path there, which every row holds beside its element's `start`.
+ */
+export type Place = Pick<Addition<typeof Declaration>, "package" | "path">;
+
+/**
+ * The text of a row's key in its relation's keyed set: its document's package and path and its
+ * element's `start`, as a JSON array, so the rows of two documents never meet at one key.
+ *
+ * @param place - The document's place.
+ * @param start - The element's position in it.
+ * @returns The key text.
+ */
+export const keyTextOf = (place: Place, start: bigint): string =>
+  JSON.stringify([place.package, place.path, String(start)]);
 
 /**
  * A `BaseType` handle.
@@ -241,13 +271,14 @@ export const declarationOf = (
  * Index a document's attribute rows by their element and name.
  *
  * @param rows - The document's flat rows.
- * @returns Each element's attributes' lexical forms, by the element's id and the attribute's name.
+ * @returns Each element's attributes' lexical forms, by the element's `start` and the attribute's
+ *   name.
  */
-const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap<string, string>> =>
+const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<bigint, ReadonlyMap<string, string>> =>
   new Map(
-    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
-      ([node, attributes]) =>
-        [node, new Map(attributes.map(({ lexical, name }) => [name, lexical] as const))] as const,
+    [...Map.groupBy(rows.attributes, ({ start }) => start)].map(
+      ([start, attributes]) =>
+        [start, new Map(attributes.map(({ lexical, name }) => [name, lexical] as const))] as const,
     ),
   );
 
@@ -256,13 +287,13 @@ const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap
  * entity reference's `&name;`, nothing for every other node.
  *
  * @param rows - The document's flat rows.
- * @returns Each node's characters, by its id, for the nodes that have any.
+ * @returns Each node's characters, by its `start`, for the nodes that have any.
  */
-const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> =>
+const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<bigint, string> =>
   new Map([
-    ...rows.texts.map(({ node, value }) => [node, value] as const),
-    ...rows.whitespace.map(({ node, value }) => [node, value] as const),
-    ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
+    ...rows.texts.map(({ start, value }) => [start, value] as const),
+    ...rows.whitespace.map(({ start, value }) => [start, value] as const),
+    ...rows.entityRefs.map(({ name, start }) => [start, `&${name};`] as const),
   ]);
 
 /**
@@ -272,7 +303,7 @@ const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> =>
  */
 interface Derived {
   readonly folds: Folds;
-  readonly text: ReadonlyMap<NodeId, string>;
+  readonly text: ReadonlyMap<bigint, string>;
 }
 
 /**
@@ -287,16 +318,16 @@ const noCharacters = "";
  *
  * @param view - A document's view, its nodes in document order, so each parent precedes its
  *   children.
- * @returns The derived values, by node id.
+ * @returns The derived values, by node `start`.
  */
 const derivedOf = (view: DocumentView): Derived => {
   const { folds, rows } = view;
   const chars = charsOf(rows);
-  const pieces = rows.nodes.flatMap(({ id, parent }) =>
-    parent === id
+  const pieces = rows.nodes.flatMap(({ parent, start }) =>
+    parent === start
       ? []
       : Option.toArray(
-          Option.map(Option.fromUndefinedOr(chars.get(id)), (value) => ({ parent, value })),
+          Option.map(Option.fromUndefinedOr(chars.get(start)), (value) => ({ parent, value })),
         ),
   );
   const text = new Map(
@@ -309,15 +340,16 @@ const derivedOf = (view: DocumentView): Derived => {
 };
 
 /**
- * What every row builder reads of a document: its node rows' derived values, its attributes, and
- * the rows built so far, a parent's before its children's.
+ * What every row builder reads of a document: its place in its package, its node rows' derived
+ * values, its attributes, and the rows built so far, a parent's before its children's, each by its
+ * element's `start`.
  */
 interface Reading {
-  readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
+  readonly attributes: ReadonlyMap<bigint, ReadonlyMap<string, string>>;
   readonly derived: Derived;
-  readonly document: NodeId;
-  readonly kinds: ReadonlyMap<NodeId, NodeRow<Composed>["kind"]>;
-  readonly rows: { readonly [Relation in keyof DeclarationRows]: Map<string, RowOf<Relation>> };
+  readonly kinds: ReadonlyMap<bigint, NodeRow<Composed>["kind"]>;
+  readonly place: Place;
+  readonly rows: { readonly [Relation in keyof DeclarationRows]: Map<bigint, RowOf<Relation>> };
 }
 
 /**
@@ -329,7 +361,7 @@ interface Reading {
  * @returns Its lexical form, none where the node does not write it.
  */
 const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): Option.Option<string> =>
-  Option.fromUndefinedOr(reading.attributes.get(node.id)?.get(name));
+  Option.fromUndefinedOr(reading.attributes.get(node.start)?.get(name));
 
 /**
  * Read a node's parent's kind, as `Declaration.parentKind` copies it from `Node`.
@@ -337,19 +369,33 @@ const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): Optio
  * @param reading - The document.
  * @param node - The node, not the document node.
  * @returns The parent's kind.
- * @throws {Error} When the document holds no node of the parent's id: a defect of the caller, which
- *   read a node of other rows than the reading's.
+ * @throws {Error} When the document holds no node at the parent's `start`: a defect of the caller,
+ *   which read a node of other rows than the reading's.
  */
 const parentKindOf = (reading: Reading, node: NodeRow<Composed>): NodeRow<Composed>["kind"] => {
   const kind = reading.kinds.get(node.parent);
   if (kind === undefined) {
     throw new Error(
-      `${node.parent}, the parent of ${node.id}, is none of the document's nodes, which hold every parent a declaration names. Read each node in the rows the reading was built from.`,
+      `${node.parent}, the parent of the node at ${node.start}, is no node's start in the document, which holds every parent a declaration names. Read each node in the rows the reading was built from.`,
     );
   }
 
   return kind;
 };
+
+/**
+ * Write a node's place, the key of every row of it: its document's package and path and its own
+ * `start`.
+ *
+ * @param reading - The document.
+ * @param node - The node.
+ * @returns The place.
+ */
+const placeOf = (reading: Reading, node: NodeRow<Composed>) => ({
+  package: reading.place.package,
+  path: reading.place.path,
+  start: node.start,
+});
 
 /**
  * Write a node's `nodeRef` tuple as an overlay row copies it.
@@ -359,12 +405,10 @@ const parentKindOf = (reading: Reading, node: NodeRow<Composed>): NodeRow<Compos
  * @returns The tuple.
  */
 const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
-  document: reading.document,
+  ...placeOf(reading, node),
   kind: node.kind,
-  nearest: foldAt(reading.derived.folds, node.id).nearest,
-  node: node.id,
+  nearest: foldAt(reading.derived.folds, node.start).nearest,
   parent: node.parent,
-  start: node.start,
   version: node.version,
 });
 
@@ -403,31 +447,32 @@ const addScale = (reading: Reading, node: NodeRow<Composed>): void => {
   const mastery = valueOf(reading, node, "mastery-value");
   const minimum = minimumOf(reading, node);
   const maximum = valueOf(reading, node, "normal-maximum");
+  const place = placeOf(reading, node);
   for (const lexical of Option.toArray(mastery)) {
-    reading.rows.MasteryValue.set(node.id, { lexical, node: node.id });
+    reading.rows.MasteryValue.set(node.start, { ...place, lexical });
   }
 
   for (const { lexical, written: stated } of Option.toArray(minimum)) {
-    reading.rows.NormalMinimum.set(node.id, {
+    reading.rows.NormalMinimum.set(node.start, {
+      ...place,
       lexical,
-      node: node.id,
       version: node.version,
       written: stated,
     });
   }
 
   for (const lexical of Option.toArray(maximum)) {
-    reading.rows.NormalMaximum.set(node.id, { lexical, node: node.id });
+    reading.rows.NormalMaximum.set(node.start, { ...place, lexical });
   }
 
   for (const [{ lexical: normalMinimum }, masteryValue] of Option.toArray(
     Option.all([minimum, mastery]),
   )) {
-    reading.rows.MasteryFloor.set(node.id, { masteryValue, node: node.id, normalMinimum });
+    reading.rows.MasteryFloor.set(node.start, { ...place, masteryValue, normalMinimum });
   }
 
   for (const [masteryValue, normalMaximum] of Option.toArray(Option.all([mastery, maximum]))) {
-    reading.rows.MasteryCeiling.set(node.id, { masteryValue, node: node.id, normalMaximum });
+    reading.rows.MasteryCeiling.set(node.start, { ...place, masteryValue, normalMaximum });
   }
 };
 
@@ -457,35 +502,38 @@ const addDeclaration = (
     cardinalities: typedCountOf(typed.cardinality),
   };
   const parentKind = parentKindOf(reading, node);
-  reading.rows.Declaration.set(node.id, { ...tupleOf(reading, node), declarationKind, parentKind });
+  const place = placeOf(reading, node);
+  reading.rows.Declaration.set(node.start, {
+    ...tupleOf(reading, node),
+    declarationKind,
+    parentKind,
+  });
   for (const cardinality of Option.toArray(typed.cardinality)) {
-    reading.rows.DeclarationCardinality.set(node.id, { cardinality, node: node.id });
+    reading.rows.DeclarationCardinality.set(node.start, { ...place, cardinality });
   }
 
   for (const baseType of Option.toArray(typed.baseType)) {
-    reading.rows.DeclarationBaseType.set(node.id, { baseType, node: node.id });
+    reading.rows.DeclarationBaseType.set(node.start, { ...place, baseType });
   }
 
   for (const { lexical, pieces } of Option.toArray(typed.name)) {
-    reading.rows.DeclarationIdentifier.set(node.id, {
+    reading.rows.DeclarationIdentifier.set(node.start, {
+      ...place,
       ...counts,
       declarationKind,
-      document: reading.document,
       identifier: pieces.value,
       identifierLead: pieces.lead,
       identifierLexical: lexical,
       identifierTrail: pieces.trail,
-      node: node.id,
       parentKind,
     });
     for (const cardinality of Option.toArray(typed.cardinality)) {
-      reading.rows.DeclarationName.set(node.id, {
+      reading.rows.DeclarationName.set(node.start, {
+        ...place,
         baseTypes: counts.baseTypes,
         cardinality,
         declarationKind,
-        document: reading.document,
         identifier: pieces.value,
-        node: node.id,
         parentKind,
       });
     }
@@ -502,12 +550,12 @@ const addDeclaration = (
  * precedes its children in document order.
  *
  * @param reading - The document.
- * @param declaration - The declaration's node.
+ * @param declaration - The declaration's `start`.
  * @returns Its base type and its cardinality, each none where it has none.
  */
 const typedAt = (
   reading: Reading,
-  declaration: NodeId,
+  declaration: bigint,
 ): Pick<TypedDeclaration, "baseType" | "cardinality"> => ({
   baseType: Option.map(
     Option.fromUndefinedOr(reading.rows.DeclarationBaseType.get(declaration)),
@@ -533,13 +581,14 @@ const addValueSet = (
   declaration: Addition<typeof Declaration>,
 ): void => {
   const typed = typedAt(reading, node.parent);
-  reading.rows.ValueSet.set(node.id, {
+  const fold = foldAt(reading.derived.folds, node.start);
+  reading.rows.ValueSet.set(node.start, {
     ...tupleOf(reading, node),
     baseTypes: typedCountOf(typed.baseType),
     cardinalities: typedCountOf(typed.cardinality),
     declarationKind: declaration.declarationKind,
-    elementChildren: foldAt(reading.derived.folds, node.id).elementChildren,
-    elements: foldAt(reading.derived.folds, node.id).elements,
+    elementChildren: fold.elementChildren,
+    elements: fold.elements,
   });
 };
 
@@ -568,10 +617,11 @@ const addValue = (
   node: NodeRow<Composed>,
   set: Addition<typeof ValueSet>,
 ): void => {
-  const text = reading.derived.text.get(node.id) ?? noCharacters;
+  const text = reading.derived.text.get(node.start) ?? noCharacters;
   const typed = typedAt(reading, set.parent);
-  const written = { declaration: set.parent, node: node.id, text };
-  reading.rows.Value.set(node.id, {
+  const place = placeOf(reading, node);
+  const written = { ...place, declaration: set.parent, text };
+  reading.rows.Value.set(node.start, {
     ...tupleOf(reading, node),
     baseTypes: set.baseTypes,
     cardinalities: set.cardinalities,
@@ -581,37 +631,37 @@ const addValue = (
   for (const [baseType, cardinality] of Option.toArray(
     Option.all([typed.baseType, typed.cardinality]),
   )) {
-    reading.rows.TypedValue.set(node.id, { ...written, baseType, cardinality });
+    reading.rows.TypedValue.set(node.start, { ...written, baseType, cardinality });
   }
 
   const fieldIdentifier = valueOf(reading, node, "field-identifier");
   const fieldBaseType = valueOf(reading, node, "base-type");
   for (const baseType of Option.toArray(spelledBaseTypeOf(fieldBaseType))) {
-    reading.rows.ValueBaseType.set(node.id, {
+    reading.rows.ValueBaseType.set(node.start, {
+      ...place,
       baseType,
       cardinalities: set.cardinalities,
-      node: node.id,
     });
     for (const cardinality of Option.toArray(typed.cardinality)) {
-      reading.rows.FieldValue.set(node.id, { ...written, baseType, cardinality });
+      reading.rows.FieldValue.set(node.start, { ...written, baseType, cardinality });
     }
   }
 
   for (const [identifierLexical, baseTypeLexical] of Option.toArray(
     Option.all([fieldIdentifier, fieldBaseType]),
   )) {
-    reading.rows.RecordField.set(node.id, {
+    reading.rows.RecordField.set(node.start, {
       ...tupleOf(reading, node),
       baseTypeLexical,
       identifierLexical,
     });
     for (const { lead, trail, value: name } of Option.toArray(namedPiecesOf(identifierLexical))) {
-      reading.rows.RecordFieldName.set(node.id, {
+      reading.rows.RecordFieldName.set(node.start, {
+        ...place,
         identifier: name,
         identifierLead: lead,
         identifierLexical,
         identifierTrail: trail,
-        node: node.id,
         parent: node.parent,
       });
     }
@@ -629,12 +679,14 @@ const addValueSetCardinalities = (reading: Reading): void => {
   const fields = [...reading.rows.RecordField.values()];
   for (const set of reading.rows.ValueSet.values()) {
     for (const cardinality of Option.toArray(typedAt(reading, set.parent).cardinality)) {
-      reading.rows.ValueSetCardinality.set(set.node, {
+      reading.rows.ValueSetCardinality.set(set.start, {
         cardinality,
         declaration: set.parent,
         elementChildren: set.elementChildren,
-        fields: BigInt(fields.filter(({ parent }) => parent === set.node).length),
-        node: set.node,
+        fields: BigInt(fields.filter(({ parent }) => parent === set.start).length),
+        package: set.package,
+        path: set.path,
+        start: set.start,
       });
     }
   }
@@ -646,18 +698,19 @@ const addValueSetCardinalities = (reading: Reading): void => {
  * its declaration's cardinality, per value and its typed rows, per record field and per field
  * name, and per scale attribute of an outcome declaration and per pair of them it writes.
  *
- * @param view - The document's view: its rows under the ids they are written under, and their folds
- *   under its context (spec reading 117), its own or, for an included fragment, the interaction its
- *   includes stand in, which its nodes take as their nearest.
+ * @param view - The document's view: its rows, each node at its `start`, and their folds under its
+ *   context (spec reading 117), its own or, for an included fragment, the interaction its includes
+ *   stand in, which its nodes take as their nearest.
+ * @param place - Where the document stands in its package, the key every row holds.
  * @returns Every overlay's rows.
  */
-export const rowsOf = (view: DocumentView): DeclarationRows => {
+export const rowsOf = (view: DocumentView, place: Place): DeclarationRows => {
   const flat = view.rows;
   const reading: Reading = {
     attributes: attributesOf(flat),
     derived: derivedOf(view),
-    document: flat.document.node,
-    kinds: new Map(flat.nodes.map(({ id, kind }) => [id, kind] as const)),
+    kinds: new Map(flat.nodes.map(({ kind, start }) => [start, kind] as const)),
+    place,
     rows: {
       Declaration: new Map(),
       DeclarationBaseType: new Map(),
@@ -695,5 +748,9 @@ export const rowsOf = (view: DocumentView): DeclarationRows => {
 
   addValueSetCardinalities(reading);
 
-  return reading.rows;
+  return Struct.map(
+    Struct.lambda<Keyed>(
+      (rows) => new Map([...rows].map(([start, row]) => [keyTextOf(place, start), row] as const)),
+    ),
+  )(reading.rows);
 };

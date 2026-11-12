@@ -90,6 +90,8 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
  * ahead of it too. The list only shrinks.
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
+  "AL4 open names":
+    "an Attribute row of an open class, or an OpenAttribute row of a closed name, is no row the folded rows can hold: AttributeRow's name is a ClosedName and OpenAttributeRow's class an OpenClass, so no edit of typed rows reaches the law, which the schema's check holds over the import's rows",
   "Card default entry": "its mutation is not written yet",
   "Card support": "its mutation is not written yet",
   "Catalog reference": "its mutation is not written yet",
@@ -105,7 +107,7 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.oracle.test.ts holds each variant to its law",
   "Node key":
-    "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
+    "Node's key is (package, path, start), so a second row at one start (xdm.ts startTaken) breaks T1 document order on the same rows and moves the intervals the fold laws read, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
   "PCI module source": "its mutation is not written yet",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",

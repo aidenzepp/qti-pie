@@ -36,17 +36,18 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { CnPart } from "#pantry/grammar/install.ts";
 import { cnDefaultType, cnForms } from "#pantry/grammar/expression.ts";
 import type { CnForm } from "#pantry/grammar/expression.ts";
-import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
+import { keyTextOf, nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
+import type { MathmlIds } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
+import type { NodeRow } from "#pantry/model/xdm.ts";
 import type { CnAttribute, CnPartText, CnCount, CnSlot, MathCn } from "#pantry/qti/mathml-cn.ts";
 
 /**
- * A document's cn rows, one keyed set per relation: a `CnAttribute` row by the JSON of its node's
- * id and its name, a `MathCn` row and a `CnCount` row by its node's id, a `CnPartText` row and a
- * `CnSlot` row by the JSON of its node's id and its part.
+ * A document's cn rows, one keyed set per relation, each by the text of its key
+ * ({@link keyTextOf}): a `CnAttribute` row by its node and its name, a `MathCn` row and a
+ * `CnCount` row by its node, a `CnPartText` row and a `CnSlot` row by its node and its part.
  */
 export interface MathmlCnRows {
   readonly CnAttribute: ReadonlyMap<string, Addition<typeof CnAttribute>>;
@@ -87,15 +88,6 @@ const radixOf = (lexical: string): string | undefined => {
 };
 
 /**
- * Key a part's row: its node and its number.
- *
- * @param node - The `cn`'s id.
- * @param part - The part's number.
- * @returns The key.
- */
-const partKey = (node: NodeId, part: number): string => JSON.stringify([node, String(part)]);
-
-/**
  * One stretch of a `cn`'s content between its `m:sep` children.
  */
 interface Stretch {
@@ -116,7 +108,7 @@ interface Stretch {
  */
 const stretchesOf = (
   children: readonly NodeRow<Composed>[],
-  textOf: ReadonlyMap<NodeId, string>,
+  textOf: ReadonlyMap<bigint, string>,
 ): readonly Stretch[] => {
   const stretches: Stretch[] = [{ judged: true, text: "" }];
   for (const child of children) {
@@ -128,7 +120,7 @@ const stretchesOf = (
     if (child.kind === "m:sep") {
       stretches.push({ judged: true, text: "" });
     } else if (child.kind === "text" || child.kind === "ws") {
-      last.text += textOf.get(child.id) ?? "";
+      last.text += textOf.get(child.start) ?? "";
     } else if (child.kind === "entityRef" || !nonElements.has(child.kind)) {
       last.judged = false;
     }
@@ -196,7 +188,8 @@ const judgementOf = (
  * or an entity reference, its judged row and a text row for each part.
  *
  * @param rows - The rows of the document, which the `cn`'s are added to.
- * @param node - The `cn`'s id.
+ * @param ids - Where the document stands in its package.
+ * @param start - The `cn`'s place in its document.
  * @param typed - What the `cn` is counted under.
  * @param values - The lexical forms of its `type` and `base`, where it writes them.
  * @param stretches - The stretches of its content.
@@ -208,16 +201,24 @@ const writeCn = (
     readonly CnSlot: Map<string, Addition<typeof CnSlot>>;
     readonly MathCn: Map<string, Addition<typeof MathCn>>;
   },
-  node: NodeId,
+  ids: MathmlIds,
+  start: bigint,
   typed: Typed,
   values: ReadonlyMap<string, string> | undefined,
   stretches: readonly Stretch[],
 ): void => {
   const { forms, type, typeLexical } = typed;
   const placed = stretches.slice(0, places.size);
-  rows.CnCount.set(node, { node, type, typeLexical });
+  const node = { package: ids.package, path: ids.path, start };
+  rows.CnCount.set(keyTextOf(ids, start), { ...node, type, typeLexical });
   for (const [at] of placed.entries()) {
-    rows.CnSlot.set(partKey(node, at), { form: forms[at] ?? "real", node, part: String(at), type });
+    const part = String(at);
+    rows.CnSlot.set(keyTextOf(ids, start, part), {
+      ...node,
+      form: forms[at] ?? "real",
+      part,
+      type,
+    });
   }
 
   const judgement = judgementOf(typed, values);
@@ -226,13 +227,14 @@ const writeCn = (
   }
 
   const { base, baseLexical } = judgement;
-  rows.MathCn.set(node, { base, baseLexical, node, type, typeLexical });
+  rows.MathCn.set(keyTextOf(ids, start), { ...node, base, baseLexical, type, typeLexical });
   for (const [at, { text }] of placed.entries()) {
-    rows.CnPartText.set(partKey(node, at), {
+    const part = String(at);
+    rows.CnPartText.set(keyTextOf(ids, start, part), {
+      ...node,
       base,
       form: forms[at] ?? "real",
-      node,
-      part: String(at),
+      part,
       text: collapse(text),
       type,
     });
@@ -242,21 +244,22 @@ const writeCn = (
 /**
  * The cn rows of one document.
  *
- * @param view - The document's view: its rows under the ids its nodes are written under.
+ * @param view - The document's view: its rows, each node at its `start`.
+ * @param ids - Where the document stands in its package, the key every row holds.
  * @returns The rows of every relation the cn module declares.
  */
-export const rowsOf = (view: DocumentView): MathmlCnRows => {
+export const rowsOf = (view: DocumentView, ids: MathmlIds): MathmlCnRows => {
   const flat = view.rows;
-  const cnIds = new Set<NodeId>();
+  const cns = new Set<bigint>();
   for (const node of flat.nodes) {
     if (node.kind === "m:cn") {
-      cnIds.add(node.id);
+      cns.add(node.start);
     }
   }
 
-  const childrenOf = new Map<NodeId, NodeRow<Composed>[]>();
+  const childrenOf = new Map<bigint, NodeRow<Composed>[]>();
   for (const node of flat.nodes) {
-    if (node.parent !== node.id && cnIds.has(node.parent)) {
+    if (node.parent !== node.start && cns.has(node.parent)) {
       const siblings = childrenOf.get(node.parent);
       if (siblings === undefined) {
         childrenOf.set(node.parent, [node]);
@@ -266,19 +269,25 @@ export const rowsOf = (view: DocumentView): MathmlCnRows => {
     }
   }
 
-  const textOf = new Map<NodeId, string>();
-  for (const { node, value } of [...flat.texts, ...flat.whitespace]) {
-    textOf.set(node, value);
+  const textOf = new Map<bigint, string>();
+  for (const { start, value } of [...flat.texts, ...flat.whitespace]) {
+    textOf.set(start, value);
   }
 
   const written = writtenOf(flat.attributes, judgedAttributes);
   const attributes = new Map<string, Addition<typeof CnAttribute>>();
-  for (const [node, values] of written) {
-    if (cnIds.has(node)) {
+  for (const [start, values] of written) {
+    if (cns.has(start)) {
       for (const name of ["base", "type"] as const) {
         const lexical = values.get(name);
         if (lexical !== undefined) {
-          attributes.set(JSON.stringify([node, name]), { lexical, name, node });
+          attributes.set(keyTextOf(ids, start, name), {
+            lexical,
+            name,
+            package: ids.package,
+            path: ids.path,
+            start,
+          });
         }
       }
     }
@@ -292,10 +301,17 @@ export const rowsOf = (view: DocumentView): MathmlCnRows => {
     MathCn: new Map<string, Addition<typeof MathCn>>(),
   } satisfies MathmlCnRows;
   for (const node of flat.nodes) {
-    const values = written.get(node.id);
+    const values = written.get(node.start);
     const typed = node.kind === "m:cn" ? typedOf(values) : undefined;
     if (typed !== undefined) {
-      writeCn(rows, node.id, typed, values, stretchesOf(childrenOf.get(node.id) ?? [], textOf));
+      writeCn(
+        rows,
+        ids,
+        node.start,
+        typed,
+        values,
+        stretchesOf(childrenOf.get(node.start) ?? [], textOf),
+      );
     }
   }
 

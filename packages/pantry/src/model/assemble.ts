@@ -6,26 +6,36 @@
  * that tree. Rows are a set: each list is first keyed by its relation's key, a key held twice
  * refused, and no row is read by the order it arrives in.
  *
- * The read takes the document node's row by the document row's node, and every other node row in
- * `start` order, with a stack of the elements whose intervals are open (trees.md §3): each row
- * closes every open element whose interval ends at or before its start, and is the next child of
- * the innermost element still open, or of the document node when none is. A node's content is the
- * row of its kind, an element's attributes and namespace declarations are its rows of each family
- * in `at` order, and an attribute's open name and entity references are the rows keyed by its id,
- * the references in offset order. The read takes nothing else from a node row: its `parent`, its
- * `at` and the document node's interval are the image's to judge.
+ * Every row is keyed within its document by positions and names, never by a minted id: a node by
+ * its `start`, its pre-order position (the document node's 0), a row a node owns by the node's
+ * `start`, an attribute by its element's `start` and its name (a closed name's handle, or an open
+ * attribute's namespace name and local name), a namespace declaration by its element's `start` and
+ * its prefix, an entity reference by its attribute's key and its offset, and the XML declaration's
+ * rows by the document itself, at most one each.
  *
- * The tree read is then flattened again, under the rows' own ids: node i, in the order read, takes
- * its row's id, and each attribute its row's. The rows are its image exactly when the two agree,
+ * The read takes the document node's row at `start` 0, and every other node row in `start` order,
+ * with a stack of the elements whose intervals are open (trees.md §3): each row closes every open
+ * element whose interval ends at or before its start, and is the next child of the innermost
+ * element still open, or of the document node when none is. A node's content is the row of its
+ * kind, an element's attributes, open attributes and namespace declarations are its rows of each
+ * family, and an attribute's entity references are the rows at its key, in offset order. An
+ * element's attributes and namespace declarations are sets (XML Information Set §2.2), so the read
+ * lists them in an order of its own, by key, which no row states and the export does not read
+ * (`#pantry/model/unshred.ts` writes Canonical XML's): the closed names by handle, then the open
+ * names by namespace name and local name, and the declarations by prefix. The read takes nothing
+ * else from a node row: its `parent`, its `at` and the document node's interval are the image's to
+ * judge.
+ *
+ * The tree read is then flattened again, and the rows are its image exactly when the two agree,
  * list by list, on every key and on every field `flatten` writes at it.
  *
- * So assembly succeeds on exactly the rows `flatten` writes for some tree, under ids distinct
- * within each relation and in any row order, and gives back that tree. Accepted rows are that image
+ * So assembly succeeds on exactly the rows `flatten` writes for some tree, in any row order, and
+ * gives back that tree, its attributes and declarations listed by key. Accepted rows are that image
  * by the comparison. And rows `flatten` wrote for a tree read back as that tree: their starts
  * number its nodes in document order, and an element's interval holds exactly its subtree's, so the
- * stack makes each node the child of the element it was written under, in slot order; each family's
- * slots, and each attribute's offsets, order its rows as they were written. So the second flatten
- * writes them again, drawing the ids they were written under.
+ * stack makes each node the child of the element it was written under, in slot order; each
+ * attribute's offsets order its references as they were written; and the families are sets, which
+ * `flatten` writes as the same rows in any order. So the second flatten writes the rows again.
  *
  * {@link assemble} is that inverse of `flatten`, the specification the tests hold every writer of
  * a document's rows to. The export reads a document with {@link readDocument}, the read alone: its
@@ -33,27 +43,29 @@
  * the image again nowhere (the stored data was checked once, where it entered).
  *
  * Every relation is grouped by its owner once, and the read keeps its own stack, so a tree of any
- * depth or width assembles in time linear in its rows. Each refusal ({@link AssembleError}) is a
- * defect wherever the rows are a database's.
+ * depth or width assembles in time linear in its rows, but for sorting each element's attributes
+ * and declarations. Each refusal ({@link AssembleError}) is a defect wherever the rows are a
+ * database's.
  */
 import { Array as Arr, Option, Order, Record, Result, Schema } from "effect";
-import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
 import type {
   AttributeEntityRow,
-  AttributeId,
   AttributeRow,
+  CharacterRow,
   DocumentRow,
+  EntityRefRow,
   FlatRows,
   NamespaceRow,
-  NodeId,
   NodeRow,
+  OpenAttributeEntityRow,
+  OpenAttributeRow,
   OpenClass,
   OpenElementNameRow,
-  OpenNameRow,
+  PiRow,
   XdmAttribute,
-  XdmAttributeName,
   XdmCharacter,
   XdmChild,
   XdmClosedElement,
@@ -76,8 +88,9 @@ type RowList = Exclude<keyof FlatRows<XdmVocabulary>, "document">;
 const rowLists = [
   "nodes",
   "attributes",
-  "openNames",
+  "openAttributes",
   "attributeEntities",
+  "openAttributeEntities",
   "namespaces",
   "openElementNames",
   "texts",
@@ -93,12 +106,12 @@ const rowLists = [
 
 /**
  * A row another row names is not among the rows, so the read cannot build the node: a
- * character-data node's row of its kind, an open-class attribute's exact name, a foreign element's
- * expanded name, or the document node's own `Node` row.
+ * character-data node's row of its kind, a foreign element's expanded name, or the document node's
+ * own `Node` row.
  */
 export class RowMissing extends Schema.TaggedError<RowMissing>()("RowMissing", {
   /**
-   * The missing row's key as its relation spells it: the node's id, or the attribute's.
+   * The missing row's key as its relation spells it: its node's `start`.
    */
   key: Schema.String,
   /**
@@ -117,14 +130,13 @@ export class RowMissing extends Schema.TaggedError<RowMissing>()("RowMissing", {
 /**
  * The document node holds no root element.
  */
-export class RootMissing extends Schema.TaggedError<RootMissing>()("RootMissing", {
-  node: Schema.String,
-}) {
+export class RootMissing extends Schema.TaggedError<RootMissing>()("RootMissing", {}) {
   /**
-   * The document node, the rule, and the repair.
+   * The rule, and the repair.
    */
+  // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
   override get message(): string {
-    return `The document node ${this.node} holds no root element, and every document holds one. Assemble the rows of one document as its scans returned them.`;
+    return "The document node holds no root element, and every document holds one. Assemble the rows of one document as its scans returned them.";
   }
 }
 
@@ -142,8 +154,8 @@ const Departure = Schema.Union([
      */
     kind: Schema.String,
     /**
-     * The node the read places it under: the innermost element whose interval holds its start, or
-     * the document node.
+     * The `start` of the node the read places it under: the innermost element whose interval holds
+     * its start, or the document node.
      */
     under: Schema.String,
   }),
@@ -195,7 +207,7 @@ export class RowsOutsideImage extends Schema.TaggedError<RowsOutsideImage>()("Ro
       case "unplaced": {
         const { kind, under } = this.departure;
 
-        return `Node ${this.key}, of kind ${kind}, reads as a child of ${under}, which cannot hold a node of its kind: the document node holds one doctype, first, its comments and processing instructions, and one root element of a kind; an element holds elements and character data, but no doctype; and only the document node is of kind document. ${repair}`;
+        return `Node ${this.key}, of kind ${kind}, reads as a child of node ${under}, which cannot hold a node of its kind: the document node holds one doctype, first, its comments and processing instructions, and one root element of a kind; an element holds elements and character data, but no doctype; and only the document node is of kind document. ${repair}`;
       }
       case "unwritten": {
         return `The rows hold a ${this.rows} row at (${this.key}), where the tree they read as writes none. ${repair}`;
@@ -230,80 +242,114 @@ interface Relation<Row extends object> {
 }
 
 /**
- * Spell the key of a row keyed by its node.
+ * Spell the key of a row keyed by its node: the node's `start`.
  *
  * @param row - The row.
- * @param row.node - Its node.
- * @returns The node's id.
+ * @param row.start - Its node's `start`.
+ * @returns The start.
  */
-const byNode = ({ node }: { readonly node: NodeId }): string => node;
+const byStart = ({ start }: { readonly start: bigint }): string => String(start);
 
 /**
- * Spell the key of a row keyed by its own id.
+ * Spell the key of a row of the document itself, at most one in a list: the document.
+ *
+ * @returns `document`.
+ */
+const ofDocument = (): string => "document";
+
+/**
+ * Spell the key of an attribute of a closed name, or of a row keyed by it: its element's `start`
+ * and its name's handle. A handle holds no `, `, so the key is spelled once for each.
  *
  * @param row - The row.
- * @param row.id - Its id.
- * @returns The id.
+ * @param row.name - The attribute's name handle.
+ * @param row.start - Its element's `start`.
+ * @returns The key.
  */
-const byId = ({ id }: { readonly id: NodeId }): string => id;
+const attributeKey = ({ name, start }: { readonly name: string; readonly start: bigint }): string =>
+  `${String(start)}, ${name}`;
+
+/**
+ * Spell the key of an attribute of an open name, or of a row keyed by it: its element's `start`,
+ * its namespace name and its local name. A local name is an NCName, which holds no `, `, so the key
+ * is spelled once for each.
+ *
+ * @param row - The row.
+ * @param row.local - The attribute's local name.
+ * @param row.start - Its element's `start`.
+ * @param row.uri - The attribute's namespace name.
+ * @returns The key.
+ */
+const openAttributeKey = ({
+  local,
+  start,
+  uri,
+}: {
+  readonly local: string;
+  readonly start: bigint;
+  readonly uri: string;
+}): string => `${String(start)}, ${uri}, ${local}`;
 
 /**
  * The fields of a row of character data or the doctype.
  */
-const characterFields = { node: true, value: true } as const;
+const characterFields = { start: true, value: true } as const;
 
 /**
  * Each list's relation: its key, and every field of its row.
  */
 const relations = {
   attributeEntities: {
-    fields: { attribute: true, name: true, offset: true },
-    key: ({ attribute, offset }) => `${attribute}, ${String(offset)}`,
+    fields: { entity: true, name: true, offset: true, start: true },
+    key: (row) => `${attributeKey(row)}, ${String(row.offset)}`,
   },
   attributes: {
-    fields: { at: true, id: true, lexical: true, name: true, node: true, prefix: true },
-    key: byId,
+    fields: { lexical: true, name: true, prefix: true, start: true },
+    key: attributeKey,
   },
-  comments: { fields: characterFields, key: byNode },
-  doctypes: { fields: characterFields, key: byNode },
-  encodingDecls: { fields: { encoding: true, node: true }, key: byNode },
-  entityRefs: { fields: { name: true, node: true }, key: byNode },
+  comments: { fields: characterFields, key: byStart },
+  doctypes: { fields: characterFields, key: byStart },
+  encodingDecls: { fields: { encoding: true }, key: ofDocument },
+  entityRefs: { fields: { name: true, start: true }, key: byStart },
   namespaces: {
-    fields: { at: true, node: true, prefix: true, uri: true },
-    key: ({ at, node }) => `${node}, ${String(at)}`,
+    fields: { prefix: true, start: true, uri: true },
+    key: ({ prefix, start }) => `${String(start)}, ${prefix}`,
   },
   nodes: {
     fields: {
       at: true,
       end: true,
       governs: true,
-      id: true,
       kind: true,
       parent: true,
       prefix: true,
       start: true,
       version: true,
     },
-    key: byId,
+    key: byStart,
   },
-  openElementNames: { fields: { local: true, namespace: true, node: true }, key: byNode },
-  openNames: {
-    fields: { attribute: true, local: true, uri: true },
-    key: ({ attribute }) => attribute,
+  openAttributeEntities: {
+    fields: { entity: true, local: true, offset: true, start: true, uri: true },
+    key: (row) => `${openAttributeKey(row)}, ${String(row.offset)}`,
   },
-  pis: { fields: { data: true, node: true, target: true }, key: byNode },
-  sdDecls: { fields: { node: true, standalone: true }, key: byNode },
-  texts: { fields: characterFields, key: byNode },
-  whitespace: { fields: characterFields, key: byNode },
-  xmlDecls: { fields: { node: true, version: true }, key: byNode },
+  openAttributes: {
+    fields: { class: true, lexical: true, local: true, prefix: true, start: true, uri: true },
+    key: openAttributeKey,
+  },
+  openElementNames: { fields: { local: true, namespace: true, start: true }, key: byStart },
+  pis: { fields: { data: true, start: true, target: true }, key: byStart },
+  sdDecls: { fields: { standalone: true }, key: ofDocument },
+  texts: { fields: characterFields, key: byStart },
+  whitespace: { fields: characterFields, key: byStart },
+  xmlDecls: { fields: { version: true }, key: ofDocument },
 } as const satisfies { readonly [K in RowList]: Relation<FlatRows<XdmVocabulary>[K][number]> };
 
 /**
- * The document row's relation, keyed by its node.
+ * The document row's relation: one row, the document's.
  */
 const documentRelation = {
-  fields: { charset: true, exportCharset: true, node: true },
-  key: byNode,
+  fields: { charset: true, exportCharset: true },
+  key: ofDocument,
 } as const satisfies Relation<DocumentRow>;
 
 /**
@@ -358,12 +404,21 @@ const keyedOf = (rows: FlatRows<XdmVocabulary>): Result.Result<Keyed, RowsOutsid
       entityRefs: yield* keyedIn("entityRefs", rows.entityRefs, relations.entityRefs),
       namespaces: yield* keyedIn("namespaces", rows.namespaces, relations.namespaces),
       nodes: yield* keyedIn("nodes", rows.nodes, relations.nodes),
+      openAttributeEntities: yield* keyedIn(
+        "openAttributeEntities",
+        rows.openAttributeEntities,
+        relations.openAttributeEntities,
+      ),
+      openAttributes: yield* keyedIn(
+        "openAttributes",
+        rows.openAttributes,
+        relations.openAttributes,
+      ),
       openElementNames: yield* keyedIn(
         "openElementNames",
         rows.openElementNames,
         relations.openElementNames,
       ),
-      openNames: yield* keyedIn("openNames", rows.openNames, relations.openNames),
       pis: yield* keyedIn("pis", rows.pis, relations.pis),
       sdDecls: yield* keyedIn("sdDecls", rows.sdDecls, relations.sdDecls),
       texts: yield* keyedIn("texts", rows.texts, relations.texts),
@@ -436,15 +491,26 @@ const outsideImage = (
   image: FlatRows<XdmVocabulary>,
 ): Option.Option<RowsOutsideImage> =>
   Option.firstSomeOf([
-    outsideIn("document", new Map([[document.node, document]]), [image.document], documentRelation),
+    outsideIn("document", new Map([[ofDocument(), document]]), [image.document], documentRelation),
     outsideIn("nodes", keyed.nodes, image.nodes, relations.nodes),
     outsideIn("attributes", keyed.attributes, image.attributes, relations.attributes),
-    outsideIn("openNames", keyed.openNames, image.openNames, relations.openNames),
+    outsideIn(
+      "openAttributes",
+      keyed.openAttributes,
+      image.openAttributes,
+      relations.openAttributes,
+    ),
     outsideIn(
       "attributeEntities",
       keyed.attributeEntities,
       image.attributeEntities,
       relations.attributeEntities,
+    ),
+    outsideIn(
+      "openAttributeEntities",
+      keyed.openAttributeEntities,
+      image.openAttributeEntities,
+      relations.openAttributeEntities,
     ),
     outsideIn("namespaces", keyed.namespaces, image.namespaces, relations.namespaces),
     outsideIn(
@@ -467,36 +533,64 @@ const outsideImage = (
 /**
  * The order the read takes node rows in: by start.
  */
-const byStart = Order.mapInput(Order.BigInt, (row: { readonly start: bigint }) => row.start);
+const startOrder = Order.mapInput(Order.BigInt, (row: { readonly start: bigint }) => row.start);
 
 /**
- * The order of a family's rows: by slot.
+ * The order the read lists an element's attributes of closed names in: by handle. It is the
+ * read's own, which no row states (the attributes are a set).
  */
-const bySlot = Order.mapInput(Order.BigInt, (row: { readonly at: bigint }) => row.at);
+const handleOrder = Order.mapInput(Order.String, (row: { readonly name: string }) => row.name);
+
+/**
+ * The order the read lists an element's attributes of open names in, after its closed ones: by
+ * namespace name, then local name, the read's own as {@link handleOrder} is.
+ */
+const expandedOrder = Order.combine(
+  Order.mapInput(Order.String, (row: OpenAttributeRow) => row.uri),
+  Order.mapInput(Order.String, (row: OpenAttributeRow) => row.local),
+);
+
+/**
+ * The order the read lists an element's namespace declarations in: by prefix, the read's own as
+ * {@link handleOrder} is.
+ */
+const prefixOrder = Order.mapInput(Order.String, (row: NamespaceRow) => row.prefix);
 
 /**
  * The order of an attribute's entity references: by offset, their key within the attribute.
  */
-const byOffset = Order.mapInput(Order.BigInt, (row: AttributeEntityRow) => row.offset);
+const offsetOrder = Order.mapInput(Order.BigInt, (row: { readonly offset: bigint }) => row.offset);
 
 /**
  * A document's rows grouped by the owner each is looked up under: leaves and a foreign element's
- * name by their node, an element's attributes and namespace declarations by the element, and an
- * attribute's open name and entity references by the attribute's id.
+ * name by their node's `start`, an element's attributes, open attributes and namespace
+ * declarations by the element's `start`, and an attribute's entity references by the attribute's
+ * key as its relation spells it.
  */
 interface Index<V extends XdmVocabulary> {
-  readonly attributes: ReadonlyMap<NodeId, readonly AttributeRow<V>[]>;
-  readonly comments: ReadonlyMap<NodeId, FlatRows<V>["comments"][number]>;
-  readonly doctypes: ReadonlyMap<NodeId, FlatRows<V>["doctypes"][number]>;
-  readonly entityRefs: ReadonlyMap<NodeId, FlatRows<V>["entityRefs"][number]>;
-  readonly namespaces: ReadonlyMap<NodeId, readonly NamespaceRow[]>;
-  readonly openElementNames: ReadonlyMap<NodeId, OpenElementNameRow>;
-  readonly openNames: ReadonlyMap<AttributeId, OpenNameRow>;
-  readonly pis: ReadonlyMap<NodeId, FlatRows<V>["pis"][number]>;
-  readonly references: ReadonlyMap<AttributeId, readonly AttributeEntityRow[]>;
-  readonly texts: ReadonlyMap<NodeId, FlatRows<V>["texts"][number]>;
-  readonly whitespace: ReadonlyMap<NodeId, FlatRows<V>["whitespace"][number]>;
+  readonly attributes: ReadonlyMap<bigint, readonly AttributeRow<V>[]>;
+  readonly comments: ReadonlyMap<bigint, CharacterRow>;
+  readonly doctypes: ReadonlyMap<bigint, CharacterRow>;
+  readonly entityRefs: ReadonlyMap<bigint, EntityRefRow>;
+  readonly namespaces: ReadonlyMap<bigint, readonly NamespaceRow[]>;
+  readonly openAttributes: ReadonlyMap<bigint, readonly OpenAttributeRow[]>;
+  readonly openElementNames: ReadonlyMap<bigint, OpenElementNameRow>;
+  readonly openReferences: ReadonlyMap<string, readonly OpenAttributeEntityRow[]>;
+  readonly pis: ReadonlyMap<bigint, PiRow>;
+  readonly references: ReadonlyMap<string, readonly AttributeEntityRow<V>[]>;
+  readonly texts: ReadonlyMap<bigint, CharacterRow>;
+  readonly whitespace: ReadonlyMap<bigint, CharacterRow>;
 }
+
+/**
+ * Key a list of rows each keyed by its node, by the node's `start`.
+ *
+ * @param rows - The rows.
+ * @returns Each row by its node's `start`.
+ */
+const atStart = <Row extends { readonly start: bigint }>(
+  rows: readonly Row[],
+): ReadonlyMap<bigint, Row> => new Map(rows.map((row) => [row.start, row]));
 
 /**
  * Group a document's rows by the owner each is looked up under.
@@ -505,120 +599,101 @@ interface Index<V extends XdmVocabulary> {
  * @returns The rows by owner, each group in the order its rows arrived.
  */
 const indexOf = <V extends XdmVocabulary>(rows: FlatRows<V>): Index<V> => ({
-  attributes: Map.groupBy(rows.attributes, ({ node }) => node),
-  comments: new Map(rows.comments.map((row) => [row.node, row])),
-  doctypes: new Map(rows.doctypes.map((row) => [row.node, row])),
-  entityRefs: new Map(rows.entityRefs.map((row) => [row.node, row])),
-  namespaces: Map.groupBy(rows.namespaces, ({ node }) => node),
-  openElementNames: new Map(rows.openElementNames.map((row) => [row.node, row])),
-  openNames: new Map(rows.openNames.map((row) => [row.attribute, row])),
-  pis: new Map(rows.pis.map((row) => [row.node, row])),
-  references: Map.groupBy(rows.attributeEntities, ({ attribute }) => attribute),
-  texts: new Map(rows.texts.map((row) => [row.node, row])),
-  whitespace: new Map(rows.whitespace.map((row) => [row.node, row])),
+  attributes: Map.groupBy(rows.attributes, ({ start }) => start),
+  comments: atStart(rows.comments),
+  doctypes: atStart(rows.doctypes),
+  entityRefs: atStart(rows.entityRefs),
+  namespaces: Map.groupBy(rows.namespaces, ({ start }) => start),
+  openAttributes: Map.groupBy(rows.openAttributes, ({ start }) => start),
+  openElementNames: atStart(rows.openElementNames),
+  openReferences: Map.groupBy(rows.openAttributeEntities, openAttributeKey),
+  pis: atStart(rows.pis),
+  references: Map.groupBy(rows.attributeEntities, attributeKey),
+  texts: atStart(rows.texts),
+  whitespace: atStart(rows.whitespace),
 });
 
 /**
- * Take the row at a key.
+ * Take the row of a node.
  *
  * @param rows - The list the row belongs in, which a refusal names.
- * @param map - The list's rows by key.
- * @param key - The key.
+ * @param map - The list's rows by their node's `start`.
+ * @param start - The node's `start`.
  * @returns The row, or the refusal of its absence.
  */
 const take = <Row>(
   rows: RowList,
-  map: ReadonlyMap<string, Row>,
-  key: string,
+  map: ReadonlyMap<bigint, Row>,
+  start: bigint,
 ): Result.Result<Row, RowMissing> =>
-  Result.fromNullishOr(map.get(key), () => new RowMissing({ key, rows }));
-
-/**
- * The open classes, the attribute name handles whose attributes carry an exact name beside them.
- */
-const openHandles: ReadonlySet<string> = new Set<OpenClass>(openClasses);
-
-/**
- * Test whether an attribute name handle is an open class.
- *
- * @param name - An `AttributeName` handle.
- * @returns Whether the handle is one of {@link openClasses}.
- */
-const isOpenClass = (name: string): name is OpenClass => openHandles.has(name);
+  Result.fromNullishOr(map.get(start), () => new RowMissing({ key: String(start), rows }));
 
 /**
  * The builder of each open class's names: the class as the name's tag, with what the class keeps of
- * the exact name its open-name row holds and the prefix its attribute row holds. A name in no
- * namespace has no prefix or namespace name to read.
+ * the exact name its row holds and the prefix it is written with. A name in no namespace has no
+ * prefix or namespace name to read.
  */
 const openNameOf = {
   "data-*": ({ local }) => ({ _tag: "data-*", local }),
-  foreign: ({ local, uri }, prefix) => ({ _tag: "foreign", local, prefix, uri }),
+  foreign: ({ local, prefix, uri }) => ({ _tag: "foreign", local, prefix, uri }),
   "no-namespace": ({ local }) => ({ _tag: "no-namespace", local }),
-  "own-namespace": ({ local, uri }, prefix) => ({ _tag: "own-namespace", local, prefix, uri }),
+  "own-namespace": ({ local, prefix, uri }) => ({ _tag: "own-namespace", local, prefix, uri }),
 } as const satisfies {
   readonly [K in OpenClass]: (
-    row: OpenNameRow,
-    prefix: string,
+    row: Pick<OpenAttributeRow, "local" | "prefix" | "uri">,
   ) => Extract<OpenName, { readonly _tag: K }>;
 };
 
 /**
- * Build an attribute from its row and the rows keyed by its id.
+ * Write an attribute's entity references as the tree holds them, in offset order.
  *
- * @param index - The document's rows by owner.
- * @param row - The attribute's row.
- * @returns The attribute, or the refusal of an open-class one without its open name.
+ * @param references - The attribute's entity reference rows, in any order.
+ * @returns Each reference's entity name and offset, by offset.
  */
-const attributeOf = <V extends XdmVocabulary>(
-  index: Index<V>,
-  row: AttributeRow<V>,
-): Result.Result<XdmAttribute<V>, RowMissing> =>
-  Result.gen(function* attribute() {
-    const { id, lexical, name, prefix } = row;
-    const named: XdmAttributeName<V> = isOpenClass(name)
-      ? yield* Result.map(take("openNames", index.openNames, id), (open) =>
-          openNameOf[name](open, prefix),
-        )
-      : { _tag: "closed", handle: name, prefix };
-
-    return {
-      lexical,
-      name: named,
-      references: (index.references.get(id) ?? [])
-        .toSorted(byOffset)
-        .map(({ name: entity, offset }) => ({ name: entity, offset: Number(offset) })),
-    };
-  });
+const referencesOf = (
+  references: readonly Pick<AttributeEntityRow<XdmVocabulary>, "entity" | "offset">[],
+): XdmAttribute<XdmVocabulary>["references"] =>
+  references
+    .toSorted(offsetOrder)
+    .map(({ entity, offset }) => ({ name: entity, offset: Number(offset) }));
 
 /**
- * Build what every element holds but its children: its attributes and namespace declarations,
- * each family in slot order, and its prefix.
+ * Build what every element holds but its children: its attributes, the closed names by handle and
+ * then the open names by expanded name, each with its entity references, its namespace
+ * declarations by prefix, and its prefix.
  *
  * @param index - The document's rows by owner.
- * @param attributeIds - The ids of the attributes read so far, which the element's join in slot
- *   order.
  * @param row - The element's row.
- * @returns The element's content, or the refusal of an attribute without its open name.
+ * @returns The element's content.
  */
 const contentOf = <V extends XdmVocabulary>(
   index: Index<V>,
-  attributeIds: AttributeId[],
   row: NodeRow<V>,
-): Result.Result<Pick<XdmClosedElement<V>, "attributes" | "namespaces" | "prefix">, RowMissing> =>
-  Result.gen(function* elementContent() {
-    const attributeRows = (index.attributes.get(row.id) ?? []).toSorted(bySlot);
-    attributeIds.push(...attributeRows.map(({ id }) => id));
+): Pick<XdmClosedElement<V>, "attributes" | "namespaces" | "prefix"> => {
+  const closed = (index.attributes.get(row.start) ?? [])
+    .toSorted(handleOrder)
+    .map((attribute): XdmAttribute<V> => {
+      const { lexical, name, prefix } = attribute;
 
-    const attributes = yield* Result.all(
-      attributeRows.map((attribute) => attributeOf(index, attribute)),
-    );
-    const namespaces: XdmNamespace[] = (index.namespaces.get(row.id) ?? [])
-      .toSorted(bySlot)
-      .map(({ prefix, uri }) => ({ prefix, uri }));
+      return {
+        lexical,
+        name: { _tag: "closed", handle: name, prefix },
+        references: referencesOf(index.references.get(attributeKey(attribute)) ?? []),
+      };
+    });
+  const open = (index.openAttributes.get(row.start) ?? [])
+    .toSorted(expandedOrder)
+    .map((attribute): XdmAttribute<V> => ({
+      lexical: attribute.lexical,
+      name: openNameOf[attribute.class](attribute),
+      references: referencesOf(index.openReferences.get(openAttributeKey(attribute)) ?? []),
+    }));
+  const namespaces: XdmNamespace[] = (index.namespaces.get(row.start) ?? [])
+    .toSorted(prefixOrder)
+    .map(({ prefix, uri }) => ({ prefix, uri }));
 
-    return { attributes, namespaces, prefix: row.prefix };
-  });
+  return { attributes: [...closed, ...open], namespaces, prefix: row.prefix };
+};
 
 /**
  * A node built from its row, with the list its children are appended to: an element of a kind or a
@@ -649,8 +724,8 @@ type Owner<V extends XdmVocabulary> = Extract<Built<V>, { readonly _tag: "elemen
  */
 const unplaced = <V extends XdmVocabulary>(row: NodeRow<V>, under: NodeRow<V>): RowsOutsideImage =>
   new RowsOutsideImage({
-    departure: { _tag: "unplaced", kind: row.kind, under: under.id },
-    key: row.id,
+    departure: { _tag: "unplaced", kind: row.kind, under: String(under.start) },
+    key: String(row.start),
     rows: "nodes",
   });
 
@@ -664,37 +739,40 @@ type LeafKind = XdmCharacter["_tag"] | "doctype";
  * The builder of each leaf kind's node from the row of its kind.
  */
 const leaves = {
-  comment: (index, id) =>
-    Result.map(take("comments", index.comments, id), ({ value }) => ({
+  comment: (index, start) =>
+    Result.map(take("comments", index.comments, start), ({ value }) => ({
       _tag: "character",
       node: { _tag: "comment", value },
     })),
-  doctype: (index, id) =>
-    Result.map(take("doctypes", index.doctypes, id), ({ value }) => ({ _tag: "doctype", value })),
-  entityRef: (index, id) =>
-    Result.map(take("entityRefs", index.entityRefs, id), ({ name }) => ({
+  doctype: (index, start) =>
+    Result.map(take("doctypes", index.doctypes, start), ({ value }) => ({
+      _tag: "doctype",
+      value,
+    })),
+  entityRef: (index, start) =>
+    Result.map(take("entityRefs", index.entityRefs, start), ({ name }) => ({
       _tag: "character",
       node: { _tag: "entityRef", name },
     })),
-  pi: (index, id) =>
-    Result.map(take("pis", index.pis, id), ({ data, target }) => ({
+  pi: (index, start) =>
+    Result.map(take("pis", index.pis, start), ({ data, target }) => ({
       _tag: "character",
       node: { _tag: "pi", data, target },
     })),
-  text: (index, id) =>
-    Result.map(take("texts", index.texts, id), ({ value }) => ({
+  text: (index, start) =>
+    Result.map(take("texts", index.texts, start), ({ value }) => ({
       _tag: "character",
       node: { _tag: "text", value },
     })),
-  ws: (index, id) =>
-    Result.map(take("whitespace", index.whitespace, id), ({ value }) => ({
+  ws: (index, start) =>
+    Result.map(take("whitespace", index.whitespace, start), ({ value }) => ({
       _tag: "character",
       node: { _tag: "ws", value },
     })),
 } as const satisfies {
   readonly [K in LeafKind]: (
     index: Index<XdmVocabulary>,
-    id: NodeId,
+    start: bigint,
   ) => Result.Result<
     Extract<Built<XdmVocabulary>, { readonly _tag: "character" | "doctype" }>,
     RowMissing
@@ -713,50 +791,48 @@ const isLeafKind = (kind: string): kind is LeafKind => Object.hasOwn(leaves, kin
  * Build the node a row below the document node stands for, with no children yet.
  *
  * @param index - The document's rows by owner.
- * @param attributeIds - The ids of the attributes read so far.
  * @param row - The node's row.
- * @returns The node, or the refusal of a leaf without its row, a foreign element without its name,
- *   or an attribute without its open name.
+ * @returns The node, or the refusal of a leaf without its row or a foreign element without its
+ *   name.
  */
 const builtOf = <V extends XdmVocabulary>(
   index: Index<V>,
-  attributeIds: AttributeId[],
   row: NodeRow<V>,
 ): Result.Result<Built<V>, RowMissing> => {
-  const { id, kind } = row;
+  const { kind, start } = row;
   if (isLeafKind(kind)) {
-    return leaves[kind](index, id);
+    return leaves[kind](index, start);
   }
 
   if (kind === "document") {
     return Result.succeed({ _tag: "document" });
   }
 
-  return Result.gen(function* element() {
-    const content = yield* contentOf(index, attributeIds, row);
-    const children: XdmChild<V>[] = [];
-    if (isForeignKind(kind)) {
-      const { local, namespace } = yield* take("openElementNames", index.openElementNames, id);
-
-      return {
-        _tag: "element",
-        children,
-        node: {
-          _tag: kind,
-          ...content,
+  const content = contentOf(index, row);
+  const children: XdmChild<V>[] = [];
+  if (isForeignKind(kind)) {
+    return Result.map(
+      take("openElementNames", index.openElementNames, start),
+      ({ local, namespace }) =>
+        ({
+          _tag: "element",
           children,
-          governs: row.governs,
-          name: { local, namespace },
-        },
-      } as const;
-    }
+          node: {
+            _tag: kind,
+            ...content,
+            children,
+            governs: row.governs,
+            name: { local, namespace },
+          },
+        }) as const,
+    );
+  }
 
-    return {
-      _tag: "element",
-      children,
-      node: { _tag: "element", ...content, children, governs: row.governs, kind },
-    } as const;
-  });
+  return Result.succeed({
+    _tag: "element",
+    children,
+    node: { _tag: "element", ...content, children, governs: row.governs, kind },
+  } as const);
 };
 
 /**
@@ -850,27 +926,21 @@ const placeInDocument = <V extends XdmVocabulary>(
 };
 
 /**
- * Read the document node's XML declaration back from its rows: its `XmlDecl` row, and its
- * `EncodingDecl` and `SdDecl` rows, each keyed by the document node. A part's row at another key
+ * Read the document's XML declaration back from its rows: its `XmlDecl` row, and its
+ * `EncodingDecl` and `SdDecl` rows, each the document's, at most one each. A second row of a part
  * is left for the image to refuse.
  *
  * @param rows - The document's rows.
- * @param node - The document node's id.
- * @returns The declaration, none when the rows hold no `XmlDecl` row at the node.
+ * @returns The declaration, none when the rows hold no `XmlDecl` row.
  */
 const declarationOf = (
   rows: Pick<FlatRows<XdmVocabulary>, "encodingDecls" | "sdDecls" | "xmlDecls">,
-  node: NodeId,
-): Option.Option<XdmDeclaration> => {
-  const at = <Row extends { readonly node: NodeId }>(list: readonly Row[]): Option.Option<Row> =>
-    Arr.findFirst(list, (row) => row.node === node);
-
-  return Option.map(at(rows.xmlDecls), ({ version }) => ({
-    encoding: Option.map(at(rows.encodingDecls), ({ encoding }) => encoding),
-    standalone: Option.map(at(rows.sdDecls), ({ standalone }) => standalone),
+): Option.Option<XdmDeclaration> =>
+  Option.map(Arr.head(rows.xmlDecls), ({ version }) => ({
+    encoding: Option.map(Arr.head(rows.encodingDecls), ({ encoding }) => encoding),
+    standalone: Option.map(Arr.head(rows.sdDecls), ({ standalone }) => standalone),
     version,
   }));
-};
 
 /**
  * A node whose interval the read holds open: its row, and how a child is placed in it, by its
@@ -882,34 +952,23 @@ interface Open<V extends XdmVocabulary> {
 }
 
 /**
- * A document read from its rows: the tree, and the ids it was read under, each node's in the order
- * read and each attribute's in its element's order, then slot order.
- */
-interface Read<V extends XdmVocabulary> {
-  readonly document: XdmDocument<V>;
-  readonly ids: readonly NodeId[];
-}
-
-/**
  * Read a document's rows into a tree, taking from each row only what the tree holds.
  *
  * @param rows - Every row of one document, no key of a list held twice.
- * @returns The tree and its ids; or the refusal of a row the read needs and does not find, a node
- *   of a kind its place cannot hold, or a document node with no root element.
+ * @returns The tree; or the refusal of a row the read needs and does not find, a node of a kind its
+ *   place cannot hold, or a document node with no root element.
  */
 const readOf = <V extends XdmVocabulary>(
   rows: FlatRows<V>,
-): Result.Result<Read<V>, AssembleError> =>
+): Result.Result<XdmDocument<V>, AssembleError> =>
   Result.gen(function* read() {
     const { document } = rows;
-    const self = document.node;
     const sentinel = yield* Result.fromNullishOr(
-      rows.nodes.find(({ id }) => id === self),
-      () => new RowMissing({ key: self, rows: "nodes" }),
+      rows.nodes.find(({ start }) => start === 0n),
+      () => new RowMissing({ key: "0", rows: "nodes" }),
     );
-    const order = [sentinel, ...rows.nodes.filter((row) => row !== sentinel).toSorted(byStart)];
+    const order = rows.nodes.filter((row) => row !== sentinel).toSorted(startOrder);
     const index = indexOf(rows);
-    const attributeIds: AttributeId[] = [];
     const parsed: DocumentChildren<V> = {
       doctype: Option.none(),
       epilog: [],
@@ -921,13 +980,13 @@ const readOf = <V extends XdmVocabulary>(
     const stack: Arr.NonEmptyArray<Open<V>> = [
       { place: (child) => placeInDocument(parsed, child), row: sentinel },
     ];
-    for (const row of order.slice(1)) {
+    for (const row of order) {
       while (stack.length > 1 && Arr.lastNonEmpty(stack).row.end <= row.start) {
         stack.pop();
       }
 
       const open = Arr.lastNonEmpty(stack);
-      const child = yield* builtOf(index, attributeIds, row);
+      const child = yield* builtOf(index, row);
       if (!open.place(child)) {
         return yield* Result.fail(unplaced(row, open.row));
       }
@@ -937,21 +996,18 @@ const readOf = <V extends XdmVocabulary>(
       }
     }
 
-    const element = yield* Result.fromOption(parsed.root, () => new RootMissing({ node: self }));
+    const element = yield* Result.fromOption(parsed.root, () => new RootMissing({}));
 
     return {
-      document: {
-        _tag: "document",
-        charset: document.charset,
-        declaration: declarationOf(rows, self),
-        doctype: parsed.doctype,
-        epilog: parsed.epilog,
-        exportCharset: document.exportCharset,
-        prolog: parsed.prolog,
-        root: element,
-        version: sentinel.version,
-      },
-      ids: [...order.map(({ id }) => id), ...attributeIds],
+      _tag: "document",
+      charset: document.charset,
+      declaration: declarationOf(rows),
+      doctype: parsed.doctype,
+      epilog: parsed.epilog,
+      exportCharset: document.exportCharset,
+      prolog: parsed.prolog,
+      root: element,
+      version: sentinel.version,
     };
   });
 
@@ -966,14 +1022,13 @@ const readOf = <V extends XdmVocabulary>(
  */
 export const readDocument = <V extends XdmVocabulary>(
   rows: FlatRows<V>,
-): Result.Result<XdmDocument<V>, AssembleError> =>
-  Result.map(readOf(rows), ({ document }) => document);
+): Result.Result<XdmDocument<V>, AssembleError> => readOf(rows);
 
 /**
  * Assemble a document's rows back into its tree, holding them to `flatten`'s image of it.
  *
- * Each list is keyed, the rows are read into a tree, and that tree is flattened again under the
- * ids it was read under and held to the rows.
+ * Each list is keyed, the rows are read into a tree, and that tree is flattened again and held to
+ * the rows.
  *
  * @param rows - Every row of one document, in any order.
  * @returns The document `flatten` writes as these rows; or the refusal of a key held twice, a row
@@ -985,12 +1040,8 @@ export const assemble = <V extends XdmVocabulary>(
 ): Result.Result<XdmDocument<V>, AssembleError> =>
   Result.gen(function* assembleDocument() {
     const keyed = yield* keyedOf(rows);
-    const { document, ids } = yield* readOf(rows);
-    const left = outsideImage(
-      rows.document,
-      keyed,
-      flatten(document, (index) => Arr.getUnsafe(ids, index)),
-    );
+    const document = yield* readOf(rows);
+    const left = outsideImage(rows.document, keyed, flatten(document));
     if (Option.isSome(left)) {
       return yield* Result.fail(left.value);
     }

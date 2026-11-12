@@ -60,7 +60,7 @@ import { rowsOf } from "#pantry/import/overlays/expressions.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { caseHang, idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { typedOf } from "#pantry/test/oracle-laws/expressions.ts";
 import type { Type } from "#pantry/test/oracle-laws/expressions.ts";
 import { lawsOf, typedReadingOf } from "#pantry/test/oracle.ts";
@@ -310,15 +310,15 @@ describe("import/overlays/expressions.ts, the types a Delete, an Index and a Ran
               const item = itemOf(of);
               const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
               const tree = yield* Effect.orDie(shred(xml, "3.0.0", shredGrammarOf(grammar)));
-              const folded = Result.getOrThrow(fold(tree, idOf, foldGrammarOf(grammar)));
+              const folded = Result.getOrThrow(fold(tree, foldGrammarOf(grammar)));
               const typed = typedOf(viewOf("i.xml", folded, typedReadingOf(laws)), grammar);
-              const rows = rowsOf(ownViewOf(tree, idOf));
+              const rows = rowsOf(ownViewOf(tree), { package: "MANIFEST", path: "i.xml" });
 
               const expressions = [...rows.Expression.values()];
               assert.isNotEmpty(expressions, item);
               for (const expression of expressions) {
-                const node = typed.rows.byId.get(expression.node);
-                assert.isDefined(node, `${item}: no oracle node ${expression.node}`);
+                const node = typed.rows.byStart.get(expression.start);
+                assert.isDefined(node, `${item}: no oracle node at ${String(expression.start)}`);
                 if (node === undefined) {
                   return;
                 }

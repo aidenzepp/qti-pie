@@ -31,7 +31,7 @@ import { contextsOf } from "#pantry/import/context.ts";
 import { ownContext, ownViewOf } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
 import { piecesOf } from "#pantry/import/pieces.ts";
-import { assembledRowsOf, itemRefPathsOf, keyOf, rowsOf } from "#pantry/import/overlays/tests.ts";
+import { assembledRowsOf, itemRefPathsOf, rowsOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
   InstanceMember,
@@ -43,13 +43,12 @@ import { closedName } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ElementKind,
-  NodeId,
   XdmChild,
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import type { BranchShuffle, BranchTarget } from "#pantry/qti/tests.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import { exits, sectionParts } from "#pantry/vocab/terms/tests.ts";
 
@@ -103,21 +102,9 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
 });
 
 /**
- * The package every case's documents are written under.
+ * The manifest identifier of the package every case's documents are written under.
  */
-const packageId = "00000000-0000-4000-8000-00000000aaaa";
-
-/**
- * Give document `n`'s node `index` an id of its own: the document's number in the uuid's fourth
- * group, so no two documents share an id.
- *
- * @param n - The document's number.
- * @returns Its ids.
- */
-const idsOf =
-  (n: number) =>
-  (index: number): NodeId =>
-    `00000000-0000-4000-${(0x80_00 + n).toString(16)}-${index.toString(16).padStart(12, "0")}`;
+const packageId = "P";
 
 /**
  * The type a document is listed under, as its root's kind gives it (`RootOfType`), `none` for a
@@ -130,7 +117,7 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
   grammar.package.rootOfType.rows.find(({ root }) => root === doc.root.kind)?.type ?? "none";
 
 /**
- * View each of a package's documents and place it: its own nodes' ids, in its own context, every
+ * View each of a package's documents and place it: in its own context, every
  * site's target found among the documents by path, and each in an assembly as the importer's
  * contexts read it.
  *
@@ -140,31 +127,24 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
 const idsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
 ): readonly (readonly [DocumentView, TestIds])[] => {
-  const listed = documents.map(([path, tree], n) => {
-    const view = ownViewOf(tree, idsOf(n));
+  const listed = documents.map(([path, tree]) => {
+    const view = ownViewOf(tree);
 
     return { named: true, path, rows: view.rows, tree, view };
   });
-  const roots = new Map(
-    listed.map(({ path, rows, tree }) => [path, { node: rows.document.node, tree }] as const),
-  );
+  const roots = new Map(listed.map(({ path, tree }) => [path, tree] as const));
   const rootAt = (at: string) => Option.fromNullishOr(roots.get(at));
 
   return contextsOf(listed).map(({ assembled, listed: { path, tree, view } }) => [
     view,
     {
       assembled,
-      documentAt: (at) => Option.map(rootAt(at), ({ node }) => node),
       documentType: listedTypeOf(tree),
       entryAt: (at) => roots.has(at),
       package: packageId,
       path,
       targetAt: (at) =>
-        Option.map(rootAt(at), ({ node, tree: target }) => ({
-          context: ownContext(node),
-          node,
-          rootKind: target.root.kind,
-        })),
+        Option.map(rootAt(at), (target) => ({ context: ownContext, rootKind: target.root.kind })),
     },
   ]);
 };
@@ -516,7 +496,7 @@ describe("import/overlays/tests.ts, includes", () => {
         ["i.xml", item],
         ["f.xml", fragment],
       ]);
-      const assembled = assembledRowsOf(documents, () => idOf(999));
+      const assembled = assembledRowsOf(documents);
       const itemRoot = [...assembled.Instance.values()].find(
         ({ rootKind }) => rootKind === "qti-assessment-item",
       );
@@ -564,9 +544,7 @@ describe("import/overlays/tests.ts, parts", () => {
 
               const expected = partsByWalk(doc);
               const starts = new Map(
-                [...(rows?.Section.values() ?? [])].map(
-                  ({ node, start }) => [node, start] as const,
-                ),
+                [...(rows?.Section.values() ?? [])].map(({ start }) => [start, start] as const),
               );
               const members = new Map<bigint, Map<bigint, boolean>>(
                 [...starts.values()].map((start) => [start, new Map()] as const),
@@ -593,7 +571,7 @@ describe("import/overlays/tests.ts, parts", () => {
                 c.note("selection");
 
                 const section = [...(rows?.Section.values() ?? [])].find(
-                  ({ node }) => node === selection.parent,
+                  ({ start }) => start === selection.parent,
                 );
                 const parts = expected.get(section?.start ?? -1n) ?? new Map();
                 assert.strictEqual(selection.members, BigInt(parts.size));
@@ -1135,13 +1113,11 @@ const admitted = (b: Addition<typeof BranchTarget>): boolean =>
  * @returns Whether the law accepts it.
  */
 const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
-  const above = b.targetInstanceStart <= b.instanceStart && b.instanceStart < b.targetInstanceEnd;
+  const above = b.targetInstance <= b.instance && b.instance < b.targetInstanceEnd;
   const through =
     b.targetInstance === b.instance
       ? b.via === b.instance
-      : b.viaParent === b.targetInstance &&
-        b.viaStart <= b.instanceStart &&
-        b.instanceStart < b.viaEnd;
+      : b.viaParent === b.targetInstance && b.via <= b.instance && b.instance < b.viaEnd;
 
   return admitted(b) && above && through;
 };
@@ -1154,15 +1130,15 @@ const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
  * @returns Whether the law accepts it.
  */
 const shuffleAccepts = (s: Addition<typeof BranchShuffle>): boolean => {
-  const point = s.targetInstance === s.instance ? s.ownerStart : s.viaSiteStart;
+  const point = s.targetInstance === s.instance ? s.owner : s.viaSite;
   const holds = (start: bigint, end: bigint) => start <= point && point < end;
 
   return (
-    holds(s.commonStart, s.commonEnd) &&
+    holds(s.common, s.commonEnd) &&
     s.branchParent === s.common &&
-    s.branchStart <= s.targetStart &&
+    s.branch <= s.targetStart &&
     s.targetStart < s.branchEnd &&
-    !holds(s.branchStart, s.branchEnd) &&
+    !holds(s.branch, s.branchEnd) &&
     s.commonMixes
   );
 };
@@ -1178,12 +1154,12 @@ const shuffleAccepts = (s: Addition<typeof BranchShuffle>): boolean => {
  */
 const forwardAccepts = (b: Addition<typeof BranchTarget>, shuffles: number): boolean => {
   const same = b.targetInstance === b.instance;
-  const point = same ? b.ownerStart : b.viaSiteStart;
+  const point = same ? b.owner : b.viaSite;
   const holds = (start: bigint, end: bigint) => start <= point && point < end;
-  const forward = same ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSiteStart;
+  const forward = same ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSite;
   const nested =
     holds(b.targetStart, b.targetEnd) ||
-    (same && b.ownerStart <= b.targetStart && b.targetStart < b.ownerEnd);
+    (same && b.owner <= b.targetStart && b.targetStart < b.ownerEnd);
 
   return !admitted(b) || forward || (b.ownerKind !== "qti-test-part" && !nested && shuffles === 1);
 };
@@ -1363,22 +1339,23 @@ const brokenGraph = (box: AssemblyCase): boolean => {
  */
 const instancesOf = (rows: AssembledRows) => {
   const out: {
+    readonly assembly: string;
     readonly end: number;
     readonly instance: InstanceMember;
-    readonly parent: NodeId | undefined;
+    readonly parent: number | undefined;
     readonly start: number;
   }[] = [];
   for (const root of rows.Instance.values()) {
     let next = 0;
-    const visit = (instance: InstanceMember, parent?: NodeId): void => {
+    const visit = (instance: InstanceMember, parent?: number): void => {
       const start = next;
       next += 1;
       const at = out.length;
-      out.push({ end: 0, instance, parent, start });
+      out.push({ assembly: root.assembly, end: 0, instance, parent, start });
       for (const child of instance.children) {
-        visit(child, instance.id);
+        visit(child, start);
       }
-      out[at] = { end: next, instance, parent, start };
+      out[at] = { assembly: root.assembly, end: next, instance, parent, start };
     };
     visit(root);
   }
@@ -1449,11 +1426,13 @@ const assertPlacedRules = (
   instances: ReturnType<typeof instancesOf>,
 ): void => {
   const intervals = new Map(
-    instances.map(({ end, instance, start }) => [
-      instance.id,
+    instances.map(({ assembly, end, start }) => [
+      JSON.stringify([assembly, String(start)]),
       { end: BigInt(end), start: BigInt(start) },
     ]),
   );
+  const intervalOf = (assembly: string, start: bigint) =>
+    intervals.get(JSON.stringify([assembly, String(start)]));
   assert.strictEqual(assembled.BranchTarget.size, assembled.BranchResolution.size);
   for (const [at, resolution] of assembled.BranchResolution) {
     const resolved = assembled.BranchTarget.get(at);
@@ -1462,12 +1441,11 @@ const assertPlacedRules = (
       continue;
     }
 
-    const target = intervals.get(resolved.targetInstance);
-    const via = intervals.get(resolved.via);
-    assert.strictEqual(resolved.instanceStart, intervals.get(resolution.instance)?.start);
-    assert.strictEqual(resolved.targetInstanceStart, target?.start);
+    const target = intervalOf(resolved.assembly, resolved.targetInstance);
+    const via = intervalOf(resolved.assembly, resolved.via);
+    assert.strictEqual(resolved.instance, resolution.instance);
+    assert.isDefined(intervalOf(resolution.assembly, resolution.instance));
     assert.strictEqual(resolved.targetInstanceEnd, target?.end);
-    assert.strictEqual(resolved.viaStart, via?.start);
     assert.strictEqual(resolved.viaEnd, via?.end);
     assert.isUndefined(
       rowRule(resolved, assembled.BranchShuffle.get(at)),
@@ -1521,15 +1499,10 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
           (box: AssemblyCase, c) =>
             Effect.sync(() => {
               const documents = rowsOfPackage(assemblyDocuments(box));
-              let counter = 0;
-              const assembled = assembledRowsOf(documents, () => {
-                counter += 1;
-
-                return `00000000-0000-4000-9000-${counter.toString(16).padStart(12, "0")}`;
-              });
+              const assembled = assembledRowsOf(documents);
               const byDocument = new Map(
                 documents.flatMap((rows) =>
-                  [...rows.TestDocument.values()].map((row) => [row.node, rows] as const),
+                  [...rows.TestDocument.values()].map((row) => [row.path, rows] as const),
                 ),
               );
               // A site's target is the document its href names, a row only where it names one, so
@@ -1537,18 +1510,18 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
               // (reading 115).
               const listed = new Map(
                 documents.flatMap((rows) =>
-                  [...rows.TestDocument.values()].map((row) => [row.path, row.node] as const),
+                  [...rows.TestDocument.values()].map((row) => [row.path, row.path] as const),
                 ),
               );
               for (const rows of documents) {
-                const pathOf = (node: string) => rows.SitePath.get(node)?.path;
+                const pathOf = (start: bigint) => rows.SitePath.get(String(start))?.target;
                 assert.deepStrictEqual(
                   [...rows.Site.values()].map((site) => [
-                    pathOf(site.node),
-                    rows.SiteTarget.get(site.node)?.target,
+                    pathOf(site.start),
+                    rows.SiteTarget.get(String(site.start))?.target,
                   ]),
                   [...rows.Site.values()].map((site) => {
-                    const path = pathOf(site.node);
+                    const path = pathOf(site.start);
 
                     return [path, path === undefined ? undefined : listed.get(path)];
                   }),
@@ -1582,7 +1555,7 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
               for (const { instance } of instances) {
                 const siteTargets = byDocument.get(instance.document)?.SiteTarget;
                 for (const child of instance.children) {
-                  assert.strictEqual(siteTargets?.get(child.site)?.target, child.document);
+                  assert.strictEqual(siteTargets?.get(String(child.site))?.target, child.document);
                 }
                 assert.strictEqual(
                   new Set(instance.children.map(({ site }) => site)).size,
@@ -1603,7 +1576,7 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
               const distinct = new Set(written).size === written.length;
               c.note(distinct ? "identifiers distinct" : "identifiers clash");
 
-              const test = idsOf(0)(0);
+              const test = "t.xml";
               const names = [...assembled.AssembledName.values()]
                 .filter(({ assembly }) => assembly === test)
                 .map(({ identifier }) => identifier);
@@ -1836,7 +1809,7 @@ describe("import/overlays/tests.ts, the jumps", () => {
           (jump: JumpCase, c) =>
             Effect.sync(() => {
               const documents = rowsOfPackage([["t.xml", jumpDocument(jump)]]);
-              const assembled = assembledRowsOf(documents, () => idOf(999));
+              const assembled = assembledRowsOf(documents);
               const expected = readingRule(jump);
               const resolutions = [...assembled.BranchResolution.values()];
               const resolvedTargets = [...assembled.BranchTarget.values()];
@@ -1870,14 +1843,17 @@ describe("import/overlays/tests.ts, the jumps", () => {
 
               assert.strictEqual(rule, expected, Formatter.format(jump));
 
-              const name = (instance: string, node: string) =>
-                assembled.InstanceName.get(keyOf([instance, node]));
+              const name = (assembly: string, instance: bigint, start: bigint) =>
+                [...assembled.InstanceName.values()].find(
+                  (row) =>
+                    row.assembly === assembly && row.instance === instance && row.start === start,
+                );
               assert.strictEqual(
-                name(resolution.instance, resolution.owner)?.end,
+                name(resolution.assembly, resolution.instance, resolution.owner)?.end,
                 resolution.ownerEnd,
               );
               if (target !== undefined) {
-                const named = name(target.targetInstance, target.targetNode);
+                const named = name(target.assembly, target.targetInstance, target.targetStart);
                 assert.isDefined(named, "a target names an InstanceName");
                 assert.strictEqual(named?.start, target.targetStart);
                 assert.strictEqual(named?.kind, target.targetKind);
@@ -1888,12 +1864,12 @@ describe("import/overlays/tests.ts, the jumps", () => {
               }
 
               if (shuffle !== undefined) {
-                const common = name(shuffle.targetInstance, shuffle.common);
-                const branch = name(shuffle.targetInstance, shuffle.branch);
+                const common = name(shuffle.assembly, shuffle.targetInstance, shuffle.common);
+                const branch = name(shuffle.assembly, shuffle.targetInstance, shuffle.branch);
                 assert.isDefined(common, "a shuffle's common element names an InstanceName");
                 assert.isDefined(branch, "a shuffle's branch names an InstanceName");
                 assert.strictEqual(common?.mixes, shuffle.commonMixes);
-                assert.strictEqual(branch?.start, shuffle.branchStart);
+                assert.strictEqual(branch?.start, shuffle.branch);
                 assert.strictEqual(shuffle.targetStart, target?.targetStart);
               }
             }),

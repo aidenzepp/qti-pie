@@ -6,13 +6,14 @@
  * only to an owner the ChangeSet inserts: a member whose group key names no owner row is refused on
  * the host, before any statement reaches PostgreSQL ("an insert into X … appending to the owner Y
  * with key (…), which this stratum does not insert", grizzle-engine `write/family/edit.ts`), under
- * no rule of the schema. A row whose key a sentinel fills, such as a nil uuid or a document node
- * standing for "no interaction", is how one arises (lane NIL's audit: Site, B5, B6). A package the
- * schema must refuse is refused by its law only where no member is such an orphan.
+ * no rule of the schema. A row whose key a sentinel fills, such as a document node standing for "no
+ * interaction", is how one arises (lane NIL's audit: Site, B5, B6). A package the schema must
+ * refuse is refused by its law only where no member is such an orphan.
  */
 import { Schema } from "effect";
-import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
-import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
+import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
+import { packageFactsOf } from "#pantry/import/write.ts";
+import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -69,7 +70,7 @@ const familyAxes: readonly FamilyAxis[] = Qti.statements.flatMap((statement) => 
 });
 
 /**
- * A key field's value: a uuid, a text or a closed handle, a natural, or a boolean.
+ * A key field's value: a text or a closed handle, a natural, or a boolean.
  */
 type KeyValue = bigint | boolean | string;
 
@@ -79,44 +80,80 @@ type KeyValue = bigint | boolean | string;
 const KeyValueSchema = Schema.Union([Schema.String, Schema.BigInt, Schema.Boolean]);
 
 /**
- * The import's inputs written flat, one keyed set of rows per relation: every input but the two
- * trees, whose inserts nest their members.
+ * The key grizzle draws a tree's row under, beside its root's fields: its pre-order position
+ * `start` and its parent's `start`, the root its own parent at 0.
  */
-type FlatInputs = Omit<PackageInputs, "Instance" | "Node">;
+interface DrawnKey {
+  readonly parent: bigint;
+  readonly start: bigint;
+}
 
 /**
- * A row of one of the import's inputs, as its builder writes it: a flat input's, or a node's or an
- * instance's from inside its tree.
+ * A tree's row as grizzle draws it: its own fields but the members it nests, its root's fields
+ * `Root`, and its {@link DrawnKey}.
  */
-type InputRow =
-  | (FlatInputs[keyof FlatInputs] extends ReadonlyMap<string, infer Row> ? Row : never)
-  | InstanceMember
-  | NodeMember;
+type DrawnRow<Member, Root> = DrawnKey & Omit<Member, "children"> & Root;
 
 /**
- * Every row of an import's inputs by relation, each tree's nested members flattened in: `Node`'s
- * nodes and `Instance`'s instances, which their inserts carry under each row's `children`.
+ * A tree's rows as grizzle draws them from the nesting its insert writes: each row with its root's
+ * root fields, its pre-order position `start` and its parent's `start`, the root its own parent at
+ * 0 (`Node (package, path, start)`, `Instance (package, assembly, start)`).
+ *
+ * @param root - The root row, its members nested under each row's `children`.
+ * @param rootFields - The tree's root fields, which the root names and every member copies.
+ * @returns The tree's rows in pre-order.
+ */
+const drawnTree = <Member extends { readonly children: readonly Member[] }, Root>(
+  root: Member & Root,
+  rootFields: Root,
+): readonly DrawnRow<Member, Root>[] => {
+  const rows: DrawnRow<Member, Root>[] = [];
+  const stack: { readonly node: Member; readonly parent: bigint }[] = [{ node: root, parent: 0n }];
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    const start = BigInt(rows.length);
+    const { children, ...fields } = next.node;
+    rows.push({ ...fields, ...rootFields, parent: next.parent, start });
+    stack.push(...children.toReversed().map((node) => ({ node, parent: start })));
+  }
+
+  return rows;
+};
+
+/**
+ * Every row of an import's inputs by relation, each tree's nested members flattened in with the key
+ * grizzle draws: `Node`'s nodes under `(package, path)` and `Instance`'s instances under
+ * `(package, assembly)`, which their inserts carry under each row's `children`; every other
+ * relation's rows as its keyed set holds them (`packageFactsOf`).
  *
  * @param inputs - The import's inputs.
  * @returns The rows of each relation.
  */
-export const rowsByRelation = (inputs: PackageInputs): ReadonlyMap<string, readonly InputRow[]> => {
-  const { Instance, Node, ...flat } = inputs;
-  const nodes = (node: NodeMember): readonly NodeMember[] => [
-    node,
-    ...node.children.flatMap(nodes),
-  ];
-  const instances = (instance: InstanceMember): readonly InstanceMember[] => [
-    instance,
-    ...instance.children.flatMap(instances),
-  ];
+export const rowsByRelation = (inputs: PackageInputs) => ({
+  ...packageFactsOf(inputs),
+  Instance: [...inputs.Instance.values()].flatMap((root: InstanceRoot) =>
+    drawnTree<InstanceMember, Pick<InstanceRoot, "assembly" | "package">>(root, {
+      assembly: root.assembly,
+      package: root.package,
+    }),
+  ),
+  Node: [...inputs.Node.values()].flatMap((root: NodeRoot) =>
+    drawnTree<NodeMember, Pick<NodeRoot, "package" | "path">>(root, {
+      package: root.package,
+      path: root.path,
+    }),
+  ),
+});
 
-  return new Map<string, readonly InputRow[]>([
-    ...Object.entries(flat).map(([name, rows]) => [name, [...rows.values()]] as const),
-    ["Instance", [...Instance.values()].flatMap(instances)],
-    ["Node", [...Node.values()].flatMap(nodes)],
-  ]);
-};
+/**
+ * The rows of each relation of an import's inputs as grizzle holds them ({@link rowsByRelation}).
+ */
+type DrawnInputs = ReturnType<typeof rowsByRelation>;
+
+/**
+ * A row of one of the import's inputs: a flat input's as its builder writes it, or a tree's row
+ * with the key grizzle draws it under ({@link DrawnRow}).
+ */
+export type InputRow = DrawnInputs[keyof DrawnInputs][number];
 
 /**
  * Read the text of a row's values at some fields, each a key field's.
@@ -153,7 +190,7 @@ interface Orphan {
  * @returns The orphans, none where every member has its owner.
  */
 export const orphansOf = (inputs: PackageInputs): readonly Orphan[] => {
-  const byName = rowsByRelation(inputs);
+  const byName = new Map<string, readonly InputRow[]>(Object.entries(rowsByRelation(inputs)));
 
   return familyAxes.flatMap(({ member, owner, ownerKey, terms }) => {
     const ownerText = keyTextOf(ownerKey);

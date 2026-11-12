@@ -18,14 +18,14 @@
  *   [children]"). A form whose value is no NCName ({@link namingPattern}), empty, whitespace alone
  *   or holding whitespace inside, is no ID value: it has no row, binds nothing and names nothing,
  *   and its value domain or TextDomain refuses it alone (spec reading 156).
- * - **{@link IdBinding}** is the projection of the IDs onto (document, id, owner), keyed by its
- *   heading, and its key on (document, id) over the bindings of admitted elements is cvc-id clause
- *   2, "no ID/IDREF binding … whose [binding] has more than one member" (law "DocumentId key", rule
- *   `document-key`). An element the grammar does not admit where it stands keeps its
+ * - **{@link IdBinding}** is the projection of the IDs onto (package, path, id, owner), keyed by its
+ *   heading, and its key on (package, path, id) over the bindings of admitted elements is cvc-id
+ *   clause 2, "no ID/IDREF binding … whose [binding] has more than one member" (law "DocumentId
+ *   key", rule `document-key`). An element the grammar does not admit where it stands keeps its
  *   {@link DocumentId} but binds nothing, so "N5 admitted" alone refuses it, as the law oracle
  *   judges it (R2). An element whose two children are one ID's, or whose attribute and child are,
- *   is one binding, as the table's letter has it; the key over the ID-typed attributes' `node` is
- *   XML Schema's one ID attribute per element.
+ *   is one binding, as the table's letter has it; the key over the ID-typed attributes' element,
+ *   `(package, path, start)`, is XML Schema's one ID attribute per element.
  * - **Idref target** (rule `idref-target`): every `Idref` token, Q5.05's split of an IDREF or IDREFS
  *   attribute value, and every {@link TextIdref} token, this module's split of an IDREF or IDREFS
  *   element's text (C50), is an id of its document. Spec reading 14 follows the XSD, so a
@@ -94,11 +94,13 @@
  * {@link statedLanguagePattern}).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
- * `select(Attribute, φ)` into the overlay, keyed by the closed attributes' key (`closedAttributes`,
- * `#pantry/qti/attributes.ts`), whose index over the selection's node serves the copy's reverse
- * probe, so no index holds `Attribute.lexical`. Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`): a value past its bound has no overlay row, so
- * its copy's foreign key refuses it beside the schema's one limit law.
+ * `select(Attribute, φ)` into the overlay, keyed by `Attribute`'s own key, `(package, path, start,
+ * name)` (`#pantry/qti/attributes.ts`), whose index over the selection's element serves the copy's
+ * reverse probe, so no index holds `Attribute.lexical`. Every overlay is keyed by its element,
+ * `(package, path, start)`, and names another element of its document by its position alone. Every
+ * copied text that takes part in a cross-row equality is `keyText` (`#pantry/qti/limits.ts`): a
+ * value past its bound has no overlay row, so its copy's foreign key refuses it beside the schema's
+ * one limit law.
  *
  * Every check is named by its oracle law (`#pantry/test/oracle.ts` `LawName`) with spaces written
  * as underscores. The overlays' agreement with what the tree holds is "E1 derived" (rule
@@ -128,7 +130,6 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { languageTag } from "#pantry/grammar/attributes.ts";
@@ -142,18 +143,11 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import {
-  Attribute,
-  closedName,
-  identityIn,
-  Idref,
-  namingPattern,
-  Space,
-} from "#pantry/qti/attributes.ts";
+import { Attribute, identityIn, Idref, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { EntryPath, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
 import { ObjectLang } from "#pantry/qti/metadata.ts";
-import { admitsHere, nilUuid, Node, nodeRef } from "#pantry/qti/node.ts";
+import { admitsHere, Node, nodeRef } from "#pantry/qti/node.ts";
 import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
 import { Instance } from "#pantry/qti/tests.ts";
 import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
@@ -200,18 +194,24 @@ const shareFragmentPattern = Compute.pattern("^#.+$");
 const labelledRootVersion = "3.0.1";
 
 /**
- * One ID of a document, keyed by the node of the element that carries it: XML Schema gives a valid
- * element at most one attribute of an ID type, an attribute use's or a wildcard's (cvc-complex-type
- * clause 5, ct-props-correct clause 5), and a governor whose text is an ID's admits the four `xsi:`
- * attributes alone, so no element carries both.
+ * The document node's position in its document, `Node.start` of the root: the scope of an element
+ * no scope element holds, and the parent a document's root element names.
+ */
+const documentNode = 0n;
+
+/**
+ * One ID of a document, keyed by the element that carries it, `(package, path, start)`: XML Schema
+ * gives a valid element at most one attribute of an ID type, an attribute use's or a wildcard's
+ * (cvc-complex-type clause 5, ct-props-correct clause 5), and a governor whose text is an ID's
+ * admits the four `xsi:` attributes alone, so no element carries both.
  *
- * - **copied from the attribute or the text:** `node`, `document` and `lexical`, and for a text,
- *   `owner`, the element's parent;
+ * - **copied from the attribute or the text:** `package`, `path`, `start` and `lexical`, and for a
+ *   text, `owner`, the element's parent's position;
  * - **the host's:** `before`, `id` and `after`, the lexical form split around its value, which
- *   `E1_derived` proves, and for an attribute, `owner`, the node itself: a row whose `owner` is its
- *   `node` is an attribute's, every other a text's; and `admitted`, whether the grammar admits the
- *   element that carries it where it stands (its parent's admission map, {@link admittedNodes}),
- *   which `E1_derived` proves both ways.
+ *   `E1_derived` proves, and for an attribute, `owner`, the element's own position: a row whose
+ *   `owner` is its `start` is an attribute's, every other a text's; and `admitted`, whether the
+ *   grammar admits the element that carries it where it stands (its parent's admission map,
+ *   {@link admittedNodes}), which `E1_derived` proves both ways.
  *
  * Every ID has its row, an unadmitted element's too, so the copy from the attribute or the text
  * stays complete; only an admitted element's ID is bound ({@link IdBinding}'s `admitted`).
@@ -222,67 +222,77 @@ export const DocumentId = relation(
     admitted: pg.boolean,
     after: Space,
     before: Space,
-    document: uuid,
     id: keyText,
     lexical: keyText,
-    node: uuid,
-    owner: uuid,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One binding of the ID/IDREF table, a projection keyed by its heading (sets ruling 2): an id of a
- * document and the element it is bound to, `carriers` the IDs that bind it, and `admitted` its IDs'
- * (`DocumentId.admitted`). Only an admitted binding is in the table ({@link admittedBindings}): an
- * element the grammar does not admit where it stands is refused by "N5 admitted" alone, and the law
- * oracle drops it with its attributes, so its ID binds nothing (R2).
+ * document and the position of the element it is bound to, `carriers` the IDs that bind it, and
+ * `admitted` its IDs' (`DocumentId.admitted`). Only an admitted binding is in the table
+ * ({@link admittedBindings}): an element the grammar does not admit where it stands is refused by
+ * "N5 admitted" alone, and the law oracle drops it with its attributes, so its ID binds nothing
+ * (R2).
  */
 export const IdBinding = relation(
   "IdBinding",
-  { admitted: pg.boolean, carriers: drawn(natural), document: uuid, id: keyText, owner: uuid },
-  ["document", "id", "owner"],
+  {
+    admitted: pg.boolean,
+    carriers: drawn(natural),
+    id: keyText,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "path", "id", "owner"],
 );
 
 /**
- * One element whose text is of an identity type (C50), keyed by its node: its governing type's text
- * domain is an `xs:ID`, an `xs:IDREF` or an `xs:IDREFS` one (`ValueIdentity`), which only an
+ * One element whose text is of an identity type (C50), keyed by the element: its governing type's
+ * text domain is an `xs:ID`, an `xs:IDREF` or an `xs:IDREFS` one (`ValueIdentity`), which only an
  * `xsi:type` gives an element in the pinned grammar.
  *
- * - **copied from the node:** `node`, `document`, `kind`, `version`, `governor`, `owner` (its parent)
- *   and `lexical`, its string value, `Node.stringValue`, which the string value's fold steps
- *   because TextDomain checks the text (`#pantry/qti/node.ts` `inCheckedText`);
+ * - **copied from the node:** `package`, `path`, `start`, `kind`, `version`, `governor`, `owner` (its
+ *   parent's position) and `lexical`, its string value, `Node.stringValue`, which the string
+ *   value's fold steps because TextDomain checks the text (`#pantry/qti/node.ts` `inCheckedText`);
  * - **drawn:** `idrefs`, its {@link TextIdref} count;
  * - **accumulated:** `idrefText`, the end of its tokens' concatenation.
  */
 export const IdentityText = relation(
   "IdentityText",
   {
-    document: uuid,
     governor: closedId(Governor),
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: closedId(NodeKind),
     lexical: keyText,
-    node: uuid,
-    owner: uuid,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One IDREF token of an element whose text is an `xs:IDREF` or `xs:IDREFS` (C50), in order, with
  * the whitespace written before and after it, so its `piece` is a stretch of the text and the
- * pieces concatenate to it, as Q5.05's `Idref` splits an attribute's.
+ * pieces concatenate to it, as Q5.05's `Idref` splits an attribute's. The order is the text's: an
+ * `xs:IDREFS` value is an `xs:list`, an ordered sequence of tokens.
  *
  * - **the host's:** `before`, `token` and `after`;
  * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
  *   domain refuses a piece past the bound;
- * - **the family's group:** `node`;
+ * - **the family's group:** `package`, `path` and `start`, its element's, which `Idref target` reads;
  * - **drawn:** `at`;
- * - **accumulated:** `document`, its element's, along the owner axis, which `Idref target` reads;
- *   `piecesWas` and `piecesAfter`, the concatenation before and after it.
+ * - **accumulated:** `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
 export const TextIdref = relation.generated(
   "TextIdref",
@@ -290,27 +300,34 @@ export const TextIdref = relation.generated(
     after: Space,
     at: drawn(natural),
     before: Space,
-    document: accumulated(uuid, nilUuid),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
+    start: natural,
     token: keyText,
   },
-  ["node", "at"],
+  ["package", "path", "start", "at"],
   (i) => ({
     piece: generated(keyText, Compute.concat(Compute.concat(i.before, i.token), i.after)),
   }),
 );
 
 /**
- * One element's `xml:lang`, keyed by the element's node: its document, the attribute's lexical
- * form, and `scope`, the element's {@link CatalogScope}, the member that carries a
- * {@link DocumentLang} value where that scope is the document.
+ * One element's `xml:lang`, keyed by the element: the attribute's lexical form, and `scope`, the
+ * position of the element's {@link CatalogScope}, the member that carries a {@link DocumentLang}
+ * value where that scope is the document node.
  */
 export const XmlLang = relation(
   "XmlLang",
-  { document: uuid, lang: keyText, node: uuid, scope: uuid },
-  ["node"],
+  {
+    lang: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    scope: natural,
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
@@ -322,30 +339,32 @@ export const XmlLang = relation(
  */
 export const DocumentLang = relation.generated(
   "DocumentLang",
-  { carriers: drawn(natural), document: uuid, lang: keyText },
-  ["document", "lang"],
+  { carriers: drawn(natural), lang: keyText, package: ManifestIdentifier, path: EntryPath },
+  ["package", "path", "lang"],
   (d) => ({
     value: generated(keyText, Compute.cast(Compute.lowerAscii(Compute.collapse(d.lang)), keyText)),
   }),
 );
 
 /**
- * One language a LOM `general` category lists, keyed by its `lom:language` node: the category, its
- * parent; `lang`, the element's string value as written; and `tag`, that value case-folded
- * (`Compute.lowerAscii`, RFC 5646 §2.1.1), the member that carries a
+ * One language a LOM `general` category lists, keyed by its `lom:language` element: `general`, the
+ * category's position, its parent's; `lang`, the element's string value as written; and `tag`,
+ * that value case-folded (`Compute.lowerAscii`, RFC 5646 §2.1.1), the member that carries a
  * {@link ResourceLomLanguageSet} value. `Node.stringValue` folds a `lom:language`'s characters
  * though no domain checks them, since it is one of `copiedTextKinds` (`#pantry/qti/node.ts`).
  */
 export const LomLanguage = relation(
   "LomLanguage",
   {
-    general: uuid,
+    general: natural,
     lang: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
     // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `tag` is generated as lowerAscii(lang), and tsc names its writer.
     tag: keyText,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -354,97 +373,112 @@ export const LomLanguage = relation(
  * listings that differ only in case are one language, and its `carriers` the `lom:language`
  * elements that list it.
  *
- * It is keyed by the category's node, not by a resource: one hop from a `lom:language` cannot tell
- * a resource's record from the manifest's, a file's or an external one. R26 reads the categories
- * of the records that name a document through a query (`namingGenerals`,
+ * It is keyed by the category's element, not by a resource: one hop from a `lom:language` cannot
+ * tell a resource's record from the manifest's, a file's or an external one. R26 reads the
+ * categories of the records that name a document through a query (`namingGenerals`,
  * `#pantry/qti/queries.ts`).
  */
 export const ResourceLomLanguageSet = relation(
   "ResourceLomLanguageSet",
-  { carriers: drawn(natural), general: uuid, lang: keyText },
-  ["general", "lang"],
+  {
+    carriers: drawn(natural),
+    general: natural,
+    lang: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "path", "general", "lang"],
 );
 
 /**
- * One `label` on an element of a document that asks for its tool, keyed by the element's node
- * ({@link labelAttributes}, spec reading 128), with its document and the document's root kind,
- * which says whether Label tools binds it.
+ * One `label` on an element of a document that asks for its tool, keyed by the element
+ * ({@link labelAttributes}, spec reading 128), with its document's root kind, which says whether
+ * Label tools binds it.
  */
 export const LabelUse = relation(
   "LabelUse",
-  { document: uuid, node: uuid, rootKind: closedId(NodeKind) },
-  ["node"],
+  {
+    package: ManifestIdentifier,
+    path: EntryPath,
+    rootKind: closedId(NodeKind),
+    start: natural,
+  },
+  ["package", "path", "start"],
 );
 
 /**
- * An SSML attribute a reading 3 law reads, keyed by its element's node and its name: a `mark`'s
- * `name`, a `speak`'s `startmark` and `endmark`, a `lexicon`'s `xml:id` and a `lookup`'s `ref`.
+ * An SSML attribute a reading 3 law reads, keyed by its element and its name: a `mark`'s `name`, a
+ * `speak`'s `startmark` and `endmark`, a `lexicon`'s `xml:id` and a `lookup`'s `ref`.
  *
- * - **copied from the attribute:** `node`, `name`, `kind` (its element's) and `lexical`;
+ * - **copied from the attribute:** `package`, `path`, `start`, `name`, `kind` (its element's) and
+ *   `lexical`;
  * - **the host's:** `value`, the lexical form collapsed (`Compute.collapse`: an `xs:token`'s or an
  *   `xs:ID`'s whiteSpace), `refers`, the kind its value names (a trim a `mark`'s, a lookup a
- *   `lexicon`'s, a definition its own kind), and `fragment`, its element's {@link SsmlScope}.
+ *   `lexicon`'s, a definition its own kind), and `fragment`, the position of its element's
+ *   {@link SsmlScope}.
  */
 export const SsmlAttribute = relation(
   "SsmlAttribute",
   {
-    fragment: uuid,
+    fragment: natural,
     kind: closedId(NodeKind),
     lexical: keyText,
     name: closedId(AttributeName),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     refers: closedId(NodeKind),
+    start: natural,
     // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `value` is generated as collapse(lexical), and tsc names its writer.
     value: keyText,
   },
-  ["node", "name"],
+  ["package", "path", "start", "name"],
 );
 
 /**
- * One element on the way from an element an SSML law reads up to its SSML fragment, keyed by its
- * node (spec reading 3: "the document" is each `speak` fragment): its {@link nodeRef} tuple and
- * `fragment`, its nearest `ssml:speak`, itself included, or the document node for an element no
- * `speak` holds. A `speak` is its own fragment, a document's root the document's where it is no
- * `speak`, and every other element its parent's, so a fragment is read up the tree with no copy on
- * `Node`.
+ * One element on the way from an element an SSML law reads up to its SSML fragment, keyed by the
+ * element (spec reading 3: "the document" is each `speak` fragment): its {@link nodeRef} tuple and
+ * `fragment`, the position of its nearest `ssml:speak`, itself included, or of the document node
+ * for an element no `speak` holds. A `speak` is its own fragment, a document's root the document's
+ * where it is no `speak`, and every other element its parent's, so a fragment is read up the tree
+ * with no copy on `Node`.
  */
 export const SsmlScope = relation(
   "SsmlScope",
   {
-    document: uuid,
-    fragment: uuid,
+    fragment: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One element on the way from an element that carries an `xml:lang` up to its catalog scope, keyed
- * by its node (spec reading R9-c: a catalog is outside the content body, so the language of its
- * cards, entries and HTML content is not the item's): its {@link nodeRef} tuple and `scope`, its
- * nearest `qti-catalog-info`, itself included, or the document node for an element no catalog
- * holds. A `qti-catalog-info` is its own scope, a document's root the document's where it is no
- * catalog info, and every other element its parent's, so a scope is read up the tree with no copy
- * on `Node`, as {@link SsmlScope} reads a fragment.
+ * by the element (spec reading R9-c: a catalog is outside the content body, so the language of its
+ * cards, entries and HTML content is not the item's): its {@link nodeRef} tuple and `scope`, the
+ * position of its nearest `qti-catalog-info`, itself included, or of the document node for an
+ * element no catalog holds. A `qti-catalog-info` is its own scope, a document's root the
+ * document's where it is no catalog info, and every other element its parent's, so a scope is read
+ * up the tree with no copy on `Node`, as {@link SsmlScope} reads a fragment.
  */
 export const CatalogScope = relation(
   "CatalogScope",
   {
-    document: uuid,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
-    scope: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
+    scope: natural,
     start: natural,
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
@@ -454,13 +488,17 @@ export const CatalogScope = relation(
  */
 export const FragmentValue = relation(
   "FragmentValue",
-  { carriers: drawn(natural), fragment: uuid, kind: closedId(NodeKind), value: keyText },
-  ["fragment", "kind", "value"],
+  {
+    carriers: drawn(natural),
+    fragment: natural,
+    kind: closedId(NodeKind),
+    package: ManifestIdentifier,
+    path: EntryPath,
+    value: keyText,
+  },
+  ["package", "path", "fragment", "kind", "value"],
 );
 
-/**
- * Every relation this module declares, by name, as `schema.ts` composes them.
- */
 /**
  * An id a document's IDREF tokens name, a projection keyed by its heading (spec reading 117): every
  * `Idref` and `TextIdref` token's value, with its document's `assembled`. A document in no
@@ -469,16 +507,16 @@ export const FragmentValue = relation(
  */
 export const IdrefTarget = relation(
   "IdrefTarget",
-  { assembled: pg.boolean, document: uuid, id: keyText },
-  ["document", "id"],
+  { assembled: pg.boolean, id: keyText, package: ManifestIdentifier, path: EntryPath },
+  ["package", "path", "id"],
 );
 
 /**
- * One `m:share` whose `src` is a fragment of its own document, keyed by the element's node (MathML
- * 3 §4.2.7; a `src` that is `#` and a name stands in the same document): its document, `src` as
- * written (C18), and `id`, the text after the `#`, which an {@link IdrefTarget} of the document
- * names under "Idref target". A `src` with any text before its `#`, or no text after it, is no
- * same-document fragment and has no row.
+ * One `m:share` whose `src` is a fragment of its own document, keyed by the element (MathML 3
+ * §4.2.7; a `src` that is `#` and a name stands in the same document): `src` as written (C18), and
+ * `id`, the text after the `#`, which an {@link IdrefTarget} of the document names under "Idref
+ * target". A `src` with any text before its `#`, or no text after it, is no same-document fragment
+ * and has no row.
  *
  * Two fields are not the share's own: `assembled`, its document's `assembled` (as
  * {@link IdrefTarget}'s is), which tells a document in no assembly, whose share resolves in its own
@@ -489,126 +527,168 @@ export const ShareFragment = relation(
   "ShareFragment",
   {
     assembled: pg.boolean,
-    document: uuid,
     id: keyText,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     placements: drawn(natural),
     src: keyText,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One ID of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
- * instance and the element that carries it: a {@link DocumentId} of the instance's document, with
- * the instance's assembly and assembly kind, and its `copy`: the instance, or under a test's
- * assembly its document, since a section document placed twice is written once there (reading 86),
- * and the element carrying the ID already names its document. Each value is an id the import mints.
+ * instance, `(package, assembly, instance)`, and the position `start` of the element that carries
+ * it in the instance's document, `path`: a {@link DocumentId} of that document, with the
+ * instance's assembly kind, and its `copy`, which copy of the document's elements the assembly's
+ * merged document holds it in: the instance, or under a test's assembly the document itself, its
+ * document node's position, since a section document placed twice is written once there (reading
+ * 86), and `path` already names the document.
  */
 export const PlacedId = relation(
   "PlacedId",
   {
-    assembly: uuid,
+    assembly: EntryPath,
     assemblyKind: closedId(NodeKind),
-    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `copy` is generated as cond(assemblyKind = test, document, instance), and tsc names its writer.
-    copy: uuid,
-    document: uuid,
+    // GRIZZLE-PENDING: Q20: a family that groups by a generated field; then `copy` is generated as cond(assemblyKind = test, 0, instance), and tsc names its writer.
+    copy: natural,
     id: keyText,
-    instance: uuid,
-    node: uuid,
-    owner: uuid,
+    instance: natural,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["instance", "node"],
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
  * One binding of an assembly's ID/IDREF table, a projection of {@link PlacedId} keyed by its
- * heading: an id, the element it is bound to, and the copy of the document that holds it,
- * `carriers` the placed IDs that bind it. Its key on `(assembly, id)` is cvc-id clause 2 over the
- * merged document ("DocumentId key"): an included fragment's ID is distinct from its item's, and a
- * fragment placed twice in one item holds its IDs twice, as its merged document does (information
- * model §2.12).
+ * heading: an id, the element it is bound to (its document's `path` and its `owner` position), and
+ * the copy of the document that holds it, `carriers` the placed IDs that bind it. Its key on
+ * `(package, assembly, id)` is cvc-id clause 2 over the merged document ("DocumentId key"): an
+ * included fragment's ID is distinct from its item's, and a fragment placed twice in one item holds
+ * its IDs twice, as its merged document does (information model §2.12).
  */
 export const AssembledId = relation(
   "AssembledId",
-  { assembly: uuid, carriers: drawn(natural), copy: uuid, id: keyText, owner: uuid },
-  ["assembly", "id", "owner", "copy"],
+  {
+    assembly: EntryPath,
+    carriers: drawn(natural),
+    copy: natural,
+    id: keyText,
+    owner: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "assembly", "id", "path", "owner", "copy"],
 );
 
 /**
  * One id an instance's document's IDREFs name (spec reading 117), keyed by the instance and the id:
- * an {@link IdrefTarget} of the instance's document, which resolves among its assembly's IDs
- * ("Idref target").
+ * an {@link IdrefTarget} of the instance's document, `path`, which resolves among its assembly's
+ * IDs ("Idref target").
  */
 export const PlacedIdref = relation(
   "PlacedIdref",
-  { assembly: uuid, document: uuid, id: keyText, instance: uuid },
-  ["instance", "id"],
+  {
+    assembly: EntryPath,
+    id: keyText,
+    instance: natural,
+    package: ManifestIdentifier,
+    path: EntryPath,
+  },
+  ["package", "assembly", "instance", "id"],
 );
 
 /**
  * Each document's IDs, counted by `Document.ids`.
  */
-const documentIdFamily = counted(on(DocumentId, "document"), fin(Document, "ids"));
+const documentIdFamily = counted(on(DocumentId, "package", "path"), fin(Document, "ids"));
 
 /**
  * Each document's IDREF targets, counted by `Document.idrefTargets`.
  */
-const idrefTargetFamily = counted(on(IdrefTarget, "document"), fin(Document, "idrefTargets"));
+const idrefTargetFamily = counted(
+  on(IdrefTarget, "package", "path"),
+  fin(Document, "idrefTargets"),
+);
 
 /**
  * Each instance's IDs, counted by `Instance.ids`, its document's count.
  */
-const placedIdFamily = counted(on(PlacedId, "instance"), fin(Instance, "ids"));
+const placedIdFamily = counted(
+  on(PlacedId, "package", "assembly", "instance"),
+  fin(Instance, "ids"),
+);
 
 /**
  * Each assembly's ID bindings, counted by `AssembledId.carriers`.
  */
 const assembledIdFamily = counted(
-  on(PlacedId, "assembly", "id", "owner", "copy"),
+  on(PlacedId, "package", "assembly", "id", "path", "owner", "copy"),
   fin(AssembledId, "carriers"),
 );
 
 /**
  * Each instance's IDREF targets, counted by `Instance.idrefTargets`, its document's count.
  */
-const placedIdrefFamily = counted(on(PlacedIdref, "instance"), fin(Instance, "idrefTargets"));
+const placedIdrefFamily = counted(
+  on(PlacedIdref, "package", "assembly", "instance"),
+  fin(Instance, "idrefTargets"),
+);
 
 /**
- * One `xml:lang` outside every catalog (R9-c), keyed by its element's node: an {@link XmlLang}
- * whose scope is its document, the member a counted family can count, as a family counts a relation
- * and no selection. R26's forms are these.
+ * One `xml:lang` outside every catalog (R9-c), keyed by its element: an {@link XmlLang} whose scope
+ * is its document node, the member a counted family can count, as a family counts a relation and
+ * no selection. R26's forms are these.
  */
 export const BodyXmlLang = relation(
   // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "BodyXmlLang",
-  { document: uuid, lang: keyText, node: uuid },
-  ["node"],
+  { lang: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
 );
 
 /**
  * One `xml:lang` of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed
- * by the instance and the element's node: an {@link XmlLang} of the instance's document, under the
- * assembly, with its `scope`. An included fragment's elements are its item's body elements in
- * place, so their languages are among those R26 holds the item's records to list, those a catalog
- * holds aside.
+ * by the instance and the element's position in the instance's document, `path`: an
+ * {@link XmlLang} of that document, under the assembly, with its `scope`. An included fragment's
+ * elements are its item's body elements in place, so their languages are among those R26 holds the
+ * item's records to list, those a catalog holds aside.
  */
 export const PlacedXmlLang = relation(
   "PlacedXmlLang",
-  { assembly: uuid, document: uuid, instance: uuid, lang: keyText, node: uuid, scope: uuid },
-  ["instance", "node"],
+  {
+    assembly: EntryPath,
+    instance: natural,
+    lang: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    scope: natural,
+    start: natural,
+  },
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
  * One `xml:lang` of an instance of an item's assembly outside every catalog (R9-c), keyed as
- * {@link PlacedXmlLang} is: a placed `xml:lang` whose scope is its document, the member the
+ * {@link PlacedXmlLang} is: a placed `xml:lang` whose scope is its document node, the member the
  * assembly's family counts.
  */
 export const PlacedBodyXmlLang = relation(
   // GRIZZLE-PENDING: Q16, a family whose member side is a selection; then this stored copy goes.
   "PlacedBodyXmlLang",
-  { assembly: uuid, document: uuid, instance: uuid, lang: keyText, node: uuid },
-  ["instance", "node"],
+  {
+    assembly: EntryPath,
+    instance: natural,
+    lang: keyText,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
+  },
+  ["package", "assembly", "instance", "start"],
 );
 
 /**
@@ -618,8 +698,8 @@ export const PlacedBodyXmlLang = relation(
  */
 export const AssembledLang = relation.generated(
   "AssembledLang",
-  { assembly: uuid, carriers: drawn(natural), lang: keyText },
-  ["assembly", "lang"],
+  { assembly: EntryPath, carriers: drawn(natural), lang: keyText, package: ManifestIdentifier },
+  ["package", "assembly", "lang"],
   (a) => ({
     value: generated(keyText, Compute.cast(Compute.lowerAscii(Compute.collapse(a.lang)), keyText)),
   }),
@@ -628,28 +708,34 @@ export const AssembledLang = relation.generated(
 /**
  * Each document's `xml:lang` carriers, counted by `Document.langs`.
  */
-const documentLangFamily = counted(on(XmlLang, "document"), fin(Document, "langs"));
+const documentLangFamily = counted(on(XmlLang, "package", "path"), fin(Document, "langs"));
 
 /**
  * Each item instance's `xml:lang` carriers, counted by `Instance.langs`, its document's count.
  */
-const placedLangFamily = counted(on(PlacedXmlLang, "instance"), fin(Instance, "langs"));
+const placedLangFamily = counted(
+  on(PlacedXmlLang, "package", "assembly", "instance"),
+  fin(Instance, "langs"),
+);
 
 /**
  * The placed `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is
- * their document (R9-c), the source of {@link PlacedBodyXmlLang}.
+ * their document node (R9-c), the source of {@link PlacedBodyXmlLang}.
  */
-const bodyPlacedLangs = select(PlacedXmlLang, (p) => p.eq(p.scope, p.document));
+const bodyPlacedLangs = select(PlacedXmlLang, (p) => p.eq(p.scope, documentNode));
 
 /**
  * The placed elements outside every catalog that carry each assembly's forms, counted by
  * `AssembledLang.carriers`.
  */
 const assembledLangFamily = counted(
-  on(PlacedBodyXmlLang, "assembly", "lang"),
+  on(PlacedBodyXmlLang, "package", "assembly", "lang"),
   fin(AssembledLang, "carriers"),
 );
 
+/**
+ * Every relation this module declares, by name, as `schema.ts` composes them.
+ */
 export const identityRelations = {
   AssembledId,
   AssembledLang,
@@ -730,7 +816,7 @@ const idTyped = (a: AttributeRow) =>
   );
 
 /**
- * The ID-typed attributes, whatever their value, which the key over `node` holds to one per
+ * The ID-typed attributes, whatever their value, which the key over their element holds to one per
  * element: XML Schema gives a valid element at most one attribute of an ID type (cvc-complex-type
  * clause 5), a statement of types, not of values.
  */
@@ -739,10 +825,10 @@ export const idAttributes = select(Attribute, idTyped);
 /**
  * The ID-typed attributes whose value is one of their document's IDs: those whose lexical form
  * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId}.
- * Its conditions include every one of {@link idAttributes}', whose key over `node` holds it to one
- * per element, so it needs no key of its own: grizzle keys a containment's target by a key whose
- * selection's conditions are all the target's (README, "Keys"), and installs the UNIQUE each copy
- * back into it references, a {@link DocumentId}'s and a `th`'s `TableHeader`'s at its kind
+ * Its conditions include every one of {@link idAttributes}', whose key over the element holds it to
+ * one per element, so it needs no key of its own: grizzle keys a containment's target by a key
+ * whose selection's conditions are all the target's (README, "Keys"), and installs the UNIQUE each
+ * copy back into it references, a {@link DocumentId}'s and a `th`'s `TableHeader`'s at its kind
  * (`#pantry/qti/html.ts`).
  */
 export const namingIdAttributes = select(Attribute, (a) =>
@@ -752,8 +838,8 @@ export const namingIdAttributes = select(Attribute, (a) =>
 /**
  * The ID values of one element kind: the {@link namingIdAttributes} of that kind, which a `th`'s
  * `TableHeader` copies back into (`#pantry/qti/html.ts`). Its conditions include every one of
- * {@link idAttributes}', whose key over `node` holds it, and its kind is a field it fixes to a value
- * beyond its terms, so it needs no key of its own (grizzle's README, "Fixed fields").
+ * {@link idAttributes}', whose key over the element holds it, and its kind is a field it fixes to a
+ * value beyond its terms, so it needs no key of its own (grizzle's README, "Fixed fields").
  *
  * @param kind - The element kind.
  * @returns The selection.
@@ -766,9 +852,9 @@ export const namingIdAttributesOf = (kind: "th") =>
 /**
  * The ID-typed attributes of one manifest element kind in a manifest, a `cp:manifest`'s or a
  * `cp:resource`'s `identifier`, which its {@link ManifestId} or {@link ResourceId} copies back
- * into. Its conditions include every one of {@link idAttributes}', whose key over `node` holds it,
- * and its kind and document type are fields it fixes to values beyond its terms, so it needs no key
- * of its own (grizzle's README, "Fixed fields").
+ * into. Its conditions include every one of {@link idAttributes}', whose key over the element
+ * holds it, and its kind and document type are fields it fixes to values beyond its terms, so it
+ * needs no key of its own (grizzle's README, "Fixed fields").
  *
  * @param kind - The manifest element's kind.
  * @returns The selection.
@@ -790,34 +876,26 @@ const idTexts = select(IdentityText, (t) =>
 );
 
 /**
- * The IDs an attribute carries: those whose owner is their own node.
+ * The IDs an attribute carries: those whose owner is their own element.
  */
-const attributeIds = select(DocumentId, (d) => d.eq(d.owner, d.node));
+const attributeIds = select(DocumentId, (d) => d.eq(d.owner, d.start));
 
 /**
  * The IDs an element's text carries: those bound to another element, its parent.
  */
-const textIds = select(DocumentId, (d) => d.ne(d.owner, d.node));
+const textIds = select(DocumentId, (d) => d.ne(d.owner, d.start));
 
 /**
- * State that the grammar admits a node where it stands: its parent's family's admission map holds
- * its kind (`#pantry/qti/node.ts` `admitsHere`, the guard decision 440 put in `positioned`). "N5
- * admitted" refuses every member it is false of.
- *
- * @param n - The row.
- * @returns The statement.
+ * The nodes the grammar admits where they stand, whose IDs bind: their parent's family's admission
+ * map holds their kind (`#pantry/qti/node.ts` `admitsHere`, the guard decision 440 put in
+ * `positioned`). "N5 admitted" refuses every member it is false of.
  */
-const admits = (n: RowScalars<typeof Node>) => admitsHere(n);
-
-/**
- * The nodes the grammar admits where they stand, whose IDs bind.
- */
-export const admittedNodes = select(Node, admits);
+export const admittedNodes = select(Node, admitsHere);
 
 /**
  * The nodes the grammar does not admit where they stand, whose IDs bind nothing.
  */
-const unadmittedNodes = select(Node, (n) => n.not(admits(n)));
+const unadmittedNodes = select(Node, (n) => n.not(admitsHere(n)));
 
 /**
  * The IDs of admitted elements.
@@ -838,7 +916,7 @@ const admittedBindings = select(IdBinding, (b) => b.eq(b.admitted, true));
 /**
  * Every element's `xml:lang`, the source of {@link XmlLang}.
  */
-const langAttributes = select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, "xml:lang")));
+const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
 
 /**
  * Every MathML `share` whose `src` is a fragment of its own document, the source of
@@ -846,7 +924,6 @@ const langAttributes = select(Attribute, (a) => a.and(closedName(a), a.eq(a.name
  */
 const shareSources = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.kind, "m:share"),
     a.eq(a.name, "src"),
     Compute.matches(a.lexical, shareFragmentPattern),
@@ -869,7 +946,6 @@ const unassembledTargets = select(IdrefTarget, (t) => t.eq(t.assembled, false));
  */
 const labelAttributes = select(Attribute, (a) =>
   a.and(
-    closedName(a),
     a.eq(a.name, "label"),
     a.or(
       a.in(a.kind, toolLabelKinds),
@@ -894,8 +970,8 @@ const toolVersions = select(Attribute, (a) =>
 
 /**
  * Every `lom:language` of a LOM `general` category of a document a package's records are read from
- * (`recordDocumentTypes`), the source of {@link LomLanguage}: its id, its parent and its string
- * value.
+ * (`recordDocumentTypes`), the source of {@link LomLanguage}: its element, its parent and its
+ * string value.
  */
 const lomLanguages = select(Node, (n) =>
   n.and(
@@ -909,14 +985,11 @@ const lomLanguages = select(Node, (n) =>
  * The SSML attributes reading 3's laws read, the source of {@link SsmlAttribute}.
  */
 const ssmlAttributes = select(Attribute, (a) =>
-  a.and(
-    closedName(a),
-    a.or(
-      a.and(a.eq(a.kind, "ssml:mark"), a.eq(a.name, "name")),
-      a.and(a.eq(a.kind, "ssml:speak"), a.in(a.name, ["startmark", "endmark"])),
-      a.and(a.eq(a.kind, "ssml:lexicon"), a.eq(a.name, "xml:id")),
-      a.and(a.eq(a.kind, "ssml:lookup"), a.eq(a.name, "ref")),
-    ),
+  a.or(
+    a.and(a.eq(a.kind, "ssml:mark"), a.eq(a.name, "name")),
+    a.and(a.eq(a.kind, "ssml:speak"), a.in(a.name, ["startmark", "endmark"])),
+    a.and(a.eq(a.kind, "ssml:lexicon"), a.eq(a.name, "xml:id")),
+    a.and(a.eq(a.kind, "ssml:lookup"), a.eq(a.name, "ref")),
   ),
 );
 
@@ -940,7 +1013,7 @@ const onceHeld = select(FragmentValue, (v) => v.eq(v.carriers, 1n));
  * root.
  */
 const inheritedScopes = select(SsmlScope, (s) =>
-  s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, s.document)),
+  s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, documentNode)),
 );
 
 /**
@@ -948,7 +1021,7 @@ const inheritedScopes = select(SsmlScope, (s) =>
  * document's root.
  */
 const inheritedCatalogScopes = select(CatalogScope, (s) =>
-  s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, s.document)),
+  s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, documentNode)),
 );
 
 /**
@@ -957,37 +1030,43 @@ const inheritedCatalogScopes = select(CatalogScope, (s) =>
 const itemLabels = select(LabelUse, (l) => l.eq(l.rootKind, itemKind));
 
 /**
- * The IDs that bind each (document, id, owner), counted by `IdBinding.carriers`.
+ * The IDs that bind each (package, path, id, owner), counted by `IdBinding.carriers`.
  */
 const idBindingFamily = counted(
-  on(DocumentId, "document", "id", "owner"),
+  on(DocumentId, "package", "path", "id", "owner"),
   fin(IdBinding, "carriers"),
 );
 
 /**
  * Each IDREF or IDREFS element's tokens in order, counted by `IdentityText.idrefs`.
  */
-const textIdrefFamily = ordered(on(TextIdref, "node", "at"), fin(IdentityText, "idrefs"));
+const textIdrefFamily = ordered(
+  on(TextIdref, "package", "path", "start", "at"),
+  fin(IdentityText, "idrefs"),
+);
 
 /**
  * The `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is their
- * document (R9-c), the source of {@link BodyXmlLang}. Every `xml:lang` keeps its {@link XmlLang}
- * row; only this selection narrows.
+ * document node (R9-c), the source of {@link BodyXmlLang}. Every `xml:lang` keeps its
+ * {@link XmlLang} row; only this selection narrows.
  */
-const bodyLangs = select(XmlLang, (x) => x.eq(x.scope, x.document));
+const bodyLangs = select(XmlLang, (x) => x.eq(x.scope, documentNode));
 
 /**
  * The elements outside every catalog that carry each document's `xml:lang` forms, counted by
  * `DocumentLang.carriers`.
  */
-const langFamily = counted(on(BodyXmlLang, "document", "lang"), fin(DocumentLang, "carriers"));
+const langFamily = counted(
+  on(BodyXmlLang, "package", "path", "lang"),
+  fin(DocumentLang, "carriers"),
+);
 
 /**
  * The `lom:language` elements that list each category's languages, counted by
  * `ResourceLomLanguageSet.carriers`.
  */
 const lomLanguageFamily = counted(
-  on(LomLanguage, "general", "tag"),
+  on(LomLanguage, "package", "path", "general", "tag"),
   fin(ResourceLomLanguageSet, "carriers"),
 );
 
@@ -995,7 +1074,7 @@ const lomLanguageFamily = counted(
  * The attributes that hold each fragment's values, counted by `FragmentValue.carriers`.
  */
 const fragmentValueFamily = counted(
-  on(SsmlAttribute, "fragment", "kind", "value"),
+  on(SsmlAttribute, "package", "path", "fragment", "kind", "value"),
   fin(FragmentValue, "carriers"),
 );
 
@@ -1006,13 +1085,12 @@ const fragmentValueFamily = counted(
  * fragment defines exactly once. A mark name may otherwise repeat.
  *
  * A trim stands on its `speak`, which is its own fragment ({@link SsmlScope}), so the statement
- * reads the trim's `node` where {@link ssmlLexiconReference} reads `fragment`: the two say the
- * same of a trim, and the distinct sides keep the two laws' identities apart, since an identity
- * drops a side's selection.
+ * reads the trim's `start` where {@link ssmlLexiconReference} reads `fragment`: the two say the
+ * same of a trim.
  */
 export const ssmlTrimMark = contained(
-  on(trims, "node", "refers", "value"),
-  on(onceHeld, "fragment", "kind", "value"),
+  on(trims, "package", "path", "start", "refers", "value"),
+  on(onceHeld, "package", "path", "fragment", "kind", "value"),
 );
 
 /**
@@ -1022,8 +1100,8 @@ export const ssmlTrimMark = contained(
  * document"): a `lookup`'s `ref` names a `lexicon` of its own fragment.
  */
 export const ssmlLexiconReference = contained(
-  on(lookups, "fragment", "refers", "value"),
-  on(FragmentValue, "fragment", "kind", "value"),
+  on(lookups, "package", "path", "fragment", "refers", "value"),
+  on(FragmentValue, "package", "path", "fragment", "kind", "value"),
 );
 
 /**
@@ -1054,11 +1132,11 @@ export const ssmlLexiconReference = contained(
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
  *   counted family over the carriers outside every catalog, and each form carried (`E1_derived`);
  *   and each assessment object's `ObjectLang` (`#pantry/qti/metadata.ts`) an attribute's, through
- *   the closed attributes' key over every `xml:lang` (the one-way rule), its node an assessment
- *   object's root by its containment into `AssessmentObject`;
- * - **CatalogScope:** each `XmlLang` on its scope's row, each scope on its node's {@link nodeRef}
- *   tuple, a `qti-catalog-info` its own scope, a root that is none the document's and every other
- *   element its parent's (`E1_derived`);
+ *   `Attribute`'s key at `xml:lang` (the one-way rule), its element an assessment object's root by
+ *   its containment into `AssessmentObject`;
+ * - **CatalogScope:** each `XmlLang` on its scope's row, each scope on its element's {@link nodeRef}
+ *   tuple, a `qti-catalog-info` its own scope, a root that is none the document node's and every
+ *   other element its parent's (`E1_derived`);
  * - **ResourceLomLanguageSet:** each general category's `lom:language` copied into its `LomLanguage`
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
@@ -1068,15 +1146,15 @@ export const ssmlLexiconReference = contained(
  *   is a rule over a query (`identityQueryLawsByName`, `#pantry/qti/queries.ts`);
  * - **Reading 3:** each read SSML attribute copied into its {@link SsmlAttribute} row, both ways, its
  *   value its lexical form collapsed, and placed in its element's fragment; each fragment's values
- *   counted; each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root
- *   that is no `speak` the document's and every other element its parent's; {@link ssmlTrimMark}
- *   and {@link ssmlLexiconReference};
+ *   counted; each scope on its element's {@link nodeRef} tuple, a `speak` its own fragment, a root
+ *   that is no `speak` the document node's and every other element its parent's;
+ *   {@link ssmlTrimMark} and {@link ssmlLexiconReference};
  * - **Label tools:** each `label` that asks for its tool copied into its `LabelUse` row and each row
  *   a label's, its root kind its document's, and in an item each label's document one whose root
  *   carries `tool-name` and `tool-version`;
- * - **Manifest overlay:** each {@link ManifestId} and {@link ResourceId} row has its node's
+ * - **Manifest overlay:** each {@link ManifestId} and {@link ResourceId} row has its element's
  *   `identifier`, the way back of the copy `#pantry/qti/package.ts` states (C18): an ID-typed
- *   attribute at its node, of its kind (`cp:manifest` or `cp:resource`), in the manifest (type
+ *   attribute at its element, of its kind (`cp:manifest` or `cp:resource`), in the manifest (type
  *   `manifest`). Each of the two kinds has one ID-typed attribute, its `identifier`, in every
  *   version, so this is the containment in the manifest's `identifier` selection, read through the
  *   key over the ID-typed attributes, with no second key over the narrower selection (the one-way
@@ -1084,20 +1162,23 @@ export const ssmlLexiconReference = contained(
  */
 export const identityLawsByName = {
   "DocumentId key": [
-    key(on(idAttributes, "node")),
+    key(on(idAttributes, "package", "path", "start")),
     contained(
-      on(namingIdAttributes, "node", "document", "lexical"),
-      on(DocumentId, "node", "document", "lexical"),
+      on(namingIdAttributes, "package", "path", "start", "lexical"),
+      on(DocumentId, "package", "path", "start", "lexical"),
     ),
-    contained(on(attributeIds, "node"), on(namingIdAttributes, "node")),
     contained(
-      on(idTexts, "node", "document", "owner", "lexical"),
-      on(DocumentId, "node", "document", "owner", "lexical"),
+      on(attributeIds, "package", "path", "start"),
+      on(namingIdAttributes, "package", "path", "start"),
     ),
-    contained(on(textIds, "node"), on(idTexts, "node")),
+    contained(
+      on(idTexts, "package", "path", "start", "owner", "lexical"),
+      on(DocumentId, "package", "path", "start", "owner", "lexical"),
+    ),
+    contained(on(textIds, "package", "path", "start"), on(idTexts, "package", "path", "start")),
     idBindingFamily,
-    key(on(admittedBindings, "document", "id")),
-    key(on(AssembledId, "assembly", "id")),
+    key(on(admittedBindings, "package", "path", "id")),
+    key(on(AssembledId, "package", "assembly", "id")),
   ],
   "E1 derived": [
     check("E1_derived", DocumentId, (d) =>
@@ -1108,28 +1189,31 @@ export const identityLawsByName = {
     ),
     check("E1_derived", IdBinding, (b) => b.gt(b.carriers, 0n)),
     contained(
-      on(DocumentId, "document", "id", "owner", "admitted"),
-      on(IdBinding, "document", "id", "owner", "admitted"),
-    ),
-    // The admitted side reads `document` too, so the two sides differ where an identity drops each
-    // side's selection.
-    contained(on(admittedIds, "node", "document"), on(admittedNodes, "id", "document")),
-    contained(on(unadmittedIds, "node"), on(unadmittedNodes, "id")),
-    contained(
-      on(identityNodes, "id", "document", "parent", "stringValue"),
-      on(IdentityText, "node", "document", "owner", "lexical"),
+      on(DocumentId, "package", "path", "id", "owner", "admitted"),
+      on(IdBinding, "package", "path", "id", "owner", "admitted"),
     ),
     contained(
-      on(IdentityText, "node", "kind", "version", "document", "governor"),
-      on(Node, "id", "kind", "version", "document", "governor"),
+      on(admittedIds, "package", "path", "start"),
+      on(admittedNodes, "package", "path", "start"),
+    ),
+    contained(
+      on(unadmittedIds, "package", "path", "start"),
+      on(unadmittedNodes, "package", "path", "start"),
+    ),
+    contained(
+      on(identityNodes, "package", "path", "start", "parent", "stringValue"),
+      on(IdentityText, "package", "path", "start", "owner", "lexical"),
+    ),
+    contained(
+      on(IdentityText, "package", "path", "start", "kind", "version", "governor"),
+      on(Node, "package", "path", "start", "kind", "version", "governor"),
     ),
     textIdrefFamily,
-    contained(on(TextIdref, "node", "document"), on(IdentityText, "node", "document")),
     fold(
       textIdrefFamily,
       Monoid.concat,
-      on(TextIdref, "node", "piece", "piecesWas", "piecesAfter"),
-      on(IdentityText, "node", "idrefText"),
+      on(TextIdref, "package", "path", "start", "piece", "piecesWas", "piecesAfter"),
+      on(IdentityText, "package", "path", "start", "idrefText"),
     ),
     check("E1_derived", IdentityText, (t) =>
       t.or(
@@ -1140,73 +1224,100 @@ export const identityLawsByName = {
     check("E1_derived", TextIdref, (i) =>
       i.and(Compute.matches(i.token, idValuePattern), i.or(i.eq(i.at, 0n), i.ne(i.before, ""))),
     ),
-    contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
-    contained(on(ShareFragment, "document", "assembled"), on(Document, "node", "assembled")),
+    contained(
+      on(IdrefTarget, "package", "path", "assembled"),
+      on(Document, "package", "path", "assembled"),
+    ),
+    contained(
+      on(ShareFragment, "package", "path", "assembled"),
+      on(Document, "package", "path", "assembled"),
+    ),
     idrefTargetFamily,
     documentIdFamily,
     placedIdFamily,
     assembledIdFamily,
     placedIdrefFamily,
     contained(
-      on(PlacedId, "instance", "document", "assembly", "assemblyKind"),
-      on(Instance, "id", "document", "assembly", "assemblyKind"),
+      on(PlacedId, "package", "assembly", "instance", "path", "assemblyKind"),
+      on(Instance, "package", "assembly", "start", "document", "assemblyKind"),
     ),
     contained(
-      on(PlacedId, "node", "document", "id", "owner"),
-      on(DocumentId, "node", "document", "id", "owner"),
+      on(PlacedId, "package", "path", "start", "id", "owner"),
+      on(DocumentId, "package", "path", "start", "id", "owner"),
     ),
     check("E1_derived", PlacedId, (p) =>
       p.or(
-        p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, p.document)),
+        p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, documentNode)),
         p.and(p.ne(p.assemblyKind, testKind), p.eq(p.copy, p.instance)),
       ),
     ),
     check("E1_derived", AssembledId, (a) => a.gt(a.carriers, 0n)),
     contained(
-      on(PlacedIdref, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(PlacedIdref, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
-    contained(on(PlacedIdref, "document", "id"), on(IdrefTarget, "document", "id")),
+    contained(on(PlacedIdref, "package", "path", "id"), on(IdrefTarget, "package", "path", "id")),
     contained(
-      on(langAttributes, "node", "document", "lexical"),
-      on(XmlLang, "node", "document", "lang"),
+      on(langAttributes, "package", "path", "start", "lexical"),
+      on(XmlLang, "package", "path", "start", "lang"),
     ),
-    contained(on(XmlLang, "node"), on(langAttributes, "node")),
-    contained(on(ObjectLang, "node"), on(langAttributes, "node")),
-    contained(on(XmlLang, "node", "scope"), on(CatalogScope, "node", "scope")),
     contained(
-      on(bodyLangs, "node", "document", "lang"),
-      on(BodyXmlLang, "node", "document", "lang"),
+      on(XmlLang, "package", "path", "start"),
+      on(langAttributes, "package", "path", "start"),
     ),
-    contained(on(BodyXmlLang, "node"), on(bodyLangs, "node")),
     contained(
-      on(bodyPlacedLangs, "instance", "node", "assembly", "document", "lang"),
-      on(PlacedBodyXmlLang, "instance", "node", "assembly", "document", "lang"),
+      on(ObjectLang, "package", "path", "start"),
+      on(langAttributes, "package", "path", "start"),
     ),
-    contained(on(PlacedBodyXmlLang, "instance", "node"), on(bodyPlacedLangs, "instance", "node")),
     contained(
-      on(CatalogScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(XmlLang, "package", "path", "start", "scope"),
+      on(CatalogScope, "package", "path", "start", "scope"),
+    ),
+    contained(
+      on(bodyLangs, "package", "path", "start", "lang"),
+      on(BodyXmlLang, "package", "path", "start", "lang"),
+    ),
+    contained(
+      on(BodyXmlLang, "package", "path", "start"),
+      on(bodyLangs, "package", "path", "start"),
+    ),
+    contained(
+      on(bodyPlacedLangs, "package", "assembly", "instance", "start", "path", "lang"),
+      on(PlacedBodyXmlLang, "package", "assembly", "instance", "start", "path", "lang"),
+    ),
+    contained(
+      on(PlacedBodyXmlLang, "package", "assembly", "instance", "start"),
+      on(bodyPlacedLangs, "package", "assembly", "instance", "start"),
+    ),
+    contained(
+      on(CatalogScope, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     check("E1_derived", CatalogScope, (s) =>
       s.or(
-        s.and(s.eq(s.kind, "qti-catalog-info"), s.eq(s.scope, s.node)),
+        s.and(s.eq(s.kind, "qti-catalog-info"), s.eq(s.scope, s.start)),
         s.and(
           s.ne(s.kind, "qti-catalog-info"),
-          s.eq(s.parent, s.document),
-          s.eq(s.scope, s.document),
+          s.eq(s.parent, documentNode),
+          s.eq(s.scope, documentNode),
         ),
-        s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, s.document)),
+        s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, documentNode)),
       ),
     ),
-    contained(on(inheritedCatalogScopes, "parent", "scope"), on(CatalogScope, "node", "scope")),
+    contained(
+      on(inheritedCatalogScopes, "package", "path", "parent", "scope"),
+      on(CatalogScope, "package", "path", "start", "scope"),
+    ),
     langFamily,
     check("E1_derived", DocumentLang, (d) => d.gt(d.carriers, 0n)),
     contained(
-      on(lomLanguages, "id", "parent", "stringValue"),
-      on(LomLanguage, "node", "general", "lang"),
+      on(lomLanguages, "package", "path", "start", "parent", "stringValue"),
+      on(LomLanguage, "package", "path", "start", "general", "lang"),
     ),
-    contained(on(LomLanguage, "node"), on(lomLanguages, "id")),
+    contained(
+      on(LomLanguage, "package", "path", "start"),
+      on(lomLanguages, "package", "path", "start"),
+    ),
     check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
     lomLanguageFamily,
     check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
@@ -1214,20 +1325,26 @@ export const identityLawsByName = {
     placedLangFamily,
     assembledLangFamily,
     contained(
-      on(PlacedXmlLang, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(PlacedXmlLang, "package", "assembly", "instance", "path"),
+      on(Instance, "package", "assembly", "start", "document"),
     ),
     contained(
-      on(PlacedXmlLang, "node", "document", "lang", "scope"),
-      on(XmlLang, "node", "document", "lang", "scope"),
+      on(PlacedXmlLang, "package", "path", "start", "lang", "scope"),
+      on(XmlLang, "package", "path", "start", "lang", "scope"),
     ),
     check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
     contained(
-      on(ssmlAttributes, "node", "name", "kind", "lexical"),
-      on(SsmlAttribute, "node", "name", "kind", "lexical"),
+      on(ssmlAttributes, "package", "path", "start", "name", "kind", "lexical"),
+      on(SsmlAttribute, "package", "path", "start", "name", "kind", "lexical"),
     ),
-    contained(on(SsmlAttribute, "node", "name"), on(ssmlAttributes, "node", "name")),
-    contained(on(SsmlAttribute, "node", "fragment"), on(SsmlScope, "node", "fragment")),
+    contained(
+      on(SsmlAttribute, "package", "path", "start", "name"),
+      on(ssmlAttributes, "package", "path", "start", "name"),
+    ),
+    contained(
+      on(SsmlAttribute, "package", "path", "start", "fragment"),
+      on(SsmlScope, "package", "path", "start", "fragment"),
+    ),
     check("E1_derived", SsmlAttribute, (s) =>
       s.and(
         s.eq(s.value, Compute.collapse(s.lexical)),
@@ -1241,22 +1358,32 @@ export const identityLawsByName = {
     fragmentValueFamily,
     check("E1_derived", FragmentValue, (v) => v.gt(v.carriers, 0n)),
     contained(
-      on(SsmlScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      on(SsmlScope, "package", "path", "start", "kind", "nearest", "version", "parent"),
       nodeRef,
     ),
     check("E1_derived", SsmlScope, (s) =>
       s.or(
-        s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.fragment, s.node)),
-        s.and(s.ne(s.kind, "ssml:speak"), s.eq(s.parent, s.document), s.eq(s.fragment, s.document)),
-        s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, s.document)),
+        s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.fragment, s.start)),
+        s.and(
+          s.ne(s.kind, "ssml:speak"),
+          s.eq(s.parent, documentNode),
+          s.eq(s.fragment, documentNode),
+        ),
+        s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, documentNode)),
       ),
     ),
-    contained(on(inheritedScopes, "parent", "fragment"), on(SsmlScope, "node", "fragment")),
     contained(
-      on(shareSources, "node", "document", "lexical"),
-      on(ShareFragment, "node", "document", "src"),
+      on(inheritedScopes, "package", "path", "parent", "fragment"),
+      on(SsmlScope, "package", "path", "start", "fragment"),
     ),
-    contained(on(ShareFragment, "node"), on(shareSources, "node")),
+    contained(
+      on(shareSources, "package", "path", "start", "lexical"),
+      on(ShareFragment, "package", "path", "start", "src"),
+    ),
+    contained(
+      on(ShareFragment, "package", "path", "start"),
+      on(shareSources, "package", "path", "start"),
+    ),
     check("E1_derived", ShareFragment, (f) =>
       f.and(
         f.eq(Compute.startsWith(f.src, "#"), true),
@@ -1267,24 +1394,45 @@ export const identityLawsByName = {
     ),
   ],
   "Idref target": [
-    contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
-    contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
-    contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
-    contained(on(unassembledTargets, "document", "id"), on(admittedBindings, "document", "id")),
-    contained(on(PlacedIdref, "assembly", "id"), on(AssembledId, "assembly", "id")),
+    contained(on(Idref, "package", "path", "token"), on(IdrefTarget, "package", "path", "id")),
+    contained(on(TextIdref, "package", "path", "token"), on(IdrefTarget, "package", "path", "id")),
+    contained(on(ShareFragment, "package", "path", "id"), on(IdrefTarget, "package", "path", "id")),
+    contained(
+      on(unassembledTargets, "package", "path", "id"),
+      on(admittedBindings, "package", "path", "id"),
+    ),
+    contained(
+      on(PlacedIdref, "package", "assembly", "id"),
+      on(AssembledId, "package", "assembly", "id"),
+    ),
   ],
   "Label tools": [
-    contained(on(labelAttributes, "node", "document"), on(LabelUse, "node", "document")),
-    contained(on(LabelUse, "node"), on(labelAttributes, "node")),
-    contained(on(LabelUse, "document", "rootKind"), on(Document, "node", "rootKind")),
-    key(on(toolNames, "document")),
-    key(on(toolVersions, "document")),
-    contained(on(itemLabels, "document"), on(toolNames, "document")),
-    contained(on(itemLabels, "document"), on(toolVersions, "document")),
+    contained(
+      on(labelAttributes, "package", "path", "start"),
+      on(LabelUse, "package", "path", "start"),
+    ),
+    contained(
+      on(LabelUse, "package", "path", "start"),
+      on(labelAttributes, "package", "path", "start"),
+    ),
+    contained(
+      on(LabelUse, "package", "path", "rootKind"),
+      on(Document, "package", "path", "rootKind"),
+    ),
+    key(on(toolNames, "package", "path")),
+    key(on(toolVersions, "package", "path")),
+    contained(on(itemLabels, "package", "path"), on(toolNames, "package", "path")),
+    contained(on(itemLabels, "package", "path"), on(toolVersions, "package", "path")),
   ],
   "Manifest overlay": [
-    contained(on(ManifestId, "node"), on(manifestIdAttributes("cp:manifest"), "node")),
-    contained(on(ResourceId, "node"), on(manifestIdAttributes("cp:resource"), "node")),
+    contained(
+      on(ManifestId, "package", "path", "start"),
+      on(manifestIdAttributes("cp:manifest"), "package", "path", "start"),
+    ),
+    contained(
+      on(ResourceId, "package", "path", "start"),
+      on(manifestIdAttributes("cp:resource"), "package", "path", "start"),
+    ),
   ],
   "SSML lexicon reference": [ssmlLexiconReference],
   "SSML trim mark": [ssmlTrimMark],

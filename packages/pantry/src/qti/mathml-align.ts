@@ -76,11 +76,10 @@ import {
   pg,
   relation,
   select,
-  uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
-import { integerForm, keyText } from "#pantry/qti/limits.ts";
-import { Attribute, closedName } from "#pantry/qti/attributes.ts";
+import { EntryPath, integerForm, keyText, ManifestIdentifier } from "#pantry/qti/limits.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -119,7 +118,7 @@ const letKinds = ["m:maction", "m:mfenced", "m:mphantom", "m:semantics", "m:mtd"
 const directedKinds = ["m:mrow", "m:mstyle"] as const;
 
 /**
- * One `m:maction`, keyed by its node.
+ * One `m:maction`, keyed by its node's `(package, path, start)`.
  *
  * - **the host's:** `elements` and `elementChildren`, the node's own element rank and element count,
  *   which `nodeCounts` proves; and `selectionLexical` and `selectionWritten`, the lexical form of
@@ -136,11 +135,13 @@ export const MathAction = relation.generated(
   {
     elementChildren: natural,
     elements: natural,
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
     selectionLexical: keyText,
     selectionWritten: pg.boolean,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
   (m) => ({
     selection: generated(
       natural,
@@ -163,14 +164,16 @@ export const MathAction = relation.generated(
 );
 
 /**
- * One element inside a table cell, keyed by its node, as {@link AlignState} defines.
+ * One element inside a table cell, keyed by its node's `(package, path, start)`, as
+ * {@link AlignState} defines.
  *
- * - **the host's:** the `nodeRef` tuple (`node`, `document`, `kind`, `start`, `nearest`, `version`,
+ * - **the host's:** the `nodeRef` tuple (`package`, `path`, `start`, `kind`, `nearest`, `version`,
  *   `parent`) and the node's `elements` and `elementChildren`, proved by containment; and
  *   `dirLexical`, the lexical form of its `dir`, empty where it writes none;
- * - **copied from the parent's row:** `cell`, `parentKind`, `received` (the parent's `passes`) and
- *   `inherited` (the parent's `own`); and `chosen`, the `selection` of a parent `maction`, 0 under
- *   any other parent. An `m:mtd`'s row copies none of them;
+ * - **copied from the parent's row:** `cell`, the position of the nearest `m:mtd` in the same
+ *   document, `parentKind`, `received` (the parent's `passes`) and `inherited` (the parent's
+ *   `own`); and `chosen`, the `selection` of a parent `maction`, 0 under any other parent. An
+ *   `m:mtd`'s row copies none of them, its `cell` its own `start`;
  * - **derived by `E1_derived`:** `state`, `own` and `passes`.
  *
  * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
@@ -179,32 +182,36 @@ export const MathAction = relation.generated(
 export const MathAlignScope = relation(
   "MathAlignScope",
   {
-    cell: uuid,
+    cell: natural,
     chosen: natural,
     dirLexical: keyText,
-    document: uuid,
     elementChildren: natural,
     elements: natural,
     inherited: closedId(AlignDirection),
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
+    nearest: natural,
     own: closedId(AlignDirection),
-    parent: uuid,
+    package: ManifestIdentifier,
+    parent: natural,
     parentKind: closedId(NodeKind),
     passes: closedId(AlignState),
+    path: EntryPath,
     received: closedId(AlignState),
     start: natural,
     state: closedId(AlignState),
     version: closedId(SchemaVersion),
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
  * One `m:maligngroup` whose state is `open`, keyed by its node, with the `cell` it stands in.
  */
-export const MathAlignGroup = relation("MathAlignGroup", { cell: uuid, node: uuid }, ["node"]);
+export const MathAlignGroup = relation(
+  "MathAlignGroup",
+  { cell: natural, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
+);
 
 /**
  * One `dir` attribute of any element, in a cell or not, keyed by its node: its lexical form as
@@ -212,7 +219,11 @@ export const MathAlignGroup = relation("MathAlignGroup", { cell: uuid, node: uui
  * under "Key text bound", a stated limit, as the `InteractionAttribute` copies are
  * (`#pantry/qti/interactions.ts`); the schemas enumerate `dir`, so no valid document is refused.
  */
-export const MathDir = relation("MathDir", { lexical: keyText, node: uuid }, ["node"]);
+export const MathDir = relation(
+  "MathDir",
+  { lexical: keyText, package: ManifestIdentifier, path: EntryPath, start: natural },
+  ["package", "path", "start"],
+);
 
 /**
  * One `m:mtd`, keyed by its node: `groups`, the count of its {@link MathAlignGroup} rows, `leaves`,
@@ -225,16 +236,19 @@ export const MathCell = relation(
     groups: drawn(natural),
     lastStart: accumulated(natural, 0n),
     leaves: drawn(natural),
-    node: uuid,
+    package: ManifestIdentifier,
+    path: EntryPath,
+    start: natural,
   },
-  ["node"],
+  ["package", "path", "start"],
 );
 
 /**
- * One complete element of a table cell, in document order: keyed by its `cell` and its slot `at`.
+ * One complete element of a table cell, in document order: keyed by its document, its `cell` and
+ * its slot `at`.
  *
  * - **the host's:** the `nodeRef` tuple, proved by containment, and `cell` and `groups`, its cell's
- *   and its cell's group count;
+ *   position and its cell's group count;
  * - **drawn:** `at`;
  * - **accumulated:** `startWas` and `startAfter`, the greatest start of the leaves before it and
  *   through it.
@@ -243,19 +257,19 @@ export const CellLeaf = relation(
   "CellLeaf",
   {
     at: drawn(natural),
-    cell: uuid,
-    document: uuid,
+    cell: natural,
     groups: natural,
     kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    parent: uuid,
+    nearest: natural,
+    package: ManifestIdentifier,
+    parent: natural,
+    path: EntryPath,
     start: natural,
     startAfter: accumulated(natural, 0n),
     startWas: accumulated(natural, 0n),
     version: closedId(SchemaVersion),
   },
-  ["cell", "at"],
+  ["package", "path", "cell", "at"],
 );
 
 /**
@@ -287,13 +301,13 @@ const cells = select(Node, (n) => n.eq(n.kind, "m:mtd"));
  * The `selection` attributes of an `m:maction`, the source of {@link MathAction}'s lexical form.
  */
 const selectionAttributes = select(Attribute, (a) =>
-  a.and(closedName(a), a.eq(a.kind, "m:maction"), a.eq(a.name, "selection")),
+  a.and(a.eq(a.kind, "m:maction"), a.eq(a.name, "selection")),
 );
 
 /**
  * The `dir` attributes of an element a {@link MathAlignScope} row may name.
  */
-const dirAttributes = select(Attribute, (a) => a.and(closedName(a), a.eq(a.name, "dir")));
+const dirAttributes = select(Attribute, (a) => a.eq(a.name, "dir"));
 
 /**
  * The {@link MathAction} rows of an action that writes its `selection`.
@@ -338,12 +352,12 @@ const leafScopes = select(MathAlignScope, (s) =>
 /**
  * The family of a cell's leaves in document order, slot `at` of `MathCell.leaves`.
  */
-const leafFamily = ordered(on(CellLeaf, "cell", "at"), fin(MathCell, "leaves"));
+const leafFamily = ordered(on(CellLeaf, "package", "path", "cell", "at"), fin(MathCell, "leaves"));
 
 /**
  * The family of a cell's open alignment groups, counted by `MathCell.groups`.
  */
-const groupFamily = counted(on(MathAlignGroup, "cell"), fin(MathCell, "groups"));
+const groupFamily = counted(on(MathAlignGroup, "package", "path", "cell"), fin(MathCell, "groups"));
 
 /**
  * The fold of a cell's leaves' starts, the greatest through each leaf (`startAfter`) and before it
@@ -353,8 +367,8 @@ const groupFamily = counted(on(MathAlignGroup, "cell"), fin(MathCell, "groups"))
 const leafStartFold = fold(
   leafFamily,
   Monoid.max,
-  on(CellLeaf, "cell", "start", "startWas", "startAfter"),
-  on(MathCell, "node", "lastStart"),
+  on(CellLeaf, "package", "path", "cell", "start", "startWas", "startAfter"),
+  on(MathCell, "package", "path", "start", "lastStart"),
 );
 
 /**
@@ -382,13 +396,16 @@ const leafStartFold = fold(
  *   stands.
  */
 export const alignLaws = [
-  mirrors(on(MathAction, "node"), on(actions, "id")),
-  contained(on(MathAction, "node", "elements", "elementChildren"), nodeCounts),
+  mirrors(on(MathAction, "package", "path", "start"), on(actions, "package", "path", "start")),
+  contained(on(MathAction, "package", "path", "start", "elements", "elementChildren"), nodeCounts),
   contained(
-    on(selectionAttributes, "node", "lexical"),
-    on(writtenSelections, "node", "selectionLexical"),
+    on(selectionAttributes, "package", "path", "start", "lexical"),
+    on(writtenSelections, "package", "path", "start", "selectionLexical"),
   ),
-  contained(on(writtenSelections, "node"), on(selectionAttributes, "node")),
+  contained(
+    on(writtenSelections, "package", "path", "start"),
+    on(selectionAttributes, "package", "path", "start"),
+  ),
   check("E1_derived", MathAction, (m) =>
     m.or(m.eq(m.selectionWritten, true), m.eq(m.selectionLexical, "")),
   ),
@@ -397,34 +414,45 @@ export const alignLaws = [
   ),
 
   contained(
-    on(MathAlignScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    on(MathAlignScope, "package", "path", "start", "kind", "nearest", "version", "parent"),
     nodeRef,
   ),
-  contained(on(MathAlignScope, "node", "elements", "elementChildren"), nodeCounts),
-  contained(on(dirAttributes, "node", "lexical"), on(MathDir, "node", "lexical")),
-  contained(on(MathDir, "node"), on(dirAttributes, "node")),
+  contained(
+    on(MathAlignScope, "package", "path", "start", "elements", "elementChildren"),
+    nodeCounts,
+  ),
+  contained(
+    on(dirAttributes, "package", "path", "start", "lexical"),
+    on(MathDir, "package", "path", "start", "lexical"),
+  ),
+  contained(on(MathDir, "package", "path", "start"), on(dirAttributes, "package", "path", "start")),
   contained(
     on(
       select(MathAlignScope, (s) => s.ne(s.dirLexical, "")),
-      "node",
+      "package",
+      "path",
+      "start",
       "dirLexical",
     ),
-    on(MathDir, "node", "lexical"),
+    on(MathDir, "package", "path", "start", "lexical"),
   ),
-  contained(on(cells, "id"), on(cellScopes, "node")),
-  contained(on(cellScopes, "node"), on(cells, "id")),
+  contained(on(cells, "package", "path", "start"), on(cellScopes, "package", "path", "start")),
+  contained(on(cellScopes, "package", "path", "start"), on(cells, "package", "path", "start")),
   contained(
-    on(innerScopes, "parent", "cell", "received", "parentKind", "inherited"),
-    on(MathAlignScope, "node", "cell", "passes", "kind", "own"),
+    on(innerScopes, "package", "path", "parent", "cell", "received", "parentKind", "inherited"),
+    on(MathAlignScope, "package", "path", "start", "cell", "passes", "kind", "own"),
   ),
-  contained(on(actionChildren, "parent", "chosen"), on(MathAction, "node", "selection")),
+  contained(
+    on(actionChildren, "package", "path", "parent", "chosen"),
+    on(MathAction, "package", "path", "start", "selection"),
+  ),
   check("E1_derived", MathAlignScope, (s) =>
     s.and(
       s.or(
-        s.and(s.eq(s.kind, "m:mtd"), s.eq(s.cell, s.node), s.eq(s.state, "open")),
+        s.and(s.eq(s.kind, "m:mtd"), s.eq(s.cell, s.start), s.eq(s.state, "open")),
         s.and(
           s.ne(s.kind, "m:mtd"),
-          s.ne(s.cell, s.node),
+          s.ne(s.cell, s.start),
           s.or(s.eq(s.parentKind, "m:maction"), s.eq(s.chosen, 0n)),
           s.or(
             s.and(
@@ -474,21 +502,36 @@ export const alignLaws = [
     s.or(s.ne(s.kind, "m:maligngroup"), s.ne(s.state, "closed")),
   ),
 
-  contained(on(MathAlignGroup, "node", "cell"), on(MathAlignScope, "node", "cell")),
-  contained(on(MathAlignGroup, "node"), on(openGroups, "node")),
-  contained(on(openGroups, "node", "cell"), on(MathAlignGroup, "node", "cell")),
+  contained(
+    on(MathAlignGroup, "package", "path", "start", "cell"),
+    on(MathAlignScope, "package", "path", "start", "cell"),
+  ),
+  contained(
+    on(MathAlignGroup, "package", "path", "start"),
+    on(openGroups, "package", "path", "start"),
+  ),
+  contained(
+    on(openGroups, "package", "path", "start", "cell"),
+    on(MathAlignGroup, "package", "path", "start", "cell"),
+  ),
   groupFamily,
 
-  mirrors(on(MathCell, "node"), on(cells, "id")),
+  mirrors(on(MathCell, "package", "path", "start"), on(cells, "package", "path", "start")),
 
   contained(
-    on(CellLeaf, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    on(CellLeaf, "package", "path", "start", "kind", "nearest", "version", "parent"),
     nodeRef,
   ),
-  contained(on(CellLeaf, "node", "cell"), on(leafScopes, "node", "cell")),
-  key(on(CellLeaf, "node")),
-  contained(on(leafScopes, "node"), on(CellLeaf, "node")),
-  contained(on(CellLeaf, "cell", "groups"), on(MathCell, "node", "groups")),
+  contained(
+    on(CellLeaf, "package", "path", "start", "cell"),
+    on(leafScopes, "package", "path", "start", "cell"),
+  ),
+  key(on(CellLeaf, "package", "path", "start")),
+  contained(on(leafScopes, "package", "path", "start"), on(CellLeaf, "package", "path", "start")),
+  contained(
+    on(CellLeaf, "package", "path", "cell", "groups"),
+    on(MathCell, "package", "path", "start", "groups"),
+  ),
   leafFamily,
   leafStartFold,
   check("E1_derived", CellLeaf, (l) => l.gt(l.start, l.startWas)),

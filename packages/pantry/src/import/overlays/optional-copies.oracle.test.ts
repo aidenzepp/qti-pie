@@ -8,7 +8,7 @@
  *
  * Each row is copied from its attribute both ways: the copy makes the row exist wherever the
  * attribute is written and hold its lexical form, and the way back, a containment from the row's
- * node into the attribute's selection, refuses a row with no attribute, under "Manifest overlay"
+ * place into the attribute's selection, refuses a row with no attribute, under "Manifest overlay"
  * for a `ResourceHref` and "E1 derived" for a `LomStringLanguage`.
  *
  * Oracle: the specification, as read above. The import's rows hold each row exactly where its
@@ -33,7 +33,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
@@ -211,6 +210,18 @@ const packageOf = (of: OptionalCase): PackageEntries => {
 };
 
 /**
+ * An element's place as the test compares it, its document's path and its `start`: every row of
+ * one case is of its one package.
+ *
+ * @param row - A row of the element.
+ * @param row.path - Its document's path.
+ * @param row.start - Its position there.
+ * @returns The place's text.
+ */
+const placeOf = ({ path, start }: { readonly path: string; readonly start: bigint }): string =>
+  JSON.stringify([path, String(start)]);
+
+/**
  * Describe a law as the test compares it: a containment by its two relations, any other by its
  * kind, each with the law a refusal names it by.
  *
@@ -228,17 +239,12 @@ const describeLaw = (law: Law): string =>
  *
  * @param planted - The rows with a row planted.
  * @param own - The import's own rows.
- * @param minted - Every id the program drew.
  * @returns Each newly broken statement, described.
  */
-const newlyBroken = (
-  planted: PackageInputs,
-  own: PackageInputs,
-  minted: ReadonlySet<string>,
-): readonly string[] => {
-  const before = hostVerdictOf(own, minted).brokenLaws;
+const newlyBroken = (planted: PackageInputs, own: PackageInputs): readonly string[] => {
+  const before = hostVerdictOf(own).brokenLaws;
 
-  return hostVerdictOf(planted, minted)
+  return hostVerdictOf(planted)
     .brokenLaws.filter((law) => !before.some((held) => sameLaw(held, law)))
     .map(describeLaw);
 };
@@ -284,14 +290,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const dir = `${directory}/c${String(at)}`;
                   yield* writePackage(packageOf(of), dir);
 
-                  const minted = new Set<string>();
-                  const mint = (): NodeId => {
-                    const id: NodeId = `${(0x10_00_00_00 + minted.size + 1).toString(16)}-0000-4000-8000-000000000000`;
-                    minted.add(id);
-
-                    return id;
-                  };
-                  const { inputs } = yield* Effect.orDie(readProgram(dir, mint));
+                  const { inputs } = yield* Effect.orDie(readProgram(dir));
                   yield* fs.remove(dir, { recursive: true });
 
                   const hrefs = [...inputs.ResourceHref.values()];
@@ -307,7 +306,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     `${said}: LomStringLanguage`,
                   );
 
-                  const own = hostVerdictOf(inputs, minted).broken;
+                  const own = hostVerdictOf(inputs).broken;
                   assert.isFalse(
                     own.has("Manifest overlay"),
                     `${said}: ${String(own.get("Manifest overlay")?.witness)}`,
@@ -317,33 +316,42 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     `${said}: ${String(own.get("E1 derived")?.witness)}`,
                   );
 
-                  const hrefNodes = new Set(hrefs.map(({ node }) => node));
+                  const hrefPlaces = new Set(hrefs.map(placeOf));
                   const files = [...inputs.File.values()];
                   const bare = [...inputs.ResourceTyped.values()].filter(
-                    ({ node, type }) => type === "webcontent" && !hrefNodes.has(node),
+                    (resource) =>
+                      resource.type === "webcontent" && !hrefPlaces.has(placeOf(resource)),
                   );
                   assert.lengthOf(bare, hrefless(of).length, said);
                   for (const resource of bare) {
                     const file = Arr.findFirst(
                       files,
-                      ({ resource: owner }) => owner === resource.node,
+                      ({ path, resource: owner }) =>
+                        path === resource.path && owner === resource.start,
                     );
                     assert.isTrue(Option.isSome(file), `${said}: the resource's file`);
                     if (Option.isSome(file)) {
                       // The href a writer plants is its resource's own file's; its typed href is
                       // the query `TypedHref`'s, which no row stores.
-                      const { href, path, scope } = file.value;
+                      const { href, scope, target } = file.value;
                       const planted: PackageInputs = {
                         ...inputs,
                         ResourceHref: new Map([
                           ...inputs.ResourceHref,
                           [
-                            resource.node,
-                            { href, node: resource.node, package: resource.package, path, scope },
+                            `planted ${placeOf(resource)}`,
+                            {
+                              href,
+                              package: resource.package,
+                              path: resource.path,
+                              scope,
+                              start: resource.start,
+                              target,
+                            },
                           ],
                         ]),
                       };
-                      const broken = newlyBroken(planted, inputs, minted);
+                      const broken = newlyBroken(planted, inputs);
                       assert.deepStrictEqual(
                         broken,
                         ['ResourceHref ⊆ Attribute, "Manifest overlay"'],
@@ -352,9 +360,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     }
                   }
 
-                  const languageNodes = new Set(languages.map(({ node }) => node));
+                  const languagePlaces = new Set(languages.map(placeOf));
                   const unwritten = [...inputs.LomString.values()].filter(
-                    ({ node }) => !languageNodes.has(node),
+                    (lomString) => !languagePlaces.has(placeOf(lomString)),
                   );
                   assert.lengthOf(unwritten, languageless(of).length, said);
                   for (const lomString of unwritten) {
@@ -365,15 +373,23 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                       LomString: new Map(
                         [...inputs.LomString].map(([key, row]) => [
                           key,
-                          row.node === lomString.node ? { ...row, languageTag: "en" } : row,
+                          placeOf(row) === placeOf(lomString) ? { ...row, languageTag: "en" } : row,
                         ]),
                       ),
                       LomStringLanguage: new Map([
                         ...inputs.LomStringLanguage,
-                        [lomString.node, { language: "en", node: lomString.node }],
+                        [
+                          `planted ${placeOf(lomString)}`,
+                          {
+                            language: "en",
+                            package: lomString.package,
+                            path: lomString.path,
+                            start: lomString.start,
+                          },
+                        ],
                       ]),
                     };
-                    const broken = newlyBroken(planted, inputs, minted);
+                    const broken = newlyBroken(planted, inputs);
                     assert.deepStrictEqual(
                       broken,
                       ['LomStringLanguage ⊆ Attribute, "E1 derived"'],

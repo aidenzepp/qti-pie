@@ -37,7 +37,6 @@ import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import {
   assemblyOf,
   holds,
@@ -190,8 +189,8 @@ const itemRefsOf = (document: TestDocument): readonly ItemRef[] => {
   return rows.members
     .filter(({ kind }) => kind === testKinds.itemRef)
     .map((node) => ({
-      itemRef: Option.match(Option.fromUndefinedOr(document.namesByNode.get(node.id)), {
-        onNone: () => pathOf(rows, node.id),
+      itemRef: Option.match(Option.fromUndefinedOr(document.namesByNode.get(node.start)), {
+        onNone: () => pathOf(rows, node.start),
         onSome: ({ identifier }) => identifier,
       }),
       node,
@@ -227,14 +226,14 @@ const declarationsOf = (
   const declared = new Map<string, Declared[]>();
   for (const node of rows.members) {
     if (grammar.references.declarationKind.has(node.kind)) {
-      for (const identifier of Option.toArray(typedValueOf(rows, node.id, "identifier"))) {
+      for (const identifier of Option.toArray(typedValueOf(rows, node.start, "identifier"))) {
         declared.set(identifier, [
           ...(declared.get(identifier) ?? []),
           {
-            baseType: typedValueOf(rows, node.id, "base-type"),
-            cardinality: typedValueOf(rows, node.id, "cardinality"),
+            baseType: typedValueOf(rows, node.start, "base-type"),
+            cardinality: typedValueOf(rows, node.start, "cardinality"),
             kind: node.kind,
-            tables: elementsOf(rows, node.id).map(({ kind }) => kind),
+            tables: elementsOf(rows, node.start).map(({ kind }) => kind),
           },
         ]);
       }
@@ -273,14 +272,14 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
   );
   const sections = [...document.sections.values()].flatMap((section): readonly Breach[] => {
     const required = section.parts.filter(
-      ({ id, kind }) =>
+      ({ kind, start }) =>
         (kind === testKinds.itemRef || kind === testKinds.section) &&
-        Option.contains(Option.flatMap(valueOf(rows, id, "required"), booleanOf), true),
+        Option.contains(Option.flatMap(valueOf(rows, start, "required"), booleanOf), true),
     ).length;
     const bound = section.selection.pipe(
       Option.flatMap((selection) =>
         Option.map(
-          typedValueOf(rows, selection.id, "select").pipe(
+          typedValueOf(rows, selection.start, "select").pipe(
             Option.filter((form) => integerForm.test(form)),
           ),
           (form) => ({ select: BigInt(form), selection }),
@@ -304,10 +303,10 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
     return selected;
   });
   const mappings = itemRefsOf(document).flatMap(({ itemRef, node }): readonly Breach[] => {
-    const targets = elementsOf(rows, node.id)
+    const targets = elementsOf(rows, node.start)
       .filter(({ kind }) => kind === "qti-variable-mapping")
       .flatMap((mapping) =>
-        Option.toArray(typedOr(rows, mapping.id, "target-identifier", "")).map((target) => ({
+        Option.toArray(typedOr(rows, mapping.start, "target-identifier", "")).map((target) => ({
           mapping,
           target,
         })),
@@ -344,7 +343,7 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
   const { rows } = listed;
   const refs = rows.members.flatMap((node) =>
     node.kind === "qti-assessment-stimulus-ref"
-      ? Option.toArray(typedValueOf(rows, node.id, "identifier")).map((identifier) => ({
+      ? Option.toArray(typedValueOf(rows, node.start, "identifier")).map((identifier) => ({
           identifier,
           node,
         }))
@@ -410,13 +409,13 @@ const itemRefLawsOf = (
      */
     const firstKindOf = (name: string): Option.Option<string> =>
       declared.pipe(Option.flatMap((held) => Option.fromNullishOr(held.get(name)?.[0]?.kind)));
-    const children = elementsOf(rows, node.id);
+    const children = elementsOf(rows, node.start);
     const mappings = children
       .filter(({ kind }) => kind === "qti-variable-mapping")
       .flatMap((mapping): readonly Breach[] => {
-        const written = typedValueOf(rows, mapping.id, "source-identifier");
+        const written = typedValueOf(rows, mapping.start, "source-identifier");
         const source = Option.getOrElse(written, () => "");
-        const targeted = typedValueOf(rows, mapping.id, "target-identifier");
+        const targeted = typedValueOf(rows, mapping.start, "target-identifier");
         const mapped = Option.getOrElse(targeted, () => "");
         // An unwritten or unread source-identifier names nothing: AL3 refuses it alone, as the
         // importer writes no row for an absent attribute (reading 155). Neither half of a pair with
@@ -447,7 +446,7 @@ const itemRefLawsOf = (
       .flatMap((templated): readonly Breach[] => {
         // An unwritten or unread template-identifier names nothing: AL3 refuses it alone, as
         // the importer writes no row for an absent attribute (reading 155).
-        const template = typedValueOf(rows, templated.id, "template-identifier");
+        const template = typedValueOf(rows, templated.start, "template-identifier");
 
         return Option.match(template, {
           onNone: () => [],
@@ -489,13 +488,13 @@ interface Assembled {
  * @returns The assembly with its written elements.
  */
 const assembledOf = (test: TestDocument, instances: readonly Instance[]): Assembled => {
-  const byElement = new Map<NodeId, PlacedName[]>();
+  // An element is its document's path and its position there: a section document placed twice
+  // names each of its elements once.
+  const byElement = new Map<string, PlacedName[]>();
   for (const instance of instances) {
     for (const name of instance.document.names) {
-      byElement.set(name.node.id, [
-        ...(byElement.get(name.node.id) ?? []),
-        placedName(instance, name),
-      ]);
+      const element = `${instance.document.listed.path} ${String(name.node.start)}`;
+      byElement.set(element, [...(byElement.get(element) ?? []), placedName(instance, name)]);
     }
   }
 
@@ -556,7 +555,7 @@ const resolutionOf = (
   instance: Instance,
   rule: Rule,
 ): Option.Option<{ readonly owner: Name; readonly target: PlacedName }> => {
-  const owner = instance.document.namesByNode.get(rule.owner.id);
+  const owner = instance.document.namesByNode.get(rule.owner.start);
   const target = (assembled.written.get(rule.target) ?? [])
     .flat()
     .toSorted((left, right) => left.instance.start - right.instance.start)
@@ -648,7 +647,7 @@ const branchLawsOf = (assembled: Assembled): readonly Breach[] =>
       const { rows } = instance.document.listed;
       const keys = {
         instance: String(instance.start),
-        owner: Option.getOrElse(typedValueOf(rows, rule.owner.id, "identifier"), () => ""),
+        owner: Option.getOrElse(typedValueOf(rows, rule.owner.start, "identifier"), () => ""),
         target: rule.target,
         test: assembled.test.listed.path,
       };
@@ -876,10 +875,13 @@ const readingsOf = (
           const declared = Option.contains(held.type, itemResourceType)
             ? declarations.get(variable)?.[0]
             : undefined;
-          const mapping = elementsOf(held.referrer.rows, held.node.id).find(
-            ({ id, kind: child }) =>
+          const mapping = elementsOf(held.referrer.rows, held.node.start).find(
+            ({ kind: child, start }) =>
               child === "qti-variable-mapping" &&
-              Option.contains(typedValueOf(held.referrer.rows, id, "target-identifier"), variable),
+              Option.contains(
+                typedValueOf(held.referrer.rows, start, "target-identifier"),
+                variable,
+              ),
           );
           if (declared !== undefined) {
             return {
@@ -896,7 +898,7 @@ const readingsOf = (
             return {
               builtIn: Option.none(),
               declaration: Option.flatMap(
-                typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
+                typedValueOf(held.referrer.rows, mapping.start, "source-identifier"),
                 (source) => Option.fromNullishOr(declarations.get(source)?.[0]),
               ),
               source: "mapped",
@@ -979,7 +981,7 @@ const feedbackTypeOf = (
   rows: View,
   node: Row,
 ): readonly Breach[] => {
-  const named = typedValueOf(rows, node.id, "outcome-identifier");
+  const named = typedValueOf(rows, node.start, "outcome-identifier");
   if (
     Option.isNone(named) ||
     !grammar.references.contentReference.rows.some(
@@ -1126,8 +1128,8 @@ const contentBreachesOf = (
   // NIL's audit, B11 and B12).
   const typed = outcome.pipe(
     Option.map((held) => ({
-      baseType: typedValueOf(held.rows, held.node.id, "base-type"),
-      cardinality: typedValueOf(held.rows, held.node.id, "cardinality"),
+      baseType: typedValueOf(held.rows, held.node.start, "base-type"),
+      cardinality: typedValueOf(held.rows, held.node.start, "cardinality"),
     })),
   );
 
@@ -1193,7 +1195,7 @@ const referenceLawsOf = (
       testRows.members
         .filter(({ kind }) => kind === "qti-outcome-declaration")
         .flatMap((node) =>
-          Option.toArray(typedValueOf(testRows, node.id, "identifier")).map(
+          Option.toArray(typedValueOf(testRows, node.start, "identifier")).map(
             (identifier) => [identifier, { node, rows: testRows }] as const,
           ),
         )
@@ -1217,7 +1219,7 @@ const referenceLawsOf = (
 
   return readDocumentsOf(input, assembled).flatMap(({ path, rows }) =>
     rows.members.flatMap((node): readonly Breach[] => {
-      const sections = Option.toArray(typedValueOf(rows, node.id, "section-identifier")).flatMap(
+      const sections = Option.toArray(typedValueOf(rows, node.start, "section-identifier")).flatMap(
         (identifier) => {
           const looked = lookUp(input, assembled, identifier);
           const named = Option.exists(
@@ -1235,7 +1237,7 @@ const referenceLawsOf = (
         .filter(({ kind }) => kind === node.kind)
         .flatMap(({ attribute, spelling }) =>
           Option.toArray(
-            Option.flatMap(valueOf(rows, node.id, attribute), (lexical) =>
+            Option.flatMap(valueOf(rows, node.start, attribute), (lexical) =>
               spelledName(lexical, spelling),
             ),
           ).flatMap((identifier): readonly Breach[] => {

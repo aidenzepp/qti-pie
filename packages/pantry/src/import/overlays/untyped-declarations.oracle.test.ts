@@ -36,7 +36,7 @@ import {
   shownSignature,
 } from "#pantry/test/gen/genetic/judge.ts";
 import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
-import { closedName, fixed, known } from "#pantry/test/gen/genetic/known.ts";
+import { fixed, known } from "#pantry/test/gen/genetic/known.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
@@ -69,13 +69,21 @@ const closed: readonly Signature[] = [
             },
           ],
         },
-        terms: [{ field: "id", kind: "field" }],
+        terms: [
+          { field: "package", kind: "field" },
+          { field: "path", kind: "field" },
+          { field: "start", kind: "field" },
+        ],
       },
       kind: "contained",
       to: {
         relation: "Declaration",
         selection: { conjuncts: [] },
-        terms: [{ field: "node", kind: "field" }],
+        terms: [
+          { field: "package", kind: "field" },
+          { field: "path", kind: "field" },
+          { field: "start", kind: "field" },
+        ],
       },
     },
   },
@@ -86,7 +94,6 @@ const closed: readonly Signature[] = [
         relation: "Attribute",
         selection: {
           conjuncts: [
-            closedName,
             {
               kind: "compare",
               left: { field: "kind", kind: "field" },
@@ -102,7 +109,9 @@ const closed: readonly Signature[] = [
           ],
         },
         terms: [
-          { field: "node", kind: "field" },
+          { field: "package", kind: "field" },
+          { field: "path", kind: "field" },
+          { field: "start", kind: "field" },
           { field: "lexical", kind: "field" },
         ],
       },
@@ -111,7 +120,9 @@ const closed: readonly Signature[] = [
         relation: "MapKey",
         selection: { conjuncts: [] },
         terms: [
-          { field: "node", kind: "field" },
+          { field: "package", kind: "field" },
+          { field: "path", kind: "field" },
+          { field: "start", kind: "field" },
           { field: "key", kind: "field" },
         ],
       },

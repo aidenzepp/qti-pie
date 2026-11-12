@@ -5,7 +5,7 @@ import { element, increasing } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Brand, Effect, Formatter, Option, Result, Stream } from "effect";
+import { Array as Arr, Brand, Effect, Formatter, Option, Result, Stream } from "effect";
 import type { Page, PageCursor } from "@bjornpagen/grizzle";
 import {
   DocumentRowCount,
@@ -14,19 +14,12 @@ import {
   emptyScan,
   scannedRows,
 } from "#pantry/export/pages.ts";
-import type { ScanRow } from "#pantry/export/pages.ts";
+import type { DocumentKey, ScanRow } from "#pantry/export/pages.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId } from "#pantry/model/xdm.ts";
-import {
-  caseHang,
-  featuresOf,
-  idOf,
-  scrambledIdOf,
-  searchTimeout,
-  xdmDocument,
-} from "#pantry/test/gen/xdm.ts";
+import type { FlatRows, XdmDocument } from "#pantry/model/xdm.ts";
+import { caseHang, featuresOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -40,6 +33,12 @@ const grammar = Result.getOrThrow(composed());
 const documents = xdmDocument(grammar);
 
 /**
+ * The key every case's document is scanned at: the scan's rows carry none, so any key will do,
+ * and the refusal names it.
+ */
+const key: DocumentKey = { package: "MANIFEST-1", path: "item.xml" };
+
+/**
  * The query a fake page is of, which only its cursors' type names.
  */
 type FakeScan = "fake document scan";
@@ -50,58 +49,62 @@ type FakeScan = "fake document scan";
 const cursorOf = Brand.nominal<PageCursor<FakeScan>>();
 
 /**
- * Key a list of rows by their node.
+ * Key a list of rows by their node's `start`.
  *
  * @param list - Rows keyed by a node, one each.
- * @returns The rows by node.
+ * @returns The rows by `start`.
  */
-const byNode = <Row extends { readonly node: NodeId }>(list: readonly Row[]) =>
-  new Map(list.map((row) => [row.node, row]));
+const atStart = <Row extends { readonly start: bigint }>(list: readonly Row[]) =>
+  new Map(list.map((row) => [row.start, row]));
 
 /**
- * Order family rows by slot.
- *
- * @param left - One row.
- * @param right - The other.
- * @returns Negative, zero or positive as `left`'s slot is below, at or above `right`'s.
+ * The order a scan delivers an element's attributes and namespace declarations in: as `flatten`
+ * lists them, or reversed. They are sets, so no order of theirs may reach the document.
  */
-const bySlot = (left: { readonly at: bigint }, right: { readonly at: bigint }): number =>
-  Number(left.at - right.at);
+type SetOrder = <Row>(rows: readonly Row[]) => readonly Row[];
+
+/**
+ * Order two rows by their `offset`, least first.
+ *
+ * @param left - The one row.
+ * @param right - The other.
+ * @returns A negative number where `left` comes first, positive where `right` does, zero for one
+ *   offset.
+ */
+const byOffset = (left: { readonly offset: bigint }, right: { readonly offset: bigint }) =>
+  Number(left.offset - right.offset);
 
 /**
  * The scan of one document as the database delivers it, built from the document's rows without
  * the code under test: each node row in `start` order with its characters (a text or whitespace
  * run's, an entity reference's `&name;`) and the rows keyed by it attached (its governing type an
- * `ElementType`, or a foreign element's `OpenElementType`), the document row with
- * its XML declaration and the declaration with its encoding and standalone, its attributes and
- * namespace declarations in `at` order, and an attribute's entity references in offset order with
- * its open name.
+ * `ElementType`, or a foreign element's `OpenElementType`), the document row on the document node
+ * with its XML declaration and the declaration with its encoding and standalone, its attributes,
+ * open attributes and namespace declarations in the order `order` gives, and an attribute's entity
+ * references in offset order.
  *
  * @param rows - The rows `flatten` writes for a document.
+ * @param order - The order each element's sets are delivered in.
  * @returns The document's scan rows, in `start` order.
  */
-const scanOf = (rows: FlatRows<Composed>): readonly ScanRow<Composed>[] => {
-  const texts = byNode(rows.texts);
-  const whitespace = byNode(rows.whitespace);
-  const comments = byNode(rows.comments);
-  const pis = byNode(rows.pis);
-  const entityRefs = byNode(rows.entityRefs);
-  const doctypes = byNode(rows.doctypes);
-  const openElementNames = byNode(rows.openElementNames);
-  const xmlDecls = byNode(rows.xmlDecls);
-  const encodingDecls = byNode(rows.encodingDecls);
-  const sdDecls = byNode(rows.sdDecls);
-  const attributes = Map.groupBy(rows.attributes, ({ node }) => node);
-  const namespaces = Map.groupBy(rows.namespaces, ({ node }) => node);
-  const openNames = Map.groupBy(rows.openNames, ({ attribute }) => attribute);
-  const references = Map.groupBy(rows.attributeEntities, ({ attribute }) => attribute);
+const scanOf = (rows: FlatRows<Composed>, order: SetOrder): readonly ScanRow<Composed>[] => {
+  const texts = atStart(rows.texts);
+  const whitespace = atStart(rows.whitespace);
+  const comments = atStart(rows.comments);
+  const pis = atStart(rows.pis);
+  const entityRefs = atStart(rows.entityRefs);
+  const doctypes = atStart(rows.doctypes);
+  const openElementNames = atStart(rows.openElementNames);
+  const attributes = Map.groupBy(rows.attributes, ({ start }) => start);
+  const openAttributes = Map.groupBy(rows.openAttributes, ({ start }) => start);
+  const namespaces = Map.groupBy(rows.namespaces, ({ start }) => start);
 
-  const charsOf = (node: NodeId): string => {
-    const reference = entityRefs.get(node);
+  const charsOf = (start: bigint): string => {
+    const reference = entityRefs.get(start);
 
     return (
-      texts.get(node)?.value ??
-      whitespace.get(node)?.value ??
+      texts.get(start)?.value ??
+      whitespace.get(start)?.value ??
       (reference === undefined ? "" : `&${reference.name};`)
     );
   };
@@ -110,61 +113,82 @@ const scanOf = (rows: FlatRows<Composed>): readonly ScanRow<Composed>[] => {
     .toSorted((left, right) => Number(left.start - right.start))
     .map((node): ScanRow<Composed> => ({
       ...node,
-      attributes: (attributes.get(node.id) ?? []).toSorted(bySlot).map((attribute) => ({
-        at: attribute.at,
-        entities: (references.get(attribute.id) ?? [])
-          .toSorted((left, right) => Number(left.offset - right.offset))
-          .map(({ name, offset }) => ({ name, offset })),
-        id: attribute.id,
+      attributes: order(attributes.get(node.start) ?? []).map((attribute) => ({
+        entities: rows.attributeEntities
+          .filter(({ name, start }) => start === node.start && name === attribute.name)
+          .toSorted(byOffset)
+          .map(({ entity, offset }) => ({ entity, offset })),
         lexical: attribute.lexical,
         name: attribute.name,
-        openName: (openNames.get(attribute.id) ?? []).map(({ local, uri }) => ({ local, uri })),
         prefix: attribute.prefix,
       })),
-      chars: charsOf(node.id),
-      comment: Option.fromNullishOr(comments.get(node.id)).pipe(
+      chars: charsOf(node.start),
+      comment: Option.fromNullishOr(comments.get(node.start)).pipe(
         Option.map(({ value }) => ({ value })),
       ),
-      doctype: Option.fromNullishOr(doctypes.get(node.id)).pipe(
+      doctype: Option.fromNullishOr(doctypes.get(node.start)).pipe(
         Option.map(({ value }) => ({ value })),
       ),
       documentRow:
-        node.id === rows.document.node
+        node.start === 0n
           ? Option.some({
               charset: rows.document.charset,
-              declaration: Option.fromNullishOr(xmlDecls.get(node.id)).pipe(
-                Option.map(({ version }) => ({
-                  encoding: Option.fromNullishOr(encodingDecls.get(node.id)).pipe(
-                    Option.map(({ encoding }) => ({ encoding })),
-                  ),
-                  node: node.id,
-                  standalone: Option.fromNullishOr(sdDecls.get(node.id)).pipe(
-                    Option.map(({ standalone }) => ({ standalone })),
-                  ),
-                  version,
-                })),
-              ),
+              declaration: Option.map(Arr.head(rows.xmlDecls), ({ version }) => ({
+                encoding: Arr.head(rows.encodingDecls),
+                standalone: Arr.head(rows.sdDecls),
+                version,
+              })),
               exportCharset: rows.document.exportCharset,
-              node: node.id,
             })
           : Option.none(),
-      elementType: openElementNames.has(node.id)
+      elementType: openElementNames.has(node.start)
         ? Option.none()
         : node.governs.pipe(Option.map((type) => ({ type }))),
-      namespaces: (namespaces.get(node.id) ?? [])
-        .toSorted(bySlot)
-        .map(({ at, prefix, uri }) => ({ at, prefix, uri })),
-      openElementName: Option.fromNullishOr(openElementNames.get(node.id)).pipe(
+      namespaces: order(namespaces.get(node.start) ?? []).map(({ prefix, uri }) => ({
+        prefix,
+        uri,
+      })),
+      openAttributes: order(openAttributes.get(node.start) ?? []).map((attribute) => ({
+        class: attribute.class,
+        entities: rows.openAttributeEntities
+          .filter(
+            ({ local, start, uri }) =>
+              start === node.start && uri === attribute.uri && local === attribute.local,
+          )
+          .toSorted(byOffset)
+          .map(({ entity, offset }) => ({ entity, offset })),
+        lexical: attribute.lexical,
+        local: attribute.local,
+        prefix: attribute.prefix,
+        uri: attribute.uri,
+      })),
+      openElementName: Option.fromNullishOr(openElementNames.get(node.start)).pipe(
         Option.map(({ local, namespace }) => ({ local, namespace })),
       ),
-      openElementType: openElementNames.has(node.id)
+      openElementType: openElementNames.has(node.start)
         ? node.governs.pipe(Option.map((type) => ({ type })))
         : Option.none(),
-      pi: Option.fromNullishOr(pis.get(node.id)).pipe(
+      pi: Option.fromNullishOr(pis.get(node.start)).pipe(
         Option.map(({ data, target }) => ({ data, target })),
       ),
     }));
 };
+
+/**
+ * A document's rows as sets: each list's rows, each written as text, in sorted order. Two
+ * documents are one document exactly when their rows are one set (`flatten` writes every field the
+ * tree holds), whatever order each lists its attributes and namespace declarations in.
+ *
+ * @param document - The document.
+ * @returns Each list of `flatten`'s rows as sorted text, and the document row.
+ */
+const rowSetOf = (document: XdmDocument<Composed>) =>
+  Object.fromEntries(
+    Object.entries(flatten(document)).map(([list, rows]) => [
+      list,
+      Array.isArray(rows) ? rows.map((row) => Formatter.format(row)).toSorted() : rows,
+    ]),
+  );
 
 /**
  * Cut a scan into pages at the given boundaries.
@@ -219,13 +243,12 @@ const pager =
  * Assemble a document from its scan served in the given pages, through the export's own stream
  * and fold.
  *
- * @param document - The document node's id.
  * @param pages - The pages the fake scan serves.
  * @returns The document, or the refusal of the rows the pages held.
  */
-const assembledFrom = (document: NodeId, pages: readonly (readonly ScanRow<Composed>[])[]) =>
+const assembledFrom = (pages: readonly (readonly ScanRow<Composed>[])[]) =>
   Effect.map(Stream.runFold(scannedRows(pager(pages), 1), emptyScan<Composed>, addRow), (scan) =>
-    assembleScan(document, scan),
+    assembleScan(key, scan),
   );
 
 /**
@@ -269,7 +292,8 @@ const uniformCuts = (count: number, size: number): readonly number[] =>
 
 /**
  * The situations a paging case reaches: the document's kinds of node, an entity reference inside
- * an attribute, whether the document writes an XML declaration, and how its cuts were chosen.
+ * an attribute, whether the document writes an XML declaration, how its cuts were chosen, and the
+ * order its sets were delivered in.
  */
 type PagingFeature =
   | XdmFeature
@@ -279,17 +303,28 @@ type PagingFeature =
   | "every cut"
   | "drawn cuts"
   | "one page"
-  | "a page per row";
+  | "a page per row"
+  | "sets as written"
+  | "sets reversed";
+
+/**
+ * The orders a scan delivers an element's sets in, by the feature each notes.
+ */
+const setOrders = [
+  ["sets as written", (rows) => rows],
+  ["sets reversed", (rows) => rows.toReversed()],
+] as const satisfies readonly (readonly [PagingFeature, SetOrder])[];
 
 describe("export/pages.ts", { timeout: searchTimeout }, () => {
   it.effect(
-    "assembles every generated document to itself from its scan cut into pages at any boundaries, as from one page",
+    "assembles every generated document to itself from its scan cut into pages at any boundaries and its sets in any order, as from one page",
     (ctx) =>
-      // Oracle: a universal one, a metamorphic relation: paging is invisible, so the scan served
-      // as one page and as every cut of it assembles to the same document, the generated one.
-      // Bound: the generator's drawn bounds, up to 200 nodes a tree; every cut set of a document
-      // of at most 6 nodes, and past that the uniform pages of 1, 2 and 3 rows, a cut after the
-      // first row and before the last, and 3 drawn cut sets.
+      // Oracle: a universal one, a metamorphic relation: paging and set order are invisible, so
+      // the scan served as one page and as every cut of it, its attributes and declarations in
+      // either order, assembles to the same document, the generated one up to the order of its
+      // sets (its rows are one set). Bound: the generator's drawn bounds, up to 200 nodes a tree;
+      // every cut set of a document of at most 6 nodes, and past that the uniform pages of 1, 2
+      // and 3 rows, a cut after the first row and before the last, and 3 drawn cut sets.
       searched(
         ctx,
         explore(
@@ -314,6 +349,8 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
                 "doctype",
                 "every cut",
                 "drawn cuts",
+                "sets as written",
+                "sets reversed",
               ],
               { cases: 200, sense: notesOnly },
             ),
@@ -331,12 +368,15 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
               c.noteAll(featuresOf(generated.document));
               c.note(Option.isSome(generated.document.declaration) ? "declared" : "undeclared");
 
-              const rows = flatten(generated.document, c.draw(element([idOf, scrambledIdOf])));
-              if (rows.attributeEntities.length > 0) {
+              const rows = flatten(generated.document);
+              if (rows.attributeEntities.length + rows.openAttributeEntities.length > 0) {
                 c.note("attributeReference");
               }
 
-              const scan = scanOf(rows);
+              const [ordered, order] = c.draw(element(setOrders));
+              c.note(ordered);
+
+              const scan = scanOf(rows, order);
               const count = scan.length;
               const cuts =
                 count <= exhaustiveNodes
@@ -351,9 +391,12 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
                     ];
               c.note(count <= exhaustiveNodes ? "every cut" : "drawn cuts");
 
-              const one = yield* assembledFrom(rows.document.node, [scan]);
+              const one = yield* assembledFrom([scan]);
 
-              assert.deepStrictEqual(Result.getOrThrow(one), generated.document);
+              assert.deepStrictEqual(
+                rowSetOf(Result.getOrThrow(one)),
+                rowSetOf(generated.document),
+              );
               for (const cut of cuts) {
                 if (cut.length === 0) {
                   c.note("one page");
@@ -363,7 +406,7 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
                   c.note("a page per row");
                 }
 
-                const paged = yield* assembledFrom(rows.document.node, pagesOf(scan, cut));
+                const paged = yield* assembledFrom(pagesOf(scan, cut));
 
                 assert.deepStrictEqual(paged, one, `cut at ${cut.join(", ")}`);
               }
@@ -402,8 +445,8 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
         },
         (generated, c) =>
           Effect.gen(function* secondDocumentRow() {
-            const rows = flatten(generated.document, idOf);
-            const [root, ...below] = scanOf(rows);
+            const rows = flatten(generated.document);
+            const [root, ...below] = scanOf(rows, (list) => list);
             const last = below.at(-1);
             if (root === undefined || last === undefined) {
               assert.fail("a scan holds the document node and its root element");
@@ -411,13 +454,13 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
 
             c.note("secondDocumentRow");
 
-            const assembled = yield* assembledFrom(rows.document.node, [
+            const assembled = yield* assembledFrom([
               [root, ...below.slice(0, -1), { ...last, documentRow: root.documentRow }],
             ]);
 
             assert.deepStrictEqual(
               Result.isFailure(assembled) ? assembled.failure : undefined,
-              new DocumentRowCount({ document: rows.document.node, found: 2 }),
+              new DocumentRowCount({ found: 2, package: key.package, path: key.path }),
             );
           }),
       ),

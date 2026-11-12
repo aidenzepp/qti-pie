@@ -12,7 +12,6 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedAttribute, FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import {
   contentLawOf,
@@ -975,15 +974,7 @@ const documentLaws = (text: string) =>
   Effect.gen(function* judgedDocument() {
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
     const tree = yield* Effect.orDie(shred(xml, "3.0.0", shredGrammarOf(grammar)));
-    const rows = yield* Effect.orDie(
-      Effect.fromResult(
-        fold(
-          tree,
-          (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-          foldGrammarOf(grammar),
-        ),
-      ),
-    );
+    const rows = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
 
     return [...new Set(documentBreaches("imsmanifest.xml", rows, laws).map(({ law }) => law))];
   });
@@ -1368,15 +1359,7 @@ const foldedText = (text: string) =>
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
 
-    return yield* Effect.orDie(
-      Effect.fromResult(
-        fold(
-          tree,
-          (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-          foldGrammarOf(grammar),
-        ),
-      ),
-    );
+    return yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
   });
 
 /**
@@ -1438,18 +1421,16 @@ const declared = (attribute: FoldedAttribute<Composed>): boolean =>
 const under = (node: FoldedNode<Composed>, parent: FoldedNode<Composed>): FoldedNode<Composed> => ({
   ...node,
   at: parent.children,
-  parent: parent.id,
+  parent: parent.start,
 });
 
 /**
- * Decide whether a node row is a child of its document node.
+ * Decide whether a node row is a child of its document node, the node at `start` 0.
  *
- * @param rows - The document's rows.
  * @param node - The node row.
  * @returns Whether its parent is the document node.
  */
-const topLevel = (rows: FoldedRows<Composed>, node: FoldedNode<Composed>): boolean =>
-  node.start > 0n && node.parent === rows.document.node;
+const topLevel = (node: FoldedNode<Composed>): boolean => node.start > 0n && node.parent === 0n;
 
 /**
  * Change one node row of a document, the first that a test selects.
@@ -1513,7 +1494,7 @@ describe("the foreign namespace classes, every class against every URI", () => {
             ...tamperNodes(rows, (node) => (node === target ? { ...node, kind } : node)),
             openElementNames: [
               ...rows.openElementNames,
-              { local: "x", namespace: uri, node: target?.id ?? rows.document.node },
+              { local: "x", namespace: uri, start: target?.start ?? 0n },
             ],
           };
 
@@ -1530,25 +1511,31 @@ describe("the foreign namespace classes, every class against every URI", () => {
   it.effect("an open attribute's class breaks its law exactly off the diagonal", () =>
     Effect.gen(function* attributeClass() {
       const rows = yield* foldedItem;
-      const target = rows.attributes.find(
-        (attribute) => attribute.kind === "qti-assessment-item" && attribute.name === "title",
-      );
+      const target = rows.nodes.find((node) => node.kind === "qti-assessment-item");
       const classes = ["no-namespace", "own-namespace", "foreign"] as const;
 
-      assert.isDefined(target, "the item carries a title");
+      assert.isDefined(target, "the item has its root");
       for (const [row, name] of classes.entries()) {
         for (const [column, uri] of uris.entries()) {
           const tampered: FoldedRows<Composed> = {
-            ...tamperAttributes(rows, (attribute) =>
-              attribute === target ? { ...attribute, name } : attribute,
-            ),
-            openNames: [
-              ...rows.openNames,
-              {
-                attribute: target?.id ?? rows.document.node,
-                local: "a",
-                uri,
-              },
+            ...rows,
+            openAttributes: [
+              ...rows.openAttributes,
+              ...(target === undefined
+                ? []
+                : [
+                    {
+                      class: name,
+                      governs: target.governs,
+                      kind: target.kind,
+                      lexical: "x",
+                      local: "a",
+                      prefix: "",
+                      start: target.start,
+                      uri,
+                      version: target.version,
+                    },
+                  ]),
             ],
           };
 
@@ -1573,8 +1560,8 @@ describe("the foreign namespace classes, every class against every URI", () => {
       // Bound: 2 classes, 2 hosts and 9 names, 36 rows.
       Effect.gen(function* dataName() {
         const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
-        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
-        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const target = rows.openAttributes.find((open) => open.class === "data-*");
+        const host = rows.nodes.find(({ start }) => start === target?.start);
         const language = /^data-[a-z0-9_.-]+$/u;
         const names = [
           "data-x",
@@ -1594,14 +1581,9 @@ describe("the foreign namespace classes, every class against every URI", () => {
           for (const kind of [host?.kind ?? "div", "foreign-element"] as const) {
             for (const local of names) {
               const tampered: FoldedRows<Composed> = {
-                ...tamperNodes(
-                  tamperAttributes(rows, (attribute) =>
-                    attribute === target ? { ...attribute, name } : attribute,
-                  ),
-                  (node) => (node === host ? { ...node, kind } : node),
-                ),
-                openNames: rows.openNames.map((open) =>
-                  open.attribute === target?.id ? { ...open, local } : open,
+                ...tamperNodes(rows, (node) => (node === host ? { ...node, kind } : node)),
+                openAttributes: rows.openAttributes.map((open) =>
+                  open === target ? { ...open, class: name, local } : open,
                 ),
               };
               const expected =
@@ -1630,8 +1612,8 @@ describe("the foreign namespace classes, every class against every URI", () => {
       // Bound: 2 classes, 3 hosts and 4 names, 24 rows.
       Effect.gen(function* declaredDataName() {
         const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
-        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
-        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const target = rows.openAttributes.find((open) => open.class === "data-*");
+        const host = rows.nodes.find(({ start }) => start === target?.start);
         const declaredNames = new Set(["data-catalog-idref", "data-ssml"]);
 
         assert.isDefined(target, "the item carries a data-* attribute");
@@ -1644,14 +1626,9 @@ describe("the foreign namespace classes, every class against every URI", () => {
           ] as const) {
             for (const local of ["data-catalog-idref", "data-ssml", "data-x", "data-é"] as const) {
               const tampered: FoldedRows<Composed> = {
-                ...tamperNodes(
-                  tamperAttributes(rows, (attribute) =>
-                    attribute === target ? { ...attribute, name } : attribute,
-                  ),
-                  (node) => (node === host ? { ...node, kind } : node),
-                ),
-                openNames: rows.openNames.map((open) =>
-                  open.attribute === target?.id ? { ...open, local } : open,
+                ...tamperNodes(rows, (node) => (node === host ? { ...node, kind } : node)),
+                openAttributes: rows.openAttributes.map((open) =>
+                  open === target ? { ...open, class: name, local } : open,
                 ),
               };
 
@@ -1685,7 +1662,7 @@ describe("the tree laws, on the named corruptions of trees.md §7", () => {
           ...node,
           start: node.start - 1n,
         })),
-        secondRoot: tamperFirst(rows, later, (node) => ({ ...node, parent: node.id })),
+        secondRoot: tamperFirst(rows, later, (node) => ({ ...node, parent: node.start })),
         startTaken: tamperFirst(
           rows,
           (node) => node.start > startOf,
@@ -1747,34 +1724,22 @@ describe("the fold laws, on rows the folds did not write", () => {
       }),
   );
 
-  it.effect("the Node key: a second row with one id is refused, and distinct ids are not", () =>
-    Effect.gen(function* nodeKey() {
-      const rows = yield* foldedItem;
-      const [, second] = rows.nodes;
-      const twice = tamperNodes(rows, (node, index) =>
-        second !== undefined && index === 2 ? { ...node, id: second.id } : node,
-      );
-
-      assert.isDefined(second, "the item has a second node");
-      assert.notInclude(lawsBroken(rows), "Node key");
-      assert.include(lawsBroken(twice), "Node key");
-    }),
-  );
-
   it.effect(
     "T3: a two-node cycle of parent links ends, breaking the first-child law and its new parents' mirrors",
     () =>
       Effect.gen(function* cycle() {
         const rows = yield* foldedItem;
         const [a, b] = rows.nodes.filter(
-          (node) => !topLevel(rows, node) && node.start > 0n && laws.elements.has(node.kind),
+          (node) => !topLevel(node) && node.start > 0n && laws.elements.has(node.kind),
         );
         const tampered = tamperNodes(rows, (node) => {
-          if (a !== undefined && b !== undefined && node.id === a.id) {
+          if (a !== undefined && b !== undefined && node.start === a.start) {
             return under(node, b);
           }
 
-          return a !== undefined && b !== undefined && node.id === b.id ? under(node, a) : node;
+          return a !== undefined && b !== undefined && node.start === b.start
+            ? under(node, a)
+            : node;
         });
         const broken = lawsBroken(tampered);
 
@@ -1799,17 +1764,16 @@ describe("the fold laws, on rows the folds did not write", () => {
     Effect.gen(function* parentCopy() {
       const rows = yield* foldedItem;
       const target = rows.nodes.find(
-        (node) => node.start > 0n && node.at > 0n && node.parent !== rows.document.node,
+        (node) => node.start > 0n && node.at > 0n && node.parent !== 0n,
       );
-      const other: NodeId = "00000000-0000-4000-8000-0000000fffff";
+      // A position no node of the item holds.
+      const other = BigInt(rows.nodes.length);
       const copies: readonly (readonly [
         string,
         (node: FoldedNode<Composed>) => FoldedNode<Composed>,
       ])[] = [
-        ["document", (node) => ({ ...node, document: other })],
         ["version", (node) => ({ ...node, version: node.version === "3.0.0" ? "3.0.1" : "3.0.0" })],
         ["parentKind", (node) => ({ ...node, parentKind: "qti-item-body" })],
-        ["parentStart", (node) => ({ ...node, parentStart: node.parentStart + 1n })],
         [
           "parentAncestry",
           (node) => ({
@@ -1855,10 +1819,6 @@ describe("the fold laws, on rows the folds did not write", () => {
             version: attribute.version === "3.0.0" ? "3.0.1" : "3.0.0",
           }),
         ],
-        [
-          "document",
-          (attribute) => ({ ...attribute, document: "00000000-0000-4000-8000-0000000fffff" }),
-        ],
       ];
 
       assert.isDefined(target, "the item carries an attribute");
@@ -1880,10 +1840,7 @@ describe("the fold laws, on rows the folds did not write", () => {
     Effect.gen(function* identity() {
       const rows = yield* foldedItem;
       const first = (change: (node: FoldedNode<Composed>) => FoldedNode<Composed>) =>
-        lawsBroken(tamperNodes(rows, (node) => (topLevel(rows, node) ? change(node) : node)));
-      const attrs = tamperAttributes(rows, (attribute) =>
-        attribute.at === 0n ? { ...attribute, attrsWas: new Set([0]) } : attribute,
-      );
+        lawsBroken(tamperNodes(rows, (node) => (topLevel(node) ? change(node) : node)));
 
       assert.include(
         first((node) => ({ ...node, was: 1 })),
@@ -1895,8 +1852,6 @@ describe("the fold laws, on rows the folds did not write", () => {
         "N5 first slot",
         "elementsWas",
       );
-      assert.include(lawsBroken(attrs), "N5 first slot", "attrsWas");
-      assert.include(lawsBroken(attrs), "AL2 fold");
     }),
   );
 
@@ -1932,7 +1887,7 @@ describe("the fold laws, on rows the folds did not write", () => {
       const rows = yield* foldedItem;
       const tampered = tamperNodes(rows, (node) =>
         node.at === 1n &&
-        rows.nodes.some((parent) => parent.id === node.parent && topLevel(rows, parent))
+        rows.nodes.some((parent) => parent.start === node.parent && topLevel(parent))
           ? { ...node, was: 9 }
           : node,
       );
@@ -1945,7 +1900,7 @@ describe("the fold laws, on rows the folds did not write", () => {
     Effect.gen(function* lastSlot() {
       const rows = yield* foldedItem;
       const tampered = tamperNodes(rows, (node) =>
-        topLevel(rows, node) ? { ...node, childState: node.childState + 1 } : node,
+        topLevel(node) ? { ...node, childState: node.childState + 1 } : node,
       );
 
       assert.include(lawsBroken(tampered), "N7 last slot");
@@ -1956,7 +1911,7 @@ describe("the fold laws, on rows the folds did not write", () => {
     Effect.gen(function* nearest() {
       const rows = yield* foldedItem;
       const tampered = tamperNodes(rows, (node) =>
-        node.kind === "qti-simple-choice" ? { ...node, nearest: node.id } : node,
+        node.kind === "qti-simple-choice" ? { ...node, nearest: node.start } : node,
       );
 
       assert.include(lawsBroken(tampered), "N8 nearest");
@@ -1967,8 +1922,11 @@ describe("the fold laws, on rows the folds did not write", () => {
     Effect.gen(function* distinct() {
       const rows = yield* foldedItem;
       const [first] = rows.attributes;
+      const second = rows.attributes.find(
+        (attribute) => attribute !== first && attribute.start === first?.start,
+      );
       const tampered = tamperAttributes(rows, (attribute) =>
-        first !== undefined && attribute.node === first.node && attribute.at === 1n
+        first !== undefined && attribute === second
           ? { ...attribute, name: first.name }
           : attribute,
       );
@@ -1983,12 +1941,8 @@ describe("the fold laws, on rows the folds did not write", () => {
       const renamed = tamperAttributes(rows, (attribute) =>
         declared(attribute) ? { ...attribute, name: "href" } : attribute,
       );
-      const opened = tamperAttributes(rows, (attribute) =>
-        declared(attribute) ? { ...attribute, name: "data-*" } : attribute,
-      );
 
       assert.include(lawsBroken(renamed), "AL1 admission");
-      assert.include(lawsBroken(opened), "AL1 admission");
     }),
   );
 });
@@ -2010,15 +1964,7 @@ describe("MathML foreign element, on rows the codec did not write", () => {
       Effect.gen(function* mathmlForeign() {
         const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(annotatedItem)));
         const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
-        const rows = yield* Effect.orDie(
-          Effect.fromResult(
-            fold(
-              tree,
-              (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-              foldGrammarOf(grammar),
-            ),
-          ),
-        );
+        const rows = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
         const renamed: FoldedRows<Composed> = {
           ...rows,
           openElementNames: rows.openElementNames.map((row) => ({

@@ -22,13 +22,12 @@
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Formatter, Predicate } from "effect";
+import { Effect, Formatter } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
-import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
@@ -75,7 +74,7 @@ const unjudged = {
   "Node.parentNearestKind": rootCopy,
   "Node.parentParentKind": rootCopy,
   "Node: a between term": unreadTerm("between"),
-  "OpenAttributeName: a literal term":
+  "OpenAttribute: a literal term":
     "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
   "Quotation: a base term": unreadTerm("base"),
@@ -87,74 +86,48 @@ const unjudged = {
 } satisfies Readonly<Record<string, string>>;
 
 /**
- * Whether a law side is `relation`'s one field `field`.
+ * Whether a law side reads exactly `relation`'s fields `fields`, in order.
  *
  * @param side - The side.
  * @param relation - The relation.
- * @param field - The field.
- * @returns Whether it is.
+ * @param fields - The fields.
+ * @returns Whether it does.
  */
-const readsOne = (side: LawSide, relation: string, field: string): boolean =>
+const readsFields = (side: LawSide, relation: string, fields: readonly string[]): boolean =>
   side.relation === relation &&
-  side.terms.length === 1 &&
-  side.terms.every((term) => term.kind === "field" && term.field === field);
+  side.terms.length === fields.length &&
+  side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
 
 /**
- * The test that a law is the containment of one field of a relation in one field of another.
+ * The test that a law is the containment of some fields of a relation in as many of another.
  *
- * @param from - The source relation and its field.
- * @param to - The target relation and its field.
+ * @param from - The source relation and its fields.
+ * @param to - The target relation and its fields.
  * @returns The test.
  */
 const containedAs =
-  (from: readonly [string, string], to: readonly [string, string]) =>
+  (from: readonly [string, readonly string[]], to: readonly [string, readonly string[]]) =>
   (law: Law): boolean =>
-    law.kind === "contained" && readsOne(law.from, ...from) && readsOne(law.to, ...to);
+    law.kind === "contained" && readsFields(law.from, ...from) && readsFields(law.to, ...to);
+
+/**
+ * A document's key, `(package, path)`, the fields `ReferenceDocument`'s mirror pairs.
+ */
+const documentKey = ["package", "path"] as const;
 
 /**
  * The laws the test must judge, each with its label: both halves of `ReferenceDocument`'s mirror.
  */
 const required: readonly (readonly [string, (law: Law) => boolean])[] = [
   [
-    "ReferenceDocument(document) in Document(node)",
-    containedAs(["ReferenceDocument", "document"], ["Document", "node"]),
+    "ReferenceDocument(package, path) in Document(package, path)",
+    containedAs(["ReferenceDocument", documentKey], ["Document", documentKey]),
   ],
   [
-    "Document(node) in ReferenceDocument(document)",
-    containedAs(["Document", "node"], ["ReferenceDocument", "document"]),
+    "Document(package, path) in ReferenceDocument(package, path)",
+    containedAs(["Document", documentKey], ["ReferenceDocument", documentKey]),
   ],
 ];
-
-/**
- * The paths of the documents a package's rows name, by document node.
- *
- * @param rows - The rows.
- * @returns Each document's path.
- */
-const pathsOf = (rows: HostRows): ReadonlyMap<string, string> =>
-  new Map(
-    (rows.get("Document") ?? []).flatMap((row) => {
-      const { node, path } = row;
-
-      return Predicate.isString(node) && Predicate.isString(path) ? [[node, path] as const] : [];
-    }),
-  );
-
-/**
- * A row with each document node it holds written as its document's path, so a breach names the
- * documents it is in.
- *
- * @param paths - Each document's path, by its node.
- * @param row - The row.
- * @returns The row, its document nodes replaced.
- */
-const namedIn = (paths: ReadonlyMap<string, string>, row: HostRow): HostRow =>
-  Object.fromEntries(
-    Object.entries(row).map(([field, value]) => [
-      field,
-      Predicate.isString(value) ? (paths.get(value) ?? value) : value,
-    ]),
-  );
 
 layer(NodeServices.layer, { excludeTestServices: true })(
   "every law the host can judge over the every-relation package",
@@ -176,13 +149,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const rows = hostRowsOf(program.inputs);
             const laws = judgedLaws(Qti);
             const judgment = judge(rows, laws);
-            const paths = pathsOf(rows);
 
             assert.deepStrictEqual(verdict, { kind: "accepted" });
             assert.deepStrictEqual(
               judgment.broken.map(
                 ({ law, rows: breaking }) =>
-                  `${Formatter.format(law)}: ${Formatter.format(breaking.map((row) => namedIn(paths, row)))}`,
+                  `${Formatter.format(law)}: ${Formatter.format(breaking)}`,
               ),
               [],
               "a law the import's rows break",

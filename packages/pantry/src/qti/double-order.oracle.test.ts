@@ -54,7 +54,7 @@ import { shred } from "#pantry/model/shred.ts";
 import { MasteryCeiling, MasteryFloor } from "#pantry/qti/declarations.ts";
 import { Slider } from "#pantry/qti/interactions.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { breaks, checksOf, closedOf, doubleNamed } from "#pantry/test/predicates.ts";
@@ -873,7 +873,7 @@ const judged = (drawnCase: OrderCase, note: (situation: Situation) => void) =>
     const attributes = attributesOf(drawnCase);
     const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(itemOf(attributes))));
     const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
-    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))));
+    const folded = yield* Effect.orDie(Effect.fromResult(fold(tree, foldGrammarOf(grammar))));
     const rows = rowsOf(attributes);
     const [low, high] = formsRead(drawnCase);
     const expected = above(referenceOf(low), referenceOf(high));

@@ -10,7 +10,6 @@ import { names as documentNames } from "#pantry/model/names.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId } from "#pantry/model/xdm.ts";
 import { readEntries } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
@@ -103,15 +102,6 @@ const textOf = (element: Element): string =>
   element.children.map((child) => (child.kind === "text" ? child.value : "")).join("");
 
 /**
- * Give the node numbered `index` a uuid that spells its number.
- *
- * @param index - The node's number in document order.
- * @returns A uuid whose last group is the number in hexadecimal.
- */
-const idOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
-
-/**
  * Materialize a fixture in a root of its own and read its package.
  *
  * @param name - The fixture's name.
@@ -168,7 +158,7 @@ const roundTripped = Effect.fn("fixtures.ssml.roundTripped")(function* roundTrip
     }
 
     const tree = yield* shred(doc, version, shredding);
-    const assembled = assemble(flatten(tree, idOf));
+    const assembled = assemble(flatten(tree));
 
     assert.isTrue(Result.isSuccess(assembled), `${name}: ${file.path} assembles`);
 

@@ -1,24 +1,25 @@
 /**
  * A package applied through the author login as the database tests apply one: its import program
  * read, one edit of its inputs, and the login's `importWrite` member applied to its facts; and the
- * laws a refusal is matched against. A test judges its own package by the id its program minted
+ * laws a refusal is matched against. A test judges its own package by its manifest identifier
  * ({@link packageStored}), never by a count of every stored package, so it holds beside another
  * file's imports.
  */
 import { Db } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, Law, Uuid } from "@bjornpagen/grizzle";
+import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
 import { Duration, Effect, Option } from "effect";
 import { AuthorLogin } from "#pantry/db/served.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { packageFactsOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
+import type { QtiPackage } from "#pantry/import/read.ts";
 
 /**
  * Build a package's ChangeSet with one edit of its inputs and apply it, logging the apply's time.
  *
  * @param dir - The package.
  * @param edit - The edit of its inputs; none applies the package as read.
- * @returns The apply's outcome, and the id the package's program minted for it.
+ * @returns The apply's outcome, and the package's manifest identifier.
  */
 export const applyEdited = (
   dir: string,
@@ -33,20 +34,21 @@ export const applyEdited = (
 
     yield* Effect.log("import apply", { applyMillis: Duration.toMillis(applied), dir });
 
-    return { outcome, packageId: program.packageId };
+    return { outcome, package: program.package };
   });
 
 /**
- * Whether a package is stored, read back by its id through the author login's `packageOf`.
+ * Whether a package is stored, read back by its manifest identifier through the author login's
+ * `packageOf`.
  *
- * @param id - The package's id.
+ * @param identifier - The package's manifest identifier.
  * @returns Whether its row is stored.
  */
-export const packageStored = (id: Uuid) =>
-  Effect.gen(function* storedById() {
+export const packageStored = (identifier: QtiPackage["identifier"]) =>
+  Effect.gen(function* storedByIdentifier() {
     const db = yield* Db.open((yield* AuthorLogin).roles.author, {});
 
-    return Option.isSome(yield* db.workload.packageOf.get({ id }));
+    return Option.isSome(yield* db.workload.packageOf.get({ identifier }));
   });
 
 /**

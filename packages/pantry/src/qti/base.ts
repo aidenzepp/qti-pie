@@ -109,7 +109,8 @@ import {
   AttributeEntity,
   attributeLaws,
   Idref,
-  OpenAttributeName,
+  OpenAttribute,
+  OpenAttributeEntity,
 } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -368,7 +369,8 @@ const attributeRelations = {
   Attribute,
   AttributeEntity,
   Idref,
-  OpenAttributeName,
+  OpenAttribute,
+  OpenAttributeEntity,
 };
 
 /**

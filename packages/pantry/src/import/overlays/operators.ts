@@ -3,7 +3,7 @@
  * (`DocumentView` of `#pantry/import/fold.ts`), the rows of every relation
  * `#pantry/qti/operators.ts` declares, each a keyed set.
  *
- * The rows restate what the tree says and nothing else: each rounding operator's node tuple and
+ * The rows restate what the tree says and nothing else: each rounding operator's element tuple and
  * what it holds, its `figures` as written and collapsed where it writes one, its mode in force
  * where it has one, and both together where it has both; each `qti-equal`'s `tolerance` as written,
  * split into its values. The database proves every one of them (`operatorLaws`), so a row this
@@ -15,7 +15,9 @@ import { Option } from "effect";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { foldAt } from "#pantry/import/fold.ts";
 import type { DocumentView } from "#pantry/import/fold.ts";
+import { keyTextOf } from "#pantry/import/key-text.ts";
 import { tokensOf } from "#pantry/import/pieces.ts";
+import type { Place } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeRow } from "#pantry/model/xdm.ts";
 import type {
@@ -29,10 +31,10 @@ import type {
 import { equalRoundedMode, roundingKinds } from "#pantry/vocab/terms/operators.ts";
 
 /**
- * One value of a `tolerance` as its owner's family nests it: without the `node` the nesting
- * supplies, nor the `at` the family draws.
+ * One value of a `tolerance` as its owner's family nests it: without the `package`, `path` and
+ * `start` the nesting supplies, nor the `at` the family draws.
  */
-type ToleranceTokenInsert = Omit<Addition<typeof ToleranceToken>, "node">;
+type ToleranceTokenInsert = Omit<Addition<typeof ToleranceToken>, "package" | "path" | "start">;
 
 /**
  * A `qti-equal`'s `tolerance`, with its values nested at its count field.
@@ -43,7 +45,7 @@ export type ToleranceRow = Addition<typeof Tolerance> & {
 
 /**
  * A document's operator rows, one keyed set per relation: each map from the text of a row's key,
- * its node's id, to the row as its writer writes it.
+ * its element's place `(package, path, start)` as a JSON array, to the row as its writer writes it.
  */
 export interface OperatorRows {
   readonly Rounding: ReadonlyMap<string, Addition<typeof Rounding>>;
@@ -104,11 +106,11 @@ const holdingsOf = (
  *
  * @param view - The document's view: its rows, and their folds under its context (spec reading
  *   117), whose interaction an included fragment's nodes take as their nearest.
+ * @param place - Where the document stands in its package, the key every row holds.
  * @returns Every operator relation's rows.
  */
-export const rowsOf = (view: DocumentView): OperatorRows => {
+export const rowsOf = (view: DocumentView, place: Place): OperatorRows => {
   const { folds, rows } = view;
-  const document = rows.document.node;
   const operators = rows.nodes.filter(({ kind }) => rounders.has(kind) || kind === "qti-equal");
   const built = {
     Rounding: new Map<string, Addition<typeof Rounding>>(),
@@ -121,19 +123,17 @@ export const rowsOf = (view: DocumentView): OperatorRows => {
     return built;
   }
 
-  const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
+  const lexicals = new Map(rows.attributes.map((row) => [`${row.start} ${row.name}`, row.lexical]));
   const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
-    lexicals.get(`${node.id} ${name}`);
+    lexicals.get(`${node.start} ${name}`);
 
   for (const node of operators) {
+    const key = keyTextOf(place.package, place.path, node.start);
+    const at = { package: place.package, path: place.path, start: node.start };
     if (node.kind === "qti-equal") {
       const lexical = valueOf(node, "tolerance");
       if (lexical !== undefined) {
-        built.Tolerance.set(node.id, {
-          lexical,
-          node: node.id,
-          tokens: tokensOf(lexical),
-        });
+        built.Tolerance.set(key, { ...at, lexical, tokens: tokensOf(lexical) });
       }
 
       continue;
@@ -143,36 +143,29 @@ export const rowsOf = (view: DocumentView): OperatorRows => {
     const written = Option.fromNullishOr(valueOf(node, "rounding-mode"));
     const mode = modeOf(node.kind, written);
     const modeWritten = Option.isSome(written);
-    built.Rounding.set(node.id, {
-      document,
+    built.Rounding.set(key, {
+      ...at,
       holds: holdingsOf(figuresLexical, mode),
       kind: node.kind,
       modeWritten,
-      nearest: foldAt(folds, node.id).nearest,
-      node: node.id,
+      nearest: foldAt(folds, node.start).nearest,
       parent: node.parent,
-      start: node.start,
       version: node.version,
     });
 
     if (Option.isSome(figuresLexical)) {
-      built.RoundingFigures.set(node.id, { figuresLexical: figuresLexical.value, node: node.id });
+      built.RoundingFigures.set(key, { ...at, figuresLexical: figuresLexical.value });
     }
 
     if (Option.isSome(mode)) {
-      built.RoundingMode.set(node.id, {
-        kind: node.kind,
-        mode: mode.value,
-        modeWritten,
-        node: node.id,
-      });
+      built.RoundingMode.set(key, { ...at, kind: node.kind, mode: mode.value, modeWritten });
     }
 
     if (Option.isSome(figuresLexical) && Option.isSome(mode)) {
-      built.RoundingModeFigures.set(node.id, {
+      built.RoundingModeFigures.set(key, {
+        ...at,
         figures: collapse(figuresLexical.value),
         mode: mode.value,
-        node: node.id,
       });
     }
   }

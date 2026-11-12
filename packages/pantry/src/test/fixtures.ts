@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
+import { Config, Effect, FileSystem, Match, Option, Record as Rec, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -2271,6 +2271,75 @@ const ltiMember = "qtiv3-examples/packaging/lti/lti.zip";
  * The tarball member the `usage3` fixtures are extracted from, the `usageData` package.
  */
 const usageMember = "qtiv3-examples/packaging/usageData/usageData.zip";
+
+/**
+ * The manifest identifier of each corpus package whose variants the lease imports into one
+ * database, by its tarball member: `simple`'s, which 1EdTech's `svg` shares, `sharedMedia`'s and
+ * `usageData`'s. A package is keyed by its manifest identifier (`#pantry/qti/package.ts`), so two
+ * variants under one identifier would be one package twice, the second refused on the key; each
+ * variant holds its own ({@link variantOf}).
+ */
+const copiedIdentifiers: ReadonlyMap<string, string> = new Map([
+  [simpleMember, "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"],
+  ["qtiv3-examples/packaging/svg/svg.zip", "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"],
+  [sharedMediaMember, "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD391"],
+  [usageMember, "usage-TEST-106391"],
+]);
+
+/**
+ * The manifest identifier of a variant of a corpus package, from its name: an NCName no corpus
+ * package holds.
+ *
+ * @param name - The variant's name.
+ * @returns Its manifest identifier.
+ */
+export const ownIdentifierOf = (name: string): string =>
+  `fixture-${name.replaceAll(/[^\w.-]+/gu, "-")}`;
+
+/**
+ * The edit that gives a variant of a corpus package a manifest identifier of its own,
+ * {@link ownIdentifierOf} its name, in place of the package's.
+ *
+ * @param name - The variant's name.
+ * @param identifier - The manifest identifier the package it is copied from holds; `simple`'s by
+ *   default.
+ * @returns The edit of `imsmanifest.xml`.
+ */
+export const ownIdentifier = (
+  name: string,
+  identifier = copiedIdentifiers.get(simpleMember) ?? "",
+): Extract<TextEdit, { readonly _tag: "ReplaceText" }> => ({
+  _tag: "ReplaceText",
+  file: "imsmanifest.xml",
+  replacement: `identifier="${ownIdentifierOf(name)}"`,
+  search: `identifier="${identifier}"`,
+});
+
+/**
+ * A variant of a fixture: its package with more edits, under a name of its own. A variant of a
+ * package of {@link copiedIdentifiers} holds its own manifest identifier ({@link ownIdentifier}),
+ * its first text edit, so any two fixtures a lease imports into one database are two packages; the
+ * package itself, unedited, keeps its own. Its base is the unedited package, since a base's own
+ * edits hold its identifier already, and the variant's edit of it then finds nothing to replace.
+ *
+ * @param spec - The fixture it varies, an unedited corpus package.
+ * @param name - The variant's name.
+ * @param edits - Its edits, after the base's.
+ * @returns The variant's spec.
+ */
+export const variantOf = (spec: FixtureSpec, name: string, edits: readonly Edit[]): FixtureSpec => {
+  const identifier = copiedIdentifiers.get(spec.member);
+
+  return {
+    edits: [
+      ...(identifier === undefined ? [] : [ownIdentifier(name, identifier)]),
+      ...spec.edits,
+      ...edits,
+    ],
+    member: spec.member,
+    name,
+  };
+};
 
 /**
  * The unpackaged QTI fragment `bytes` carries, whose root is `div`.
@@ -6645,7 +6714,7 @@ const dataSpecs: Record<(typeof dataNames)[number], FixtureSpec> = {
  * by a `boolean single` one, `HINT`, and its `map_response` template dropped, which would name a
  * response no longer declared. No corpus item holds an end-attempt interaction (spec 3.6).
  */
-const specs: Record<FixtureName, FixtureSpec> = {
+const writtenSpecs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
   ...htmlSpecs,
   ...copySpecs,
@@ -7225,6 +7294,13 @@ const specs: Record<FixtureName, FixtureSpec> = {
     name: "windows-1252",
   },
 };
+
+/**
+ * Every fixture's spec, each edited one a variant of its package ({@link variantOf}).
+ */
+const specs: Record<FixtureName, FixtureSpec> = Rec.map((spec: FixtureSpec) =>
+  spec.edits.length === 0 ? spec : variantOf({ ...spec, edits: [] }, spec.name, spec.edits),
+)(writtenSpecs);
 
 /**
  * Look up the spec a fixture name stands for.
